@@ -1,0 +1,205 @@
+<?php
+
+namespace App\Jobs;
+
+use App\Enums\BulkMailCampaignStatus;
+use App\Enums\BulkMailRecipientStatus;
+use App\Mail\BulkMailMessage;
+use App\Models\BulkMailCampaign;
+use App\Models\BulkMailLog;
+use App\Models\BulkMailRecipient;
+use App\Services\MMS\BulkMailService;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Webklex\PHPIMAP\ClientManager;
+
+class SendBulkMailBatch implements ShouldQueue
+{
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    public function __construct(
+        public int $campaignId,
+        public int $batchSize = 10
+    ) {
+        $this->onQueue('mail');
+    }
+
+    public function handle(): void
+    {
+        $campaign = BulkMailCampaign::find($this->campaignId);
+
+        if (! $campaign || $campaign->status !== BulkMailCampaignStatus::Active) {
+            return;
+        }
+
+        $remainingLimit = $campaign->getRemainingDailyLimit();
+
+        if ($remainingLimit <= 0) {
+            Log::info("Campaign {$this->campaignId} reached daily limit.");
+
+            return;
+        }
+
+        $recipients = BulkMailRecipient::where('campaign_id', $this->campaignId)
+            ->where('status', BulkMailRecipientStatus::Pending)
+            ->limit(min($this->batchSize, $remainingLimit))
+            ->get();
+
+        if ($recipients->isEmpty()) {
+            if (BulkMailRecipient::where('campaign_id', $this->campaignId)
+                ->where('status', BulkMailRecipientStatus::Pending)
+                ->count() === 0) {
+                $campaign->update(['status' => BulkMailCampaignStatus::Completed]);
+            }
+
+            return;
+        }
+
+        foreach ($recipients as $recipient) {
+            $email = is_array($recipient->email) ? implode('; ', $recipient->email) : $recipient->email;
+            try {
+                // 1. Send mail — stop everything if this fails
+                $this->withMailerConfig($campaign, function () use ($campaign, $recipient) {
+                    $message = Mail::to($recipient->email)
+                        ->cc(array_merge($campaign->cc_emails ?? [], $recipient->cc_emails ?? []))
+                        ->bcc($campaign->bcc_emails ?? [])
+                        ->send(new BulkMailMessage($campaign, $recipient));
+
+                    // 2. Save to IMAP Sent folder — stop everything if this fails
+                    $cm = new ClientManager($this->getIMAPConfig($campaign));
+                    $client = $cm->account($campaign->from_sender_key);
+                    $client->connect();
+                    $sendFolder = $client->getFolder('Sent');
+                    $sendFolder->appendMessage(
+                        $message->getSymfonySentMessage()->toString(),
+                        ['\Seen'],
+                        now()->format('d-M-Y h:i:s O')
+                    );
+                });
+
+                // 3. Generate PDF — stop everything if this fails
+                $pdfPath = app(BulkMailService::class)->generate($campaign, $recipient);
+
+                // 4. All succeeded — update record
+                $recipient->update([
+                    'status' => BulkMailRecipientStatus::Sent,
+                    'sent_at' => now(),
+                    'pdf_path' => $pdfPath,
+                ]);
+                $campaign->increment('sent_count');
+
+                BulkMailLog::create([
+                    'campaign_id' => $campaign->id,
+                    'recipient_id' => $recipient->id,
+                    'action' => 'sent',
+                    'metadata' => ['pdf_path' => $pdfPath],
+                    'timestamp' => now(),
+                ]);
+
+            } catch (\Exception $e) {
+                // Log the failure
+                Log::error("Bulk mail batch stopped. Failed for recipient {$email}: ".$e->getMessage());
+
+                $recipient->increment('attempt_count');
+
+                if ($recipient->attempt_count >= config('mail_senders.retry_attempts', 3)) {
+                    $recipient->update([
+                        'status' => BulkMailRecipientStatus::Failed,
+                        'failed_at' => now(),
+                        'failure_reason' => $e->getMessage(),
+                    ]);
+                    $campaign->increment('failed_count');
+                }
+
+                BulkMailLog::create([
+                    'campaign_id' => $campaign->id,
+                    'recipient_id' => $recipient->id,
+                    'action' => 'failed',
+                    'metadata' => ['error' => $e->getMessage()],
+                    'timestamp' => now(),
+                ]);
+
+                // Stop the entire batch — do NOT dispatch next batch
+                return;
+            }
+        }
+
+        // Only reached if ALL recipients in this batch succeeded
+        if ($campaign->getRemainingDailyLimit() > 0) {
+            static::dispatch($this->campaignId, $this->batchSize)->delay(now()->addSeconds(30));
+        }
+    }
+
+    public function withMailerConfig(BulkMailCampaign $campaign, callable $callable): void
+    {
+        $original = [
+            'mail.default' => config('mail.default'),
+            'mail.mailers.smtp.host' => config('mail.mailers.smtp.host'),
+            'mail.mailers.smtp.port' => config('mail.mailers.smtp.port'),
+            'mail.mailers.smtp.username' => config('mail.mailers.smtp.username'),
+            'mail.mailers.smtp.password' => config('mail.mailers.smtp.password'),
+            'mail.mailers.smtp.encryption' => config('mail.mailers.smtp.encryption'),
+            'mail.from.address' => config('mail.from.address'),
+            'mail.from.name' => config('mail.from.name'),
+        ];
+        try {
+            config([
+                'mail.default' => 'smtp',
+                'mail.mailers.smtp.host' => $campaign->sender_config['host'],
+                'mail.mailers.smtp.port' => $campaign->sender_config['port'],
+                'mail.mailers.smtp.username' => $campaign->sender_config['username'],
+                'mail.mailers.smtp.password' => $campaign->sender_config['password'],
+                'mail.mailers.smtp.encryption' => $campaign->sender_config['encryption'],
+                'mail.from.address' => $campaign->sender_config['address'],
+                'mail.from.name' => $campaign->sender_config['name'],
+            ]);
+            app('mail.manager')->purge('smtp');
+            $callable();
+        } catch (\Throwable $e) {
+            // Must re-throw: the caller's own handler counts the attempt, marks the
+            // recipient Failed and stops the batch. Swallowing it here let a failed
+            // send fall through and be recorded as Sent, so an SMTP/IMAP outage
+            // produced a campaign reporting 100% delivered with nothing retried.
+            Log::error('Failed to execute mailer configuration callback: '.$e->getMessage());
+            throw $e;
+        } finally {
+            config($original);
+            app('mail.manager')->purge('smtp');
+        }
+
+    }
+
+    /**
+     * @return array[][]
+     */
+    public function getIMAPConfig($campaign): array
+    {
+        return [
+            'accounts' => [
+                $campaign->from_sender_key => [
+                    'host' => $campaign->sender_config['host'],
+                    'port' => 993,
+                    'encryption' => $campaign->sender_config['encryption'],
+                    'username' => $campaign->sender_config['username'],
+                    'password' => $campaign->sender_config['password'],
+                    'protocol' => 'imap', // might also use imap, [pop3 or nntp (untested)]
+                    'validate_cert' => true,
+                    'authentication' => null,
+                    'proxy' => [
+                        'socket' => null,
+                        'request_fulluri' => false,
+                        'username' => null,
+                        'password' => null,
+                    ],
+                    'timeout' => 30,
+                    'extensions' => [],
+                ],
+            ],
+        ];
+    }
+}

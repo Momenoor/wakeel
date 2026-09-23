@@ -1,0 +1,387 @@
+@import '../../../../vendor/filament/filament/resources/css/theme.css';
+
+/*
+ * The calendar plugin's own stylesheet — including its dark-mode CSS variable
+ * overrides for borders, buttons and event colors — is never registered as a
+ * panel asset by the package itself (only its Alpine JS component is; see
+ * FilamentFullCalendarServiceProvider::getAssets()). Its own README says as
+ * much: a custom theme has to @import this manually. Without it, FullCalendar
+ * renders with its own un-themed defaults — a white grid with black text and
+ * light borders — regardless of the panel's theme, which is what made it look
+ * broken specifically in dark mode.
+ */
+@import '../../../../vendor/saade/filament-fullcalendar/resources/css/filament-fullcalendar.css';
+
+@source '../../../../app/Filament/**/*';
+@source '../../../../app/Helpers/**/*';
+@source '../../../../resources/views/filament/**/*';
+@source '../../../../resources/views/livewire/**/*';
+
+/*
+ * Panel styling previously lived in public/css/custom-css.css, a hand-written
+ * stylesheet outside Vite and Tailwind that was injected via FilamentAsset.
+ * Folded in here so it is compiled, versioned and cache-busted with everything
+ * else. Physical padding-left/right became logical padding-inline-start/end —
+ * the panel's default locale is Arabic (RTL), where the physical form applied
+ * the padding to the wrong side.
+ */
+
+html {
+    transition: font-size 0.2s ease-in-out;
+}
+
+/*
+ * Compact table rows on narrower screens. These override Filament's own cell
+ * padding, so they need to win on specificity — but note the !important that
+ * used to be here is gone: the extra class in the selector is already more
+ * specific than Filament's single-class rule.
+ */
+@media (max-width: 1280px) {
+    .custom-compact-table .fi-ta-cell {
+        padding-block: 0;
+    }
+
+    .custom-compact-table .fi-ta-text-item,
+    .custom-compact-table .fi-ta-text {
+        padding-inline: 0;
+    }
+
+    .custom-compact-table .fi-ta-header-cell {
+        padding-inline: 0.5rem;
+    }
+
+    .fi-sidebar-nav {
+        padding: 0.5rem;
+    }
+}
+
+/*
+ * The role label inside party/expert badges is hidden on smaller or
+ * high-DPI screens, leaving just the index number and the name.
+ */
+@media (min-width: 1280px) {
+    .type-label {
+        display: inline;
+    }
+}
+
+@media (max-width: 1280px),
+    (-webkit-min-device-pixel-ratio: 1.25),
+    (min-resolution: 120dpi) {
+    .type-label {
+        display: none;
+    }
+}
+
+/*
+ * Scrolling system announcement.
+ *
+ * Replaces <marquee>, which is obsolete, cannot be paused, ignores
+ * prefers-reduced-motion, and always scrolls right-to-left regardless of page
+ * direction — the wrong way round for this panel's Arabic default.
+ *
+ * The track holds two copies of the message; sliding it by exactly one copy
+ * plus one gap puts the second copy where the first started, so the loop has no
+ * visible seam.
+ */
+.fi-announcement {
+    overflow: hidden;
+    width: 100%;
+    /* The slide is a negative translate, i.e. a direction-independent
+       movement, so the track is laid out LTR to keep an Arabic announcement
+       travelling the same way as an English one. */
+    direction: ltr;
+}
+
+.fi-announcement-track {
+    display: flex;
+    width: max-content;
+    gap: 4rem;
+    will-change: transform;
+    animation: fi-announcement-scroll 30s linear infinite;
+}
+
+.fi-announcement-item {
+    flex: none;
+    white-space: nowrap;
+    /* Restored for the text itself so Arabic still shapes and orders
+       correctly inside each copy. */
+    direction: rtl;
+    unicode-bidi: plaintext;
+}
+
+/* A moving line is hard to read; hovering or tabbing into it stops the scroll. */
+.fi-announcement:hover .fi-announcement-track,
+.fi-announcement:focus-within .fi-announcement-track {
+    animation-play-state: paused;
+}
+
+@keyframes fi-announcement-scroll {
+    from {
+        transform: translateX(0);
+    }
+
+    to {
+        /* The track is two copies plus one 4rem gap, so 50% of it is one copy
+           plus 2rem. Adding the other 2rem slides a full copy-and-gap, landing
+           the second copy exactly where the first began. */
+        transform: translateX(calc(-50% - 2rem));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .fi-announcement-track {
+        animation: none;
+        width: 100%;
+    }
+
+    .fi-announcement-item {
+        white-space: normal;
+    }
+
+    /* One static, wrapping copy for anyone who asked for less motion. */
+    .fi-announcement-item[aria-hidden='true'] {
+        display: none;
+    }
+}
+
+/*
+ * Chart axis labels and gridlines.
+ *
+ * Filament hands Chart.js the colours by reading getComputedStyle().color off
+ * four marker elements, and those resolve to Tailwind v4's palette — which is
+ * authored in oklch(). Chart.js parses hex, rgb(), hsl() and named colours
+ * only; given an oklch() string it silently falls back to its own default dark
+ * grey, so in dark mode the tick labels, legend and axis titles came out black
+ * on a black panel.
+ *
+ * Stated here in rgb so the parser accepts them. The values are Tailwind's own
+ * gray-500 (light) and gray-400 (dark) — what Filament asks for anyway, in a
+ * form that survives the round trip.
+ */
+.fi-wi-chart-text-color {
+    color: #6b7280;
+}
+
+.fi-wi-chart-grid-color {
+    color: rgb(0 0 0 / 10%);
+}
+
+/*
+ * The other two of the four markers — a chart's own default dataset fill/
+ * border when a widget doesn't set its own (only some of the widgets in this
+ * app set explicit per-dataset colours; any that don't fell back to these).
+ * Same oklch problem, just never covered by the fix above: Tailwind's
+ * text-gray-100/dark:text-gray-800 (bg) and text-gray-400 (border, same in
+ * both themes per the framework's own default) restated in rgb.
+ */
+.fi-wi-chart-bg-color {
+    color: rgb(243 244 246);
+}
+
+.fi-wi-chart-border-color {
+    color: rgb(156 163 175);
+}
+
+:where(.dark, .dark *) .fi-wi-chart-text-color {
+    color: #9ca3af;
+}
+
+:where(.dark, .dark *) .fi-wi-chart-grid-color {
+    color: rgb(255 255 255 / 10%);
+}
+
+:where(.dark, .dark *) .fi-wi-chart-bg-color {
+    color: rgb(31 41 55);
+}
+
+/*
+ * Calendar list-view row hover, dark mode.
+ *
+ * FullCalendar's own core CSS hardcodes `--fc-list-event-hover-bg-color:
+ * #f5f5f5` at :root with no dark variant, and neither the calendar plugin's
+ * stylesheet above nor Filament touches it. The calendar's default view here
+ * is listWeek (see CalendarWidget::config()), so every row hover painted a
+ * near-white background under dark-mode text that was styled light to read
+ * against the panel's own dark background — background and text landing on
+ * the same end of the scale made the hovered row's text unreadable.
+ */
+:where(.dark, .dark *) .filament-fullcalendar {
+    --fc-list-event-hover-bg-color: color-mix(in oklab, var(--color-white) 8%, transparent);
+}
+
+/*
+ * Dashboard widget tables, compacted unconditionally.
+ *
+ * The app already has a compact-table class, but it only takes effect below
+ * 1280px (see the @media rule above) — meant for the Matters index handling
+ * a narrow viewport, not for a dashboard glance widget that should read
+ * compact on an ordinary desktop too.
+ */
+.fi-dashboard-compact-table .fi-ta-cell {
+    padding-block: 0.375rem;
+}
+
+.fi-dashboard-compact-table .fi-ta-text-item,
+.fi-dashboard-compact-table .fi-ta-text {
+    padding-inline: 0;
+}
+
+.fi-dashboard-compact-table .fi-ta-header-cell {
+    padding-block: 0.375rem;
+}
+
+/*
+ * Report print action (ReportPrintAction, applied to every report page's
+ * table headerActions()). It triggers a plain window.print() — there is no
+ * per-report print route to maintain — so this is what actually makes the
+ * printed page just the report instead of the whole panel chrome around it.
+ */
+@media print {
+    aside,
+    nav,
+    header,
+    .fi-sidebar,
+    .fi-main-sidebar,
+    .fi-topbar,
+    .fi-breadcrumbs,
+    .fi-header,
+    .fi-page-header,
+    .fi-header-actions-ctn,
+    .fi-layout-sidebar-toggle-btn-ctn,
+    .fi-sidebar-close-overlay,
+    .fi-ta-header-toolbar,
+    .fi-ta-filters,
+    .fi-ta-filters-trigger-action-ctn,
+    .fi-ta-actions,
+    .fi-ta-col-wrp-actions,
+    .fi-ta-selection-cell,
+    .fi-ta-selection-checkbox,
+    .fi-ta-selection-checkbox-column,
+    .fi-ta-filter-indicators,
+    .fi-pagination,
+    .fi-announcement,
+    .fi-wi-chart,
+    #chat-widget,
+    .no-print {
+        display: none !important;
+    }
+
+    .report-print-header {
+        display: block !important;
+    }
+
+    body,
+    html {
+        background: #ffffff !important;
+        color: #111827 !important;
+        font-size: 10pt !important;
+    }
+
+    .fi-main,
+    .fi-main-ctn,
+    .fi-page,
+    .fi-page-content,
+    .fi-page-sub-header-ctn,
+    .fi-page-header-ctn {
+        margin: 0 !important;
+        padding: 0 !important;
+        max-width: none !important;
+        width: 100% !important;
+    }
+
+    .fi-ta-ctn {
+        box-shadow: none !important;
+        border: none !important;
+        background: transparent !important;
+        overflow: visible !important;
+    }
+
+    .fi-ta-content {
+        overflow: visible !important;
+    }
+
+    table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        page-break-inside: auto !important;
+    }
+
+    thead {
+        display: table-header-group !important;
+    }
+
+    /*
+     * A sortable column's header isn't plain text — Filament wraps it in a
+     * <button> (the click-to-sort control; see fi-ta-header-cell-sort-btn in
+     * the table package's own index.blade.php). `thead { display:
+     * table-header-group }` above is what makes browsers repeat the header
+     * row on every printed page, but a <button> is a replaced form control,
+     * and browsers only paint one instance of a form control across a
+     * multi-page print rather than repeating it like reflowable text — so
+     * only the non-sortable columns (plain text) were surviving onto page 2
+     * onward. `display: contents` drops the button's own box entirely while
+     * its label and sort-icon children stay in the DOM as direct children of
+     * the <th>, which repeats them like ordinary text because that's what
+     * they now are.
+     */
+    .fi-ta-header-cell-sort-btn {
+        display: contents !important;
+    }
+
+    tr {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
+
+    th,
+    td {
+        border: 1px solid #d1d5db !important;
+        padding: 4px 6px !important;
+        color: #111827 !important;
+        background-color: transparent !important;
+    }
+
+    th {
+        background-color: #f3f4f6 !important;
+        font-weight: 700 !important;
+    }
+
+    .fi-badge {
+        border: 1px solid #9ca3af !important;
+        background: transparent !important;
+        color: #111827 !important;
+        box-shadow: none !important;
+    }
+}
+
+/*
+ * The lease wizard's property picker (LeaseWizardForm::propertyAndUnitsStep()):
+ * square "hero" tiles with the icon stacked above the name, instead of
+ * ToggleButtons' default inline icon-then-label row. Forces column flow on
+ * the button's own content rather than the outer container, since that
+ * content — not `.fi-fo-toggle-buttons-btn-ctn` itself — is what Filament
+ * lays out as a row.
+ */
+.pms-property-picker.fi-fo-toggle-buttons {
+    gap: 1rem;
+}
+
+.pms-property-picker .fi-fo-toggle-buttons-btn-ctn {
+    aspect-ratio: 1;
+}
+
+.pms-property-picker .fi-fo-toggle-buttons-btn-ctn > * {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    text-align: center;
+    font-weight: 700;
+}
+
+.pms-property-picker .fi-fo-toggle-buttons-btn-ctn svg {
+    width: 5.5rem;
+    height: 5.5rem;
+}
