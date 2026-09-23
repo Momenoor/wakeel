@@ -27,12 +27,16 @@
     # The root front controller itself.
     RewriteRule ^index\.php$ - [L]
 
-    # This directory's filesystem path, whatever folder the app sits in.
-    RewriteCond $0#%{REQUEST_FILENAME} ^(.*)#(.*)\1$
-    RewriteRule ^.*$ - [E=APP_BASE_DIR:%2]
+    # This folder's URL path (e.g. /wakeel/), whatever folder the app sits
+    # in — taken from the request URI, not REQUEST_FILENAME, which Apache
+    # cuts short at the first path segment that doesn't exist here (so it
+    # never matches a nested asset like js/vendor/package/file.js).
+    RewriteCond %{REQUEST_URI}::$0 ^(.*/)(.*)::\2$
+    RewriteRule ^.*$ - [E=APP_BASE_URI:%1]
 
-    # Real files (build assets, preinstall.php, storage link...) from public/.
-    RewriteCond %{ENV:APP_BASE_DIR}public/$1 -f
+    # Real files (build assets, published package assets, preinstall.php,
+    # storage link...) from public/.
+    RewriteCond %{DOCUMENT_ROOT}%{ENV:APP_BASE_URI}public/$1 -f
     RewriteRule ^(.*)$ public/$1 [L]
 
     # Everything else goes to Laravel.
