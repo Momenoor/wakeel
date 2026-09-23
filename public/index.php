@@ -41,8 +41,9 @@ function env_looks_configured(string $envPath): bool
 
     $contents = file_get_contents($envPath);
 
-    return preg_match('/^APP_KEY=.+/m', $contents) === 1
-        && preg_match('/^DB_DATABASE=.+/m', $contents) === 1;
+    // \S, not `.`: in a CRLF file an empty `APP_KEY=` still has a `\r`.
+    return preg_match('/^APP_KEY=\S/m', $contents) === 1
+        && preg_match('/^DB_DATABASE=\S/m', $contents) === 1;
 }
 
 // Register the Composer autoloader...

@@ -869,6 +869,11 @@ class InstallWizard extends Component
 
         app(InstallationStatus::class)->markInstalled();
 
+        // This request saved settings through the installer's fallback
+        // cache store; the app's real store may still hold a copy cached at
+        // boot (see Setting::clearCacheEverywhere()).
+        Setting::clearCacheEverywhere();
+
         Artisan::call('config:clear');
         Artisan::call('route:clear');
         Artisan::call('view:clear');

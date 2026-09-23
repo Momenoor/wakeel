@@ -45,6 +45,26 @@ class Setting extends Model
     }
 
     /**
+     * clearCache() for every configured cache store, not just the current
+     * default. The installer switches the default store mid-request (see
+     * RedirectToInstaller), so settings saved while installing only clear
+     * the installer's fallback store — while the app's real store can
+     * still hold a copy cached at boot, before the switch.
+     */
+    public static function clearCacheEverywhere(): void
+    {
+        static::clearCache();
+
+        foreach (array_keys((array) config('cache.stores')) as $store) {
+            try {
+                Cache::store($store)->forget(self::CACHE_KEY);
+            } catch (\Throwable) {
+                // A store this server doesn't have (e.g. no Redis) — nothing cached there.
+            }
+        }
+    }
+
+    /**
      * Get all cached settings.
      *
      * @return array<string, mixed>
@@ -60,14 +80,30 @@ class Setting extends Model
                 return [];
             }
 
-            return static::$runtimeCache = Cache::rememberForever(self::CACHE_KEY, function () {
-                return static::query()
-                    ->get()
-                    ->mapWithKeys(function (Setting $setting) {
-                        return [$setting->key => $setting->casted_value];
-                    })
-                    ->all();
-            });
+            $cached = Cache::get(self::CACHE_KEY);
+
+            // An empty cached list is ignored too, so installs that already
+            // cached one (before the rule below existed) heal themselves.
+            if (is_array($cached) && $cached !== []) {
+                return static::$runtimeCache = $cached;
+            }
+
+            $settings = static::query()
+                ->get()
+                ->mapWithKeys(function (Setting $setting) {
+                    return [$setting->key => $setting->casted_value];
+                })
+                ->all();
+
+            // An empty result is never cached: it is what every request sees
+            // mid-installation (tables migrated, nothing saved yet), and
+            // caching it forever hid everything the installer then saved —
+            // company name, logo, avatar — until someone cleared the cache.
+            if ($settings !== []) {
+                Cache::forever(self::CACHE_KEY, $settings);
+            }
+
+            return static::$runtimeCache = $settings;
         } catch (\Throwable $e) {
             // Falling back to an empty set means EVERY caller silently gets its
             // hardcoded default — including the incentive rates, so payroll would

@@ -238,7 +238,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'save_database') {
         ensure_env_exists();
 
-        if (! preg_match('/^APP_KEY=.+/m', file_get_contents(BASE_PATH.'/.env') ?: '')) {
+        // \S, not `.`: in a CRLF file an empty `APP_KEY=` still has a `\r`.
+        if (! preg_match('/^APP_KEY=\S/m', file_get_contents(BASE_PATH.'/.env') ?: '')) {
             write_env(['APP_KEY' => generate_app_key()]);
         }
 

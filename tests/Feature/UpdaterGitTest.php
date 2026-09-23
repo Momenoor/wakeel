@@ -45,14 +45,22 @@ class UpdaterGitTest extends TestCase
         $this->git($this->root, ['clone', 'origin.git', 'work']);
 
         File::ensureDirectoryExists($work.'/public/js');
+        File::ensureDirectoryExists($work.'/config');
         File::put($work.'/.htaccess', "RewriteEngine On\nRULES v1\n");
         File::put($work.'/app.txt', "v1\n");
         File::put($work.'/public/js/asset.js', "asset v1\n");
+        $this->declareVersion($work, '1.0.0');
         $this->commitAndTag($work, 'v1.0.0');
 
         File::put($work.'/.htaccess', "RewriteEngine On\nRULES v2\n");
         File::put($work.'/app.txt', "v2\n");
+        $this->declareVersion($work, '1.1.0');
         $this->commitAndTag($work, 'v1.1.0');
+
+        // Cut without bumping the version — what happened to v1.0.2.
+        File::put($work.'/app.txt', "v3\n");
+        $this->commitAndTag($work, 'v1.2.0');
+
         $this->git($work, ['push', 'origin', 'main', '--tags']);
 
         // The deployed site: installed at 1.0.0, then changed locally.
@@ -121,6 +129,23 @@ class UpdaterGitTest extends TestCase
 
         $this->assertFalse($updater->runNextStep());
         $this->assertStringContainsString('v9.9.9', $updater->state()['log']);
+    }
+
+    public function test_preflight_refuses_a_tag_whose_code_still_declares_the_old_version(): void
+    {
+        $updater = app(Updater::class);
+        $updater->start('1.2.0');
+
+        $this->assertFalse($updater->runNextStep());
+        $this->assertStringContainsString('still declares version 1.1.0', $updater->state()['log']);
+        // Refused before maintenance mode or any checkout.
+        $this->assertSame([], $updater->state()['completed']);
+        $this->assertSame("v1\n", str_replace("\r\n", "\n", File::get($this->site.'/app.txt')));
+    }
+
+    private function declareVersion(string $dir, string $version): void
+    {
+        File::put($dir.'/config/license.php', "<?php\n\nreturn [\n    'app_version' => '{$version}',\n];\n");
     }
 
     private function commitAndTag(string $dir, string $tag): void

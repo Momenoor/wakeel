@@ -8,6 +8,7 @@ use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
@@ -301,6 +302,48 @@ class SettingTest extends TestCase
         }
 
         $this->assertSame(0, $queryCount);
+    }
+
+    /**
+     * What every installer request does once the tables exist: the app boots
+     * (AppServiceProvider reads settings) before anything is saved. That
+     * empty result must not be cached, or it hides everything saved next.
+     */
+    public function test_an_empty_settings_list_is_never_cached(): void
+    {
+        Setting::clearCache();
+
+        $this->assertSame([], Setting::allCached());
+        $this->assertFalse(Cache::has(Setting::CACHE_KEY));
+    }
+
+    /**
+     * The installed-server bug: an empty list cached before the fix above
+     * existed. Settings saved later must still be read.
+     */
+    public function test_a_previously_cached_empty_list_does_not_hide_saved_settings(): void
+    {
+        Setting::query()->create(['key' => 'company_name', 'value' => 'Acme LLC', 'type' => 'string', 'group' => 'general']);
+        // Creating the row above already reset the in-memory copy.
+        Cache::forever(Setting::CACHE_KEY, []);
+
+        $this->assertSame('Acme LLC', Setting::get('company_name'));
+    }
+
+    /**
+     * The installer saves through its fallback file store (see
+     * RedirectToInstaller), while the app's real store can hold a copy
+     * cached at boot — both must be cleared.
+     */
+    public function test_clearing_everywhere_clears_every_store_not_just_the_default(): void
+    {
+        Cache::store('file')->forever(Setting::CACHE_KEY, ['company_name' => 'Stale']);
+        Cache::store('array')->forever(Setting::CACHE_KEY, ['company_name' => 'Stale']);
+
+        Setting::clearCacheEverywhere();
+
+        $this->assertNull(Cache::store('file')->get(Setting::CACHE_KEY));
+        $this->assertNull(Cache::store('array')->get(Setting::CACHE_KEY));
     }
 
     public function test_system_down_page_displays_offline_message_from_database(): void
