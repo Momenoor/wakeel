@@ -9,6 +9,7 @@ use App\Filament\Mms\Support\SystemSwitcher;
 use App\Filament\Pms\Pages\PmsDashboard;
 use App\Filament\Pms\Pages\PMSSettings;
 use App\Filament\Shared\Pages\SystemSettings;
+use App\Filament\Shared\Pages\SystemUpdates;
 use App\Http\Middleware\CheckSystemOffline;
 use App\Http\Middleware\EnsureLicenseIsValid;
 use App\Http\Middleware\RedirectToInstaller;
@@ -91,7 +92,12 @@ class PmsPanelProvider extends PanelProvider
                 PmsDashboard::class,
                 PMSSettings::class,
                 SystemSettings::class,
+                SystemUpdates::class,
             ])
+            ->renderHook(
+                PanelsRenderHook::CONTENT_START,
+                fn () => view('filament.shared.update-banner'),
+            )
             ->navigationGroups([
                 NavigationGroup::make(fn () => __('Properties')),
                 NavigationGroup::make(fn () => __('Leasing')),

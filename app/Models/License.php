@@ -27,6 +27,9 @@ class License extends Model
         'expires_at',
         'last_checked_at',
         'last_valid_at',
+        'latest_version',
+        'latest_release_notes',
+        'latest_released_at',
     ];
 
     protected $casts = [
@@ -34,6 +37,7 @@ class License extends Model
         'expires_at' => 'datetime',
         'last_checked_at' => 'datetime',
         'last_valid_at' => 'datetime',
+        'latest_released_at' => 'datetime',
     ];
 
     /**

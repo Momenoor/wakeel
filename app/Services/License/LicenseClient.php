@@ -7,15 +7,20 @@ use Throwable;
 
 /**
  * The only place this app talks to the license server — the installer's
- * License step calls `activate()` once; `App\Console\Commands\VerifyLicense`
- * (scheduled) calls `verify()` on every check-in. Both return the same
- * shape regardless of success/failure/network error, so callers never
- * need a try/catch of their own.
+ * License step calls `activate()` once; `LicenseVerifier` calls `verify()`
+ * on every check-in. Both return the same shape regardless of
+ * success/failure/network error, so callers never need a try/catch of
+ * their own.
+ *
+ * A valid answer also carries the newest published release — that is how
+ * the app learns about updates, with no request of its own.
+ *
+ * @phpstan-type LicenseResult array{valid: bool, reason: string|null, expires_at: string|null, plan: string|null, latest_version: string|null, release_notes: string|null, released_at: string|null}
  */
 class LicenseClient
 {
     /**
-     * @return array{valid: bool, reason: string|null, expires_at: string|null, plan: string|null}
+     * @return LicenseResult
      */
     public function activate(string $licenseKey, string $fingerprint, string $domain): array
     {
@@ -28,19 +33,21 @@ class LicenseClient
     }
 
     /**
-     * @return array{valid: bool, reason: string|null, expires_at: string|null, plan: string|null}
+     * @return LicenseResult
      */
     public function verify(string $licenseKey, string $fingerprint): array
     {
         return $this->call('verify', [
             'license_key' => $licenseKey,
             'fingerprint' => $fingerprint,
+            // Lets the server track which version each installation runs.
+            'app_version' => config('license.app_version'),
         ]);
     }
 
     /**
      * @param  array<string, string|null>  $payload
-     * @return array{valid: bool, reason: string|null, expires_at: string|null, plan: string|null}
+     * @return LicenseResult
      */
     private function call(string $endpoint, array $payload): array
     {
@@ -59,6 +66,9 @@ class LicenseClient
                 'reason' => $body['reason'] ?? ($response->successful() ? null : 'server_error'),
                 'expires_at' => $body['expires_at'] ?? null,
                 'plan' => $body['plan'] ?? null,
+                'latest_version' => $body['latest_version'] ?? null,
+                'release_notes' => $body['release_notes'] ?? null,
+                'released_at' => $body['released_at'] ?? null,
             ];
         } catch (Throwable) {
             return [
@@ -66,6 +76,9 @@ class LicenseClient
                 'reason' => 'network_error',
                 'expires_at' => null,
                 'plan' => null,
+                'latest_version' => null,
+                'release_notes' => null,
+                'released_at' => null,
             ];
         }
     }

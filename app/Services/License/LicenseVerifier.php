@@ -24,7 +24,7 @@ class LicenseVerifier
     ) {}
 
     /**
-     * @return array{valid: bool, reason: string|null, expires_at: string|null, plan: string|null}
+     * @return array{valid: bool, reason: string|null, expires_at: string|null, plan: string|null, latest_version: string|null, release_notes: string|null, released_at: string|null}
      */
     public function verify(License $license): array
     {
@@ -37,6 +37,9 @@ class LicenseVerifier
             $license->plan = $result['plan'] ?? $license->plan;
             $license->expires_at = $result['expires_at'] ? Carbon::parse($result['expires_at']) : null;
             $license->last_valid_at = now();
+            $license->latest_version = $result['latest_version'];
+            $license->latest_release_notes = $result['release_notes'];
+            $license->latest_released_at = $result['released_at'] ? Carbon::parse($result['released_at']) : null;
         } elseif (in_array($result['reason'], ['suspended', 'revoked', 'expired', 'not_found', 'not_activated'], true)) {
             // The server actively said no — unlike a network error, this
             // is authoritative and shouldn't wait out the grace period.

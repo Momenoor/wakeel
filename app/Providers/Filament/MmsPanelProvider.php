@@ -8,6 +8,7 @@ use App\Filament\Mms\Pages\Auth\CustomLogin;
 use App\Filament\Mms\Pages\Auth\CustomProfile;
 use App\Filament\Mms\Support\SystemSwitcher;
 use App\Filament\Shared\Pages\SystemSettings;
+use App\Filament\Shared\Pages\SystemUpdates;
 use App\Http\Middleware\CheckSystemOffline;
 use App\Http\Middleware\EnsureLicenseIsValid;
 use App\Http\Middleware\RedirectToInstaller;
@@ -88,7 +89,12 @@ class MmsPanelProvider extends PanelProvider
             // an install without MMS.
             ->pages([
                 SystemSettings::class,
+                SystemUpdates::class,
             ])
+            ->renderHook(
+                PanelsRenderHook::CONTENT_START,
+                fn () => view('filament.shared.update-banner'),
+            )
             ->discoverClusters(in: app_path('Filament/Mms/Clusters'), for: 'App\Filament\Mms\Clusters')
             ->discoverWidgets(in: app_path('Filament/Mms/Widgets'), for: 'App\Filament\Mms\Widgets')
             ->renderHook(
