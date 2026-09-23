@@ -5,7 +5,9 @@ namespace App\Http\Middleware;
 use App\Models\Setting;
 use BezhanSalleh\FilamentShield\Support\Utils;
 use Closure;
+use Filament\Facades\Filament;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 use Symfony\Component\HttpFoundation\Response;
 
 class CheckSystemOffline
@@ -66,7 +68,13 @@ class CheckSystemOffline
 
         // 5. If user is unauthenticated AND trying to access a Filament panel, send to login
         if (! $user && ($request->is('mms*') || $request->is('pms*') || $request->routeIs('filament.*'))) {
-            return response()->redirectToRoute($request->is('pms*') ? 'filament.pms.auth.login' : 'filament.mms.auth.login');
+            $loginRoute = $request->is('pms*') ? 'filament.pms.auth.login' : 'filament.mms.auth.login';
+
+            // A panel whose module isn't installed has no login route —
+            // fall back to the default panel's.
+            return Route::has($loginRoute)
+                ? response()->redirectToRoute($loginRoute)
+                : redirect()->to(Filament::getDefaultPanel()->getLoginUrl());
         }
 
         // 6. Everyone else (unauthenticated visitors or non-admin users) gets redirected to system-down

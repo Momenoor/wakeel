@@ -37,7 +37,8 @@ Route::get('system-down', function () {
     return view('errors.maintenance', compact('message'));
 })->name('system-down');
 
-Route::get('/login', fn () => redirect()->route('filament.mms.auth.login'))->name('login');
+// The default panel's own login — MMS isn't registered on a PMS-only install.
+Route::get('/login', fn () => redirect()->to(Filament::getDefaultPanel()->getLoginUrl()))->name('login');
 
 if (config('modules.mms')) {
     require __DIR__.'/mms.php';

@@ -142,6 +142,7 @@ class InstallWizardTest extends TestCase
             ->set('app_url', 'https://test.example')
             ->call('saveAppSettingsAndContinue')
             ->assertSet('step', 5)
+            ->set('module_mms', true)
             ->call('saveModulesAndContinue')
             ->assertSet('step', 6)
             ->set('whatsapp_token', 'test-whatsapp-token')
@@ -220,6 +221,7 @@ class InstallWizardTest extends TestCase
             ->set('app_name', 'Test Office')
             ->set('app_url', 'https://test.example')
             ->call('saveAppSettingsAndContinue')
+            ->set('module_mms', true)
             ->set('module_mms_payroll', false)
             ->call('saveModulesAndContinue');
 
@@ -265,6 +267,7 @@ class InstallWizardTest extends TestCase
             ->set('app_name', 'Test Office')
             ->set('app_url', 'https://test.example')
             ->call('saveAppSettingsAndContinue')
+            ->set('module_mms', true)
             ->call('saveModulesAndContinue');
 
         // Simulates the state a failed migration batch leaves behind: the

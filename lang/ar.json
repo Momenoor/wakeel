@@ -2629,7 +2629,7 @@
     "Not detected — run: npm install && npm run build": "غير مكتشف — نفّذ: npm install && npm run build",
     "Turn off what this deployment doesn't need. Every table is still created either way — this only controls which panels and menus are enabled, and can be changed later.": "أوقف تشغيل ما لا يحتاجه هذا التنصيب. يتم إنشاء كل جدول بياناته على أي حال — هذا فقط يتحكم في اللوحات والقوائم المفعّلة، ويمكن تغييره لاحقًا.",
     "Properties Management (PMS)": "إدارة الممتلكات (PMS)",
-    "Legal Core (Matters, Courts, Parties) — always on": "الأساس القانوني (القضايا، المحاكم، الأطراف) — مفعّل دائمًا",
+    "Core (Parties) — always on, required by PMS": "الأساس (الأطراف) — مفعّل دائمًا، مطلوب لنظام إدارة العقارات",
     "Legal Management (MMS)": "الإدارة القانونية (MMS)",
     "Payroll & Incentives": "الرواتب والحوافز",
     "Communications (Bulk Mail, Letter Templates)": "المراسلات (البريد الجماعي، قوالب الخطابات)",

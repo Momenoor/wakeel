@@ -210,7 +210,7 @@
             <div class="field">
                 <label>
                     <input type="checkbox" checked disabled>
-                    {{ __('Legal Core (Matters, Courts, Parties) — always on') }}
+                    {{ __('Core (Parties) — always on, required by PMS') }}
                 </label>
             </div>
 

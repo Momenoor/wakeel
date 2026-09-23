@@ -87,7 +87,9 @@ class InstallWizard extends Component
     // Step 5 — modules
     public bool $module_pms = true;
 
-    public bool $module_mms = true;
+    // Off unless the operator opts in — PMS alone only needs the shared
+    // parties table, which is always installed.
+    public bool $module_mms = false;
 
     public bool $module_mms_payroll = true;
 
@@ -135,7 +137,7 @@ class InstallWizard extends Component
         // second line of defence against someone reaching the component by a
         // path that skipped the middleware.
         if (app(InstallationStatus::class)->isInstalled()) {
-            $this->redirect('/', navigate: false);
+            $this->redirect(url('/'), navigate: false);
 
             return;
         }
@@ -430,6 +432,14 @@ class InstallWizard extends Component
 
     public function saveModulesAndContinue(): void
     {
+        // MMS's own sub-modules are hidden (but keep their last value)
+        // while MMS itself is unticked — never enable them without it.
+        if (! $this->module_mms) {
+            $this->module_mms_payroll = false;
+            $this->module_mms_communications = false;
+            $this->module_mms_calendar = false;
+        }
+
         app(EnvironmentFileWriter::class)->set([
             'MODULE_PMS_ENABLED' => $this->module_pms ? 'true' : 'false',
             'MODULE_MMS_ENABLED' => $this->module_mms ? 'true' : 'false',
@@ -780,7 +790,10 @@ class InstallWizard extends Component
         Artisan::call('route:clear');
         Artisan::call('view:clear');
 
-        $this->redirect('/mms/login', navigate: false);
+        // The root route forwards to whichever panel is the default for
+        // the modules chosen — MMS isn't always installed. url() keeps a
+        // subfolder install's folder (e.g. /wakeel).
+        $this->redirect(url('/'), navigate: false);
     }
 
     private function validateDatabaseFields(): void
