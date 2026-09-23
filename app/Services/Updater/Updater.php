@@ -5,6 +5,7 @@ namespace App\Services\Updater;
 use App\Models\License;
 use App\Models\Setting;
 use App\Services\License\LicenseVerifier;
+use App\Support\AppUpdate;
 use Illuminate\Support\Facades\Artisan;
 use RuntimeException;
 use Symfony\Component\Process\ExecutableFinder;
@@ -157,19 +158,6 @@ class Updater
 
         $output .= "Found tag v{$version}.\n";
 
-        // The version a release reports is config('license.app_version') in
-        // its own code. A tag cut without bumping it would install fine and
-        // then still report the old version — offering the same update again
-        // forever — so it is refused before anything changes.
-        $declared = $this->declaredVersion("v{$version}");
-
-        if ($declared !== $version) {
-            throw new RuntimeException(__('Release v:version still declares version :declared in config/license.php. The release has to be re-tagged with the version bumped before it can be installed.', [
-                'version' => $version,
-                'declared' => $declared ?? '?',
-            ]));
-        }
-
         // Local edits would be overwritten (or block the checkout). Only
         // two kinds are expected, and checkout() handles both: the PHP
         // handler install.php adds to .htaccess, and package assets that
@@ -278,7 +266,7 @@ class Updater
 
         Setting::set('last_updated_at', now()->toDateTimeString(), 'system');
 
-        return __('Updated to version :version.', ['version' => config('license.app_version')])."\n";
+        return __('Updated to version :version.', ['version' => AppUpdate::currentVersion()])."\n";
     }
 
     private function restoreOfflineMode(): void
@@ -305,18 +293,6 @@ class Updater
         }
 
         return $output;
-    }
-
-    /**
-     * The `app_version` a tag's own config/license.php declares.
-     */
-    private function declaredVersion(string $tag): ?string
-    {
-        $config = $this->process([...$this->gitCommand(), 'show', "{$tag}:config/license.php"]);
-
-        return $config['ok'] && preg_match("/'app_version'\s*=>\s*'([^']+)'/", $config['output'], $match) === 1
-            ? $match[1]
-            : null;
     }
 
     /**

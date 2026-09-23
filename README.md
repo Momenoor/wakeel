@@ -340,18 +340,17 @@ Installations learn about new versions from the license server on their regular 
 
 To publish a release:
 
-1. Set the new version in `config/license.php` (`'app_version' => '1.2.0'`).
-2. Rebuild and commit frontend assets if CSS/JS changed: `npm run build`.
-3. Commit, then tag the commit with the same version and push the tag:
+1. Rebuild and commit frontend assets if CSS/JS changed: `npm run build`.
+2. Commit, then tag the commit and push the tag — the tag **is** the version, there is nothing to edit:
 
    ```bash
    git tag v1.2.0
    git push origin main --tags
    ```
 
-4. On the license server, add the release under **Releases** (version `1.2.0`, release notes in Markdown) and tick **Published**.
+3. On the license server, add the release under **Releases** (version `1.2.0`, release notes in Markdown) and tick **Published**.
 
-Only publish once the tag is pushed: installations check out `v{version}` and stop with an error if it doesn't exist. The **Releases** list on the license server shows how many installations run each version.
+An installation reports the highest `vX.Y.Z` tag on its checked-out commit (read from `.git`); `app_version` in `config/license.php` is only the fallback for an untagged checkout. Only publish once the tag is pushed: installations check out `v{version}` and stop with an error if it doesn't exist. The **Releases** list on the license server shows how many installations run each version.
 
 ---
 

@@ -2714,6 +2714,5 @@
     "An update to version :version has not finished — the site is in maintenance mode.": "لم يكتمل التحديث إلى الإصدار :version — الموقع في وضع الصيانة.",
     "Open System Updates": "فتح تحديثات النظام",
     "Version :version is available — you are on :current.": "الإصدار :version متاح — أنت تستخدم :current.",
-    "View update": "عرض التحديث",
-    "Release v:version still declares version :declared in config/license.php. The release has to be re-tagged with the version bumped before it can be installed.": "الإصدار v:version لا يزال يعلن الإصدار :declared في config/license.php. يجب إعادة وسم الإصدار بعد رفع رقم الإصدار قبل أن يمكن تثبيته."
+    "View update": "عرض التحديث"
 }

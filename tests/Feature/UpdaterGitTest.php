@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Setting;
 use App\Services\Updater\Updater;
+use App\Support\AppUpdate;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\Process\ExecutableFinder;
@@ -131,16 +132,21 @@ class UpdaterGitTest extends TestCase
         $this->assertStringContainsString('v9.9.9', $updater->state()['log']);
     }
 
-    public function test_preflight_refuses_a_tag_whose_code_still_declares_the_old_version(): void
+    public function test_after_updating_the_app_reports_the_tag_even_if_config_was_not_bumped(): void
     {
+        config(['license.version_from_git' => true]);
+
+        $this->assertSame('1.0.0', AppUpdate::currentVersion());
+
         $updater = app(Updater::class);
         $updater->start('1.2.0');
 
-        $this->assertFalse($updater->runNextStep());
-        $this->assertStringContainsString('still declares version 1.1.0', $updater->state()['log']);
-        // Refused before maintenance mode or any checkout.
-        $this->assertSame([], $updater->state()['completed']);
-        $this->assertSame("v1\n", str_replace("\r\n", "\n", File::get($this->site.'/app.txt')));
+        $this->assertTrue($updater->runNextStep(), (string) $updater->state()['log']); // preflight
+        $this->assertTrue($updater->runNextStep(), (string) $updater->state()['log']); // maintenance
+        $this->assertTrue($updater->runNextStep(), (string) $updater->state()['log']); // code
+
+        // v1.2.0's config still says 1.1.0 — the tag is what counts.
+        $this->assertSame('1.2.0', AppUpdate::currentVersion());
     }
 
     private function declareVersion(string $dir, string $version): void

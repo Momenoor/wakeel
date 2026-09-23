@@ -2,6 +2,7 @@
 
 namespace App\Services\License;
 
+use App\Support\AppUpdate;
 use Illuminate\Support\Facades\Http;
 use Throwable;
 
@@ -28,7 +29,7 @@ class LicenseClient
             'license_key' => $licenseKey,
             'fingerprint' => $fingerprint,
             'domain' => $domain,
-            'app_version' => config('license.app_version'),
+            'app_version' => AppUpdate::currentVersion(),
         ]);
     }
 
@@ -41,7 +42,7 @@ class LicenseClient
             'license_key' => $licenseKey,
             'fingerprint' => $fingerprint,
             // Lets the server track which version each installation runs.
-            'app_version' => config('license.app_version'),
+            'app_version' => AppUpdate::currentVersion(),
         ]);
     }
 

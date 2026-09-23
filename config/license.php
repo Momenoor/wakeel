@@ -30,7 +30,23 @@ return [
 
     'installation_id' => env('INSTALLATION_ID'),
 
-    'app_version' => '1.0.0',
+    /*
+    |--------------------------------------------------------------------------
+    | Application Version
+    |--------------------------------------------------------------------------
+    |
+    | The running version is the release tag (vX.Y.Z) of the checked-out
+    | commit — tagging IS releasing, there is nothing to bump here (see
+    | App\Support\AppUpdate::currentVersion()). `app_version` is only the
+    | fallback for a checkout that isn't on a tagged commit, e.g. a
+    | development machine on `main`. `version_from_git` is off in tests,
+    | which run inside this repository's own (tagged) checkout.
+    |
+    */
+
+    'app_version' => '1.0.7',
+
+    'version_from_git' => env('LICENSE_VERSION_FROM_GIT', true),
 
     /*
     |--------------------------------------------------------------------------
