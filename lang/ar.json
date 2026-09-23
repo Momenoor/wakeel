@@ -2714,9 +2714,5 @@
     "An update to version :version has not finished — the site is in maintenance mode.": "لم يكتمل التحديث إلى الإصدار :version — الموقع في وضع الصيانة.",
     "Open System Updates": "فتح تحديثات النظام",
     "Version :version is available — you are on :current.": "الإصدار :version متاح — أنت تستخدم :current.",
-    "View update": "عرض التحديث",
-    "Update Test": "اختبار التحديث",
-    "The update worked": "نجح التحديث",
-    "This page was added in version 1.0.8. If you can see it, the one-click update installed the new code.": "أُضيفت هذه الصفحة في الإصدار 1.0.8. إذا كنت تراها، فقد ثبّت التحديث بنقرة واحدة الشيفرة الجديدة.",
-    "Last updated": "آخر تحديث"
+    "View update": "عرض التحديث"
 }

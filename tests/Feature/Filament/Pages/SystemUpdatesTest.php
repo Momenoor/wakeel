@@ -3,7 +3,6 @@
 namespace Tests\Feature\Filament\Pages;
 
 use App\Filament\Shared\Pages\SystemUpdates;
-use App\Filament\Shared\Pages\UpdateTest;
 use App\Models\License;
 use App\Models\Setting;
 use App\Models\User;
@@ -87,15 +86,6 @@ class SystemUpdatesTest extends TestCase
             ->assertSuccessful()
             ->assertSee('1.2.0')
             ->assertSee('New reports');
-    }
-
-    public function test_the_update_test_page_is_in_the_sidebar_and_renders(): void
-    {
-        $this->get(UpdateTest::getUrl())
-            ->assertSuccessful()
-            ->assertSee('The update worked');
-
-        $this->get(SystemUpdates::getUrl())->assertSee('Update Test');
     }
 
     public function test_only_super_admins_can_open_the_page(): void

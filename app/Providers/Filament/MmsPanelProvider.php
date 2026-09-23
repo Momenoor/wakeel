@@ -9,7 +9,6 @@ use App\Filament\Mms\Pages\Auth\CustomProfile;
 use App\Filament\Mms\Support\SystemSwitcher;
 use App\Filament\Shared\Pages\SystemSettings;
 use App\Filament\Shared\Pages\SystemUpdates;
-use App\Filament\Shared\Pages\UpdateTest;
 use App\Http\Middleware\CheckSystemOffline;
 use App\Http\Middleware\EnsureLicenseIsValid;
 use App\Http\Middleware\RedirectToInstaller;
@@ -91,7 +90,6 @@ class MmsPanelProvider extends PanelProvider
             ->pages([
                 SystemSettings::class,
                 SystemUpdates::class,
-                UpdateTest::class,
             ])
             ->renderHook(
                 PanelsRenderHook::CONTENT_START,
