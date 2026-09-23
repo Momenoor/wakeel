@@ -4,6 +4,7 @@ namespace App\Filament\Shared\Pages;
 
 use App\Filament\Shared\Pages\Schemas\SystemSettingsForm;
 use App\Models\Setting;
+use App\Services\Installer\EnvironmentFileWriter;
 use App\Support\Branding;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -186,6 +187,12 @@ class SystemSettings extends Page
         }
 
         Setting::applyMailConfig();
+
+        // The live default language is APP_LOCALE (config('app.locale')),
+        // not this setting — keep .env in step, as the installer does.
+        if (filled($state['app_locale'] ?? null)) {
+            app(EnvironmentFileWriter::class)->set(['APP_LOCALE' => $state['app_locale']]);
+        }
 
         Notification::make()
             ->title(__('Settings saved successfully'))

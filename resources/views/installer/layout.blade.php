@@ -148,6 +148,7 @@
             cursor: pointer;
             background: var(--primary);
             color: #fff;
+            text-decoration: none;
         }
 
         .btn:hover { background: var(--primary-hover); }

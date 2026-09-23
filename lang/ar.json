@@ -2661,5 +2661,8 @@
     "Uploading…": "جارٍ الرفع…",
     "Optional. Shown in the panel header and in emails.": "اختياري. يظهر في رأس اللوحة وفي رسائل البريد الإلكتروني.",
     "Optional. Used for users who haven't uploaded their own photo.": "اختياري. تُستخدم للمستخدمين الذين لم يرفعوا صورتهم الخاصة.",
-    "Both can be changed later from Settings → Branding.": "يمكن تغيير كليهما لاحقًا من الإعدادات ← الهوية."
+    "Both can be changed later from Settings → Branding.": "يمكن تغيير كليهما لاحقًا من الإعدادات ← الهوية.",
+    "Company Name": "اسم الشركة",
+    "The language users see until they pick their own. Can be changed later from Settings.": "اللغة التي يراها المستخدمون حتى يختاروا لغتهم الخاصة. يمكن تغييرها لاحقًا من الإعدادات.",
+    "Printed on vouchers, forms and other documents.": "تُطبع على السندات والنماذج والمستندات الأخرى."
 }

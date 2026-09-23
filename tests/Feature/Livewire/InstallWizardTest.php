@@ -5,13 +5,17 @@ namespace Tests\Feature\Livewire;
 use App\Filament\Mms\Resources\EmployeeProfiles\EmployeeProfileResource;
 use App\Livewire\Installer\InstallWizard;
 use App\Models\License;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\Installer\EnvironmentFileWriter;
+use App\Support\Branding;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use Spatie\Permission\Models\Permission;
@@ -139,6 +143,7 @@ class InstallWizardTest extends TestCase
             ->call('saveDatabaseAndContinue')
             ->assertSet('step', 4)
             ->set('app_name', 'Test Office')
+            ->set('company_name', 'Test Company LLC')
             ->set('app_url', 'https://test.example')
             ->call('saveAppSettingsAndContinue')
             ->assertSet('step', 5)
@@ -185,6 +190,67 @@ class InstallWizardTest extends TestCase
         $this->assertSame('APP_NAME="Test Office"', $this->envLine('APP_NAME'));
     }
 
+    #[RunInSeparateProcess]
+    public function test_branding_uploaded_during_install_is_in_effect_once_installed(): void
+    {
+        $this->fakeSuccessfulActivation();
+        Storage::fake('public');
+
+        $component = Livewire::test(InstallWizard::class)
+            ->call('continueFromRequirements')
+            ->set('license_key', 'MIE-AAAAA-BBBBB-CCCCC-DDDDD')
+            ->call('activateLicense')
+            ->call('continueFromLicense')
+            ->set('db_connection', 'sqlite')
+            ->set('db_database', $this->tempDbPath)
+            ->call('testConnection')
+            ->call('saveDatabaseAndContinue')
+            ->set('app_name', 'Test Office')
+            ->set('company_name', 'Test Company LLC')
+            ->set('app_url', 'https://test.example')
+            ->set('app_locale', 'en')
+            ->set('company_logo', UploadedFile::fake()->image('logo.png', 200, 80))
+            ->set('default_avatar', UploadedFile::fake()->image('avatar.png', 128, 128))
+            ->call('saveAppSettingsAndContinue')
+            ->assertHasNoErrors()
+            ->set('module_mms', true)
+            ->call('saveModulesAndContinue')
+            ->call('saveIntegrationsAndContinue');
+
+        do {
+            $component->call('runNextInstallTask');
+        } while (! $component->get('migrated') && ! $component->get('migrationFailed'));
+
+        $component->assertSet('migrationFailed', false)
+            ->call('continueFromMigration')
+            ->set('admin_name', 'Test Admin')
+            ->set('admin_email', 'admin@test.example')
+            ->set('admin_password', 'password123')
+            ->set('admin_password_confirmation', 'password123')
+            ->call('createAdmin')
+            ->assertSet('step', 9);
+
+        // Deliberately no finish(): in a real browser, the request after
+        // createAdmin() runs with the installed app's session, so a Livewire
+        // call from the last step fails CSRF — everything must already be
+        // done by now.
+        $this->assertTrue(File::exists($this->lockFile));
+        $this->assertSame('APP_LOCALE=en', $this->envLine('APP_LOCALE'));
+        $this->assertSame('en', Setting::get('app_locale'));
+        $this->assertSame('Test Company LLC', Setting::get('company_name'));
+
+        $logo = Setting::query()->where('key', Branding::LOGO)->value('value');
+        $avatar = Setting::query()->where('key', Branding::DEFAULT_AVATAR)->value('value');
+
+        $this->assertNotNull($logo);
+        $this->assertNotNull($avatar);
+        Storage::disk('public')->assertExists([$logo, $avatar]);
+
+        // What the panels and user menu actually render.
+        $this->assertStringContainsString($logo, Branding::logoUrl());
+        $this->assertStringContainsString($avatar, (string) User::factory()->make()->getFilamentAvatarUrl());
+    }
+
     public function test_activation_failure_blocks_continuing_past_the_license_step(): void
     {
         Http::fake(['*' => Http::response(['valid' => false, 'reason' => 'not_found'])]);
@@ -219,6 +285,7 @@ class InstallWizardTest extends TestCase
             ->call('testConnection')
             ->call('saveDatabaseAndContinue')
             ->set('app_name', 'Test Office')
+            ->set('company_name', 'Test Company LLC')
             ->set('app_url', 'https://test.example')
             ->call('saveAppSettingsAndContinue')
             ->set('module_mms', true)
@@ -265,6 +332,7 @@ class InstallWizardTest extends TestCase
             ->call('testConnection')
             ->call('saveDatabaseAndContinue')
             ->set('app_name', 'Test Office')
+            ->set('company_name', 'Test Company LLC')
             ->set('app_url', 'https://test.example')
             ->call('saveAppSettingsAndContinue')
             ->set('module_mms', true)

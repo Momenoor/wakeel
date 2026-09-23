@@ -5,8 +5,10 @@ namespace Tests\Feature\Filament\Pages;
 use App\Filament\Shared\Pages\SystemSettings;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\Installer\EnvironmentFileWriter;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Mail;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
@@ -60,6 +62,11 @@ class SystemSettingsTest extends TestCase
 
     public function test_can_fill_and_save_settings(): void
     {
+        // Saving writes APP_LOCALE to .env — never the real one.
+        $envPath = sys_get_temp_dir().'/system-settings-test-'.uniqid().'.env';
+        File::put($envPath, "APP_LOCALE=ar\n");
+        $this->app->instance(EnvironmentFileWriter::class, new EnvironmentFileWriter($envPath));
+
         Livewire::test(SystemSettings::class)
             ->fillForm([
                 'app_name' => 'My Custom System',
@@ -84,6 +91,9 @@ class SystemSettingsTest extends TestCase
         $this->assertSame('log', Setting::get('mail_mailer'));
         $this->assertSame('system@test.com', Setting::get('mail_from_address'));
         $this->assertSame('System Tester', Setting::get('mail_from_name'));
+        $this->assertStringContainsString('APP_LOCALE=en', File::get($envPath));
+
+        File::delete($envPath);
     }
 
     public function test_can_trigger_send_test_email(): void

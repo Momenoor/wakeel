@@ -3,6 +3,7 @@
 namespace App\Livewire\Installer;
 
 use App\Models\License;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\Installer\DatabaseConnectionTester;
 use App\Services\Installer\EnvironmentFileWriter;
@@ -88,6 +89,10 @@ class InstallWizard extends Component
     public string $app_name = '';
 
     public string $app_url = '';
+
+    public string $company_name = '';
+
+    public string $app_locale = 'en';
 
     /** @var TemporaryUploadedFile|null */
     public $company_logo = null;
@@ -393,6 +398,8 @@ class InstallWizard extends Component
         $this->validate([
             'app_name' => ['required', 'string', 'max:255'],
             'app_url' => ['required', 'url', 'max:255'],
+            'company_name' => ['required', 'string', 'max:255'],
+            'app_locale' => ['required', 'in:ar,en'],
             'company_logo' => ['nullable', 'image', 'max:2048'],
             'default_avatar' => ['nullable', 'image', 'max:2048'],
         ]);
@@ -403,9 +410,14 @@ class InstallWizard extends Component
             }
         }
 
+        // store() moved them out of Livewire's temp folder.
+        $this->company_logo = null;
+        $this->default_avatar = null;
+
         app(EnvironmentFileWriter::class)->set([
             'APP_NAME' => $this->app_name,
             'APP_URL' => $this->app_url,
+            'APP_LOCALE' => $this->app_locale,
         ]);
 
         config(['app.name' => $this->app_name, 'app.url' => $this->app_url]);
@@ -807,12 +819,44 @@ class InstallWizard extends Component
         $role = Role::firstOrCreate(['name' => $roleName, 'guard_name' => 'web']);
         $user->assignRole($role);
 
+        $this->completeInstallation();
+
         $this->step = 9;
     }
 
     public function finish(): void
     {
+        $this->completeInstallation();
+
+        // The root route forwards to whichever panel is the default for
+        // the modules chosen — MMS isn't always installed. url() keeps a
+        // subfolder install's folder (e.g. /wakeel).
+        $this->redirect(url('/'), navigate: false);
+    }
+
+    /**
+     * Runs from createAdmin(), in the same request that creates the first
+     * user — not from a later "finish" click. Once a user exists the app
+     * counts as installed, so the next request switches session/cache from
+     * the installer's file fallback to the real database drivers; the
+     * installer's session isn't there, the click fails CSRF ("page
+     * expired"), and anything left for it would silently never run. That
+     * is exactly how uploaded branding used to go missing.
+     *
+     * Safe to run twice (finish() calls it again).
+     */
+    private function completeInstallation(): void
+    {
         Branding::save($this->brandingPaths);
+
+        // Settings → Default Language shows (and later edits) this; the
+        // live default itself is APP_LOCALE, written back in step 4.
+        Setting::set('app_locale', $this->app_locale, 'general');
+
+        // Printed documents fall back to the app name when this is blank.
+        if (filled($this->company_name)) {
+            Setting::set('company_name', $this->company_name, 'general');
+        }
 
         // Uploaded branding is served from public/storage.
         if ($this->brandingPaths !== [] && ! file_exists(public_path('storage'))) {
@@ -828,11 +872,6 @@ class InstallWizard extends Component
         Artisan::call('config:clear');
         Artisan::call('route:clear');
         Artisan::call('view:clear');
-
-        // The root route forwards to whichever panel is the default for
-        // the modules chosen — MMS isn't always installed. url() keeps a
-        // subfolder install's folder (e.g. /wakeel).
-        $this->redirect(url('/'), navigate: false);
     }
 
     private function validateDatabaseFields(): void

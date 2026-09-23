@@ -187,6 +187,23 @@
             </div>
 
             <div class="field">
+                <label>{{ __('Company Name') }}</label>
+                <input type="text" wire:model="company_name">
+                <p class="hint">{{ __('Printed on vouchers, forms and other documents.') }}</p>
+                @error('company_name') <div class="error">{{ $message }}</div> @enderror
+            </div>
+
+            <div class="field">
+                <label>{{ __('Default Language') }}</label>
+                <select wire:model="app_locale">
+                    <option value="ar">العربية (Arabic)</option>
+                    <option value="en">English</option>
+                </select>
+                <p class="hint">{{ __('The language users see until they pick their own. Can be changed later from Settings.') }}</p>
+                @error('app_locale') <div class="error">{{ $message }}</div> @enderror
+            </div>
+
+            <div class="field">
                 <label>{{ __('Company Logo') }}</label>
                 <input type="file" wire:model="company_logo" accept="image/*">
                 <div wire:loading wire:target="company_logo" class="hint">{{ __('Uploading…') }}</div>
@@ -424,9 +441,13 @@
             <p>{{ __('The application is ready. This setup wizard will no longer be reachable once you continue.') }}</p>
 
             <div class="actions">
-                <button type="button" class="btn" wire:click="finish">
+                {{-- A plain link, not a Livewire call: installation already
+                     completed in the previous step, and this page's session
+                     is no longer the one the app uses (see
+                     InstallWizard::completeInstallation()). --}}
+                <a href="{{ url('/') }}" class="btn">
                     {{ __('Go to Login') }}
-                </button>
+                </a>
             </div>
         </div>
     @endif
