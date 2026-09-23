@@ -149,7 +149,9 @@ class InstallWizard extends Component
         // APP_URL sitting at the Laravel skeleton's generic default.
         $configuredUrl = config('app.url', 'http://localhost');
         $this->app_url = $configuredUrl === 'http://localhost'
-            ? request()->getSchemeAndHttpHost()
+            // Keeps a subfolder install's folder (`/wakeel`), minus any
+            // `/public` from being reached by that path directly.
+            ? (string) preg_replace('#/public$#', '', request()->root())
             : $configuredUrl;
 
         $this->whatsapp_phone_id = (string) config('services.whatsapp.phone_id');

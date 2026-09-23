@@ -125,9 +125,23 @@ function write_env(array $values): void
 }
 
 /**
- * The scheme+host this very request arrived on — the domain the operator
- * is actually reaching this installer through, which is exactly what
- * APP_URL should be. Detected once, when `.env` doesn't exist yet, so
+ * The URL path the app lives under, without a trailing slash — `''` at a
+ * domain's root, `/wakeel` in a subfolder. A trailing `/public` is dropped:
+ * reached through the root `.htaccess` (or as `/wakeel/public/...` directly),
+ * this file runs as `/wakeel/public/preinstall.php`, but the app itself is
+ * served from `/wakeel`.
+ */
+function app_base_path(): string
+{
+    $dir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '')), '/.');
+
+    return (string) preg_replace('#/public$#', '', $dir);
+}
+
+/**
+ * The scheme+host+folder this very request arrived on — the URL the
+ * operator is actually reaching this installer through, which is exactly
+ * what APP_URL should be. Detected once, when `.env` doesn't exist yet, so
  * the operator is never asked to type in their own domain by hand.
  */
 function current_app_url(): string
@@ -138,7 +152,7 @@ function current_app_url(): string
 
     $host = $_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost';
 
-    return "{$scheme}://{$host}";
+    return "{$scheme}://{$host}".app_base_path();
 }
 
 function ensure_env_exists(): void
@@ -150,7 +164,9 @@ function ensure_env_exists(): void
     $example = BASE_PATH.'/.env.example';
     file_put_contents(BASE_PATH.'/.env', file_exists($example) ? file_get_contents($example) : '');
 
-    write_env(['APP_URL' => current_app_url()]);
+    // .env.example is set up for local development; a server running
+    // this installer is a real deployment.
+    write_env(['APP_ENV' => 'production', 'APP_URL' => current_app_url()]);
 }
 
 /**
@@ -250,7 +266,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'DB_PASSWORD' => $password,
                     ]);
 
-                header('Location: wakeel/install?db=configured');
+                header('Location: '.app_base_path().'/install?db=configured');
                 exit;
             }
 

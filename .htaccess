@@ -1,0 +1,40 @@
+# Lets the app be served from its project root (e.g. a subfolder such as
+# https://example.com/wakeel/) when the web server's document root can't
+# be pointed at public/ directly — so URLs read /wakeel/install instead of
+# /wakeel/public/install. Nothing outside public/ is ever served: real
+# files come from public/, everything else goes through the front
+# controller (index.php → public/index.php), so .env, vendor/, storage/
+# and the rest just 404.
+
+<IfModule mod_negotiation.c>
+    Options -MultiViews -Indexes
+</IfModule>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Handle Authorization Header
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Handle X-XSRF-Token Header
+    RewriteCond %{HTTP:x-xsrf-token} .
+    RewriteRule .* - [E=HTTP_X_XSRF_TOKEN:%{HTTP:X-XSRF-Token}]
+
+    # Old /public/... URLs keep working — public/.htaccess takes over.
+    RewriteRule ^public/ - [L]
+
+    # The root front controller itself.
+    RewriteRule ^index\.php$ - [L]
+
+    # This directory's filesystem path, whatever folder the app sits in.
+    RewriteCond $0#%{REQUEST_FILENAME} ^(.*)#(.*)\1$
+    RewriteRule ^.*$ - [E=APP_BASE_DIR:%2]
+
+    # Real files (build assets, preinstall.php, storage link...) from public/.
+    RewriteCond %{ENV:APP_BASE_DIR}public/$1 -f
+    RewriteRule ^(.*)$ public/$1 [L]
+
+    # Everything else goes to Laravel.
+    RewriteRule ^ index.php [L]
+</IfModule>

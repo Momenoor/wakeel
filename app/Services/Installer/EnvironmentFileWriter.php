@@ -35,6 +35,10 @@ class EnvironmentFileWriter
         $example = base_path('.env.example');
 
         File::put($this->envPath(), File::exists($example) ? File::get($example) : '');
+
+        // .env.example is set up for local development; a `.env` the
+        // installer creates is for a real deployment.
+        $this->set(['APP_ENV' => 'production']);
     }
 
     /**
