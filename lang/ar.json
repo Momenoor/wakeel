@@ -2714,5 +2714,11 @@
     "An update to version :version has not finished — the site is in maintenance mode.": "لم يكتمل التحديث إلى الإصدار :version — الموقع في وضع الصيانة.",
     "Open System Updates": "فتح تحديثات النظام",
     "Version :version is available — you are on :current.": "الإصدار :version متاح — أنت تستخدم :current.",
-    "View update": "عرض التحديث"
+    "View update": "عرض التحديث",
+    "All owner groups": "جميع مجموعات الملاك",
+    "All buildings": "جميع المباني",
+    "Upcoming Instalments (Next :days Days)": "الأقساط القادمة (خلال :days أيام)",
+    "In :days days": "خلال :days أيام",
+    "Amount Due": "المبلغ المستحق",
+    "No instalments due in the next :days days": "لا توجد أقساط مستحقة خلال :days أيام القادمة"
 }

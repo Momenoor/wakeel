@@ -3,9 +3,11 @@
 namespace App\Filament\Pms\Widgets;
 
 use App\Enums\PMS\InstallmentPaymentStatus;
+use App\Filament\Pms\Support\PortfolioScope;
 use App\Models\Installment;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Widgets\ChartWidget;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
 
 /**
  * Collected rent revenue (paid installments) by month, trailing 12 months —
@@ -15,8 +17,11 @@ use Filament\Widgets\ChartWidget;
 class PmsRevenueChartWidget extends ChartWidget
 {
     use HasWidgetShield;
+    use InteractsWithPageFilters;
 
     protected int|string|array $columnSpan = 'full';
+
+    protected static ?int $sort = 3;
 
     public function getHeading(): string
     {
@@ -28,7 +33,10 @@ class PmsRevenueChartWidget extends ChartWidget
         $months = collect(range(11, 0))
             ->map(fn (int $i) => now()->subMonths($i)->startOfMonth());
 
-        $paidByMonth = Installment::query()
+        // The dashboard's owner group / building filters.
+        [$ownerGroupId, $propertyId] = PortfolioScope::fromFilters($this->pageFilters);
+
+        $paidByMonth = PortfolioScope::installments(Installment::query(), $ownerGroupId, $propertyId)
             ->where('payment_status', InstallmentPaymentStatus::PAID)
             ->whereNotNull('paid_date')
             ->where('paid_date', '>=', $months->first())

@@ -4,12 +4,13 @@ namespace App\Filament\Pms\Widgets;
 
 use App\Enums\PMS\InstallmentPaymentStatus;
 use App\Enums\PMS\UnitStatus;
-use App\Filament\Pms\Resources\Leases\LeaseResource;
+use App\Filament\Pms\Support\PortfolioScope;
 use App\Models\Installment;
 use App\Models\Lease;
 use App\Models\Unit;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Support\Colors\Color;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 
@@ -21,8 +22,11 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
 class PMSOverviewWidget extends StatsOverviewWidget
 {
     use HasWidgetShield;
+    use InteractsWithPageFilters;
 
     protected int|string|array $columnSpan = 'full';
+
+    protected static ?int $sort = 1;
 
     public function getColumns(): int|array
     {
@@ -31,14 +35,19 @@ class PMSOverviewWidget extends StatsOverviewWidget
 
     protected function getStats(): array
     {
-        $totalUnits = Unit::count();
-        $vacantUnits = Unit::where('status', UnitStatus::VACANT)->count();
+        // The dashboard's owner group / building filters.
+        [$ownerGroupId, $propertyId] = PortfolioScope::fromFilters($this->pageFilters);
 
-        $overdueInstallments = Installment::where('payment_status', InstallmentPaymentStatus::OVERDUE);
-        $overdueCount = $overdueInstallments->count();
+        $units = PortfolioScope::units(Unit::query(), $ownerGroupId, $propertyId);
+        $totalUnits = (clone $units)->count();
+        $vacantUnits = (clone $units)->where('status', UnitStatus::VACANT)->count();
+
+        $overdueInstallments = PortfolioScope::installments(Installment::query(), $ownerGroupId, $propertyId)
+            ->where('payment_status', InstallmentPaymentStatus::OVERDUE);
+        $overdueCount = (clone $overdueInstallments)->count();
         $overdueTotal = (float) (clone $overdueInstallments)->sum('balance_due');
 
-        $renewalsDueSoon = Lease::query()
+        $renewalsDueSoon = PortfolioScope::leases(Lease::query(), $ownerGroupId, $propertyId)
             ->whereBetween('end_date', [now()->toDateString(), now()->addDays(90)->toDateString()])
             ->count();
 
@@ -55,7 +64,8 @@ class PMSOverviewWidget extends StatsOverviewWidget
                 ->description(__('Leases expiring within the notice window'))
                 ->descriptionIcon('heroicon-m-calendar')
                 ->color($renewalsDueSoon > 0 ? 'warning' : Color::Green)
-                ->url(LeaseResource::getUrl('index')),
+                // Opens the lease table with the same filters applied.
+                ->url(PortfolioScope::leaseTableUrl($ownerGroupId, $propertyId)),
         ];
     }
 }
