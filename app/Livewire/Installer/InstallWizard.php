@@ -11,6 +11,7 @@ use App\Services\Installer\ModulePruner;
 use App\Services\Installer\PackageInstaller;
 use App\Services\Installer\ServerRequirementsChecker;
 use App\Services\License\LicenseClient;
+use App\Support\Branding;
 use Database\Seeders\AllPermissionsSeeder;
 use Database\Seeders\CalendarEventPermissionsSeeder;
 use Database\Seeders\IncentiveCalculationPermissionsSeeder;
@@ -25,6 +26,8 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
+use Livewire\WithFileUploads;
 use RuntimeException;
 use Spatie\Permission\Models\Role;
 use Throwable;
@@ -49,6 +52,8 @@ use Throwable;
 #[Layout('installer.layout')]
 class InstallWizard extends Component
 {
+    use WithFileUploads;
+
     public int $step = 1;
 
     // Step 2 — license
@@ -83,6 +88,21 @@ class InstallWizard extends Component
     public string $app_name = '';
 
     public string $app_url = '';
+
+    /** @var TemporaryUploadedFile|null */
+    public $company_logo = null;
+
+    /** @var TemporaryUploadedFile|null */
+    public $default_avatar = null;
+
+    /**
+     * Where step 4 stored each upload on the `public` disk — written as
+     * settings only in finish(), since the settings table doesn't exist
+     * until the Install step migrates.
+     *
+     * @var array<string, string>
+     */
+    public array $brandingPaths = [];
 
     // Step 5 — modules
     public bool $module_pms = true;
@@ -373,7 +393,15 @@ class InstallWizard extends Component
         $this->validate([
             'app_name' => ['required', 'string', 'max:255'],
             'app_url' => ['required', 'url', 'max:255'],
+            'company_logo' => ['nullable', 'image', 'max:2048'],
+            'default_avatar' => ['nullable', 'image', 'max:2048'],
         ]);
+
+        foreach ([Branding::LOGO => $this->company_logo, Branding::DEFAULT_AVATAR => $this->default_avatar] as $key => $upload) {
+            if ($upload instanceof TemporaryUploadedFile) {
+                $this->brandingPaths[$key] = $upload->store(Branding::DIRECTORY, 'public');
+            }
+        }
 
         app(EnvironmentFileWriter::class)->set([
             'APP_NAME' => $this->app_name,
@@ -784,6 +812,17 @@ class InstallWizard extends Component
 
     public function finish(): void
     {
+        Branding::save($this->brandingPaths);
+
+        // Uploaded branding is served from public/storage.
+        if ($this->brandingPaths !== [] && ! file_exists(public_path('storage'))) {
+            try {
+                Artisan::call('storage:link');
+            } catch (Throwable) {
+                // Hosts that forbid symlinks — install.php reports this too.
+            }
+        }
+
         app(InstallationStatus::class)->markInstalled();
 
         Artisan::call('config:clear');

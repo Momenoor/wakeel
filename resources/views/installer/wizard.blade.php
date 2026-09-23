@@ -186,8 +186,32 @@
                 @error('app_url') <div class="error">{{ $message }}</div> @enderror
             </div>
 
+            <div class="field">
+                <label>{{ __('Company Logo') }}</label>
+                <input type="file" wire:model="company_logo" accept="image/*">
+                <div wire:loading wire:target="company_logo" class="hint">{{ __('Uploading…') }}</div>
+                @if ($company_logo && ! $errors->has('company_logo'))
+                    <img src="{{ $company_logo->temporaryUrl() }}" alt="" style="max-height: 64px; margin-top: 8px;">
+                @endif
+                <p class="hint">{{ __('Optional. Shown in the panel header and in emails.') }}</p>
+                @error('company_logo') <div class="error">{{ $message }}</div> @enderror
+            </div>
+
+            <div class="field">
+                <label>{{ __('Default User Avatar') }}</label>
+                <input type="file" wire:model="default_avatar" accept="image/*">
+                <div wire:loading wire:target="default_avatar" class="hint">{{ __('Uploading…') }}</div>
+                @if ($default_avatar && ! $errors->has('default_avatar'))
+                    <img src="{{ $default_avatar->temporaryUrl() }}" alt="" style="width: 64px; height: 64px; border-radius: 50%; object-fit: cover; margin-top: 8px;">
+                @endif
+                <p class="hint">{{ __('Optional. Used for users who haven\'t uploaded their own photo.') }}</p>
+                @error('default_avatar') <div class="error">{{ $message }}</div> @enderror
+            </div>
+
+            <p class="hint">{{ __('Both can be changed later from Settings → Branding.') }}</p>
+
             <div class="actions">
-                <button type="button" class="btn" wire:click="saveAppSettingsAndContinue">
+                <button type="button" class="btn" wire:click="saveAppSettingsAndContinue" wire:loading.attr="disabled" wire:target="company_logo,default_avatar">
                     {{ __('Continue') }}
                 </button>
             </div>

@@ -2,7 +2,7 @@
 
 namespace App\Filament\Pms\Pages;
 
-use App\Filament\Mms\Pages\Schemas\PMSSettingsForm;
+use App\Filament\Pms\Pages\Schemas\PMSSettingsForm;
 use App\Models\Setting;
 use BackedEnum;
 use Filament\Actions\Action;

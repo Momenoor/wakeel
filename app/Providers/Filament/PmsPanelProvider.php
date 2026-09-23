@@ -8,8 +8,10 @@ use App\Filament\Mms\Pages\Auth\CustomProfile;
 use App\Filament\Mms\Support\SystemSwitcher;
 use App\Filament\Pms\Pages\PmsDashboard;
 use App\Filament\Pms\Pages\PMSSettings;
+use App\Filament\Shared\Pages\SystemSettings;
 use App\Http\Middleware\CheckSystemOffline;
 use App\Http\Middleware\RedirectToInstaller;
+use App\Support\Branding;
 use App\Http\Middleware\TrackCurrentSystem;
 use App\Http\Middleware\TrackUserLastSeen;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
@@ -71,8 +73,8 @@ class PmsPanelProvider extends PanelProvider
             ])
             ->sidebarCollapsibleOnDesktop()
             ->font('Boutros MBC Dinkum', asset('fonts/Boutros.css'), provider: LocalFontProvider::class)
-            ->brandLogo(asset('images/logo.png'))
-            ->darkModeBrandLogo(asset('images/logo-dark.png'))
+            ->brandLogo(fn (): string => Branding::logoUrl())
+            ->darkModeBrandLogo(fn (): string => Branding::logoUrl(dark: true))
             ->brandLogoHeight('4rem')
             ->favicon(asset('images/favicon.png'))
             ->profile(CustomProfile::class)
@@ -87,6 +89,7 @@ class PmsPanelProvider extends PanelProvider
             ->pages([
                 PmsDashboard::class,
                 PMSSettings::class,
+                SystemSettings::class,
             ])
             ->navigationGroups([
                 NavigationGroup::make(fn () => __('Properties')),

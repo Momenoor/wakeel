@@ -2243,7 +2243,6 @@
     "Yes, Reject": "نعم، رفض",
     "This decides the request immediately. Close this page instead if you did not mean to click it.": "سيتم البت في الطلب فوراً. أغلق هذه الصفحة إذا لم تكن تقصد الضغط عليها.",
     "Off leaves this employee out of the WPS bank salary-upload form — for anyone paid outside that batch, e.g. by cheque or a different exchange.": "عند الإيقاف، يُستثنى هذا الموظف من نموذج رفع الرواتب البنكي (WPS) — لمن يُصرف راتبه خارج هذه الدفعة، كالدفع بشيك أو عبر مركز صرافة آخر.",
-
     "Residential": "سكني",
     "Commercial": "تجاري",
     "Industrial": "صناعي",
@@ -2296,7 +2295,6 @@
     "Add Owner": "إضافة مالك",
     "Units": "الوحدات",
     "No buildings yet": "لا توجد مبانٍ بعد",
-
     "Expired": "منتهي",
     "New Quotation": "عرض سعر جديد",
     "Quotation marked as sent.": "تم تحديد عرض السعر كمُرسل.",
@@ -2324,7 +2322,6 @@
     ":nth: :amount AED": ":nth: :amount درهم",
     "No quotations yet": "لا توجد عروض أسعار بعد",
     "Instalment :n": "القسط :n",
-
     "Full Name": "الاسم الكامل",
     "Identification Number (Emirates ID / Passport)": "رقم الهوية (هوية إماراتية / جواز سفر)",
     "TRN": "الرقم الضريبي",
@@ -2340,7 +2337,6 @@
     "Emergency Contact": "جهة الاتصال في حالات الطوارئ",
     "No tenants yet": "لا يوجد مستأجرون بعد",
     "Tenants": "المستأجرون",
-
     "Landlord": "المؤجر",
     "Owner Group": "مجموعة ملاك",
     "Owner Groups": "مجموعات الملاك",
@@ -2349,7 +2345,6 @@
     "Members": "الأعضاء",
     "No owner groups yet": "لا توجد مجموعات ملاك بعد",
     "For an owner administered as part of a shared estate — e.g. \"Legal Heirs of Mahmoud Kalbat\" — so a contract shows the group's name rather than every heir separately.": "لمالك يُدار ضمن تركة مشتركة — مثل \"ورثة محمود كلبت\" — بحيث يُظهر العقد اسم المجموعة بدلاً من كل وريث على حدة.",
-
     "Shared": "مشترك",
     "Unregistered": "غير مسجل",
     "Pending Documents": "بانتظار المستندات",
@@ -2390,7 +2385,6 @@
     "Convert to Contract": "تحويل إلى عقد",
     "Contract created.": "تم إنشاء العقد.",
     "The estate's own account — where its share of the rent is paid, distinct from any individual heir's account.": "حساب التركة الخاص — حيث تُدفع حصتها من الإيجار، ويكون مستقلاً عن حساب أي وريث فردي.",
-
     "Post-Dated Cheque": "شيك مؤجل",
     "Direct Debit (UAEDD)": "خصم مباشر (UAEDD)",
     "Bank Transfer": "تحويل بنكي",
@@ -2413,7 +2407,6 @@
     "Mark Bounced": "تحديد كمرتجع",
     "Reverts any amount this instalment had received and adds an administrative penalty.": "يُلغي أي مبلغ تم استلامه لهذا القسط ويضيف غرامة إدارية.",
     "Instalment marked bounced.": "تم تحديد القسط كمرتجع.",
-
     "Evaluate Renewal": "تقييم التجديد",
     "Target Renewal Date": "تاريخ التجديد المستهدف",
     "Market Average Rent (AED)": "متوسط إيجار السوق (درهم)",
@@ -2423,7 +2416,6 @@
     "RERA Cap: :percent% increase allowed": "سقف مؤسسة التنظيم العقاري: زيادة مسموحة :percent%",
     "Max Allowable Rent: :amount AED": "الحد الأقصى للإيجار المسموح: :amount درهم",
     "Rent adjustments cannot be proposed within :days days of contract expiry (Federal Decree-Law No. 33 of 2008).": "لا يجوز اقتراح تعديل الإيجار خلال :days يوماً من تاريخ انتهاء العقد (المرسوم بقانون اتحادي رقم 33 لسنة 2008).",
-
     "PMS Settings": "إعدادات إدارة الأملاك",
     "Tax": "الضريبة",
     "VAT applied where a unit's own classification (residential/commercial) doesn't settle it outright.": "ضريبة القيمة المضافة المطبقة عندما لا يحسم تصنيف الوحدة نفسه (سكني/تجاري) الأمر مباشرة.",
@@ -2659,5 +2651,15 @@
     "This installation's license has been revoked.": "تم إلغاء ترخيص هذا التنصيب.",
     "This installation's license has expired.": "انتهت صلاحية ترخيص هذا التنصيب.",
     "This installation could not confirm a valid license.": "تعذّر على هذا التنصيب تأكيد وجود ترخيص صالح.",
-    "Last checked: :time": "آخر تحقق: :time"
+    "Last checked: :time": "آخر تحقق: :time",
+    "Branding": "الهوية",
+    "Your company logo and the avatar shown for users without their own photo.": "شعار شركتك والصورة الرمزية التي تظهر للمستخدمين الذين ليس لديهم صورة خاصة.",
+    "Company Logo": "شعار الشركة",
+    "Shown in the panel header and in emails. Leave empty to use the default logo.": "يظهر في رأس اللوحة وفي رسائل البريد الإلكتروني. اتركه فارغًا لاستخدام الشعار الافتراضي.",
+    "Default User Avatar": "الصورة الرمزية الافتراضية للمستخدم",
+    "Used for every user who hasn't uploaded their own photo. Leave empty to show their initials.": "تُستخدم لكل مستخدم لم يرفع صورته الخاصة. اتركها فارغة لعرض الأحرف الأولى من اسمه.",
+    "Uploading…": "جارٍ الرفع…",
+    "Optional. Shown in the panel header and in emails.": "اختياري. يظهر في رأس اللوحة وفي رسائل البريد الإلكتروني.",
+    "Optional. Used for users who haven't uploaded their own photo.": "اختياري. تُستخدم للمستخدمين الذين لم يرفعوا صورتهم الخاصة.",
+    "Both can be changed later from Settings → Branding.": "يمكن تغيير كليهما لاحقًا من الإعدادات ← الهوية."
 }

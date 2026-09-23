@@ -106,7 +106,7 @@
 <body>
 <div class="wrapper">
     <div class="header">
-        <img src="{{ url('images/logo-dark-for-email.png') }}" alt="Logo" style="max-width:200px; height: auto;">
+        <img src="{{ \App\Support\Branding::emailLogoUrl() }}" alt="Logo" style="max-width:200px; height: auto;">
         <h1>{{ config('app.name') }}</h1>
     </div>
 

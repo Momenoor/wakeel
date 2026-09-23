@@ -1,9 +1,10 @@
 <?php
 
-namespace App\Filament\Mms\Pages;
+namespace App\Filament\Shared\Pages;
 
-use App\Filament\Mms\Pages\Schemas\SystemSettingsForm;
+use App\Filament\Shared\Pages\Schemas\SystemSettingsForm;
 use App\Models\Setting;
+use App\Support\Branding;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
@@ -14,6 +15,7 @@ use Filament\Schemas\Components\EmbeddedSchema;
 use Filament\Schemas\Components\Form;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Mail;
 use UnitEnum;
 
@@ -67,6 +69,8 @@ class SystemSettings extends Page
             'app_locale' => Setting::get('app_locale', 'ar'),
             'currency_code' => Setting::get('currency_code', 'AED'),
             'records_per_page' => Setting::get('records_per_page', 25),
+            Branding::LOGO => Setting::get(Branding::LOGO),
+            Branding::DEFAULT_AVATAR => Setting::get(Branding::DEFAULT_AVATAR),
 
             'mail_mailer' => Setting::get('mail_mailer', config('mail.default', 'smtp')),
             'mail_host' => Setting::get('mail_host', config('mail.mailers.smtp.host', '')),
@@ -174,7 +178,9 @@ class SystemSettings extends Page
             'show_system_announcement' => 'notifications',
         ];
 
-        foreach ($state as $key => $value) {
+        Branding::save($state);
+
+        foreach (Arr::except($state, Branding::KEYS) as $key => $value) {
             $group = $groupMap[$key] ?? 'general';
             Setting::set($key, $value, $group);
         }

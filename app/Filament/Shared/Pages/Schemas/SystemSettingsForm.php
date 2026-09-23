@@ -1,7 +1,8 @@
 <?php
 
-namespace App\Filament\Mms\Pages\Schemas;
+namespace App\Filament\Shared\Pages\Schemas;
 
+use App\Filament\Schemas\BrandingSettingsSection;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -111,6 +112,8 @@ class SystemSettingsForm
                                         ->required()
                                         ->default(25),
                                 ]),
+
+                            BrandingSettingsSection::make(),
                         ]),
 
                     Tabs\Tab::make(__('Email Settings'))

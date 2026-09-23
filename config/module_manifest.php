@@ -37,7 +37,6 @@ return [
             'app/Filament/Mms/Pages/Payroll',
             'app/Filament/Mms/Pages/Reports',
             'app/Filament/Mms/Pages/Schemas',
-            'app/Filament/Mms/Pages/SystemSettings.php',
             // NOTE: app/Filament/Mms/Pages/Auth/CustomLogin.php,
             // app/Filament/Mms/Pages/Auth/CustomProfile.php, and
             // app/Filament/Mms/Support/SystemSwitcher.php are deliberately

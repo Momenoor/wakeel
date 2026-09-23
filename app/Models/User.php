@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Branding;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Models\Contracts\HasAvatar;
 use Filament\Panel;
@@ -122,7 +123,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     public function getFilamentAvatarUrl(): ?string
     {
         if (blank($this->profile_photo_path)) {
-            return null;
+            return Branding::defaultAvatarUrl();
         }
 
         return Storage::disk('public')->url($this->profile_photo_path);

@@ -7,9 +7,11 @@ use AlizHarb\ActivityLog\RelationManagers\ActivitiesRelationManager;
 use App\Filament\Mms\Pages\Auth\CustomLogin;
 use App\Filament\Mms\Pages\Auth\CustomProfile;
 use App\Filament\Mms\Support\SystemSwitcher;
+use App\Filament\Shared\Pages\SystemSettings;
 use App\Http\Middleware\CheckSystemOffline;
 use App\Http\Middleware\RedirectToInstaller;
 use App\Http\Middleware\TrackCurrentSystem;
+use App\Support\Branding;
 use App\Http\Middleware\TrackUserLastSeen;
 use App\Models\Setting;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
@@ -74,13 +76,18 @@ class MmsPanelProvider extends PanelProvider
             ])
             ->sidebarCollapsibleOnDesktop()
             ->font('Boutros MBC Dinkum', asset('fonts/Boutros.css'), provider: LocalFontProvider::class)
-            ->brandLogo(asset('images/logo.png'))
-            ->darkModeBrandLogo(asset('images/logo-dark.png'))
+            ->brandLogo(fn (): string => Branding::logoUrl())
+            ->darkModeBrandLogo(fn (): string => Branding::logoUrl(dark: true))
             ->brandLogoHeight('4rem')
             ->favicon(asset('images/favicon.png'))
             ->profile(CustomProfile::class)
             ->discoverResources(in: app_path('Filament/Mms/Resources'), for: 'App\Filament\Mms\Resources')
             ->discoverPages(in: app_path('Filament/Mms/Pages'), for: 'App\Filament\Mms\Pages')
+            // Shared with the PMS panel — outside Filament/Mms so it survives
+            // an install without MMS.
+            ->pages([
+                SystemSettings::class,
+            ])
             ->discoverClusters(in: app_path('Filament/Mms/Clusters'), for: 'App\Filament\Mms\Clusters')
             ->discoverWidgets(in: app_path('Filament/Mms/Widgets'), for: 'App\Filament\Mms\Widgets')
             ->renderHook(
