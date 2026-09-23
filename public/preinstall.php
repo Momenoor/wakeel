@@ -250,7 +250,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'DB_PASSWORD' => $password,
                     ]);
 
-                header('Location: /install?db=configured');
+                header('Location: wakeel/install?db=configured');
                 exit;
             }
 
