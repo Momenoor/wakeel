@@ -46,4 +46,19 @@ return [
 
     'grace_days' => env('LICENSE_GRACE_DAYS', 7),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Check Interval
+    |--------------------------------------------------------------------------
+    |
+    | How often `EnsureLicenseIsValid` re-checks the license with the
+    | server itself, in minutes — so a license deleted or revoked there
+    | takes effect even when the scheduled `license:verify` never runs
+    | (no cron job on the server): the first page request after the
+    | interval has passed asks the server. 0 checks on every page request.
+    |
+    */
+
+    'check_interval_minutes' => env('LICENSE_CHECK_INTERVAL_MINUTES', 60),
+
 ];

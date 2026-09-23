@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\License;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
@@ -30,6 +31,86 @@ class EnsureLicenseIsValidTest extends TestCase
         // docblock) — this class exists specifically to test it, so it
         // opts back in for every test here.
         config(['license.force_enforcement_in_tests' => true]);
+
+        // A due re-check calls the license server — never the real one.
+        // Each test fakes the answer it needs.
+        Http::preventStrayRequests();
+    }
+
+    public function test_the_panels_themselves_are_license_checked(): void
+    {
+        // Filament panels don't run the `web` group, so this is what was
+        // missing when a deleted license left the app working.
+        $this->get('/pms')->assertRedirect(route('license.show'));
+    }
+
+    public function test_a_license_deleted_on_the_server_locks_the_app_at_the_next_due_check(): void
+    {
+        // The default — hourly, with no cron job involved.
+        Http::fake(['*' => Http::response(['valid' => false, 'reason' => 'not_found'])]);
+
+        $license = License::factory()->create([
+            'status' => 'active',
+            'last_valid_at' => now()->subHours(2),
+            'last_checked_at' => now()->subHours(2),
+        ]);
+
+        $this->get('/pms')->assertRedirect(route('license.show'));
+
+        $this->assertSame('revoked', $license->fresh()->status);
+    }
+
+    public function test_an_interval_of_zero_asks_the_server_on_every_request(): void
+    {
+        config(['license.check_interval_minutes' => 0]);
+        Http::fake(['*' => Http::response(['valid' => false, 'reason' => 'revoked'])]);
+
+        // Checked a moment ago and fine — still asked again.
+        License::factory()->create([
+            'status' => 'active',
+            'last_valid_at' => now(),
+            'last_checked_at' => now(),
+        ]);
+
+        $this->get('/pms')->assertRedirect(route('license.show'));
+
+        Http::assertSentCount(1);
+    }
+
+    public function test_the_server_is_not_asked_again_before_the_interval_passes(): void
+    {
+        config(['license.check_interval_minutes' => 60]);
+        Http::fake(['*' => Http::response(['valid' => false, 'reason' => 'not_found'])]);
+
+        License::factory()->create([
+            'status' => 'active',
+            'last_valid_at' => now()->subMinutes(10),
+            'last_checked_at' => now()->subMinutes(10),
+        ]);
+
+        $response = $this->get('/')->assertRedirect();
+        $this->assertNotSame(route('license.show'), $response->headers->get('Location'));
+
+        Http::assertNothingSent();
+    }
+
+    public function test_an_unreachable_server_keeps_the_app_running_within_the_grace_period(): void
+    {
+        config(['license.check_interval_minutes' => 60, 'license.grace_days' => 7]);
+        Http::fake(['*' => Http::response(null, 500)]);
+
+        $license = License::factory()->create([
+            'status' => 'active',
+            'last_valid_at' => now()->subDays(2),
+            'last_checked_at' => now()->subDays(2),
+        ]);
+
+        $response = $this->get('/')->assertRedirect();
+        $this->assertNotSame(route('license.show'), $response->headers->get('Location'));
+
+        // Counted as a check, so the next request doesn't wait on it again.
+        $this->assertTrue($license->fresh()->last_checked_at->isToday());
+        $this->assertSame('active', $license->fresh()->status);
     }
 
     public function test_a_request_is_redirected_to_the_license_page_when_no_license_exists(): void

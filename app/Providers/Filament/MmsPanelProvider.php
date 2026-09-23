@@ -9,6 +9,7 @@ use App\Filament\Mms\Pages\Auth\CustomProfile;
 use App\Filament\Mms\Support\SystemSwitcher;
 use App\Filament\Shared\Pages\SystemSettings;
 use App\Http\Middleware\CheckSystemOffline;
+use App\Http\Middleware\EnsureLicenseIsValid;
 use App\Http\Middleware\RedirectToInstaller;
 use App\Http\Middleware\TrackCurrentSystem;
 use App\Support\Branding;
@@ -105,6 +106,9 @@ class MmsPanelProvider extends PanelProvider
                 // here or `/admin` on an unmigrated database would hit a raw
                 // connection error instead of the wizard.
                 RedirectToInstaller::class,
+                // Likewise the license check — without it here, the panels
+                // were never license-checked at all.
+                EnsureLicenseIsValid::class,
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,

@@ -10,6 +10,7 @@ use App\Filament\Pms\Pages\PmsDashboard;
 use App\Filament\Pms\Pages\PMSSettings;
 use App\Filament\Shared\Pages\SystemSettings;
 use App\Http\Middleware\CheckSystemOffline;
+use App\Http\Middleware\EnsureLicenseIsValid;
 use App\Http\Middleware\RedirectToInstaller;
 use App\Support\Branding;
 use App\Http\Middleware\TrackCurrentSystem;
@@ -107,6 +108,7 @@ class PmsPanelProvider extends PanelProvider
                 // panel's middleware list runs independently of the app's
                 // `web` group.
                 RedirectToInstaller::class,
+                EnsureLicenseIsValid::class,
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,

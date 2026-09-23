@@ -45,7 +45,10 @@ class LicenseClient
     private function call(string $endpoint, array $payload): array
     {
         try {
-            $response = Http::timeout(10)
+            // Also runs inside a page request (EnsureLicenseIsValid) — an
+            // unreachable server must fail fast, not stall the page.
+            $response = Http::connectTimeout(3)
+                ->timeout(10)
                 ->baseUrl(rtrim((string) config('license.server_url'), '/').'/api/v1/license')
                 ->post($endpoint, $payload);
 
