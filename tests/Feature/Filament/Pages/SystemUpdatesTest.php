@@ -158,6 +158,18 @@ class SystemUpdatesTest extends TestCase
             ->assertSet('updateState.completed', ['preflight', 'maintenance']);
     }
 
+    public function test_terminal_colour_codes_are_stripped_from_the_log(): void
+    {
+        $updater = app(Updater::class);
+        $this->startAfter($updater, '1.2.0', ['preflight', 'maintenance', 'code', 'dependencies', 'database', 'permissions']);
+
+        // optimize:clear, like Composer's scripts, prints coloured output.
+        $this->assertTrue($updater->runNextStep());
+
+        $this->assertStringNotContainsString("\e[", $updater->state()['log']);
+        $this->assertStringNotContainsString('[39m', $updater->state()['log']);
+    }
+
     public function test_a_failed_update_runs_nothing_more_until_retried(): void
     {
         $updater = app(Updater::class);

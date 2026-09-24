@@ -121,6 +121,10 @@ class Updater
             $state['failed'] = true;
         }
 
+        // Composer's own scripts (package:discover --ansi) force terminal
+        // colour codes, which the page would show as "[90m…" noise.
+        $log = (string) preg_replace('/\e\[[0-9;]*[A-Za-z]/', '', $log);
+
         $state['log'] = mb_substr($state['log'].$log."\n", -20000);
         $this->saveState($state);
 
