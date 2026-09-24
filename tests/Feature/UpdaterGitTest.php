@@ -116,6 +116,11 @@ class UpdaterGitTest extends TestCase
         $updater->start('1.1.0');
 
         $this->assertTrue($updater->runNextStep(), (string) $updater->state()['log']); // preflight
+
+        // What git printed while preflight ran reached the live log (the
+        // commit hash `rev-parse` resolves the tag to).
+        $this->assertMatchesRegularExpression('/\b[0-9a-f]{40}\b/', $updater->liveOutput());
+
         $this->assertTrue($updater->runNextStep(), (string) $updater->state()['log']); // maintenance
         $this->assertTrue($updater->runNextStep(), (string) $updater->state()['log']); // code
 

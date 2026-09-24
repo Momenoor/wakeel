@@ -3,6 +3,8 @@
 use App\Http\Controllers\LicenseController;
 use App\Livewire\Installer\InstallWizard;
 use App\Models\Setting;
+use App\Services\Updater\Updater;
+use App\Support\AppUpdate;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Route;
 
@@ -36,6 +38,16 @@ Route::get('system-down', function () {
 
     return view('errors.maintenance', compact('message'));
 })->name('system-down');
+
+// The running update step's output so far, polled by the System Updates
+// page while a step runs. A plain route rather than a Livewire call:
+// Livewire queues a component's requests, so this would otherwise wait
+// behind the very step it's meant to show.
+Route::get('/system-updates/live-output', function () {
+    abort_unless(AppUpdate::canManage(), 403);
+
+    return response()->json(['output' => app(Updater::class)->liveOutput()]);
+})->middleware('auth')->name('system-updates.live-output');
 
 // The default panel's own login — MMS isn't registered on a PMS-only install.
 Route::get('/login', fn () => redirect()->to(Filament::getDefaultPanel()->getLoginUrl()))->name('login');

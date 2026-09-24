@@ -170,6 +170,20 @@ class SystemUpdatesTest extends TestCase
         $this->assertStringNotContainsString('[39m', $updater->state()['log']);
     }
 
+    public function test_the_running_steps_output_is_readable_while_it_runs(): void
+    {
+        $updater = app(Updater::class);
+        $this->startAfter($updater, '1.2.0', ['preflight']);
+        $updater->runNextStep(); // maintenance
+
+        $this->getJson(route('system-updates.live-output'))
+            ->assertOk()
+            ->assertJsonPath('output', fn (string $output): bool => str_contains($output, '== Switch to maintenance mode =='));
+
+        $this->actingAs(User::factory()->create());
+        $this->getJson(route('system-updates.live-output'))->assertForbidden();
+    }
+
     public function test_a_failed_update_runs_nothing_more_until_retried(): void
     {
         $updater = app(Updater::class);

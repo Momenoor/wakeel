@@ -45,10 +45,30 @@
             x-data="{
                 running: false,
                 waiting: false,
+                live: '',
+                poller: null,
                 start() {
                     if (this.running) return;
                     this.running = true;
+                    this.poller = setInterval(() => this.pollLive(), 2000);
                     this.tick();
+                },
+                stop() {
+                    this.running = false;
+                    clearInterval(this.poller);
+                    this.pollLive();
+                },
+                // The running step's output as it arrives (a plain route —
+                // a Livewire call would queue behind the step itself).
+                pollLive() {
+                    fetch(@js(route('system-updates.live-output')), { headers: { Accept: 'application/json' } })
+                        .then((response) => response.ok ? response.json() : null)
+                        .then((data) => {
+                            if (! data || data.output === this.live) return;
+                            this.live = data.output;
+                            this.$nextTick(() => { if (this.$refs.live) this.$refs.live.scrollTop = this.$refs.live.scrollHeight; });
+                        })
+                        .catch(() => {});
                 },
                 // runNextStep() runs one step (renderless), refreshState()
                 // then redraws from a fresh request. A step request the web
@@ -57,7 +77,7 @@
                 // so the loop waits and checks again rather than stopping.
                 tick() {
                     if ($wire.updateState === null || $wire.updateState.failed) {
-                        this.running = false;
+                        this.stop();
                         return;
                     }
                     $wire.runNextStep()
@@ -118,6 +138,13 @@
                     </p>
                 @endif
             </x-filament::section>
+
+            {{-- wire:ignore: Livewire redraws must not reset what polling filled in. --}}
+            <div wire:ignore x-show="running && live !== ''" x-cloak class="mt-6">
+                <x-filament::section :heading="__('Live output')">
+                    <pre x-ref="live" x-text="live" class="max-h-96 overflow-auto whitespace-pre-wrap text-xs"></pre>
+                </x-filament::section>
+            </div>
 
             @if (filled($state['log']))
                 <x-filament::section :heading="__('Log')" collapsible>

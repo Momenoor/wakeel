@@ -2721,5 +2721,6 @@
     "Amount Due": "المبلغ المستحق",
     "No instalments due in the next :days days": "لا توجد أقساط مستحقة خلال :days أيام القادمة",
     "Replaced .htaccess with this release's; the previous one is saved in storage/app/updater/.": "تم استبدال ملف ‎.htaccess بملف هذا الإصدار؛ وحُفظ الملف السابق في storage/app/updater/.",
-    "Waiting for the server to finish this step… This can take a few minutes. If nothing changes for a long time, reload the page — the update resumes where it stopped.": "بانتظار أن ينهي الخادم هذه الخطوة… قد يستغرق ذلك بضع دقائق. إذا لم يتغير شيء لفترة طويلة، أعد تحميل الصفحة — سيستأنف التحديث من حيث توقف."
+    "Waiting for the server to finish this step… This can take a few minutes. If nothing changes for a long time, reload the page — the update resumes where it stopped.": "بانتظار أن ينهي الخادم هذه الخطوة… قد يستغرق ذلك بضع دقائق. إذا لم يتغير شيء لفترة طويلة، أعد تحميل الصفحة — سيستأنف التحديث من حيث توقف.",
+    "Live output": "المخرجات المباشرة"
 }

@@ -113,6 +113,10 @@ class Updater
 
         $log = '== '.$this->steps()[$step]." ==\n";
 
+        // Each step starts a fresh live log.
+        @mkdir(dirname($this->liveLogPath()), 0755, true);
+        @file_put_contents($this->liveLogPath(), $log);
+
         try {
             $log .= $this->runStep($step, $state['version']);
             $state['completed'][] = $step;
@@ -487,12 +491,31 @@ class Updater
         }
 
         $process = new Process($command, base_path(), $env, null, $timeout);
-        $process->run();
+
+        // Streamed to the live log as it arrives, so the page can show a
+        // long `composer install` while it runs (see liveOutput()).
+        $process->run(fn (string $type, string $buffer) => @file_put_contents($this->liveLogPath(), $buffer, FILE_APPEND));
 
         return [
             'ok' => $process->isSuccessful(),
             'output' => $process->getOutput().$process->getErrorOutput(),
         ];
+    }
+
+    /**
+     * The running step's output so far (its tail), without terminal colour
+     * codes — read by the System Updates page while a step runs.
+     */
+    public function liveOutput(int $maxLength = 8000): string
+    {
+        $output = (string) @file_get_contents($this->liveLogPath());
+
+        return mb_substr((string) preg_replace('/\e\[[0-9;]*[A-Za-z]/', '', $output), -$maxLength);
+    }
+
+    private function liveLogPath(): string
+    {
+        return storage_path('app/updater/live.log');
     }
 
     private function saveState(array $state): void
