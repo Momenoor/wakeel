@@ -160,11 +160,11 @@ class Updater
 
         // Local edits would be overwritten (or block the checkout). Only
         // two kinds are expected, and checkout() handles both: the PHP
-        // handler install.php adds to .htaccess, and package assets that
-        // Composer republishes into public/.
+        // handler install.php adds to .htaccess, and files the server's own
+        // Composer/npm runs regenerate (see isGenerated()).
         $unexpected = array_filter(
             $this->changedFiles(),
-            fn (string $file): bool => $file !== '.htaccess' && ! $this->isPublishedAsset($file),
+            fn (string $file): bool => $file !== '.htaccess' && ! $this->isGenerated($file),
         );
 
         if ($unexpected !== []) {
@@ -197,11 +197,18 @@ class Updater
         $prefix = null;
         $changed = $this->changedFiles();
 
-        // Republished by Composer in the next step anyway.
-        $assets = array_values(array_filter($changed, $this->isPublishedAsset(...)));
+        // Regenerated files: the release's own copies replace them.
+        $generated = array_values(array_filter($changed, $this->isGenerated(...)));
 
-        if ($assets !== []) {
-            $this->git(['checkout', '--', ...$assets]);
+        if ($generated !== []) {
+            $this->git(['checkout', '--', ...$generated]);
+        }
+
+        // A frontend built on the server leaves new, untracked hashed files
+        // in public/build; one that the release also ships would make git
+        // refuse the checkout rather than overwrite it.
+        if (is_dir(base_path('public/build'))) {
+            $this->git(['clean', '-f', '-q', '--', 'public/build']);
         }
 
         // install.php prepends a PHP-version handler to the tracked
@@ -296,12 +303,17 @@ class Updater
     }
 
     /**
-     * Package assets (Filament, plugins) that `filament:upgrade` publishes
-     * on every `composer install` — regenerated, never edited by hand.
+     * Files the server's own tooling rewrites, never edited by hand:
+     * package assets `filament:upgrade` publishes on every `composer
+     * install`, the frontend build and npm's lock file (install.php builds
+     * on the server), and composer.lock (Composer may rewrite it when it
+     * runs there). The release ships its own copy of each, and the next
+     * step installs exactly what its composer.lock pins.
      */
-    private function isPublishedAsset(string $file): bool
+    private function isGenerated(string $file): bool
     {
-        return (bool) preg_match('#^public/(js|css|fonts|vendor)/#', $file);
+        return in_array($file, ['composer.lock', 'package-lock.json'], true)
+            || preg_match('#^public/(js|css|fonts|vendor|build)/#', $file) === 1;
     }
 
     /**

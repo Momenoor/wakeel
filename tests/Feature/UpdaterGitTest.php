@@ -46,15 +46,21 @@ class UpdaterGitTest extends TestCase
         $this->git($this->root, ['clone', 'origin.git', 'work']);
 
         File::ensureDirectoryExists($work.'/public/js');
+        File::ensureDirectoryExists($work.'/public/build/assets');
         File::ensureDirectoryExists($work.'/config');
         File::put($work.'/.htaccess', "RewriteEngine On\nRULES v1\n");
         File::put($work.'/app.txt', "v1\n");
         File::put($work.'/public/js/asset.js', "asset v1\n");
+        File::put($work.'/composer.lock', "lock v1\n");
+        File::put($work.'/public/build/manifest.json', "manifest v1\n");
         $this->declareVersion($work, '1.0.0');
         $this->commitAndTag($work, 'v1.0.0');
 
         File::put($work.'/.htaccess', "RewriteEngine On\nRULES v2\n");
         File::put($work.'/app.txt', "v2\n");
+        File::put($work.'/composer.lock', "lock v2\n");
+        File::put($work.'/public/build/manifest.json', "manifest v2\n");
+        File::put($work.'/public/build/assets/app-2.js', "release build\n");
         $this->declareVersion($work, '1.1.0');
         $this->commitAndTag($work, 'v1.1.0');
 
@@ -69,6 +75,13 @@ class UpdaterGitTest extends TestCase
         $this->git($this->site, ['-c', 'advice.detachedHead=false', 'checkout', 'v1.0.0']);
         File::put($this->site.'/.htaccess', "# Force PHP 8.5\nAddHandler x-php85 .php\n\n".File::get($this->site.'/.htaccess'));
         File::put($this->site.'/public/js/asset.js', "asset republished\n");
+        // Composer and npm run on the server: a rewritten lock file and a
+        // local frontend build — including an untracked file the release
+        // also ships.
+        File::put($this->site.'/composer.lock', "lock rewritten on the server\n");
+        File::put($this->site.'/public/build/manifest.json', "manifest built on the server\n");
+        File::ensureDirectoryExists($this->site.'/public/build/assets');
+        File::put($this->site.'/public/build/assets/app-2.js', "built on the server\n");
 
         $this->originalBasePath = $this->app->basePath();
         $this->app->setBasePath($this->site);
@@ -109,6 +122,11 @@ class UpdaterGitTest extends TestCase
             str_replace("\r\n", "\n", File::get($this->site.'/.htaccess')),
         );
         $this->assertSame("asset v1\n", str_replace("\r\n", "\n", File::get($this->site.'/public/js/asset.js')));
+
+        // Server-regenerated files are replaced by the release's own.
+        $this->assertSame("lock v2\n", str_replace("\r\n", "\n", File::get($this->site.'/composer.lock')));
+        $this->assertSame("manifest v2\n", str_replace("\r\n", "\n", File::get($this->site.'/public/build/manifest.json')));
+        $this->assertSame("release build\n", str_replace("\r\n", "\n", File::get($this->site.'/public/build/assets/app-2.js')));
     }
 
     public function test_preflight_refuses_to_overwrite_other_local_changes(): void
