@@ -7,6 +7,7 @@ use App\Models\Setting;
 use App\Services\License\LicenseVerifier;
 use App\Support\AppUpdate;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
 use RuntimeException;
 use Symfony\Component\Process\ExecutableFinder;
 use Symfony\Component\Process\Process;
@@ -59,6 +60,33 @@ class Updater
     public function start(string $version): void
     {
         $this->saveState(['version' => $version, 'completed' => [], 'failed' => false, 'log' => '']);
+    }
+
+    /**
+     * runNextStep(), unless a step is already running. The page calls this
+     * again after its previous request failed — typically the web server
+     * timing out a long `composer install` that PHP carries on with — so it
+     * must never start the same step twice.
+     *
+     * @return 'ran'|'stopped'|'busy'
+     */
+    public function runNextStepIfIdle(): string
+    {
+        try {
+            $lock = Cache::lock('updater:step', 1800);
+
+            if (! $lock->get()) {
+                return 'busy';
+            }
+        } catch (Throwable) {
+            $lock = null; // Cache store without locks.
+        }
+
+        try {
+            return $this->runNextStep() ? 'ran' : 'stopped';
+        } finally {
+            $lock?->release();
+        }
     }
 
     /**

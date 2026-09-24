@@ -11,6 +11,7 @@ use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
+use Livewire\Attributes\Renderless;
 use UnitEnum;
 
 /**
@@ -73,11 +74,24 @@ class SystemUpdates extends Page
     }
 
     /**
-     * Called repeatedly by the view while an update is running.
+     * Called repeatedly by the view while an update is running, followed
+     * each time by refreshState().
+     *
+     * Renderless: after the dependencies step replaces vendor/, this same
+     * PHP process must not go on to render the page — loading classes from
+     * a vendor/ swapped out underneath it can crash the response. The
+     * fresh refreshState() request renders instead.
+     *
+     * @return 'ran'|'stopped'|'busy'
      */
-    public function runNextStep(): void
+    #[Renderless]
+    public function runNextStep(): string
     {
-        app(Updater::class)->runNextStep();
+        return app(Updater::class)->runNextStepIfIdle();
+    }
+
+    public function refreshState(): void
+    {
         $this->updateState = app(Updater::class)->state();
     }
 

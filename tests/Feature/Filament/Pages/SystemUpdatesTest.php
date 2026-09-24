@@ -11,6 +11,7 @@ use App\Services\Updater\Updater;
 use App\Support\AppUpdate;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
@@ -121,6 +122,40 @@ class SystemUpdatesTest extends TestCase
 
         $this->assertFalse(Setting::get('app_offline'));
         $this->assertNull($updater->state());
+    }
+
+    /**
+     * The page calls again after its previous request failed — e.g. the web
+     * server timing out a composer install PHP is still running. That call
+     * must not start the step a second time.
+     */
+    public function test_a_step_is_never_started_while_another_is_running(): void
+    {
+        $updater = app(Updater::class);
+        $this->startAfter($updater, '1.2.0', ['preflight']);
+
+        $running = Cache::lock('updater:step', 1800);
+        $this->assertTrue($running->get());
+
+        $this->assertSame('busy', $updater->runNextStepIfIdle());
+        $this->assertSame(['preflight'], $updater->state()['completed']);
+
+        $running->release();
+
+        $this->assertSame('ran', $updater->runNextStepIfIdle());
+        $this->assertSame(['preflight', 'maintenance'], $updater->state()['completed']);
+    }
+
+    public function test_the_page_runs_steps_without_rendering_and_refreshes_separately(): void
+    {
+        License::factory()->create(['latest_version' => '1.2.0']);
+        $this->startAfter(app(Updater::class), '1.2.0', ['preflight']);
+
+        Livewire::test(SystemUpdates::class)
+            ->call('runNextStep')
+            ->assertReturned('ran')
+            ->call('refreshState')
+            ->assertSet('updateState.completed', ['preflight', 'maintenance']);
     }
 
     public function test_a_failed_update_runs_nothing_more_until_retried(): void
