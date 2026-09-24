@@ -70,8 +70,7 @@ class SystemSettings extends Page
             'app_locale' => Setting::get('app_locale', 'ar'),
             'currency_code' => Setting::get('currency_code', 'AED'),
             'records_per_page' => Setting::get('records_per_page', 25),
-            Branding::LOGO => Setting::get(Branding::LOGO),
-            Branding::DEFAULT_AVATAR => Setting::get(Branding::DEFAULT_AVATAR),
+            ...collect(Branding::KEYS)->mapWithKeys(fn (string $key): array => [$key => Setting::get($key)])->all(),
 
             'mail_mailer' => Setting::get('mail_mailer', config('mail.default', 'smtp')),
             'mail_host' => Setting::get('mail_host', config('mail.mailers.smtp.host', '')),

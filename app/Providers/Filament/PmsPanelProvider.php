@@ -78,7 +78,7 @@ class PmsPanelProvider extends PanelProvider
             ->brandLogo(fn (): string => Branding::logoUrl())
             ->darkModeBrandLogo(fn (): string => Branding::logoUrl(dark: true))
             ->brandLogoHeight('4rem')
-            ->favicon(asset('images/favicon.png'))
+            ->favicon(fn (): string => Branding::faviconUrl())
             ->profile(CustomProfile::class)
             ->discoverResources(in: app_path('Filament/Pms/Resources'), for: 'App\Filament\Pms\Resources')
             ->discoverPages(in: app_path('Filament/Pms/Pages'), for: 'App\Filament\Pms\Pages')

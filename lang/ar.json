@@ -2653,7 +2653,6 @@
     "This installation could not confirm a valid license.": "تعذّر على هذا التنصيب تأكيد وجود ترخيص صالح.",
     "Last checked: :time": "آخر تحقق: :time",
     "Branding": "الهوية",
-    "Your company logo and the avatar shown for users without their own photo.": "شعار شركتك والصورة الرمزية التي تظهر للمستخدمين الذين ليس لديهم صورة خاصة.",
     "Company Logo": "شعار الشركة",
     "Shown in the panel header and in emails. Leave empty to use the default logo.": "يظهر في رأس اللوحة وفي رسائل البريد الإلكتروني. اتركه فارغًا لاستخدام الشعار الافتراضي.",
     "Default User Avatar": "الصورة الرمزية الافتراضية للمستخدم",
@@ -2722,5 +2721,10 @@
     "No instalments due in the next :days days": "لا توجد أقساط مستحقة خلال :days أيام القادمة",
     "Replaced .htaccess with this release's; the previous one is saved in storage/app/updater/.": "تم استبدال ملف ‎.htaccess بملف هذا الإصدار؛ وحُفظ الملف السابق في storage/app/updater/.",
     "Waiting for the server to finish this step… This can take a few minutes. If nothing changes for a long time, reload the page — the update resumes where it stopped.": "بانتظار أن ينهي الخادم هذه الخطوة… قد يستغرق ذلك بضع دقائق. إذا لم يتغير شيء لفترة طويلة، أعد تحميل الصفحة — سيستأنف التحديث من حيث توقف.",
-    "Live output": "المخرجات المباشرة"
+    "Live output": "المخرجات المباشرة",
+    "Your company logos, the browser tab icon, and the avatar shown for users without their own photo.": "شعارات شركتك، وأيقونة تبويب المتصفح، والصورة الرمزية التي تظهر للمستخدمين الذين ليس لديهم صورة خاصة.",
+    "Company Logo (Dark Mode)": "شعار الشركة (الوضع الداكن)",
+    "Shown in the panel header in dark mode. Leave empty to use the logo above.": "يظهر في رأس اللوحة في الوضع الداكن. اتركه فارغًا لاستخدام الشعار أعلاه.",
+    "Favicon": "أيقونة الموقع",
+    "The browser tab icon. A square image, e.g. 64×64 PNG.": "الأيقونة التي تظهر في تبويب المتصفح. صورة مربعة، مثل PNG بحجم 64×64."
 }

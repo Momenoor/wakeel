@@ -7,29 +7,44 @@ use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 /**
- * The deployment's own logo and default user avatar — uploaded during
- * installation or from the Branding section of the settings pages, stored
- * on the `public` disk with their paths kept as settings. Anything not
- * uploaded falls back to the images shipped in `public/images`.
+ * The deployment's own logos (light and dark mode), favicon and default
+ * user avatar — uploaded during installation or from the Branding section
+ * of the settings pages, stored on the `public` disk with their paths kept
+ * as settings. Anything not uploaded falls back to the images shipped in
+ * `public/images`.
  */
 class Branding
 {
     public const LOGO = 'company_logo';
 
+    public const LOGO_DARK = 'company_logo_dark';
+
+    public const FAVICON = 'favicon';
+
     public const DEFAULT_AVATAR = 'default_avatar';
 
-    public const KEYS = [self::LOGO, self::DEFAULT_AVATAR];
+    public const KEYS = [self::LOGO, self::LOGO_DARK, self::FAVICON, self::DEFAULT_AVATAR];
 
     public const DIRECTORY = 'branding';
 
+    /**
+     * Dark mode uses the uploaded dark logo, else the uploaded light one;
+     * with nothing uploaded, the shipped image for that mode.
+     */
     public static function logoUrl(bool $dark = false): string
     {
-        $path = static::path(self::LOGO);
+        $path = ($dark ? static::path(self::LOGO_DARK) : null) ?? static::path(self::LOGO);
 
-        // One uploaded logo serves both themes.
         return $path !== null
             ? Storage::disk('public')->url($path)
             : asset($dark ? 'images/logo-dark.png' : 'images/logo.png');
+    }
+
+    public static function faviconUrl(): string
+    {
+        $path = static::path(self::FAVICON);
+
+        return $path !== null ? Storage::disk('public')->url($path) : asset('images/favicon.png');
     }
 
     public static function emailLogoUrl(): string
