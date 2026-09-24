@@ -1,0 +1,66 @@
+# On every vX.Y.Z tag: build release notes from the commits since the
+# previous tag, publish them as a GitHub Release, and announce the release
+# to the license server — where it arrives UNPUBLISHED until someone ticks
+# "Published" (installations are only offered published releases).
+#
+# Repository settings needed (Settings -> Secrets and variables -> Actions):
+#   Variable  LICENSE_SERVER_URL   e.g. https://license.jpaemirates.com
+#   Secret    RELEASES_API_TOKEN   same value as RELEASES_API_TOKEN in the
+#                                  license server's .env
+# Without them the GitHub Release is still created; use "Sync from GitHub"
+# on the license server's Releases page instead.
+#
+# GitHub doesn't run workflows for pushes of more than three tags at once —
+# push release tags one at a time (git push origin vX.Y.Z).
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build release notes from commits
+        run: |
+          previous=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          range="${previous:+$previous..}${GITHUB_REF_NAME}"
+          git log "$range" --no-merges --pretty='- %s' > notes.md
+          [ -s notes.md ] || echo '- Maintenance release' > notes.md
+          echo "Notes for ${GITHUB_REF_NAME} (since ${previous:-the first commit}):"
+          cat notes.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --notes-file notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag
+          fi
+
+      - name: Announce to the license server
+        if: ${{ vars.LICENSE_SERVER_URL != '' }}
+        env:
+          LICENSE_SERVER_URL: ${{ vars.LICENSE_SERVER_URL }}
+          RELEASES_API_TOKEN: ${{ secrets.RELEASES_API_TOKEN }}
+        run: |
+          jq -n --arg version "${GITHUB_REF_NAME#v}" --rawfile notes notes.md \
+            '{version: $version, notes: $notes}' > payload.json
+          curl --fail-with-body -sS -X POST "${LICENSE_SERVER_URL%/}/api/v1/releases" \
+            -H "Authorization: Bearer ${RELEASES_API_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json' \
+            --data @payload.json

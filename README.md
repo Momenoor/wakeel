@@ -348,7 +348,9 @@ To publish a release:
    git push origin main --tags
    ```
 
-3. On the license server, add the release under **Releases** (version `1.2.0`, release notes in Markdown) and tick **Published**.
+3. The **Release** GitHub Action (`.github/workflows/release.yml`) turns the commit messages since the previous tag into release notes, creates the GitHub Release, and sends it to the license server, where it appears under **Releases** as **unpublished**. Review the notes there and tick **Published** to offer it to installations. (If the Action couldn't reach the license server, use **Sync from GitHub** on that page.)
+
+   The Action needs, under the repository's Settings → Secrets and variables → Actions: the variable `LICENSE_SERVER_URL` and the secret `RELEASES_API_TOKEN` (same value as in the license server's `.env`). Push release tags one at a time — GitHub skips workflows for pushes of more than three tags.
 
 An installation reports the highest `vX.Y.Z` tag on its checked-out commit (read from `.git`); `app_version` in `config/license.php` is only the fallback for an untagged checkout. Only publish once the tag is pushed: installations check out `v{version}` and stop with an error if it doesn't exist. The **Releases** list on the license server shows how many installations run each version.
 
