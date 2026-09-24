@@ -54,11 +54,15 @@ jobs:
       - name: Announce to the license server
         if: ${{ vars.LICENSE_SERVER_URL != '' }}
         env:
+          GH_TOKEN: ${{ github.token }}
           LICENSE_SERVER_URL: ${{ vars.LICENSE_SERVER_URL }}
           RELEASES_API_TOKEN: ${{ secrets.RELEASES_API_TOKEN }}
         run: |
-          jq -n --arg version "${GITHUB_REF_NAME#v}" --rawfile notes notes.md \
-            '{version: $version, notes: $notes}' > payload.json
+          # GitHub's own publish date for the release, so the license
+          # server shows when it was released, not when it was told.
+          released_at=$(gh release view "$GITHUB_REF_NAME" --json publishedAt -q .publishedAt)
+          jq -n --arg version "${GITHUB_REF_NAME#v}" --rawfile notes notes.md --arg released_at "$released_at" \
+            '{version: $version, notes: $notes, released_at: $released_at}' > payload.json
           curl --fail-with-body -sS -X POST "${LICENSE_SERVER_URL%/}/api/v1/releases" \
             -H "Authorization: Bearer ${RELEASES_API_TOKEN}" \
             -H 'Content-Type: application/json' \
