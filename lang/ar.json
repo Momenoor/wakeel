@@ -2679,7 +2679,6 @@
     "These files were changed on the server and would be overwritten: :files": "تم تعديل هذه الملفات على الخادم وستتم الكتابة فوقها: :files",
     "The system is being updated to version :version. Please check back in a few minutes.": "يجري تحديث النظام إلى الإصدار :version. يرجى المحاولة بعد بضع دقائق.",
     "Maintenance mode is on — administrators can still sign in.": "وضع الصيانة مفعّل — لا يزال بإمكان المسؤولين تسجيل الدخول.",
-    ".htaccess has local edits beyond the PHP handler at its top — merge them by hand, then retry.": "يحتوي ملف ‎.htaccess على تعديلات محلية غير معالج PHP في أعلاه — ادمجها يدويًا ثم أعد المحاولة.",
     "Restored the PHP handler at the top of .htaccess.": "تمت استعادة معالج PHP في أعلى ملف ‎.htaccess.",
     "Composer install failed.": "فشل تثبيت Composer.",
     "Updated to version :version.": "تم التحديث إلى الإصدار :version.",
@@ -2720,5 +2719,6 @@
     "Upcoming Instalments (Next :days Days)": "الأقساط القادمة (خلال :days أيام)",
     "In :days days": "خلال :days أيام",
     "Amount Due": "المبلغ المستحق",
-    "No instalments due in the next :days days": "لا توجد أقساط مستحقة خلال :days أيام القادمة"
+    "No instalments due in the next :days days": "لا توجد أقساط مستحقة خلال :days أيام القادمة",
+    "Replaced .htaccess with this release's; the previous one is saved in storage/app/updater/.": "تم استبدال ملف ‎.htaccess بملف هذا الإصدار؛ وحُفظ الملف السابق في storage/app/updater/."
 }

@@ -23,6 +23,9 @@ class UpdaterGitTest extends TestCase
 {
     use RefreshDatabase;
 
+    /** What install.php prepends to .htaccess on cPanel/LiteSpeed. */
+    private const HANDLER = "# Force PHP 8.5 on LiteSpeed / EasyApache 4\n<IfModule mime_module>\n  AddHandler application/x-httpd-ea-php85___lsphp .php .php8 .phtml\n</IfModule>\n\n";
+
     private string $root;
 
     private string $site;
@@ -73,7 +76,7 @@ class UpdaterGitTest extends TestCase
         // The deployed site: installed at 1.0.0, then changed locally.
         $this->git($this->root, ['clone', 'origin.git', 'site']);
         $this->git($this->site, ['-c', 'advice.detachedHead=false', 'checkout', 'v1.0.0']);
-        File::put($this->site.'/.htaccess', "# Force PHP 8.5\nAddHandler x-php85 .php\n\n".File::get($this->site.'/.htaccess'));
+        File::put($this->site.'/.htaccess', self::HANDLER.File::get($this->site.'/.htaccess'));
         File::put($this->site.'/public/js/asset.js', "asset republished\n");
         // Composer and npm run on the server: a rewritten lock file and a
         // local frontend build — including an untracked file the release
@@ -118,7 +121,7 @@ class UpdaterGitTest extends TestCase
 
         $this->assertSame("v2\n", str_replace("\r\n", "\n", File::get($this->site.'/app.txt')));
         $this->assertSame(
-            "# Force PHP 8.5\nAddHandler x-php85 .php\n\nRewriteEngine On\nRULES v2\n",
+            self::HANDLER."RewriteEngine On\nRULES v2\n",
             str_replace("\r\n", "\n", File::get($this->site.'/.htaccess')),
         );
         $this->assertSame("asset v1\n", str_replace("\r\n", "\n", File::get($this->site.'/public/js/asset.js')));
@@ -127,6 +130,29 @@ class UpdaterGitTest extends TestCase
         $this->assertSame("lock v2\n", str_replace("\r\n", "\n", File::get($this->site.'/composer.lock')));
         $this->assertSame("manifest v2\n", str_replace("\r\n", "\n", File::get($this->site.'/public/build/manifest.json')));
         $this->assertSame("release build\n", str_replace("\r\n", "\n", File::get($this->site.'/public/build/assets/app-2.js')));
+    }
+
+    /**
+     * What stopped the live update: a newer .htaccess uploaded by hand, so
+     * the file isn't "handler + the committed one". The handler is kept,
+     * the rest comes from the release, and the old file is backed up.
+     */
+    public function test_a_hand_edited_htaccess_is_replaced_keeping_the_php_handler(): void
+    {
+        File::put($this->site.'/.htaccess', self::HANDLER."RewriteEngine On\nRULES UPLOADED BY HAND\n");
+
+        $updater = app(Updater::class);
+        $updater->start('1.1.0');
+
+        $this->assertTrue($updater->runNextStep(), (string) $updater->state()['log']); // preflight
+        $this->assertTrue($updater->runNextStep(), (string) $updater->state()['log']); // maintenance
+        $this->assertTrue($updater->runNextStep(), (string) $updater->state()['log']); // code
+
+        $this->assertSame(self::HANDLER."RewriteEngine On\nRULES v2\n", str_replace("\r\n", "\n", File::get($this->site.'/.htaccess')));
+
+        $backups = File::glob($this->site.'/storage/app/updater/htaccess-*');
+        $this->assertCount(1, $backups);
+        $this->assertStringContainsString('RULES UPLOADED BY HAND', File::get($backups[0]));
     }
 
     public function test_preflight_refuses_to_overwrite_other_local_changes(): void

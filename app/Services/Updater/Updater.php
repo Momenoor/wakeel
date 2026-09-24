@@ -211,28 +211,51 @@ class Updater
             $this->git(['clean', '-f', '-q', '--', 'public/build']);
         }
 
-        // install.php prepends a PHP-version handler to the tracked
-        // .htaccess. Keep exactly that prefix across the checkout.
+        // The release's .htaccess replaces the server's, except for the
+        // PHP-version handler install.php adds — without it the host could
+        // fall back to an older PHP mid-update. Anything else edited there
+        // (e.g. rules uploaded by hand) is kept in a backup, not merged.
         if (in_array('.htaccess', $changed, true)) {
-            $local = str_replace("\r\n", "\n", (string) file_get_contents($htaccess));
-            $tracked = str_replace("\r\n", "\n", $this->git(['show', 'HEAD:.htaccess']));
+            $local = (string) file_get_contents($htaccess);
+            $prefix = static::phpHandlerBlocks($local);
 
-            if (! str_ends_with($local, $tracked)) {
-                throw new RuntimeException(__('.htaccess has local edits beyond the PHP handler at its top — merge them by hand, then retry.'));
-            }
+            $backup = storage_path('app/updater/htaccess-'.now()->format('Ymd-His'));
+            @mkdir(dirname($backup), 0755, true);
+            file_put_contents($backup, $local);
 
-            $prefix = substr($local, 0, strlen($local) - strlen($tracked));
             $this->git(['checkout', '--', '.htaccess']);
         }
 
         $output = $this->git(['-c', 'advice.detachedHead=false', 'checkout', "v{$version}"]);
 
+        if ($prefix !== null) {
+            $output .= __('Replaced .htaccess with this release\'s; the previous one is saved in storage/app/updater/.')."\n";
+        }
+
         if ($prefix !== null && $prefix !== '') {
-            file_put_contents($htaccess, $prefix.file_get_contents($htaccess));
+            file_put_contents($htaccess, $prefix.str_replace("\r\n", "\n", (string) file_get_contents($htaccess)));
             $output .= __('Restored the PHP handler at the top of .htaccess.')."\n";
         }
 
         return $output;
+    }
+
+    /**
+     * Every `<IfModule mime_module>` block setting an AddHandler (the PHP
+     * version selector hosts like cPanel/LiteSpeed use), with the comment
+     * line right above it — ready to put back at the top of .htaccess.
+     */
+    public static function phpHandlerBlocks(string $htaccess): string
+    {
+        preg_match_all(
+            '/(?:^#[^\n]*\n)?<IfModule mime_module>(?:(?!<\/IfModule>).)*?AddHandler(?:(?!<\/IfModule>).)*<\/IfModule>\s*/ms',
+            str_replace("\r\n", "\n", $htaccess),
+            $matches,
+        );
+
+        $blocks = implode('', $matches[0]);
+
+        return $blocks === '' ? '' : rtrim($blocks)."\n\n";
     }
 
     private function composerInstall(): string
