@@ -46,7 +46,10 @@ Route::get('system-down', function () {
 Route::get('/system-updates/live-output', function () {
     abort_unless(AppUpdate::canManage(), 403);
 
-    return response()->json(['output' => app(Updater::class)->liveOutput()]);
+    return response()->json([
+        'output' => app(Updater::class)->liveOutput(),
+        'silent_for' => app(Updater::class)->secondsSinceOutput(),
+    ]);
 })->middleware('auth')->name('system-updates.live-output');
 
 // The default panel's own login — MMS isn't registered on a PMS-only install.

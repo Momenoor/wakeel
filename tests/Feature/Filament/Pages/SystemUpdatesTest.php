@@ -146,6 +146,26 @@ class SystemUpdatesTest extends TestCase
         $this->assertSame(['preflight', 'maintenance'], $updater->state()['completed']);
     }
 
+    /**
+     * The loop both live systems hit: a request killed mid-step never
+     * released the lock, so every later call answered 'busy'. A step that
+     * has been silent past STALE_AFTER is treated as dead and taken over.
+     */
+    public function test_a_step_silent_for_too_long_is_taken_over(): void
+    {
+        $updater = app(Updater::class);
+        $this->startAfter($updater, '1.2.0', ['preflight']);
+
+        $this->assertTrue(Cache::lock('updater:step', 1800)->get()); // never released
+
+        @mkdir(storage_path('app/updater'), 0755, true);
+        file_put_contents(storage_path('app/updater/live.log'), "== Check the server can update ==\n");
+        touch(storage_path('app/updater/live.log'), time() - Updater::STALE_AFTER - 5);
+
+        $this->assertSame('ran', $updater->runNextStepIfIdle());
+        $this->assertSame(['preflight', 'maintenance'], $updater->state()['completed']);
+    }
+
     public function test_the_page_runs_steps_without_rendering_and_refreshes_separately(): void
     {
         License::factory()->create(['latest_version' => '1.2.0']);
