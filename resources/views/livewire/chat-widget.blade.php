@@ -5,10 +5,24 @@
 
 <div
     x-data="{
+        {{--
+            The full Chat page fills exactly the rest of the screen: no page
+            scrollbar, only the conversation list and the messages scroll
+            inside their own boxes. The height is measured, then trimmed by
+            whatever still overflows (Filament's page padding, footer), so
+            it fits whatever is above and below it.
+        --}}
         fillViewport() {
             const el = this.$refs.pageShell;
             if (! el) { return; }
-            el.style.height = Math.max(320, window.innerHeight - el.getBoundingClientRect().top - 24) + 'px';
+            const doc = document.documentElement;
+            const top = el.getBoundingClientRect().top + window.scrollY;
+            let height = window.innerHeight - top - 16;
+            el.style.height = Math.max(320, height) + 'px';
+            const overflow = doc.scrollHeight - window.innerHeight;
+            if (overflow > 0) {
+                el.style.height = Math.max(320, height - overflow) + 'px';
+            }
         },
 
         {{--
@@ -70,7 +84,9 @@
     x-init="
         if ($refs.pageShell) {
             fillViewport();
-            window.addEventListener('resize', fillViewport);
+            requestAnimationFrame(() => fillViewport());
+            window.addEventListener('load', () => fillViewport());
+            window.addEventListener('resize', () => fillViewport());
         }
         if ($refs.bubble) {
             loadPos();
@@ -85,7 +101,17 @@
             if (window.Echo) { join(); } else { window.addEventListener('EchoLoaded', join, { once: true }); }
         }
     "
-    wire:poll.15s.keep-alive="$refresh"
+    {{--
+        With Pusher, messages and online status arrive live, so polling is
+        only a slow safety net and stops in background tabs. Without it,
+        polling is what delivers both — and keeps a background tab's user
+        online — so it runs faster and keeps going.
+    --}}
+    @if (filled(config('filament.broadcasting.echo')))
+        wire:poll.60s="$refresh"
+    @else
+        wire:poll.20s.keep-alive="$refresh"
+    @endif
     @if ($isPopup)
         wire:key="chat-widget-popup"
         :style="placement()"
@@ -135,11 +161,19 @@
             style="display: none;"
             class="flex h-[32rem] w-[23rem] max-w-[calc(100vw-3rem)] origin-bottom-end flex-col overflow-hidden rounded-3xl border border-gray-950/5 bg-white shadow-2xl shadow-gray-950/20 dark:border-white/10 dark:bg-gray-900"
         >
-            @include('livewire.partials.chat-body', ['isPopup' => true, 'showingThread' => $showingThread])
+            {{-- Only while open: a closed popup's every refresh rendered the
+                 whole conversation list and thread nobody could see. --}}
+            @if ($isOpen)
+                @include('livewire.partials.chat-body', ['isPopup' => true, 'showingThread' => $showingThread])
+            @endif
         </div>
     @else
         <div
             x-ref="pageShell"
+            {{-- ignore.self: Livewire's refresh would otherwise strip the
+                 measured height off this element every few seconds --}}
+            wire:ignore.self
+            style="grid-auto-rows: minmax(0, 1fr);"
             class="fi-chat-page grid grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[20rem_1fr]"
         >
             <div class="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-gray-950/5 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900">

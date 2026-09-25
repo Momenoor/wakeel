@@ -24,6 +24,9 @@ use Spatie\Permission\Traits\HasRoles;
  */
 class User extends Authenticatable implements FilamentUser, HasAvatar
 {
+    /** Seen within this many seconds counts as online (see isOnline()). */
+    public const ONLINE_WITHIN_SECONDS = 60;
+
     use HasFactory, HasInbox, HasRoles, Notifiable;
     use LogsActivity;
 
@@ -75,14 +78,14 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     ];
 
     /**
-     * "Online" is a 45-second window on last_seen_at, which TrackUserLastSeen
-     * stamps (at most every 10 seconds) on page loads and on the panels'
+     * "Online" is a 60-second window on last_seen_at, which TrackUserLastSeen
+     * stamps (at most every 15 seconds) on page loads and on the panels'
      * polling requests. With Pusher configured the chat widget overrides
      * this live from the "online" presence channel; this is the fallback.
      */
     public function isOnline(): bool
     {
-        return (bool) $this->last_seen_at?->gt(now()->subSeconds(45));
+        return (bool) $this->last_seen_at?->gt(now()->subSeconds(self::ONLINE_WITHIN_SECONDS));
     }
 
     /**

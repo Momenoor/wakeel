@@ -267,7 +267,7 @@ class ChatWidget extends Component
     public function render(): View
     {
         $this->onlineUserIds = User::query()
-            ->where('last_seen_at', '>', now()->subSeconds(45))
+            ->where('last_seen_at', '>', now()->subSeconds(User::ONLINE_WITHIN_SECONDS))
             ->pluck('id')
             ->all();
 

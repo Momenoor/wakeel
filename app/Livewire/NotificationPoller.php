@@ -12,6 +12,23 @@ use Livewire\Component;
 
 class NotificationPoller extends Component
 {
+    /**
+     * Toasts a new notification the moment NotificationsUpdated reaches this
+     * user's private channel over Pusher.
+     *
+     * @return array<string, string>
+     */
+    protected function getListeners(): array
+    {
+        if (! Auth::check()) {
+            return [];
+        }
+
+        return [
+            'echo-private:App.Models.User.'.Auth::id().',.database-notifications.sent' => 'checkNotifications',
+        ];
+    }
+
     public function checkNotifications(): void
     {
         $user = Auth::user();

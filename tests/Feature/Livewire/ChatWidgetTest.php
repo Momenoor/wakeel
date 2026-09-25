@@ -180,6 +180,15 @@ class ChatWidgetTest extends TestCase
             ->assertSet('onlineUserIds', fn ($ids) => in_array($this->colleague->id, $ids));
     }
 
+    public function test_a_closed_popup_does_not_render_its_hidden_content(): void
+    {
+        // The popup panel's header (chat-body) — only there once opened.
+        Livewire::test(ChatWidget::class, ['mode' => 'popup'])
+            ->assertDontSee(__('Messages'))
+            ->call('toggleOpen')
+            ->assertSee(__('Messages'));
+    }
+
     public function test_the_panels_stamp_last_seen_on_their_polling_requests_too(): void
     {
         // Registered with Livewire once a panel boots.

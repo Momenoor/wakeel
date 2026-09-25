@@ -2,11 +2,15 @@
 
 namespace App\Providers;
 
+use App\Events\NotificationsUpdated;
 use App\Models\Setting;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Events\LocaleUpdated;
+use Illuminate\Notifications\Events\NotificationSent;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
+use Throwable;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -38,5 +42,28 @@ class AppServiceProvider extends ServiceProvider
         );
 
         Setting::applyMailConfig();
+
+        // Every database notification — a Laravel Notification or Filament's
+        // sendToDatabase() — pings the user's open tabs over Pusher, so the
+        // bell and toasts show it at once rather than on the next poll. Once
+        // per user per request (named defer), after the response, and never
+        // allowed to break whatever sent the notification.
+        Event::listen(NotificationSent::class, function (NotificationSent $event) {
+            if ($event->channel !== 'database'
+                || ! $event->notifiable instanceof User
+                || ! in_array(config('broadcasting.default'), ['pusher', 'reverb'], true)) {
+                return;
+            }
+
+            $userId = $event->notifiable->getKey();
+
+            defer(function () use ($userId) {
+                try {
+                    broadcast(new NotificationsUpdated($userId));
+                } catch (Throwable $e) {
+                    report($e);
+                }
+            }, "notifications-updated-{$userId}");
+        });
     }
 }

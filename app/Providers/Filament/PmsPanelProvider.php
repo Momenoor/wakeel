@@ -153,7 +153,9 @@ class PmsPanelProvider extends PanelProvider
                     ->useAvatar(),
             ])
             ->databaseNotifications()
-            ->databaseNotificationsPolling('10s')
+            // With Pusher, new notifications arrive live (NotificationsUpdated),
+            // so polling is only a slow safety net.
+            ->databaseNotificationsPolling(filled(config('filament.broadcasting.echo')) ? '60s' : '10s')
             ->databaseTransactions()
             ->globalSearch(false)
             ->maxContentWidth(Width::Full);
