@@ -128,6 +128,21 @@ class BulkMailSyncQueueTest extends TestCase
         $this->assertCount(25, array_unique($to));
     }
 
+    public function test_the_scheduler_sends_even_when_the_queue_is_the_database(): void
+    {
+        // What a server gets with no QUEUE_CONNECTION in .env — and no
+        // queue worker running on cPanel to process that queue.
+        config(['queue.default' => 'database']);
+
+        $campaign = $this->campaign(25);
+
+        Artisan::call('mail:send-bulk-campaigns');
+
+        $this->assertCount(10, $this->sent);
+        $this->assertSame(0, \DB::table('jobs')->count());
+        $this->assertStringContainsString('sent 10 now, 15 pending', Artisan::output());
+    }
+
     public function test_the_daily_limit_holds(): void
     {
         $campaign = $this->campaign(25, dailyLimit: 12);

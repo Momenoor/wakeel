@@ -55,7 +55,9 @@ class ViewBulkMailCampaign extends ViewRecord
                     // A scheduled campaign waits for mail:send-bulk-campaigns
                     // to pick it up once scheduled_at has passed.
                     if ($this->record->scheduled_at === null || $this->record->scheduled_at->isPast()) {
-                        SendBulkMailBatch::dispatch($this->record->id);
+                        // Sent right here, not queued — nothing on cPanel
+                        // runs a queue worker (see mail:send-bulk-campaigns).
+                        SendBulkMailBatch::dispatchSync($this->record->id);
                     }
 
                     Notification::make()
