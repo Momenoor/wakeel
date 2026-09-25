@@ -75,14 +75,14 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     ];
 
     /**
-     * "Online" is a 60-second window on last_seen_at (itself throttled to a
-     * 30-second write cadence by TrackUserLastSeen), not a live socket
-     * presence check — good enough for a colored dot in the chat widget
-     * without the extra machinery of a presence channel.
+     * "Online" is a 45-second window on last_seen_at, which TrackUserLastSeen
+     * stamps (at most every 10 seconds) on page loads and on the panels'
+     * polling requests. With Pusher configured the chat widget overrides
+     * this live from the "online" presence channel; this is the fallback.
      */
     public function isOnline(): bool
     {
-        return (bool) $this->last_seen_at?->gt(now()->subSeconds(60));
+        return (bool) $this->last_seen_at?->gt(now()->subSeconds(45));
     }
 
     /**

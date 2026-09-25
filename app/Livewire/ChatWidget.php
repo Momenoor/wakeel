@@ -179,9 +179,14 @@ class ChatWidget extends Component
         $this->markActiveConversationRead();
     }
 
-    public function sendMessage(): void
+    /**
+     * The text comes as an argument from the thread's form, which has
+     * already shown it and cleared the input before this request goes out
+     * (see chat-thread.blade.php); $this->body is the fallback.
+     */
+    public function sendMessage(?string $text = null): void
     {
-        $body = trim($this->body);
+        $body = trim($text ?? $this->body);
 
         if ($body === '' || ! $this->activeConversationId) {
             return;
@@ -202,7 +207,10 @@ class ChatWidget extends Component
         $conversation->update(['last_message_at' => $message->created_at]);
         $conversation->participants()->updateExistingPivot(Auth::id(), ['last_read_at' => $message->created_at]);
 
-        broadcast(new ChatMessageSent($message->load('sender')))->toOthers();
+        // After the response has gone back — the broadcaster's HTTP call to
+        // Pusher no longer holds up the sender's own reply.
+        $message->load('sender');
+        defer(fn () => broadcast(new ChatMessageSent($message))->toOthers());
 
         $this->body = '';
     }
@@ -246,8 +254,23 @@ class ChatWidget extends Component
             ?? 'https://ui-avatars.com/api/?name='.urlencode($user->display_name ?: $user->name).'&size=128&background=2563EB&color=FFFFFF';
     }
 
+    /**
+     * Who counts as online by last_seen_at — the fallback the status dots
+     * read (through $wire) when there's no live presence channel. Kept in
+     * one property rather than in each dot's HTML, so a re-render never
+     * fights Alpine over the dots.
+     *
+     * @var list<int>
+     */
+    public array $onlineUserIds = [];
+
     public function render(): View
     {
+        $this->onlineUserIds = User::query()
+            ->where('last_seen_at', '>', now()->subSeconds(45))
+            ->pluck('id')
+            ->all();
+
         return view('livewire.chat-widget');
     }
 }

@@ -13,9 +13,9 @@ use App\Filament\Shared\Pages\SystemUpdates;
 use App\Http\Middleware\CheckSystemOffline;
 use App\Http\Middleware\EnsureLicenseIsValid;
 use App\Http\Middleware\RedirectToInstaller;
-use App\Support\Branding;
 use App\Http\Middleware\TrackCurrentSystem;
 use App\Http\Middleware\TrackUserLastSeen;
+use App\Support\Branding;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use CraftForge\FilamentLanguageSwitcher\FilamentLanguageSwitcherPlugin;
 use Filament\FontProviders\LocalFontProvider;
@@ -128,6 +128,8 @@ class PmsPanelProvider extends PanelProvider
                 TrackUserLastSeen::class,
                 TrackCurrentSystem::class,
             ])
+            // See MmsPanelProvider — keeps "Online" current while polling.
+            ->persistentMiddleware([TrackUserLastSeen::class])
             ->authMiddleware([
                 Authenticate::class,
             ])

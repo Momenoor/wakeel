@@ -13,9 +13,9 @@ use App\Http\Middleware\CheckSystemOffline;
 use App\Http\Middleware\EnsureLicenseIsValid;
 use App\Http\Middleware\RedirectToInstaller;
 use App\Http\Middleware\TrackCurrentSystem;
-use App\Support\Branding;
 use App\Http\Middleware\TrackUserLastSeen;
 use App\Models\Setting;
+use App\Support\Branding;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use BezhanSalleh\FilamentShield\Support\Utils;
 use CraftForge\FilamentLanguageSwitcher\FilamentLanguageSwitcherPlugin;
@@ -128,6 +128,10 @@ class MmsPanelProvider extends PanelProvider
                 TrackUserLastSeen::class,
                 TrackCurrentSystem::class,
             ])
+            // Also on the panel's Livewire requests — the notification and
+            // chat polling — so reading one page for a while doesn't turn
+            // a user "Offline"; page loads alone stamped it too rarely.
+            ->persistentMiddleware([TrackUserLastSeen::class])
             ->navigationGroups([
                 NavigationGroup::make(fn () => __('Communication')),
                 NavigationGroup::make(fn () => __('Financial')),

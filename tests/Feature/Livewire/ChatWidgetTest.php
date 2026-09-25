@@ -3,10 +3,12 @@
 namespace Tests\Feature\Livewire;
 
 use App\Events\ChatMessageSent;
+use App\Http\Middleware\TrackUserLastSeen;
 use App\Livewire\ChatWidget;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\User;
+use Filament\Facades\Filament;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
@@ -59,6 +61,8 @@ class ChatWidgetTest extends TestCase
 
     public function test_sending_a_message_persists_it_and_broadcasts_it(): void
     {
+        // The broadcast runs after the response; run it straight away here.
+        $this->withoutDefer();
         Event::fake([ChatMessageSent::class]);
 
         Livewire::test(ChatWidget::class)
@@ -73,6 +77,18 @@ class ChatWidgetTest extends TestCase
         $this->assertSame($this->me->id, $message->user_id);
 
         Event::assertDispatched(ChatMessageSent::class, fn ($event) => $event->message->id === $message->id);
+    }
+
+    public function test_the_form_sends_its_text_as_an_argument(): void
+    {
+        // What the thread's form does: it clears the input (and body)
+        // before the request, passing the text itself.
+        Livewire::test(ChatWidget::class)
+            ->call('startConversationWith', $this->colleague->id)
+            ->set('body', '')
+            ->call('sendMessage', '  Sent at once  ');
+
+        $this->assertSame('Sent at once', ChatMessage::sole()->body);
     }
 
     public function test_the_broadcast_goes_to_every_participants_personal_channel(): void
@@ -149,5 +165,27 @@ class ChatWidgetTest extends TestCase
 
         $this->colleague->forceFill(['last_seen_at' => now()->subMinutes(5)])->save();
         $this->assertFalse($this->colleague->fresh()->isOnline());
+    }
+
+    public function test_every_render_refreshes_who_is_online_for_the_status_dots(): void
+    {
+        $this->colleague->forceFill(['last_seen_at' => now()->subMinutes(5)])->save();
+
+        $widget = Livewire::test(ChatWidget::class)
+            ->assertSet('onlineUserIds', fn ($ids) => ! in_array($this->colleague->id, $ids));
+
+        $this->colleague->forceFill(['last_seen_at' => now()])->save();
+
+        $widget->call('$refresh')
+            ->assertSet('onlineUserIds', fn ($ids) => in_array($this->colleague->id, $ids));
+    }
+
+    public function test_the_panels_stamp_last_seen_on_their_polling_requests_too(): void
+    {
+        // Registered with Livewire once a panel boots.
+        Filament::setCurrentPanel('pms');
+        Filament::getPanel('pms')->bootUsing(fn () => null)->boot();
+
+        $this->assertContains(TrackUserLastSeen::class, Livewire::getPersistentMiddleware());
     }
 }

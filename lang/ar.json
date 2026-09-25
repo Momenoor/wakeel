@@ -2726,5 +2726,7 @@
     "Company Logo (Dark Mode)": "شعار الشركة (الوضع الداكن)",
     "Shown in the panel header in dark mode. Leave empty to use the logo above.": "يظهر في رأس اللوحة في الوضع الداكن. اتركه فارغًا لاستخدام الشعار أعلاه.",
     "Favicon": "أيقونة الموقع",
-    "The browser tab icon. A square image, e.g. 64×64 PNG.": "الأيقونة التي تظهر في تبويب المتصفح. صورة مربعة، مثل PNG بحجم 64×64."
+    "The browser tab icon. A square image, e.g. 64×64 PNG.": "الأيقونة التي تظهر في تبويب المتصفح. صورة مربعة، مثل PNG بحجم 64×64.",
+    "Drag to move": "اسحب للتحريك",
+    "Sending...": "جارٍ الإرسال..."
 }

@@ -9,10 +9,9 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Stamps the authenticated user's last_seen_at so the chat widget can show
- * an online/offline dot. Throttled to once every 30 seconds per user via a
- * cache lock rather than writing on every single request — this middleware
- * runs on every panel page load, and a chat feature doesn't need
- * request-level precision on "when did they last click something".
+ * an online/offline dot. Runs on panel page loads and, as persistent
+ * middleware, on their Livewire polling requests; written at most once
+ * every 10 seconds per user.
  */
 class TrackUserLastSeen
 {

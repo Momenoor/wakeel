@@ -5,35 +5,105 @@
 
 <div
     x-data="{
-        scrollToBottom() {
-            $nextTick(() => {
-                const el = this.$refs.messageList;
-                if (el) { el.scrollTop = el.scrollHeight; }
-            });
-        },
         fillViewport() {
             const el = this.$refs.pageShell;
             if (! el) { return; }
             el.style.height = Math.max(320, window.innerHeight - el.getBoundingClientRect().top - 24) + 'px';
         },
+
+        {{--
+            The popup's bubble can be dragged anywhere, so it never sits on
+            top of a page's own buttons. pos is the bubble's top-left in
+            viewport pixels (null = the default bottom corner), remembered
+            per browser. The panel opens on whichever side has room.
+        --}}
+        pos: null,
+        drag: null,
+        moved: false,
+        loadPos() {
+            try { this.pos = JSON.parse(localStorage.getItem('wakeel.chat.position')); } catch (e) { this.pos = null; }
+            this.clamp();
+        },
+        clamp() {
+            if (! this.pos) { return; }
+            this.pos = {
+                x: Math.min(Math.max(8, this.pos.x), window.innerWidth - 64),
+                y: Math.min(Math.max(8, this.pos.y), window.innerHeight - 64),
+            };
+        },
+        startDrag(e) {
+            if (e.button !== undefined && e.button !== 0) { return; }
+            const r = e.currentTarget.getBoundingClientRect();
+            this.drag = { dx: e.clientX - r.left, dy: e.clientY - r.top, sx: e.clientX, sy: e.clientY };
+            this.moved = false;
+            e.currentTarget.setPointerCapture(e.pointerId);
+        },
+        onDrag(e) {
+            if (! this.drag) { return; }
+            if (! this.moved && Math.hypot(e.clientX - this.drag.sx, e.clientY - this.drag.sy) < 5) { return; }
+            this.moved = true;
+            this.pos = { x: e.clientX - this.drag.dx, y: e.clientY - this.drag.dy };
+            this.clamp();
+        },
+        endDrag() {
+            if (this.drag && this.moved) {
+                try { localStorage.setItem('wakeel.chat.position', JSON.stringify(this.pos)); } catch (e) {}
+            }
+            this.drag = null;
+        },
+        clicked() {
+            if (this.moved) { this.moved = false; return; }
+            this.$wire.toggleOpen();
+        },
+        placement() {
+            if (! this.pos) { return ''; }
+            const left = this.pos.x < 384;
+            const top = this.pos.y < 540;
+            return [
+                left ? 'left:' + this.pos.x + 'px; right:auto' : 'right:' + (window.innerWidth - this.pos.x - 56) + 'px; left:auto',
+                top ? 'top:' + this.pos.y + 'px; bottom:auto' : 'bottom:' + (window.innerHeight - this.pos.y - 56) + 'px; top:auto',
+                'flex-direction:' + (top ? 'column-reverse' : 'column'),
+                'align-items:' + (left ? 'flex-start' : 'flex-end'),
+            ].join('; ');
+        },
     }"
     x-init="
-        scrollToBottom();
         if ($refs.pageShell) {
             fillViewport();
             window.addEventListener('resize', fillViewport);
         }
+        if ($refs.bubble) {
+            loadPos();
+            window.addEventListener('resize', () => clamp());
+        }
+        if (! Alpine.store('chatOnline')) {
+            Alpine.store('chatOnline', { ids: null });
+            const join = () => window.Echo.join('online')
+                .here((users) => Alpine.store('chatOnline').ids = users.map((u) => u.id))
+                .joining((u) => { const s = Alpine.store('chatOnline'); if (s.ids && ! s.ids.includes(u.id)) { s.ids = [...s.ids, u.id]; } })
+                .leaving((u) => { const s = Alpine.store('chatOnline'); if (s.ids) { s.ids = s.ids.filter((id) => id !== u.id); } });
+            if (window.Echo) { join(); } else { window.addEventListener('EchoLoaded', join, { once: true }); }
+        }
     "
-    x-on:message-sent.window="scrollToBottom()"
-    wire:poll.20s="$refresh"
-    @if ($isPopup) wire:key="chat-widget-popup" @endif
+    wire:poll.15s.keep-alive="$refresh"
+    @if ($isPopup)
+        wire:key="chat-widget-popup"
+        :style="placement()"
+    @endif
     class="fi-chat-widget {{ $isPopup ? 'fixed bottom-6 end-6 z-50 flex flex-col items-end gap-3' : '' }}"
 >
     @if ($isPopup)
-        {{-- Floating launcher bubble --}}
+        {{-- Floating launcher bubble — click to open, drag to move --}}
         <button
             type="button"
-            wire:click="toggleOpen"
+            x-ref="bubble"
+            x-on:pointerdown="startDrag($event)"
+            x-on:pointermove="onDrag($event)"
+            x-on:pointerup="endDrag()"
+            x-on:pointercancel="endDrag()"
+            x-on:click="clicked()"
+            style="touch-action: none; user-select: none; cursor: grab;"
+            title="{{ __('Drag to move') }}"
             @class([
                 'group relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-lg shadow-primary-600/30 ring-1 ring-white/10 transition-transform hover:scale-105 active:scale-95',
             ])

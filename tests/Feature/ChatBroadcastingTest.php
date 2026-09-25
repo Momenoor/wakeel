@@ -73,5 +73,12 @@ class ChatBroadcastingTest extends TestCase
 
         $this->post('/broadcasting/auth', ['socket_id' => '1234.5678', 'channel_name' => 'private-App.Models.User.999999'])
             ->assertForbidden();
+
+        // The "who's online" presence channel, open to every signed-in user.
+        $presence = $this->post('/broadcasting/auth', ['socket_id' => '1234.5678', 'channel_name' => 'presence-online'])
+            ->assertSuccessful()
+            ->json();
+
+        $this->assertSame(auth()->id(), json_decode($presence['channel_data'], true)['user_info']['id']);
     }
 }

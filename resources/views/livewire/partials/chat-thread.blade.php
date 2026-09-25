@@ -5,9 +5,13 @@
             @include('livewire.partials.chat-avatar', ['user' => $other, 'size' => 36])
             <span class="flex min-w-0 flex-1 flex-col">
                 <span class="truncate font-semibold text-gray-950 dark:text-white">{{ $other->display_name ?: $other->name }}</span>
-                <span class="text-xs {{ $other->isOnline() ? 'text-green-600 dark:text-green-400' : 'text-gray-400' }}">
-                    {{ $other->isOnline() ? __('Online') : __('Offline') }}
-                </span>
+                {{-- Live like the avatar dot — see chat-avatar.blade.php --}}
+                <span
+                    x-data="{ get on() { const ids = $store.chatOnline?.ids; return (ids ?? $wire.onlineUserIds).includes({{ $other->id }}); } }"
+                    class="text-xs"
+                    :class="on ? 'text-green-600 dark:text-green-400' : 'text-gray-400'"
+                    x-text="on ? @js(__('Online')) : @js(__('Offline'))"
+                ></span>
             </span>
         @else
             <span class="font-semibold text-gray-500 dark:text-gray-400">{{ __('Chat') }}</span>
@@ -16,9 +20,54 @@
 @endif
 
 @if ($this->activeConversation)
-    <div x-ref="messageList" class="flex-1 space-y-3 overflow-y-auto p-4">
+    {{--
+        Keeps the newest message in view: when the list first shows (the
+        popup opening resizes it from display:none), when messages arrive
+        or are sent, as long as the reader was already at the bottom —
+        scrolling up to read history isn't yanked back down. Keyed per
+        conversation so switching starts again at its latest message.
+    --}}
+    <div
+        x-ref="messageList"
+        data-chat-messages
+        wire:key="chat-messages-{{ $this->activeConversation->id }}"
+        x-data="{
+            stick: true,
+            toBottom() {
+                this.$el.scrollTop = this.$el.scrollHeight;
+            },
+            follow() {
+                if (this.stick) { this.toBottom(); }
+            },
+        }"
+        x-init="
+            toBottom();
+            new MutationObserver(() => follow()).observe($el, { childList: true, subtree: true, characterData: true });
+            new ResizeObserver(() => follow()).observe($el);
+        "
+        x-on:scroll="stick = $el.scrollHeight - $el.scrollTop - $el.clientHeight < 80"
+        x-on:message-sent.window="stick = true; toBottom()"
+        class="flex-1 space-y-3 overflow-y-auto p-4"
+    >
+        @php($lastDay = null)
         @foreach ($this->messages as $message)
             @php($isMine = $message->user_id === auth()->id())
+            @php($day = $message->created_at->copy()->startOfDay())
+            @if (! $lastDay || ! $day->equalTo($lastDay))
+                @php($lastDay = $day)
+                {{-- One label per day, WhatsApp-style --}}
+                <div class="flex justify-center" wire:key="chat-day-{{ $day->format('Y-m-d') }}">
+                    <span class="rounded-full bg-gray-100 px-3 text-xs font-medium text-gray-500 dark:bg-white/10 dark:text-gray-400" style="padding-top: 2px; padding-bottom: 2px;">
+                        @if ($day->isToday())
+                            {{ __('Today') }}
+                        @elseif ($day->isYesterday())
+                            {{ __('Yesterday') }}
+                        @else
+                            {{ $day->translatedFormat($day->isCurrentYear() ? 'l, j F' : 'j F Y') }}
+                        @endif
+                    </span>
+                </div>
+            @endif
             <div @class(['flex', 'justify-end' => $isMine])>
                 <div @class([
                     'max-w-[80%] rounded-2xl px-4 py-2 text-sm shadow-sm',
@@ -30,15 +79,47 @@
                         'mt-1 text-end text-[10px] tracking-wide',
                         'text-white/70' => $isMine,
                         'text-gray-400' => ! $isMine,
-                    ])>{{ $message->created_at->format('H:i') }}</p>
+                    ])>{{ $message->created_at->translatedFormat('g:i A') }}</p>
                 </div>
             </div>
         @endforeach
     </div>
 
-    <form wire:submit.prevent="sendMessage" x-on:submit="window.dispatchEvent(new CustomEvent('message-sent'))" class="flex items-center gap-2 border-t border-gray-100 p-3 dark:border-white/10">
+    {{--
+        The message shows in the list and the input clears the instant Send
+        is pressed; the server's reply then swaps the grey copy for the real
+        one. Waiting on the round trip first made every send feel seconds
+        slow on shared hosting.
+    --}}
+    <form
+        x-data="{
+            send() {
+                const input = this.$refs.input;
+                const text = input.value.trim();
+                if (text === '') { return; }
+                input.value = '';
+                this.$wire.body = '';
+                const bubble = this.$refs.pending.content.firstElementChild.cloneNode(true);
+                bubble.querySelector('[data-text]').textContent = text;
+                this.$el.closest('.fi-chat-widget').querySelector('[data-chat-messages]')?.appendChild(bubble);
+                window.dispatchEvent(new CustomEvent('message-sent'));
+                this.$wire.sendMessage(text);
+            },
+        }"
+        x-on:submit.prevent="send()"
+        class="flex items-center gap-2 border-t border-gray-100 p-3 dark:border-white/10"
+    >
+        <template x-ref="pending">
+            <div class="flex justify-end" style="opacity: 0.6;">
+                <div class="max-w-[80%] rounded-2xl rounded-br-md bg-gradient-to-br from-primary-600 to-primary-500 px-4 py-2 text-sm text-white shadow-sm">
+                    <p data-text class="whitespace-pre-wrap break-words leading-relaxed"></p>
+                    <p class="mt-1 text-end text-[10px] tracking-wide text-white/70">{{ __('Sending...') }}</p>
+                </div>
+            </div>
+        </template>
         <input
             type="text"
+            x-ref="input"
             wire:model="body"
             autocomplete="off"
             placeholder="{{ __('Type a message...') }}"
@@ -46,8 +127,6 @@
         />
         <button
             type="submit"
-            wire:loading.attr="disabled"
-            wire:target="sendMessage"
             class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-primary-600 text-white shadow-sm transition hover:bg-primary-500 disabled:opacity-60"
             aria-label="{{ __('Send') }}"
         >
