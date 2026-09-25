@@ -30,8 +30,13 @@ class ViewBulkMailCampaign extends ViewRecord
                         'email' => auth()->user()->email,
                         'name' => auth()->user()->name,
                     ]);
-                    Mail::to(auth()->user()->email)
-                        ->send(new BulkMailMessage($record, $recipient));
+                    // Through the campaign's own sender account, exactly as
+                    // the campaign will send — the app's default mailer
+                    // proved nothing about that account's SMTP settings.
+                    (new SendBulkMailBatch($record->id))->withMailerConfig(
+                        $record,
+                        fn () => Mail::to(auth()->user()->email)->send(new BulkMailMessage($record, $recipient)),
+                    );
 
                     Notification::make()
                         ->success()
@@ -46,7 +51,12 @@ class ViewBulkMailCampaign extends ViewRecord
                 ->visible(fn () => in_array($this->record->status, [BulkMailCampaignStatus::Draft, BulkMailCampaignStatus::Paused]))
                 ->action(function () {
                     $this->record->update(['status' => BulkMailCampaignStatus::Active]);
-                    SendBulkMailBatch::dispatch($this->record->id);
+
+                    // A scheduled campaign waits for mail:send-bulk-campaigns
+                    // to pick it up once scheduled_at has passed.
+                    if ($this->record->scheduled_at === null || $this->record->scheduled_at->isPast()) {
+                        SendBulkMailBatch::dispatch($this->record->id);
+                    }
 
                     Notification::make()
                         ->success()
