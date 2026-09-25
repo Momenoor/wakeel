@@ -131,6 +131,12 @@ class UpdaterGitTest extends TestCase
         );
         $this->assertSame("asset v1\n", str_replace("\r\n", "\n", File::get($this->site.'/public/js/asset.js')));
 
+        // On the branch, not a detached HEAD — cPanel's Git Version Control
+        // refuses to manage a detached one — and still tracking GitHub's.
+        $this->assertSame('main', $this->gitOutput(['symbolic-ref', '--short', 'HEAD']));
+        $this->assertSame($this->gitOutput(['rev-parse', 'v1.1.0^{commit}']), $this->gitOutput(['rev-parse', 'HEAD']));
+        $this->assertSame('origin/main', $this->gitOutput(['rev-parse', '--abbrev-ref', 'main@{upstream}']));
+
         // Server-regenerated files are replaced by the release's own.
         $this->assertSame("lock v2\n", str_replace("\r\n", "\n", File::get($this->site.'/composer.lock')));
         $this->assertSame("manifest v2\n", str_replace("\r\n", "\n", File::get($this->site.'/public/build/manifest.json')));
@@ -196,6 +202,17 @@ class UpdaterGitTest extends TestCase
 
         // v1.2.0's config still says 1.1.0 — the tag is what counts.
         $this->assertSame('1.2.0', AppUpdate::currentVersion());
+    }
+
+    /**
+     * @param  list<string>  $arguments
+     */
+    private function gitOutput(array $arguments): string
+    {
+        $process = new Process(['git', '-c', 'safe.directory=*', ...$arguments], $this->site);
+        $process->mustRun();
+
+        return trim($process->getOutput());
     }
 
     private function declareVersion(string $dir, string $version): void

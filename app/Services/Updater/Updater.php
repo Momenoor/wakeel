@@ -282,7 +282,7 @@ class Updater
             $this->git(['checkout', '--', '.htaccess']);
         }
 
-        $output = $this->git(['-c', 'advice.detachedHead=false', 'checkout', "v{$version}"]);
+        $output = $this->checkoutRelease($version);
 
         if ($prefix !== null) {
             $output .= __('Replaced .htaccess with this release\'s; the previous one is saved in storage/app/updater/.')."\n";
@@ -294,6 +294,41 @@ class Updater
         }
 
         return $output;
+    }
+
+    /**
+     * Puts the repository's own branch (e.g. `main`) on the release tag —
+     * not the tag itself, which would leave a detached HEAD that cPanel's
+     * Git Version Control refuses to manage ("cannot manage repositories in
+     * the detached HEAD state"). The branch keeps tracking GitHub's, so a
+     * pull from cPanel still works.
+     */
+    private function checkoutRelease(string $version): string
+    {
+        $branch = $this->defaultBranch();
+        $output = $this->git(['checkout', '-B', $branch, "v{$version}"]);
+
+        $this->process([...$this->gitCommand(), 'branch', "--set-upstream-to=origin/{$branch}", $branch]);
+
+        return $output;
+    }
+
+    /**
+     * The remote's default branch (origin/HEAD), else the branch currently
+     * checked out, else `main`.
+     */
+    private function defaultBranch(): string
+    {
+        foreach ([['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], ['symbolic-ref', '--short', '-q', 'HEAD']] as $arguments) {
+            $result = $this->process([...$this->gitCommand(), ...$arguments]);
+            $branch = trim((string) preg_replace('#^origin/#', '', trim($result['output'])));
+
+            if ($result['ok'] && preg_match('#^[A-Za-z0-9._/-]+$#', $branch) === 1) {
+                return $branch;
+            }
+        }
+
+        return 'main';
     }
 
     /**
