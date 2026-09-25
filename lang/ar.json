@@ -2726,5 +2726,9 @@
     "Company Logo (Dark Mode)": "شعار الشركة (الوضع الداكن)",
     "Shown in the panel header in dark mode. Leave empty to use the logo above.": "يظهر في رأس اللوحة في الوضع الداكن. اتركه فارغًا لاستخدام الشعار أعلاه.",
     "Favicon": "أيقونة الموقع",
-    "The browser tab icon. A square image, e.g. 64×64 PNG.": "الأيقونة التي تظهر في تبويب المتصفح. صورة مربعة، مثل PNG بحجم 64×64."
+    "The browser tab icon. A square image, e.g. 64×64 PNG.": "الأيقونة التي تظهر في تبويب المتصفح. صورة مربعة، مثل PNG بحجم 64×64.",
+    "Update Test": "اختبار التحديث",
+    "The update worked": "نجح التحديث",
+    "This page was added in version 1.0.19. If you can see it, the one-click update installed the new code.": "أُضيفت هذه الصفحة في الإصدار 1.0.19. إذا كنت تراها، فقد ثبّت التحديث بنقرة واحدة الشيفرة الجديدة.",
+    "Last updated": "آخر تحديث"
 }
