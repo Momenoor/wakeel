@@ -58,6 +58,7 @@ return [
         'resend' => 'Resend',
         'print' => 'Print',
         'download_pdf' => 'Download PDF',
+        'download_all_pdfs' => 'Download All PDFs',
     ],
     'hints' => [
         'subject' => 'Use {{name}}, {{matter_number}} etc.',

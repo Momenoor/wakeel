@@ -11,7 +11,9 @@ use App\Http\Controllers\PayrollJournalVoucherPrintController;
 use App\Http\Controllers\SalaryAuthorizationFormPrintController;
 use App\Models\Attachment;
 use App\Models\BulkMailRecipient;
+use App\Services\MMS\BulkMailService;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 
 Route::get('/mail/unsubscribe/{token}', function ($token) {
     $recipient = BulkMailRecipient::where('unsubscribe_token', $token)->firstOrFail();
@@ -23,6 +25,15 @@ Route::get('/mail/unsubscribe/{token}', function ($token) {
 Route::middleware('auth')->group(function () {
     Route::get('bulk-mail/preview/{campaign}/{recipient}', [BulkMailController::class, '__invoke'])
         ->name('bulk-mail.preview');
+
+    Route::get('bulk-mail/pdf/{recipient}', function (BulkMailRecipient $recipient) {
+        abort_unless(auth()->user()->can('view', $recipient->campaign), 403);
+
+        $path = app(BulkMailService::class)->ensurePdf($recipient);
+        abort_if($path === null, 404);
+
+        return Storage::disk(BulkMailService::DISK)->download($path, BulkMailService::pdfFileName($recipient));
+    })->name('bulk-mail.pdf');
 
     Route::get('attachments/{attachment}/download', function (Attachment $attachment) {
         abort_unless(auth()->user()->can('view', $attachment->matter), 403);

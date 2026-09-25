@@ -58,6 +58,7 @@ return [
         'resend' => 'إعادة إرسال',
         'print' => 'طباعة',
         'download_pdf' => 'تحميل PDF',
+        'download_all_pdfs' => 'تحميل جميع ملفات PDF',
     ],
     'hints' => [
         'subject' => 'استخدم {{name}}، {{matter_number}} إلخ.',

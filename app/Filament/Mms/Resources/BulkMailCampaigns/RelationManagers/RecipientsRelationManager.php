@@ -4,6 +4,8 @@ namespace App\Filament\Mms\Resources\BulkMailCampaigns\RelationManagers;
 
 use App\Enums\BulkMailRecipientStatus;
 use App\Filament\Mms\Imports\BulkMailRecipientImporter;
+use App\Models\BulkMailRecipient;
+use App\Services\MMS\BulkMailService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -22,7 +24,8 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Storage;
-use ZipArchive;
+use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class RecipientsRelationManager extends RelationManager
 {
@@ -92,6 +95,13 @@ class RecipientsRelationManager extends RelationManager
                             'total_recipients' => $livewire->getOwnerRecord()->recipients_count,
                         ]);
                     }),
+                Action::make('downloadAllPdfs')
+                    ->label(__('bulk_mail.actions.download_all_pdfs'))
+                    ->icon('heroicon-o-archive-box-arrow-down')
+                    ->visible(fn ($livewire) => $livewire->getOwnerRecord()->recipients()->whereNotNull('sent_at')->exists())
+                    ->action(fn ($livewire) => $this->downloadZip(
+                        $livewire->getOwnerRecord()->recipients()->whereNotNull('sent_at')->orderBy('sent_at')->get(),
+                    )),
             ])
             ->recordActions([
                 EditAction::make(),
@@ -99,25 +109,14 @@ class RecipientsRelationManager extends RelationManager
                     ->after(function ($livewire) {
                         $livewire->getOwnerRecord()->decrement('total_recipients');
                     }),
+                // Sent or failed — a failed one (e.g. a wrong mailbox
+                // password) had no way back from its own row before.
                 Action::make('resend')
                     ->label(__('bulk_mail.actions.resend'))
                     ->icon('heroicon-o-arrow-path')
-                    ->visible(fn ($record) => filled($record->sent_at))
+                    ->visible(fn ($record) => in_array($record->status, [BulkMailRecipientStatus::Sent, BulkMailRecipientStatus::Failed]))
                     ->requiresConfirmation()
-                    ->action(function ($record) {
-                        if ($record->pdf_path && Storage::exists($record->pdf_path)) {
-                            Storage::delete($record->pdf_path);
-                        }
-                        $record->update([
-                            'status' => BulkMailRecipientStatus::Pending,
-                            'sent_at' => null,
-                            'failed_at' => null,
-                            'attempt_count' => 0,
-                            'pdf_path' => null,
-                        ]);
-                        $record->campaign->decrement('sent_count');
-
-                    }),
+                    ->action(fn ($record) => $this->resetForResend($record)),
                 Action::make('print')
                     ->label(__('bulk_mail.actions.print'))
                     ->icon('heroicon-o-printer')
@@ -142,9 +141,8 @@ class RecipientsRelationManager extends RelationManager
                 Action::make('downloadPdf')
                     ->label(__('bulk_mail.actions.download_pdf'))
                     ->icon('heroicon-o-document-arrow-down')
-                    ->visible(fn ($record) => filled($record->pdf_path))
-                    ->url(fn ($record) => Storage::url($record->pdf_path))
-                    ->openUrlInNewTab(),
+                    ->visible(fn ($record) => filled($record->sent_at))
+                    ->url(fn ($record) => route('bulk-mail.pdf', $record)),
 
             ])
             ->toolbarActions([
@@ -167,57 +165,64 @@ class RecipientsRelationManager extends RelationManager
                         }),
                     BulkAction::make('resend')
                         ->label(__('bulk_mail.actions.resend'))
-                        ->action(function (Collection $records) {
-                            $records->each(function ($record) {
-                                if ($record->pdf_path && Storage::exists($record->pdf_path)) {
-                                    Storage::delete($record->pdf_path);
-                                }
-                                $record->update([
-                                    'status' => BulkMailRecipientStatus::Pending,
-                                    'sent_at' => null,
-                                    'failed_at' => null,
-                                    'attempt_count' => 0,
-                                    'pdf_path' => null,
-                                ]);
-                                $record->campaign->decrement('sent_count');
-                            });
-                        }),
+                        ->requiresConfirmation()
+                        ->action(fn (Collection $records) => $records
+                            ->filter(fn ($record) => in_array($record->status, [BulkMailRecipientStatus::Sent, BulkMailRecipientStatus::Failed]))
+                            ->each(fn ($record) => $this->resetForResend($record))),
                     BulkAction::make('downloadPdf')
                         ->label(__('bulk_mail.actions.download_pdf'))
-                        ->action(function (Collection $records) {
-                            $files = $records->filter(fn ($r) => $r->pdf_path && Storage::exists($r->pdf_path));
-
-                            if ($files->isEmpty()) {
-                                Notification::make()
-                                    ->title(__('bulk_mail.notifications.no_pdfs'))
-                                    ->warning()
-                                    ->send();
-
-                                return false;
-                            }
-
-                            $zipName = 'bulk-mail-'.now()->format('Y-m-d-His').'.zip';
-                            $zipPath = storage_path('app/temp/'.$zipName);
-
-                            if (! is_dir(dirname($zipPath))) {
-                                mkdir(dirname($zipPath), 0755, true);
-                            }
-
-                            $zip = new ZipArchive;
-                            $zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
-
-                            $files->each(function ($record) use ($zip) {
-                                $zip->addFile(
-                                    storage_path('app/public/'.$record->pdf_path),
-                                    basename($record->pdf_path)
-                                );
-                            });
-
-                            $zip->close();
-
-                            return response()->download($zipPath, $zipName)->deleteFileAfterSend(true);
-                        }),
+                        ->icon('heroicon-o-archive-box-arrow-down')
+                        ->action(fn (Collection $records) => $this->downloadZip($records->sortBy('sent_at'))),
                 ]),
             ]);
+    }
+
+    /**
+     * Back to Pending, so the next batch sends it again.
+     */
+    private function resetForResend(BulkMailRecipient $record): void
+    {
+        if ($record->pdf_path) {
+            Storage::disk(BulkMailService::DISK)->delete($record->pdf_path);
+        }
+
+        $record->campaign->decrement(
+            $record->status === BulkMailRecipientStatus::Sent ? 'sent_count' : 'failed_count'
+        );
+
+        $record->update([
+            'status' => BulkMailRecipientStatus::Pending,
+            'sent_at' => null,
+            'failed_at' => null,
+            'failure_reason' => null,
+            'attempt_count' => 0,
+            'pdf_path' => null,
+        ]);
+    }
+
+    /**
+     * One zip of the recipients' PDFs, each named
+     * "date recipient subject.pdf" (max 75 characters).
+     *
+     * @param  iterable<BulkMailRecipient>  $records
+     */
+    private function downloadZip(iterable $records): ?BinaryFileResponse
+    {
+        $zipPath = app(BulkMailService::class)->zip($records);
+
+        if ($zipPath === null) {
+            Notification::make()
+                ->title(__('bulk_mail.notifications.no_pdfs'))
+                ->warning()
+                ->send();
+
+            return null;
+        }
+
+        $name = Str::slug($this->getOwnerRecord()->name) ?: 'bulk-mail';
+
+        return response()
+            ->download($zipPath, $name.'-'.now()->format('Y-m-d').'.zip')
+            ->deleteFileAfterSend();
     }
 }
