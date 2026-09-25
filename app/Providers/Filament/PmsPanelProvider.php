@@ -10,7 +10,6 @@ use App\Filament\Pms\Pages\PmsDashboard;
 use App\Filament\Pms\Pages\PMSSettings;
 use App\Filament\Shared\Pages\SystemSettings;
 use App\Filament\Shared\Pages\SystemUpdates;
-use App\Filament\Shared\Pages\UpdateTest;
 use App\Http\Middleware\CheckSystemOffline;
 use App\Http\Middleware\EnsureLicenseIsValid;
 use App\Http\Middleware\RedirectToInstaller;
@@ -94,7 +93,6 @@ class PmsPanelProvider extends PanelProvider
                 PMSSettings::class,
                 SystemSettings::class,
                 SystemUpdates::class,
-                UpdateTest::class,
             ])
             ->renderHook(
                 PanelsRenderHook::CONTENT_START,
