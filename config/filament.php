@@ -14,20 +14,35 @@ return [
     |
     */
 
+    // The panels never load resources/js/app.js — Filament creates
+    // window.Echo itself from this array, which is what the chat widget's
+    // echo-private listener needs. Read from .env at runtime, so switching
+    // BROADCAST_CONNECTION on a server needs no frontend rebuild. Only the
+    // public key goes to the browser, never the secret.
     'broadcasting' => [
 
-        // 'echo' => [
-        //     'broadcaster' => 'pusher',
-        //     'key' => env('VITE_PUSHER_APP_KEY'),
-        //     'cluster' => env('VITE_PUSHER_APP_CLUSTER'),
-        //     'wsHost' => env('VITE_PUSHER_HOST'),
-        //     'wsPort' => env('VITE_PUSHER_PORT'),
-        //     'wssPort' => env('VITE_PUSHER_PORT'),
-        //     'authEndpoint' => '/broadcasting/auth',
-        //     'disableStats' => true,
-        //     'encrypted' => true,
-        //     'forceTLS' => true,
-        // ],
+        'echo' => match (env('BROADCAST_CONNECTION')) {
+            'pusher' => env('PUSHER_APP_ID') && env('PUSHER_APP_KEY') && env('PUSHER_APP_SECRET') ? [
+                'broadcaster' => 'pusher',
+                'key' => env('PUSHER_APP_KEY'),
+                'cluster' => env('PUSHER_APP_CLUSTER', 'mt1'),
+                'forceTLS' => true,
+                // Absolute, so a subfolder install (/wakeel) authorizes
+                // against its own route rather than the domain root's.
+                'authEndpoint' => rtrim((string) env('APP_URL'), '/').'/broadcasting/auth',
+            ] : null,
+            'reverb' => env('REVERB_APP_KEY') ? [
+                'broadcaster' => 'reverb',
+                'key' => env('REVERB_APP_KEY'),
+                'wsHost' => env('REVERB_HOST'),
+                'wsPort' => env('REVERB_PORT', 80),
+                'wssPort' => env('REVERB_PORT', 443),
+                'forceTLS' => env('REVERB_SCHEME', 'https') === 'https',
+                'enabledTransports' => ['ws', 'wss'],
+                'authEndpoint' => rtrim((string) env('APP_URL'), '/').'/broadcasting/auth',
+            ] : null,
+            default => null,
+        },
 
     ],
 

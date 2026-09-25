@@ -15,7 +15,14 @@ return [
     |
     */
 
-    'default' => env('BROADCAST_CONNECTION', 'null'),
+    // Pusher with any key missing throws while the app boots — every page,
+    // not just chat — and a fresh install copies BROADCAST_CONNECTION=pusher
+    // from .env.example before anyone has keys. Falls back to 'log' until
+    // all three are set.
+    'default' => env('BROADCAST_CONNECTION') === 'pusher'
+        && ! (env('PUSHER_APP_ID') && env('PUSHER_APP_KEY') && env('PUSHER_APP_SECRET'))
+            ? 'log'
+            : env('BROADCAST_CONNECTION', 'null'),
 
     /*
     |--------------------------------------------------------------------------
