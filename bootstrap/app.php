@@ -34,6 +34,19 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('mail:send-bulk-campaigns')->everyMinute()->withoutOverlapping();
         $schedule->command('pms:flag-overdue-installments')->everyMinute()->withoutOverlapping();
         $schedule->command('license:verify')->daily()->withoutOverlapping();
+
+        // A queue worker for hosting without a long-running process (cPanel):
+        // started every minute from the same cron, it works through whatever
+        // is queued (Filament imports/exports, queued mail, the "mail" queue),
+        // then exits on its own before the next start. In the background,
+        // so the other tasks above never wait for it; the overlap lock
+        // expires after 5 minutes in case a worker is ever killed mid-run.
+        // With QUEUE_CONNECTION=sync nothing is ever queued and each run
+        // simply finds nothing to do.
+        $schedule->command('queue:work --queue=default,mail --stop-when-empty --max-time=50 --tries=3 --timeout=45')
+            ->everyMinute()
+            ->withoutOverlapping(5)
+            ->runInBackground();
     })
 
     ->withExceptions(function (Exceptions $exceptions): void {
