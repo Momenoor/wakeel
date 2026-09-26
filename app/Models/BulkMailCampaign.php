@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\BulkMailCampaignStatus;
+use App\Services\MMS\BulkMailPlaceholders;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
@@ -20,6 +21,7 @@ class BulkMailCampaign extends Model
         'subject',
         'body',
         'from_sender_key',
+        'matter_id',
         'cc_emails',
         'bcc_emails',
         'has_attachment',
@@ -82,10 +84,22 @@ class BulkMailCampaign extends Model
         return max(0, $this->daily_send_limit - $sentToday);
     }
 
+    /**
+     * The matter this campaign is about — its details fill the {{matter.*}}
+     * placeholders. Null for a general mailing.
+     */
+    public function matter(): BelongsTo
+    {
+        return $this->belongsTo(Matter::class);
+    }
+
     public function renderBody(BulkMailRecipient $recipient, array $recipientPlaceholders = []): string
     {
-        $body = $this->body;
-        $body = $this->getDefaultPlaceholder($recipient, $recipientPlaceholders, $body);
+        $body = BulkMailPlaceholders::apply(
+            (string) $this->body,
+            [...BulkMailPlaceholders::for($this, $recipient), ...$recipientPlaceholders],
+            escape: true,
+        );
 
         $sender = $this->sender_config;
         if ($sender && isset($sender['signature'])) {
@@ -97,28 +111,9 @@ class BulkMailCampaign extends Model
 
     public function renderSubject(BulkMailRecipient $recipient, array $recipientPlaceholders = []): string
     {
-        $subject = $this->subject;
-        $subject = $this->getDefaultPlaceholder($recipient, $recipientPlaceholders, $subject);
-
-        return $subject;
-    }
-
-    /**
-     * @return array|mixed|string|string[]
-     */
-    private function getDefaultPlaceholder(BulkMailRecipient $recipient, array $recipientPlaceholders, mixed $body): mixed
-    {
-        $placeholder = array_merge($recipient->placeholders ?? [], $recipientPlaceholders);
-        if (! isset($placeholder['name'])) {
-            $placeholder['name'] = $recipient->name;
-        }
-        if (! isset($placeholder['email'])) {
-            $placeholder['email'] = is_array($recipient->email) ? implode('; ', $recipient->email) : $recipient->email;
-        }
-        foreach ($placeholder as $key => $value) {
-            $body = str_replace("{{{$key}}}", $value, $body);
-        }
-
-        return $body;
+        return BulkMailPlaceholders::apply(
+            (string) $this->subject,
+            [...BulkMailPlaceholders::for($this, $recipient), ...$recipientPlaceholders],
+        );
     }
 }

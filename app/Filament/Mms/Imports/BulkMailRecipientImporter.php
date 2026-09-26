@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Imports;
 
 use App\Models\BulkMailRecipient;
+use App\Services\MMS\BulkMailPlaceholders;
 use Filament\Actions\Imports\ImportColumn;
 use Filament\Actions\Imports\Importer;
 use Filament\Actions\Imports\Models\Import;
@@ -33,6 +34,30 @@ class BulkMailRecipientImporter extends Importer
     protected function beforeSave(): void
     {
         $this->record->campaign_id = $this->options['campaign_id'];
+        $this->record->placeholders = $this->extraColumns() ?: null;
+    }
+
+    /**
+     * Every column of the file besides the mapped name and email — each one
+     * becomes a placeholder for this recipient, keyed by its header: a
+     * "Claim Amount" column fills {{claim_amount}} (or {{Claim Amount}}).
+     *
+     * @return array<string, string>
+     */
+    private function extraColumns(): array
+    {
+        $mapped = array_filter($this->columnMap);
+        $extra = [];
+
+        foreach ($this->originalData as $header => $value) {
+            if (in_array($header, $mapped, true) || blank($header)) {
+                continue;
+            }
+
+            $extra[BulkMailPlaceholders::normalize((string) $header)] = trim((string) $value);
+        }
+
+        return $extra;
     }
 
     public static function getCompletedNotificationBody(Import $import): string
