@@ -142,6 +142,42 @@ class BulkMailPlaceholdersTest extends TestCase
         $this->assertNotSame('', $values['matter.status']);
     }
 
+    public function test_parties_saved_with_parent_id_zero_count_as_top_level(): void
+    {
+        // How older (live) matters store top-level parties.
+        $matter = Matter::factory()->create();
+        $plaintiff = MatterParty::create([
+            'matter_id' => $matter->id,
+            'party_id' => Party::factory()->create(['name' => 'Old Plaintiff'])->id,
+            'role' => 'party', 'type' => 'plaintiff', 'parent_id' => 0,
+        ]);
+        MatterParty::create([
+            'matter_id' => $matter->id,
+            'party_id' => Party::factory()->create(['name' => 'Their Lawyer'])->id,
+            'role' => 'representative', 'type' => 'lawyer', 'parent_id' => $plaintiff->id,
+        ]);
+
+        $values = BulkMailPlaceholders::forMatter($matter);
+
+        $this->assertSame('Old Plaintiff', $values['matter.plaintiffs']);
+        $this->assertSame('Old Plaintiff', $values['matter.parties']);
+        $this->assertSame('Their Lawyer', $values['matter.representatives']);
+    }
+
+    public function test_the_preview_page_renders_a_recipient_with_several_emails(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $campaign = $this->campaign($this->matter(), 'Notice {{matter.reference}}', '<p>{{matter.defendants}}</p>');
+        $recipient = $this->recipient($campaign);
+        $recipient->update(['email' => ['a@example.com', 'b@example.com']]);
+
+        $this->get(route('bulk-mail.preview', ['campaign' => $campaign->id, 'recipient' => $recipient->id]))
+            ->assertSuccessful()
+            ->assertSee('a@example.com&gt;; &lt;b@example.com', false)
+            ->assertSee('Notice 125/2025')
+            ->assertSee('Defendant One, Defendant Two');
+    }
+
     public function test_the_campaign_form_lists_the_chosen_matters_placeholders(): void
     {
         $this->actingAs(User::factory()->create()->assignRole(

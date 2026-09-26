@@ -76,7 +76,9 @@ class BulkMailPlaceholders
 
         $matter->loadMissing(['court', 'type', 'parent', 'matterParties.party', 'matterParties.representatives.party']);
 
-        $top = $matter->matterParties->filter(fn (MatterParty $mp) => blank($mp->parent_id));
+        // Top-level rows have parent_id null OR 0 (older data uses 0) — the
+        // same rule as Matter::mainParties(); representatives have a parent.
+        $top = $matter->matterParties->filter(fn (MatterParty $mp) => empty($mp->parent_id));
         $parties = $top->where('role', 'party');
         $names = fn (Collection $rows): string => $rows
             ->map(fn (MatterParty $mp) => $mp->party?->name)

@@ -1,6 +1,6 @@
 {{-- resources/views/bulk-mail/preview.blade.php --}}
     <!DOCTYPE html>
-<html lang="{{ str_contains($recipient->email, '@') ? 'en' : 'en' }}" dir="ltr">
+<html lang="en" dir="ltr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -331,7 +331,7 @@
             <td class="meta-label">To</td>
             <td class="meta-value">
                 {{ $recipient->name }}
-                &lt;{{ $recipient->email }}&gt;
+                &lt;{{ is_array($recipient->email) ? implode('>; <', $recipient->email) : $recipient->email }}&gt;
             </td>
         </tr>
         @if(!empty($cc))
