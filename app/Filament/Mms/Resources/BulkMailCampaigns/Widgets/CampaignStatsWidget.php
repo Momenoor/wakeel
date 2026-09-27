@@ -5,10 +5,23 @@ namespace App\Filament\Mms\Resources\BulkMailCampaigns\Widgets;
 use App\Models\BulkMailCampaign;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
+use Livewire\Attributes\On;
 
 class CampaignStatsWidget extends BaseWidget
 {
     public ?BulkMailCampaign $record = null;
+
+    /**
+     * Refreshed by the campaign page instead (its poll, or Pusher) — not on
+     * its own every 5 seconds, forever, even for a finished campaign.
+     */
+    protected ?string $pollingInterval = null;
+
+    #[On('bulk-mail-campaign-refreshed')]
+    public function refreshStats(): void
+    {
+        $this->record?->refresh();
+    }
 
     protected function getStats(): array
     {

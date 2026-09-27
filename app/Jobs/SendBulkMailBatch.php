@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Enums\BulkMailCampaignStatus;
 use App\Enums\BulkMailRecipientStatus;
+use App\Events\BulkMailCampaignUpdated;
 use App\Mail\BulkMailMessage;
 use App\Models\BulkMailCampaign;
 use App\Models\BulkMailLog;
@@ -55,6 +56,7 @@ class SendBulkMailBatch implements ShouldQueue
                 ->where('status', BulkMailRecipientStatus::Pending)
                 ->count() === 0) {
                 $campaign->update(['status' => BulkMailCampaignStatus::Completed]);
+                BulkMailCampaignUpdated::announce($campaign->id);
             }
 
             return;
@@ -105,6 +107,7 @@ class SendBulkMailBatch implements ShouldQueue
                     'metadata' => ['error' => $e->getMessage()],
                     'timestamp' => now(),
                 ]);
+                BulkMailCampaignUpdated::announce($campaign->id);
 
                 // Stop the entire batch — do NOT dispatch next batch
                 return;
@@ -122,6 +125,7 @@ class SendBulkMailBatch implements ShouldQueue
                 'metadata' => $archived,
                 'timestamp' => now(),
             ]);
+            BulkMailCampaignUpdated::announce($campaign->id);
         }
 
         // Only reached if ALL recipients in this batch succeeded.

@@ -25,11 +25,22 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Livewire\Attributes\On;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class RecipientsRelationManager extends RelationManager
 {
     protected static string $relationship = 'recipients';
+
+    /**
+     * The campaign page's refresh (poll or Pusher) re-renders the table,
+     * so each recipient's status follows the sending live.
+     */
+    #[On('bulk-mail-campaign-refreshed')]
+    public function refreshRecipients(): void
+    {
+        $this->getOwnerRecord()->refresh();
+    }
 
     public static function getModelLabel(): ?string
     {

@@ -46,7 +46,12 @@ class BulkMailRecipientImporter extends Importer
      */
     private function extraColumns(): array
     {
-        $mapped = array_filter($this->columnMap);
+        // Only set while a row is being imported.
+        if (! isset($this->originalData)) {
+            return [];
+        }
+
+        $mapped = array_filter($this->columnMap ?? []);
         $extra = [];
 
         foreach ($this->originalData as $header => $value) {

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\BulkMailCampaignStatus;
 use App\Enums\BulkMailRecipientStatus;
+use App\Events\BulkMailCampaignUpdated;
 use App\Jobs\SendBulkMailBatch;
 use App\Models\BulkMailCampaign;
 use App\Models\BulkMailRecipient;
@@ -183,5 +184,30 @@ class BulkMailSyncQueueTest extends TestCase
         SendBulkMailBatch::dispatch($campaign->id);
 
         $this->assertCount(0, $this->sent);
+    }
+
+    public function test_open_campaign_pages_hear_about_every_recipient_over_pusher(): void
+    {
+        config(['broadcasting.default' => 'pusher']);
+        Event::fake([BulkMailCampaignUpdated::class]);
+
+        $campaign = $this->campaign(3);
+
+        SendBulkMailBatch::dispatch($campaign->id); // sends all 3
+        SendBulkMailBatch::dispatch($campaign->id); // finds none left: completes
+
+        // One per recipient sent, one for completing.
+        Event::assertDispatchedTimes(BulkMailCampaignUpdated::class, 4);
+        $this->assertSame(BulkMailCampaignStatus::Completed, $campaign->fresh()->status);
+    }
+
+    public function test_no_announcements_without_a_live_broadcaster(): void
+    {
+        config(['broadcasting.default' => 'log']);
+        Event::fake([BulkMailCampaignUpdated::class]);
+
+        SendBulkMailBatch::dispatch($this->campaign(2)->id);
+
+        Event::assertNotDispatched(BulkMailCampaignUpdated::class);
     }
 }
