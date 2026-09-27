@@ -141,6 +141,17 @@ return [
         'view_activity_logs' => 'سجل الأنشطة',
         'view_failed_import_rows' => 'صفوف الاستيراد الفاشلة',
         'view_import_matters' => 'استيراد القضايا',
+        'view_system_updates' => 'تحديثات النظام',
+        // PMS reports.
+        'view_rent_roll_report' => 'سجل الإيجارات',
+        'view_occupancy_report' => 'الإشغال والشواغر',
+        'view_collections_report' => 'التحصيلات',
+        'view_arrears_aging_report' => 'أعمار المتأخرات',
+        'view_lease_expiry_report' => 'انتهاء العقود',
+        'view_payments_received_report' => 'المدفوعات المستلمة',
+        'view_owner_statement_report' => 'كشوف الملاك',
+        'view_vat_report' => 'تقرير ضريبة القيمة المضافة (العقارات)',
+        'view_security_deposits_report' => 'التأمينات',
 
         // Widgets.
         'view_activity_chart_widget' => 'النشاط عبر الوقت',

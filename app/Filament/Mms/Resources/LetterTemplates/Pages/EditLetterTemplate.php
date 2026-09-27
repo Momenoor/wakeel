@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Resources\LetterTemplates\Pages;
 
+use App\Filament\Mms\Resources\LetterTemplates\Actions\PreviewLetterTemplateAction;
 use App\Filament\Mms\Resources\LetterTemplates\LetterTemplateResource;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ViewAction;
@@ -14,6 +15,7 @@ class EditLetterTemplate extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            PreviewLetterTemplateAction::make(),
             ViewAction::make(),
             DeleteAction::make(),
         ];

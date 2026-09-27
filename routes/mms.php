@@ -11,9 +11,14 @@ use App\Http\Controllers\PayrollJournalVoucherPrintController;
 use App\Http\Controllers\SalaryAuthorizationFormPrintController;
 use App\Models\Attachment;
 use App\Models\BulkMailRecipient;
+use App\Models\MatterLetter;
 use App\Services\MMS\BulkMailService;
+use App\Services\MMS\Letters\LetterDocx;
+use App\Services\MMS\Letters\LetterIssuer;
+use App\Services\MMS\Letters\LetterPdf;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\HeaderUtils;
 
 Route::get('/mail/unsubscribe/{token}', function ($token) {
     $recipient = BulkMailRecipient::where('unsubscribe_token', $token)->firstOrFail();
@@ -25,6 +30,27 @@ Route::get('/mail/unsubscribe/{token}', function ($token) {
 Route::middleware('auth')->group(function () {
     Route::get('bulk-mail/preview/{campaign}/{recipient}', [BulkMailController::class, '__invoke'])
         ->name('bulk-mail.preview');
+
+    // An issued letter, rendered from its frozen copy.
+    Route::get('letters/{letter}/pdf', function (MatterLetter $letter) {
+        abort_unless(auth()->user()->can('view', $letter->matter), 403);
+
+        $pdf = (new LetterPdf(LetterIssuer::composerFor($letter)))->render();
+
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            // Opens in the browser; the Arabic name needs the encoded form.
+            'Content-Disposition' => HeaderUtils::makeDisposition('inline', LetterIssuer::fileName($letter).'.pdf', 'letter-'.$letter->getKey().'.pdf'),
+        ]);
+    })->name('letters.pdf');
+
+    Route::get('letters/{letter}/docx', function (MatterLetter $letter) {
+        abort_unless(auth()->user()->can('view', $letter->matter), 403);
+
+        $path = (new LetterDocx(LetterIssuer::composerFor($letter)))->save(storage_path('app/temp/letter-'.$letter->getKey().'-'.uniqid().'.docx'));
+
+        return response()->download($path, LetterIssuer::fileName($letter).'.docx')->deleteFileAfterSend();
+    })->name('letters.docx');
 
     Route::get('bulk-mail/pdf/{recipient}', function (BulkMailRecipient $recipient) {
         abort_unless(auth()->user()->can('view', $recipient->campaign), 403);

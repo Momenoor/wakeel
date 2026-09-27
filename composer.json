@@ -29,6 +29,7 @@
         "laravel/tinker": "^3.0",
         "momenoor/laravel-msgraph-mailer": "^1.0",
         "mpdf/mpdf": "^8.3",
+        "phpoffice/phpword": "^1.4",
         "qalainau/filament-inbox": "^1.0",
         "relaticle/activity-log": "^1.0",
         "saade/filament-fullcalendar": "^4.0",

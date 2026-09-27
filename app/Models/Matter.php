@@ -391,6 +391,14 @@ class Matter extends Model
         return $this->getReference();
     }
 
+    /**
+     * Letters issued on this matter, newest first.
+     */
+    public function letters(): HasMany
+    {
+        return $this->hasMany(MatterLetter::class)->latest('id');
+    }
+
     public function requests(): HasMany
     {
         return $this->hasMany(MatterRequest::class);

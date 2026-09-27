@@ -66,7 +66,9 @@ class MatterResource extends Resource
 
     public static function getRelations(): array
     {
-        return [];
+        return [
+            RelationManagers\LettersRelationManager::class,
+        ];
     }
 
     public static function getPages(): array

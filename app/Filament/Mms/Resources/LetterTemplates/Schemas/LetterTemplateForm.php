@@ -3,114 +3,160 @@
 namespace App\Filament\Mms\Resources\LetterTemplates\Schemas;
 
 use App\Enums\LetterTemplateCategories;
-use App\Models\Matter;
-use App\Models\Party;
-use App\Services\TemplatePlaceholderService;
-use Filament\Actions\Action;
-use Filament\Forms\Components\KeyValue;
+use App\Models\Letterhead;
+use App\Models\LetterItem;
+use App\Services\MMS\Letters\LetterComposer;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Illuminate\Support\HtmlString;
+use Illuminate\Support\Str;
 
+/**
+ * A letter template: its letterhead, the form filled in when a letter is
+ * issued from it (inputs), and its wording with {{placeholders}} — the
+ * editor's "merge tags" menu lists every one, the template's own inputs
+ * included.
+ */
 class LetterTemplateForm
 {
     public static function configure(Schema $schema): Schema
     {
         return $schema
             ->components([
-                TextInput::make('name')
-                    ->afterStateUpdated(fn ($state, Set $set) => $set('slug', str($state)->slug()))
-                    ->lazy()
-                    ->required(),
-
-                TextInput::make('slug')
-                    ->unique(ignoreRecord: true)
-                    ->readOnly()
-                    ->required(),
-
-                Select::make('locale')
-                    ->options(config('app.available_locales'))
-                    ->required()
-                    ->default('en'),
-
-                Select::make('category')
-                    ->options(LetterTemplateCategories::class)
-                    ->default('general')
-                    ->required(),
-
-                TextInput::make('subject')
-                    ->required()
+                Section::make(__('Template'))
+                    ->columns(3)
                     ->columnSpanFull()
-                    ->hint(__('You can use placeholders like {{matter.reference}}'))
-                    ->hintIcon('heroicon-m-information-circle'),
-                RichEditor::make('body')
-                    ->toolbarButtons([
-                        ['h1', 'h2', 'h3', 'bulletList', 'orderedList', 'blockquote', 'horizontalRule'],
-                        ['bold', 'italic', 'strike', 'underline', 'superscript', 'subscript', 'lead', 'textColor', 'small', 'highlight', 'alignStart', 'alignCenter', 'alignEnd'],
-                        ['link', 'table', 'grid', 'details', 'code', 'codeBlock', 'customBlocks', 'mergeTags'],
-                    ]),
-
-                // ── Placeholder panel ──────────────────────────────────────────────────
-                Section::make(__('Placeholders'))
-                    ->description(__('Variables detected from body. Add descriptions or load from a model.'))
-                    ->collapsible()
-                    ->columnSpanFull()
-                    ->headerActions([
-                        // Load from Matter model
-                        Action::make('loadFromMatter')
-                            ->label(__('Load from Matter'))
-                            ->icon('heroicon-o-arrow-down-tray')
-                            ->action(function (Set $set, Get $get) {
-                                $flat = app(TemplatePlaceholderService::class)
-                                    ->flatten(Matter::class, depth: 1);
-
-                                // Merge with existing, don't overwrite user edits
-                                $existing = $get('placeholders') ?? [];
-                                $set('placeholders', array_merge($flat, $existing));
-                            }),
-
-                        // Load from Party model
-                        Action::make('loadFromParty')
-                            ->label(__('Load from Party'))
-                            ->icon('heroicon-o-arrow-down-tray')
-                            ->color('gray')
-                            ->action(function (Set $set, Get $get) {
-                                $flat = app(TemplatePlaceholderService::class)
-                                    ->flatten(Party::class, depth: 0, prefix: 'party');
-
-                                $existing = $get('placeholders') ?? [];
-                                $set('placeholders', array_merge($flat, $existing));
-                            }),
-
-                        // Clear all
-                        Action::make('clearPlaceholders')
-                            ->label(__('Clear'))
-                            ->icon('heroicon-o-trash')
-                            ->color('danger')
-                            ->requiresConfirmation()
-                            ->action(fn (Set $set) => $set('placeholders', [])),
-                    ])
                     ->schema([
-                        KeyValue::make('placeholders')
-                            ->label(false)
-                            ->keyLabel(__('Variable (e.g. {{matter.reference}})'))
-                            ->valueLabel(__('Description / Label'))
-                            ->addActionLabel(__('Add placeholder manually'))
-                            ->reorderable()
-                            ->columnSpanFull(),
+                        TextInput::make('name')
+                            ->label(__('Name'))
+                            ->afterStateUpdated(fn ($state, Set $set) => $set('slug', Str::slug((string) $state) ?: Str::random(8)))
+                            ->lazy()
+                            ->required(),
+                        TextInput::make('slug')
+                            ->label(__('Code'))
+                            ->unique(ignoreRecord: true)
+                            ->required(),
+                        Select::make('category')
+                            ->label(__('Category'))
+                            ->options(LetterTemplateCategories::class)
+                            ->default(LetterTemplateCategories::LETTER)
+                            ->required(),
+                        Select::make('locale')
+                            ->label(__('Language'))
+                            ->options(['ar' => __('Arabic'), 'en' => __('English')])
+                            ->default('ar')
+                            ->helperText(__('Arabic letters are laid out right to left.'))
+                            ->required(),
+                        Select::make('letterhead_id')
+                            ->label(__('Letterhead'))
+                            ->relationship('letterhead', 'name')
+                            ->placeholder(__('The default letterhead'))
+                            ->preload(),
+                        Toggle::make('is_active')
+                            ->label(__('Active'))
+                            ->default(true)
+                            ->inline(false),
+                        TextInput::make('subject')
+                            ->label(__('Subject'))
+                            ->required()
+                            ->columnSpanFull()
+                            ->helperText(__('Placeholders work here too, e.g. الدعوى رقم {{matter.number}} لسنة {{matter.year}}. Use {{subject}} in the letter to repeat it.')),
                     ]),
 
-                Toggle::make('is_active')
-                    ->default(true)
-                    ->required(),
+                Section::make(__('What to fill in when issuing'))
+                    ->description(__('Each field appears in the form when a letter is issued from this template, and fills {{input.KEY}} in the letter.'))
+                    ->columnSpanFull()
+                    ->collapsible()
+                    ->schema([
+                        Repeater::make('inputs')
+                            ->label('')
+                            ->addActionLabel(__('Add field'))
+                            ->reorderable()
+                            ->collapsible()
+                            ->itemLabel(fn (array $state) => ($state['label'] ?? '').(filled($state['key'] ?? null) ? ' — {{input.'.$state['key'].'}}' : ''))
+                            ->live(onBlur: true)
+                            ->columns(4)
+                            ->schema([
+                                TextInput::make('label')
+                                    ->label(__('Label'))
+                                    ->required()
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(function ($state, Get $get, Set $set) {
+                                        if (blank($get('key'))) {
+                                            $set('key', Str::slug(Str::ascii((string) $state), '_') ?: 'field_'.Str::lower(Str::random(4)));
+                                        }
+                                    }),
+                                TextInput::make('key')
+                                    ->label(__('Key'))
+                                    ->required()
+                                    ->alphaDash()
+                                    ->helperText(__('Used as {{input.KEY}}')),
+                                Select::make('type')
+                                    ->label(__('Type'))
+                                    ->options([
+                                        'text' => __('Text'),
+                                        'textarea' => __('Long text'),
+                                        'date' => __('Date'),
+                                        'time' => __('Time'),
+                                        'url' => __('Link'),
+                                        'number' => __('Number'),
+                                        'select' => __('Choice'),
+                                        'items' => __('Items from the library'),
+                                    ])
+                                    ->default('text')
+                                    ->required()
+                                    ->live(),
+                                Toggle::make('required')
+                                    ->label(__('Required'))
+                                    ->inline(false),
+                                TagsInput::make('options')
+                                    ->label(__('Choices'))
+                                    ->visible(fn (Get $get) => $get('type') === 'select')
+                                    ->columnSpanFull(),
+                                Select::make('group')
+                                    ->label(__('Item group'))
+                                    ->options(fn () => array_combine(LetterItem::groups(), LetterItem::groups()) ?: [])
+                                    ->searchable()
+                                    ->helperText(__('The library group to tick items from.'))
+                                    ->visible(fn (Get $get) => $get('type') === 'items')
+                                    ->columnSpan(2),
+                                TextInput::make('heading')
+                                    ->label(__('Heading above the list'))
+                                    ->placeholder('من الطالبة (المدعي):')
+                                    ->visible(fn (Get $get) => $get('type') === 'items')
+                                    ->columnSpan(2),
+                            ]),
+                    ]),
 
-                Toggle::make('is_default')
-                    ->required(),
+                Section::make(__('Letter'))
+                    ->columnSpanFull()
+                    ->schema([
+                        RichEditor::make('body')
+                            ->label('')
+                            ->required()
+                            ->toolbarButtons([
+                                ['bold', 'italic', 'underline', 'textColor', 'highlight'],
+                                ['h2', 'h3', 'bulletList', 'orderedList', 'horizontalRule', 'table'],
+                                ['alignStart', 'alignCenter', 'alignEnd', 'alignJustify'],
+                                ['mergeTags'],
+                                ['undo', 'redo'],
+                            ])
+                            ->mergeTags(fn (Get $get) => LetterComposer::catalog(null, $get('inputs') ?? []))
+                            ->extraInputAttributes(fn (Get $get) => ['dir' => $get('locale') === 'en' ? 'ltr' : 'rtl', 'style' => 'min-height: 30rem;']),
+
+                        TextEntry::make('placeholder_help')
+                            ->hiddenLabel()
+                            ->state(new HtmlString(e(__('Insert placeholders from the { } menu, or type them: {{recipients}} puts the addressee block (put it alone on its own line), {{input.KEY}} what was filled in, {{input.KEY.day}} a date\'s weekday, {{signature}} and {{stamp}} the letterhead\'s images.')))),
+                    ]),
             ]);
     }
 }
