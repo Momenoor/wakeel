@@ -95,6 +95,18 @@ class Unit extends Model
             ->withTimestamps();
     }
 
+    /**
+     * The unit's lease(s) currently in force — normally one.
+     *
+     * @return BelongsToMany<Lease, $this>
+     */
+    public function activeLeases(): BelongsToMany
+    {
+        return $this->leases()
+            ->where('leases.status', LeaseStatus::ACTIVE->value)
+            ->orderByDesc('leases.start_date');
+    }
+
     public function hasLeaseHistory(): bool
     {
         return $this->leases()->exists();

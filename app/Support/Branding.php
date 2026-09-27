@@ -40,6 +40,18 @@ class Branding
             : asset($dark ? 'images/logo-dark.png' : 'images/logo.png');
     }
 
+    /**
+     * The light logo as a file on disk, for PDFs (mPDF reads files faster
+     * and more reliably than fetching the site's own URL).
+     */
+    public static function logoFile(): ?string
+    {
+        $path = static::path(self::LOGO);
+        $file = $path !== null ? Storage::disk('public')->path($path) : public_path('images/logo.png');
+
+        return is_file($file) ? $file : null;
+    }
+
     public static function faviconUrl(): string
     {
         $path = static::path(self::FAVICON);

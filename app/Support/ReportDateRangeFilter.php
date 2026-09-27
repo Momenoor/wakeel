@@ -87,16 +87,20 @@ class ReportDateRangeFilter
      *                        filterTable() name (e.g. 'period') doesn't need
      *                        its tests renamed just to gain the presets.
      */
-    public static function make(string $column, ?string $label = null, ?callable $applyUsing = null, string $name = 'date_range'): Filter
+    public static function make(string $column, ?string $label = null, ?callable $applyUsing = null, string $name = 'date_range', ?string $defaultPreset = null): Filter
     {
         $label ??= __('Date Range');
 
         return Filter::make($name)
             ->label($label)
             ->schema([
+                // The default goes on the field: Filament fills a filter's
+                // form from its fields' defaults, and ignores ->default() on
+                // a filter that has its own form.
                 Select::make('preset')
                     ->label($label)
                     ->options(self::options())
+                    ->default($defaultPreset)
                     ->native(false)
                     ->live(),
                 DatePicker::make('from')
