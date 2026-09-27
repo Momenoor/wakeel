@@ -211,7 +211,8 @@ class LettersRelationManager extends RelationManager
                 ->schema([
                     Select::make('letter_template_id')
                         ->label(__('Template'))
-                        ->options(fn () => LetterTemplate::query()->where('is_active', true)->orderBy('name')->pluck('name', 'id'))
+                        // Only the templates for this matter's type (and those for every type).
+                        ->options(fn () => LetterTemplate::query()->forMatterType($matter->type_id)->orderBy('name')->pluck('name', 'id'))
                         ->searchable()
                         ->required()
                         ->live()

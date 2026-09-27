@@ -65,6 +65,15 @@ class LetterTemplateForm
                             ->label(__('Active'))
                             ->default(true)
                             ->inline(false),
+                        Select::make('types')
+                            ->label(__('Matter types'))
+                            ->relationship('types', 'name')
+                            ->multiple()
+                            ->preload()
+                            ->searchable()
+                            ->placeholder(__('All matter types'))
+                            ->helperText(__('Issuing a letter on a matter offers only the templates for its type. Leave empty to offer this one for every type.'))
+                            ->columnSpanFull(),
                         TextInput::make('subject')
                             ->label(__('Subject'))
                             ->required()

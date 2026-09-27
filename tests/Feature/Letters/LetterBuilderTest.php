@@ -18,6 +18,7 @@ use App\Models\Matter;
 use App\Models\MatterLetter;
 use App\Models\MatterParty;
 use App\Models\Party;
+use App\Models\Type;
 use App\Models\User;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterDocx;
@@ -191,6 +192,55 @@ class LetterBuilderTest extends TestCase
         $this->assertSame(['منى أحمد', 'Court clerk'], $letter->recipients->pluck('name')->all());
         $this->assertSame(['مذكرة شارحة.', 'سطر أول', 'سطر ثان'], $letter->inputs['documents']);
         $this->assertSame(auth()->id(), $letter->sent_by);
+    }
+
+    public function test_templates_are_offered_for_the_matter_types_they_are_linked_to(): void
+    {
+        $insolvency = Type::factory()->create(['name' => 'إعسار']);
+        $bankruptcy = Type::factory()->create(['name' => 'إفلاس']);
+        $liquidation = Type::factory()->create(['name' => 'تصفية']);
+
+        $forBoth = LetterTemplate::create(['name' => 'إشعار مأمورية', 'slug' => 'both', 'locale' => 'ar', 'category' => 'letter', 'subject' => 's', 'body' => 'b']);
+        $forBoth->types()->sync([$insolvency->id, $bankruptcy->id]);
+        $forLiquidation = LetterTemplate::create(['name' => 'تعليمات التصفية', 'slug' => 'liq', 'locale' => 'ar', 'category' => 'letter', 'subject' => 's', 'body' => 'b']);
+        $forLiquidation->types()->sync([$liquidation->id]);
+        $inactive = LetterTemplate::create(['name' => 'قديم', 'slug' => 'old', 'locale' => 'ar', 'category' => 'letter', 'subject' => 's', 'body' => 'b', 'is_active' => false]);
+
+        $offered = fn (?int $typeId) => LetterTemplate::query()->forMatterType($typeId)->pluck('slug')->sort()->values()->all();
+
+        // $this->template has no types: offered for every type.
+        $this->assertSame(['both', 'notice'], $offered($insolvency->id));
+        $this->assertSame(['both', 'notice'], $offered($bankruptcy->id));
+        $this->assertSame(['liq', 'notice'], $offered($liquidation->id));
+        $this->assertSame(['notice'], $offered(null));
+
+        // And in the issue form of a liquidation matter.
+        $this->matter->update(['type_id' => $liquidation->id]);
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter->fresh(), 'pageClass' => ViewMatter::class])
+            ->mountTableAction('issue')
+            ->assertFormFieldExists('letter_template_id', 'mountedActionSchema0', fn ($field) => array_keys($field->getOptions()) == [$this->template->id, $forLiquidation->id]
+                || array_keys($field->getOptions()) == [$forLiquidation->id, $this->template->id]);
+    }
+
+    public function test_library_items_are_offered_for_the_matter_types_they_are_linked_to(): void
+    {
+        $insolvency = Type::factory()->create();
+        $bankruptcy = Type::factory()->create();
+        $liquidation = Type::factory()->create();
+
+        $both = LetterItem::create(['group' => 'مستندات', 'text' => 'للإعسار والإفلاس', 'sort' => 10]);
+        $both->types()->sync([$insolvency->id, $bankruptcy->id]);
+        $liquidationOnly = LetterItem::create(['group' => 'مستندات', 'text' => 'للتصفية', 'sort' => 11]);
+        $liquidationOnly->types()->sync([$liquidation->id]);
+
+        $offered = fn (?int $typeId) => LetterItem::query()->forGroup('مستندات', $typeId)->pluck('text')->all();
+
+        // The three from setUp have no types: offered for every type.
+        $this->assertSame(['بيان موطن المدين.', 'كشف الحسابات البنكية.', 'مذكرة شارحة.', 'للإعسار والإفلاس'], $offered($insolvency->id));
+        $this->assertContains('للإعسار والإفلاس', $offered($bankruptcy->id));
+        $this->assertNotContains('للإعسار والإفلاس', $offered($liquidation->id));
+        $this->assertContains('للتصفية', $offered($liquidation->id));
+        $this->assertCount(3, $offered(null));
     }
 
     public function test_downloads_need_access_to_the_matter(): void

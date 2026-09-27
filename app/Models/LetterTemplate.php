@@ -8,8 +8,10 @@ use Filament\Forms\Components\RichEditor\MentionProvider;
 use Filament\Forms\Components\RichEditor\Models\Concerns\InteractsWithRichContent;
 use Filament\Forms\Components\RichEditor\Models\Contracts\HasRichContent;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
@@ -44,6 +46,28 @@ class LetterTemplate extends Model implements HasRichContent
     public function letterhead(): BelongsTo
     {
         return $this->belongsTo(Letterhead::class);
+    }
+
+    /**
+     * The matter types this template is for — none means every type.
+     */
+    public function types(): BelongsToMany
+    {
+        return $this->belongsToMany(Type::class, 'letter_template_type');
+    }
+
+    /**
+     * Active templates usable for a matter of this type: those linked to
+     * it, and those linked to no type at all.
+     *
+     * @param  Builder<LetterTemplate>  $query
+     */
+    public function scopeForMatterType(Builder $query, ?int $typeId): void
+    {
+        $query->where('is_active', true)
+            ->where(fn (Builder $q) => $q
+                ->whereDoesntHave('types')
+                ->when($typeId, fn (Builder $q) => $q->orWhereHas('types', fn (Builder $t) => $t->whereKey($typeId))));
     }
 
     public function getFilamentRichContentField(): string

@@ -31,6 +31,10 @@ class LetterTemplatesTable
                 TextColumn::make('category')
                     ->badge()
                     ->searchable(),
+                TextColumn::make('types.name')
+                    ->label(__('Matter types'))
+                    ->badge()
+                    ->placeholder(__('All matter types')),
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()

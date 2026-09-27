@@ -5,7 +5,6 @@ namespace App\Filament\Mms\Resources\LetterItems;
 use App\Filament\Concerns\HasModuleGate;
 use App\Filament\Mms\Resources\LetterItems\Pages\ManageLetterItems;
 use App\Models\LetterItem;
-use App\Models\Type;
 use BackedEnum;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
@@ -68,11 +67,13 @@ class LetterItemResource extends Resource
                 ->datalist(fn () => LetterItem::groups())
                 ->placeholder('مستندات مطلوبة من الشركة تحت التصفية')
                 ->helperText(__('Pick an existing group or type a new one.')),
-            Select::make('type_id')
-                ->label(__('Matter type'))
-                ->options(fn () => Type::query()->orderBy('name')->pluck('name', 'id'))
+            Select::make('types')
+                ->label(__('Matter types'))
+                ->relationship('types', 'name')
+                ->multiple()
+                ->preload()
                 ->searchable()
-                ->placeholder(__('Any matter type')),
+                ->placeholder(__('All matter types')),
             Textarea::make('text')
                 ->label(__('Text'))
                 ->required()
@@ -91,13 +92,18 @@ class LetterItemResource extends Resource
             ->defaultSort('sort')
             ->columns([
                 TextColumn::make('text')->label(__('Text'))->wrap()->searchable(),
-                TextColumn::make('type.name')->label(__('Matter type'))->placeholder(__('Any'))->toggleable(),
+                TextColumn::make('types.name')->label(__('Matter types'))->badge()->placeholder(__('All matter types'))->toggleable(),
                 ToggleColumn::make('is_active')->label(__('Active')),
             ])
             ->filters([
                 SelectFilter::make('group')
                     ->label(__('Group'))
                     ->options(fn () => array_combine(LetterItem::groups(), LetterItem::groups()) ?: []),
+                SelectFilter::make('types')
+                    ->label(__('Matter types'))
+                    ->relationship('types', 'name')
+                    ->multiple()
+                    ->preload(),
             ])
             ->recordActions([
                 EditAction::make(),

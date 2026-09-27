@@ -23,6 +23,7 @@ class LetterTemplateInfolist
                         TextEntry::make('name')->label(__('Name')),
                         TextEntry::make('category')->label(__('Category'))->badge(),
                         TextEntry::make('letterhead.name')->label(__('Letterhead'))->placeholder(__('The default letterhead')),
+                        TextEntry::make('types.name')->label(__('Matter types'))->badge()->placeholder(__('All matter types')),
                         IconEntry::make('is_active')->label(__('Active'))->boolean(),
                         TextEntry::make('subject')->label(__('Subject'))->columnSpanFull(),
                         TextEntry::make('inputs')
