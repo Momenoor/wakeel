@@ -72,6 +72,7 @@ class SystemSettings extends Page
             'records_per_page' => Setting::get('records_per_page', 25),
             ...collect(Branding::KEYS)->mapWithKeys(fn (string $key): array => [$key => Setting::get($key)])->all(),
 
+            'mail_sender_key' => Setting::get('mail_sender_key'),
             'mail_mailer' => Setting::get('mail_mailer', config('mail.default', 'smtp')),
             'mail_host' => Setting::get('mail_host', config('mail.mailers.smtp.host', '')),
             'mail_port' => Setting::get('mail_port', config('mail.mailers.smtp.port', 587)),
@@ -163,6 +164,7 @@ class SystemSettings extends Page
             'currency_code' => 'general',
             'records_per_page' => 'general',
 
+            'mail_sender_key' => 'mail',
             'mail_mailer' => 'mail',
             'mail_host' => 'mail',
             'mail_port' => 'mail',

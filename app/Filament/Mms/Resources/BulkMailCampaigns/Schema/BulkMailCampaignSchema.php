@@ -6,6 +6,7 @@ use App\Enums\BulkMailCampaignStatus;
 use App\Models\BulkMailCampaign;
 use App\Models\Matter;
 use App\Services\MMS\BulkMailPlaceholders;
+use App\Services\MMS\SenderMailer;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\RichEditor;
@@ -16,7 +17,6 @@ use Filament\Forms\Components\Toggle;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
-use Illuminate\Support\Facades\Config;
 use Illuminate\Support\HtmlString;
 
 class BulkMailCampaignSchema
@@ -43,13 +43,13 @@ class BulkMailCampaignSchema
 
                     Select::make('from_sender_key')
                         ->label(__('bulk_mail.fields.from_sender'))
-                        ->options(collect(Config::get('mail_senders.senders'))->mapWithKeys(fn ($s, $k) => [$k => $s['name']]))
+                        ->options(fn () => SenderMailer::options())
                         ->required()
                         ->live(),
 
                     TextEntry::make('sender_signature')
                         ->label(__('bulk_mail.fields.signature_preview'))
-                        ->state(fn ($get) => new HtmlString(Config::get("mail_senders.senders.{$get('from_sender_key')}.signature", '')))
+                        ->state(fn ($get) => new HtmlString((string) (SenderMailer::all()[$get('from_sender_key')]['signature'] ?? '')))
                         ->visible(fn ($get) => filled($get('from_sender_key'))),
                 ])->columns(2),
 

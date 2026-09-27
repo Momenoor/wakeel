@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 
 use App\Models\CalendarEvent;
+use App\Models\EmailTemplate;
 use App\Models\Letterhead;
 use App\Models\LetterItem;
 use App\Models\LetterTemplate;
@@ -10,18 +11,22 @@ use App\Models\Matter;
 use App\Models\MatterLetter;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterIssuer;
+use App\Services\MMS\Letters\LetterMailer;
+use App\Services\MMS\SenderMailer;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\TimePicker;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Components\Group;
@@ -55,6 +60,10 @@ class LettersRelationManager extends RelationManager
                 TextColumn::make('letter_date')->label(__('Date'))->date('d/m/Y')->sortable(),
                 TextColumn::make('subject')->label(__('Subject'))->wrap()->searchable(),
                 TextColumn::make('recipients.name')->label(__('To'))->listWithLineBreaks()->limitList(3)->expandableLimitedList(),
+                TextColumn::make('status')
+                    ->label(__('Status'))
+                    ->badge()
+                    ->description(fn (MatterLetter $record) => $record->sent_at?->format('d/m/Y H:i')),
                 TextColumn::make('template.name')->label(__('Template'))->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('sentBy.name')->label(__('By'))->toggleable(isToggledHiddenByDefault: true),
             ])
@@ -71,10 +80,100 @@ class LettersRelationManager extends RelationManager
                     ->icon('heroicon-o-document-text')
                     ->color('gray')
                     ->url(fn (MatterLetter $record) => route('letters.docx', $record)),
+                $this->emailAction(),
                 ActionGroup::make([
                     DeleteAction::make(),
                 ]),
             ]);
+    }
+
+    /**
+     * Email an issued letter: as an attachment under a covering email, or
+     * as the email body; to everyone at once or separately.
+     */
+    private function emailAction(): Action
+    {
+        return Action::make('email')
+            ->label(__('Send by email'))
+            ->icon('heroicon-o-paper-airplane')
+            ->color('success')
+            ->modalWidth('3xl')
+            ->modalSubmitActionLabel(__('Send'))
+            ->fillForm(fn (MatterLetter $record) => [
+                // The mailbox this matter's letters last went from.
+                'sender' => MatterLetter::query()->where('matter_id', $record->matter_id)->whereNotNull('sender_key')->latest('sent_at')->value('sender_key')
+                    ?? array_key_first(SenderMailer::options()),
+                'mode' => LetterMailer::ATTACHMENT,
+                'email_template_id' => EmailTemplate::default()?->getKey(),
+                'formats' => ['pdf'],
+                'recipients' => $record->recipients->pluck('id')->all(),
+                'separate' => false,
+            ])
+            ->schema(fn (MatterLetter $record) => [
+                Select::make('sender')
+                    ->label(__('Send from'))
+                    ->options(SenderMailer::options())
+                    ->required(),
+                Radio::make('mode')
+                    ->label(__('Send the letter'))
+                    ->options([
+                        LetterMailer::ATTACHMENT => __('As an attachment, with a covering email'),
+                        LetterMailer::BODY => __('As the email itself'),
+                    ])
+                    ->required()
+                    ->live(),
+                Select::make('email_template_id')
+                    ->label(__('Covering email'))
+                    ->options(fn () => EmailTemplate::query()->where('is_active', true)->orderBy('name')->pluck('name', 'id'))
+                    ->placeholder(__('A short standard note'))
+                    ->visible(fn (Get $get) => $get('mode') === LetterMailer::ATTACHMENT),
+                CheckboxList::make('formats')
+                    ->label(__('Attach as'))
+                    ->options(['pdf' => 'PDF', 'docx' => 'Word'])
+                    ->required(fn (Get $get) => $get('mode') === LetterMailer::ATTACHMENT)
+                    ->visible(fn (Get $get) => $get('mode') === LetterMailer::ATTACHMENT)
+                    ->columns(2),
+                CheckboxList::make('recipients')
+                    ->label(__('To'))
+                    ->options($record->recipients->mapWithKeys(fn ($r) => [$r->id => trim($r->name.($r->role ? ' ('.$r->role.')' : ''))]))
+                    ->descriptions($record->recipients->mapWithKeys(fn ($r) => [$r->id => implode(' · ', $r->emails ?: array_filter([$r->email])) ?: __('No email')]))
+                    ->bulkToggleable(),
+                TagsInput::make('cc')
+                    ->label(__('CC'))
+                    ->placeholder('name@example.com')
+                    ->nestedRecursiveRules(['email']),
+                Toggle::make('separate')
+                    ->label(__('A separate email to each recipient'))
+                    ->helperText(__('Each then sees only their own address, and {{recipient.name}} greets them by name.')),
+            ])
+            ->action(function (MatterLetter $record, array $data) {
+                $result = app(LetterMailer::class)->send(
+                    $record,
+                    $data['sender'],
+                    $data['mode'],
+                    filled($data['email_template_id'] ?? null) ? EmailTemplate::find($data['email_template_id']) : null,
+                    $data['formats'] ?? [],
+                    array_map('intval', $data['recipients'] ?? []),
+                    array_values($data['cc'] ?? []),
+                    (bool) ($data['separate'] ?? false),
+                );
+
+                $notification = Notification::make()
+                    ->title(__('Sent: :sent, failed: :failed, without email: :skipped', [
+                        'sent' => $result['sent'],
+                        'failed' => $result['failed'],
+                        'skipped' => $result['skipped'],
+                    ]))
+                    ->body($result['errors'] ? implode("\n", array_unique($result['errors'])) : null);
+
+                match (true) {
+                    $result['failed'] > 0 && $result['sent'] === 0 => $notification->danger(),
+                    $result['failed'] > 0 || $result['skipped'] > 0 => $notification->warning(),
+                    default => $notification->success(),
+                };
+
+                $notification->send();
+            });
     }
 
     private function issueAction(): Action

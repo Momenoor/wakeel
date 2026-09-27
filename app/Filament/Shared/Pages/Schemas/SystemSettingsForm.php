@@ -3,6 +3,7 @@
 namespace App\Filament\Shared\Pages\Schemas;
 
 use App\Filament\Schemas\BrandingSettingsSection;
+use App\Services\MMS\SenderMailer;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -124,7 +125,19 @@ class SystemSettingsForm
                                 ->icon(Heroicon::EnvelopeOpen)
                                 ->columns(2)
                                 ->schema([
+                                    // The same mailboxes letters and bulk mail use
+                                    // (Communication → Mail senders). The server
+                                    // fields below are only for a custom setup.
+                                    Select::make('mail_sender_key')
+                                        ->label(__('Send system emails from'))
+                                        ->options(fn () => SenderMailer::options())
+                                        ->placeholder(__('A custom mail server (below)'))
+                                        ->helperText(__('Notifications, assistant emails and every other email the system sends go out from this mailbox. Mailboxes are added under Communication → Mail senders.'))
+                                        ->live()
+                                        ->columnSpanFull(),
+
                                     Select::make('mail_mailer')
+                                        ->visible(fn (Get $get): bool => blank($get('mail_sender_key')))
                                         ->label(__('Mail Driver'))
                                         ->options([
                                             'microsoft-graph' => 'Microsoft Graph',
@@ -138,11 +151,13 @@ class SystemSettingsForm
                                         ->columnSpanFull(),
 
                                     TextInput::make('mail_host')
+                                        ->visible(fn (Get $get): bool => blank($get('mail_sender_key')))
                                         ->label(__('SMTP Host'))
                                         ->placeholder('smtp.mailgun.org')
                                         ->required(fn (Get $get): bool => $get('mail_mailer') === 'smtp'),
 
                                     TextInput::make('mail_port')
+                                        ->visible(fn (Get $get): bool => blank($get('mail_sender_key')))
                                         ->label(__('SMTP Port'))
                                         ->numeric()
                                         ->placeholder('587')
@@ -150,6 +165,7 @@ class SystemSettingsForm
                                         ->required(fn (Get $get): bool => $get('mail_mailer') === 'smtp'),
 
                                     Select::make('mail_encryption')
+                                        ->visible(fn (Get $get): bool => blank($get('mail_sender_key')))
                                         ->label(__('Encryption'))
                                         ->options([
                                             'tls' => 'TLS',
@@ -159,21 +175,25 @@ class SystemSettingsForm
                                         ->default('tls'),
 
                                     TextInput::make('mail_username')
+                                        ->visible(fn (Get $get): bool => blank($get('mail_sender_key')))
                                         ->label(__('SMTP Username'))
                                         ->placeholder('user@example.com'),
 
                                     TextInput::make('mail_password')
+                                        ->visible(fn (Get $get): bool => blank($get('mail_sender_key')))
                                         ->label(__('SMTP Password'))
                                         ->password()
                                         ->revealable(),
 
                                     TextInput::make('mail_from_address')
+                                        ->visible(fn (Get $get): bool => blank($get('mail_sender_key')))
                                         ->label(__('Sender Email Address'))
                                         ->email()
                                         ->placeholder('noreply@example.com')
                                         ->required(),
 
                                     TextInput::make('mail_from_name')
+                                        ->visible(fn (Get $get): bool => blank($get('mail_sender_key')))
                                         ->label(__('Sender Name'))
                                         ->placeholder('JPA Emirates')
                                         ->required(),

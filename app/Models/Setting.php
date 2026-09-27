@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\MMS\SenderMailer;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
@@ -228,6 +229,19 @@ class Setting extends Model
      */
     public static function applyMailConfig(): void
     {
+        // A sender chosen from Mail senders (cPanel or Microsoft 365) —
+        // the same mailboxes letters and bulk mail use. The custom server
+        // fields below apply only when none is chosen, or it's gone.
+        if (filled($senderKey = static::get('mail_sender_key'))) {
+            try {
+                SenderMailer::applyAsDefault(SenderMailer::sender((string) $senderKey));
+
+                return;
+            } catch (\Throwable $e) {
+                Log::warning("The mail sender [{$senderKey}] chosen for system emails is unavailable; using the custom mail settings. ".$e->getMessage());
+            }
+        }
+
         $mailer = static::get('mail_mailer');
         $host = static::get('mail_host');
         $port = static::get('mail_port');

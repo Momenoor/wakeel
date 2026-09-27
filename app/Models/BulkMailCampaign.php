@@ -4,13 +4,13 @@ namespace App\Models;
 
 use App\Enums\BulkMailCampaignStatus;
 use App\Services\MMS\BulkMailPlaceholders;
+use App\Services\MMS\SenderMailer;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Facades\Config;
 
 class BulkMailCampaign extends Model
 {
@@ -70,7 +70,8 @@ class BulkMailCampaign extends Model
     public function senderConfig(): Attribute
     {
         return new Attribute(
-            get: fn () => Config::get("mail_senders.senders.{$this->from_sender_key}")
+            // Managed senders (Mail senders) and config/mail_senders.php.
+            get: fn () => filled($this->from_sender_key) ? (SenderMailer::all()[$this->from_sender_key] ?? null) : null
         );
     }
 

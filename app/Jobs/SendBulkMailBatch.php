@@ -10,6 +10,7 @@ use App\Models\BulkMailCampaign;
 use App\Models\BulkMailLog;
 use App\Models\BulkMailRecipient;
 use App\Services\MMS\BulkMailService;
+use App\Services\MMS\SenderMailer;
 use App\Services\MMS\SentFolder;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -179,42 +180,13 @@ class SendBulkMailBatch implements ShouldQueue
         return $result;
     }
 
+    /**
+     * Sends through the campaign's mailbox — see SenderMailer. A failure is
+     * re-thrown: the caller counts the attempt, marks the recipient failed
+     * and stops the batch.
+     */
     public function withMailerConfig(BulkMailCampaign $campaign, callable $callable): void
     {
-        $original = [
-            'mail.default' => config('mail.default'),
-            'mail.mailers.smtp.host' => config('mail.mailers.smtp.host'),
-            'mail.mailers.smtp.port' => config('mail.mailers.smtp.port'),
-            'mail.mailers.smtp.username' => config('mail.mailers.smtp.username'),
-            'mail.mailers.smtp.password' => config('mail.mailers.smtp.password'),
-            'mail.mailers.smtp.encryption' => config('mail.mailers.smtp.encryption'),
-            'mail.from.address' => config('mail.from.address'),
-            'mail.from.name' => config('mail.from.name'),
-        ];
-        try {
-            config([
-                'mail.default' => 'smtp',
-                'mail.mailers.smtp.host' => $campaign->sender_config['host'],
-                'mail.mailers.smtp.port' => $campaign->sender_config['port'],
-                'mail.mailers.smtp.username' => $campaign->sender_config['username'],
-                'mail.mailers.smtp.password' => $campaign->sender_config['password'],
-                'mail.mailers.smtp.encryption' => $campaign->sender_config['encryption'],
-                'mail.from.address' => $campaign->sender_config['address'],
-                'mail.from.name' => $campaign->sender_config['name'],
-            ]);
-            app('mail.manager')->purge('smtp');
-            $callable();
-        } catch (\Throwable $e) {
-            // Must re-throw: the caller's own handler counts the attempt, marks the
-            // recipient Failed and stops the batch. Swallowing it here let a failed
-            // send fall through and be recorded as Sent, so an SMTP/IMAP outage
-            // produced a campaign reporting 100% delivered with nothing retried.
-            Log::error('Failed to execute mailer configuration callback: '.$e->getMessage());
-            throw $e;
-        } finally {
-            config($original);
-            app('mail.manager')->purge('smtp');
-        }
-
+        SenderMailer::using($campaign->sender_config, $callable);
     }
 }

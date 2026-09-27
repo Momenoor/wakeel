@@ -6,14 +6,29 @@ use App\Models\BulkMailCampaign;
 use Webklex\PHPIMAP\ClientManager;
 
 /**
- * Copies a sent bulk mail into the sender mailbox's IMAP "Sent" folder, so
- * it shows up in Outlook like a message sent by hand.
+ * Copies a sent mail into the sender mailbox's IMAP "Sent" folder, so it
+ * shows up in the mailbox like a message sent by hand.
  */
 class SentFolder
 {
     public function save(BulkMailCampaign $campaign, string $rawMessage): void
     {
-        $client = (new ClientManager($this->config($campaign)))->account($campaign->from_sender_key);
+        $this->saveFor($campaign->from_sender_key, $rawMessage);
+    }
+
+    /**
+     * For any sender in config/mail_senders.php.
+     */
+    public function saveFor(string $senderKey, string $rawMessage): void
+    {
+        $sender = SenderMailer::sender($senderKey);
+
+        // Microsoft 365 keeps the copy in Sent Items itself.
+        if (SenderMailer::isMicrosoft($sender)) {
+            return;
+        }
+
+        $client = (new ClientManager($this->config($senderKey, $sender)))->account($senderKey);
         $client->connect();
 
         $client->getFolder('Sent')->appendMessage(
@@ -24,15 +39,14 @@ class SentFolder
     }
 
     /**
+     * @param  array<string, mixed>  $sender
      * @return array<string, mixed>
      */
-    private function config(BulkMailCampaign $campaign): array
+    private function config(string $senderKey, array $sender): array
     {
-        $sender = $campaign->sender_config;
-
         return [
             'accounts' => [
-                $campaign->from_sender_key => [
+                $senderKey => [
                     'host' => $sender['host'],
                     'port' => 993,
                     'encryption' => $sender['encryption'],
