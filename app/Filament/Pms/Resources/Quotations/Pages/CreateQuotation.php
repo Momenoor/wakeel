@@ -25,6 +25,12 @@ class CreateQuotation extends CreateRecord
             'security_deposit' => $data['security_deposit'] ?? 0,
             'number_of_installments' => $data['number_of_installments'] ?? 1,
             'validity_date' => $data['validity_date'],
+            'start_date' => $data['start_date'] ?? null,
+            'end_date' => $data['end_date'] ?? null,
+            'grace_period_days' => $data['grace_period_days'] ?? 0,
+            'contract_type' => $data['contract_type'] ?? null,
+            'payment_method' => $data['payment_method'] ?? null,
+            'schedule' => $data['schedule'] ?? [],
         ]);
     }
 

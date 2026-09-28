@@ -3,6 +3,7 @@
 namespace App\Filament\Pms\Resources\Quotations;
 
 use App\Filament\Pms\Resources\Quotations\Pages\CreateQuotation;
+use App\Filament\Pms\Resources\Quotations\Pages\EditQuotation;
 use App\Filament\Pms\Resources\Quotations\Pages\ListQuotations;
 use App\Filament\Pms\Resources\Quotations\Pages\ViewQuotation;
 use App\Filament\Pms\Resources\Quotations\Schemas\QuotationForm;
@@ -66,6 +67,7 @@ class QuotationResource extends Resource
             'index' => ListQuotations::route('/'),
             'create' => CreateQuotation::route('/create'),
             'view' => ViewQuotation::route('/{record}'),
+            'edit' => EditQuotation::route('/{record}/edit'),
         ];
     }
 }

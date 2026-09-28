@@ -5,6 +5,7 @@ namespace App\Services\PMS;
 use App\Enums\PMS\InstallmentPaymentStatus;
 use App\Models\Installment;
 use App\Models\Lease;
+use App\Support\ChequeNumber;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -32,40 +33,59 @@ class InstallmentGenerator
         }
 
         $totalRent = (float) $lease->getAttribute('total_base_rent');
-        ['vatRate' => $vatRate, 'landlordTrn' => $landlordTrn, 'tenantTrn' => $tenantTrn] = $this->resolveTaxContext($lease);
+        $vatRate = $this->resolveTaxContext($lease)['vatRate'];
 
-        $netAmounts = $this->splitEvenly($totalRent, $count);
-        $dueDates = $this->spreadDueDates($lease, $count);
+        $amounts = self::splitEvenly($totalRent, $count);
+        $dueDates = self::dueDates($lease->getAttribute('start_date'), $lease->getAttribute('end_date'), $count);
 
-        return DB::transaction(function () use ($lease, $count, $netAmounts, $dueDates, $vatRate, $landlordTrn, $tenantTrn): Collection {
-            $installments = collect();
+        // Rent instalments carry no VAT: the lease's VAT is always its own
+        // instalment, due with the first rent one, and a non-zero security
+        // deposit another — the same rows the lease wizard makes.
+        $rows = [];
+        foreach ($amounts as $i => $amount) {
+            $rows[] = ['payment_date' => $dueDates[$i]->toDateString(), 'amount' => $amount, 'vat_handling' => 'excluded'];
+        }
 
-            for ($i = 0; $i < $count; $i++) {
-                $net = $netAmounts[$i];
-                $vat = round($net * $vatRate, 2);
-                $dueDate = $dueDates[$i];
+        return $this->recordManualSchedule($lease, [
+            ...$rows,
+            ...self::separateRows($lease, $totalRent, $vatRate, $dueDates[0]->toDateString()),
+        ]);
+    }
 
-                $installments->push(Installment::create([
-                    'lease_id' => $lease->getKey(),
-                    'due_date' => $dueDate,
-                    'grace_period_expiry_date' => $dueDate->copy()->addDays((int) $lease->getAttribute('grace_period_days')),
-                    'net_amount' => $net,
-                    'vat_amount' => $vat,
-                    'total_due_amount' => round($net + $vat, 2),
-                    'admin_penalty_amount' => 0,
-                    'paid_amount' => 0,
-                    'balance_due' => round($net + $vat, 2),
-                    'payment_status' => InstallmentPaymentStatus::PENDING,
-                    'landlord_trn' => $landlordTrn,
-                    'tenant_trn' => $tenantTrn,
-                    'tax_invoice_serial' => sprintf('INV-%d-%02d', $lease->getKey(), $i + 1),
-                    'date_of_supply' => $dueDate,
-                    'vat_rate' => $vatRate,
-                ]));
-            }
+    /**
+     * The lease's VAT as one instalment, and its security deposit as
+     * another when it isn't zero — never folded into a rent instalment.
+     *
+     * @param  array<string, mixed>  $vatPayment  method, date, reference, bank for the VAT row
+     * @param  array<string, mixed>  $depositPayment  the same for the deposit row
+     * @return list<array<string, mixed>>
+     */
+    public static function separateRows(Lease $lease, float $totalRent, float $vatRate, string $defaultDate, array $vatPayment = [], array $depositPayment = []): array
+    {
+        $rows = [];
+        $vat = round($totalRent * $vatRate, 2);
+        $deposit = round((float) $lease->getAttribute('security_deposit_amount'), 2);
 
-            return $installments;
-        });
+        if ($vat > 0) {
+            $rows[] = [
+                ...$vatPayment,
+                'payment_date' => filled($vatPayment['payment_date'] ?? null) ? $vatPayment['payment_date'] : $defaultDate,
+                'amount' => $vat,
+                'vat_handling' => 'vat_only',
+                'is_security_deposit' => false,
+            ];
+        }
+
+        if ($deposit > 0) {
+            $rows[] = [
+                ...$depositPayment,
+                'payment_date' => filled($depositPayment['payment_date'] ?? null) ? $depositPayment['payment_date'] : $defaultDate,
+                'amount' => $deposit,
+                'is_security_deposit' => true,
+            ];
+        }
+
+        return $rows;
     }
 
     /**
@@ -75,10 +95,11 @@ class InstallmentGenerator
      * (rent + VAT + security deposit), so this only has to persist them.
      *
      * @param  list<array{
-     *     payment_method: string,
+     *     payment_method?: string|null,
      *     payment_date: string,
      *     amount: float|string,
      *     reference_number?: string|null,
+     *     bank_name?: string|null,
      *     is_security_deposit?: bool,
      *     vat_handling?: string,
      * }>  $rows
@@ -131,8 +152,9 @@ class InstallmentGenerator
                     'admin_penalty_amount' => 0,
                     'paid_amount' => 0,
                     'balance_due' => round($net + $vat, 2),
-                    'payment_method' => $row['payment_method'],
-                    'transaction_reference' => $row['reference_number'] ?? null,
+                    'payment_method' => $row['payment_method'] ?? null,
+                    'transaction_reference' => ChequeNumber::forMethod($row['reference_number'] ?? null, $row['payment_method'] ?? null),
+                    'bank_name' => filled($row['bank_name'] ?? null) ? $row['bank_name'] : null,
                     'payment_status' => InstallmentPaymentStatus::PENDING,
                     'landlord_trn' => $landlordTrn,
                     'tenant_trn' => $tenantTrn,
@@ -159,34 +181,54 @@ class InstallmentGenerator
     }
 
     /**
+     * The total in equal instalments rounded to the nearest 10, the first
+     * one taking the difference so the schedule sums exactly: 100,000 in 6
+     * is 16,650 then five of 16,670.
+     *
      * @return list<float>
      */
-    private function splitEvenly(float $total, int $count): array
+    public static function splitEvenly(float $total, int $count, int $roundTo = 10): array
     {
-        $amount = round($total / $count, 2);
-        $amounts = array_fill(0, $count, $amount);
+        $amount = $count > 1 ? round($total / $count / $roundTo) * $roundTo : round($total, 2);
+        $amounts = array_fill(0, $count, (float) $amount);
 
-        // The last instalment absorbs whatever rounding drift the even split
-        // leaves behind, so the schedule always sums to exactly the total.
-        $amounts[$count - 1] = round($total - array_sum(array_slice($amounts, 0, $count - 1)), 2);
+        $amounts[0] = round($total - $amount * ($count - 1), 2);
 
         return $amounts;
     }
 
     /**
+     * Due dates spaced by whole months from the start, on the start's day
+     * of the month: a 21/06/2026 – 20/06/2027 lease in 6 instalments is
+     * due 21/06, 21/08, 21/10, 21/12/2026, 21/02 and 21/04/2027. When the
+     * months don't divide evenly the gaps differ by at most one month.
+     *
      * @return list<Carbon>
      */
-    private function spreadDueDates(Lease $lease, int $count): array
+    public static function dueDates(mixed $start, mixed $end, int $count): array
     {
-        $start = $lease->getAttribute('start_date')->copy();
-        $end = $lease->getAttribute('end_date')->copy();
-        $totalDays = max(1, $start->diffInDays($end));
-        $interval = $totalDays / $count;
+        $start = Carbon::parse($start)->startOfDay();
+        $end = Carbon::parse($end)->startOfDay();
+
+        // A lease runs to the day before its anniversary: 21/06 – 20/06 is
+        // 12 months.
+        $months = max(1, (int) round($start->diffInMonths($end->copy()->addDay())));
 
         $dates = [];
 
+        // More instalments than months (e.g. 24 in a year): evenly by days.
+        if ($count > $months) {
+            $interval = max(1, $start->diffInDays($end)) / $count;
+
+            for ($i = 0; $i < $count; $i++) {
+                $dates[] = $start->copy()->addDays((int) round($interval * $i));
+            }
+
+            return $dates;
+        }
+
         for ($i = 0; $i < $count; $i++) {
-            $dates[] = $start->copy()->addDays((int) round($interval * $i));
+            $dates[] = $start->copy()->addMonthsNoOverflow(intdiv($i * $months, $count));
         }
 
         return $dates;

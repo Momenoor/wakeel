@@ -13,8 +13,9 @@ class QuotationPrintController extends Controller
         abort_unless(auth()->user()?->can('view', $quotation), 403);
 
         return view('filament.pms.quotation-print', [
-            'quotation' => $quotation->load(['party', 'units']),
-            'paymentSchedule' => app(QuotationService::class)->paymentSchedule($quotation),
+            'quotation' => $quotation->load(['party', 'units.property']),
+            'installments' => app(QuotationService::class)->expectedInstallments($quotation),
+            'period' => app(QuotationService::class)->period($quotation),
         ]);
     }
 }

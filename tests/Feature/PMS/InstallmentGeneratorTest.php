@@ -57,22 +57,55 @@ class InstallmentGeneratorTest extends TestCase
 
         $installments = $this->generator->generateSchedule($lease, 12);
 
-        $this->assertCount(12, $installments);
+        // 12 rent instalments, then the VAT as its own.
+        $this->assertCount(13, $installments);
+        $rent = $installments->where('is_vat_only', false);
+        $vat = $installments->where('is_vat_only', true);
+        $this->assertCount(12, $rent);
+        $this->assertCount(1, $vat);
 
-        $totalNet = $installments->sum(fn ($installment) => (float) $installment->net_amount);
-        $totalVat = $installments->sum(fn ($installment) => (float) $installment->vat_amount);
-        $totalDue = $installments->sum(fn ($installment) => (float) $installment->total_due_amount);
+        $this->assertSame(120000.0, round($rent->sum(fn ($i) => (float) $i->net_amount), 2));
+        $this->assertSame(0.0, round($rent->sum(fn ($i) => (float) $i->vat_amount), 2));
+        $this->assertSame(6000.0, (float) $vat->first()->vat_amount); // 5% of 120,000
+        $this->assertSame(126000.0, round($installments->sum(fn ($i) => (float) $i->total_due_amount), 2));
+        // Due with the first rent instalment.
+        $this->assertSame($rent->first()->due_date->toDateString(), $vat->first()->due_date->toDateString());
 
-        $this->assertSame(120000.0, round($totalNet, 2));
-        $this->assertSame(6000.0, round($totalVat, 2)); // 5% of 120,000
-        $this->assertSame(126000.0, round($totalDue, 2));
-
-        // Every installment carries its own frozen VAT rate and serial.
+        // Every instalment carries its own frozen VAT rate and serial.
         $this->assertTrue($installments->every(fn ($i) => (float) $i->vat_rate === 0.05));
         $this->assertSame(
-            range(1, 12),
+            range(1, 13),
             $installments->map(fn ($i) => (int) substr($i->tax_invoice_serial, -2))->all(),
         );
+    }
+
+    public function test_instalments_fall_due_every_few_months_on_the_start_day(): void
+    {
+        $this->assertSame(
+            ['2026-06-21', '2026-08-21', '2026-10-21', '2026-12-21', '2027-02-21', '2027-04-21'],
+            array_map(fn ($date) => $date->toDateString(), InstallmentGenerator::dueDates('2026-06-21', '2027-06-20', 6)),
+        );
+        $this->assertSame(
+            ['2026-06-21', '2026-09-21', '2026-12-21', '2027-03-21'],
+            array_map(fn ($date) => $date->toDateString(), InstallmentGenerator::dueDates('2026-06-21', '2027-06-20', 4)),
+        );
+        // Month-end starts stay at month end.
+        $this->assertSame('2026-02-28', InstallmentGenerator::dueDates('2026-01-31', '2027-01-30', 12)[1]->toDateString());
+    }
+
+    public function test_a_security_deposit_is_its_own_instalment(): void
+    {
+        $unit = Unit::factory()->residential()->create();
+        $lease = $this->contractOn($unit, 60000);
+        $lease->update(['security_deposit_amount' => 5000]);
+
+        $installments = $this->generator->generateSchedule($lease->fresh(), 4);
+
+        $this->assertCount(5, $installments);
+        $deposit = $installments->firstWhere('is_security_deposit', true);
+        $this->assertSame(5000.0, (float) $deposit->total_due_amount);
+        $this->assertSame(0.0, (float) $deposit->vat_amount);
+        $this->assertSame(60000.0, round($installments->where('is_security_deposit', false)->sum(fn ($i) => (float) $i->net_amount), 2));
     }
 
     public function test_a_residential_contract_has_no_vat(): void

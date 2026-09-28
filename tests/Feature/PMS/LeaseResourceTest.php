@@ -4,6 +4,8 @@ namespace Tests\Feature\PMS;
 
 use App\Enums\PMS\LeasePartyRole;
 use App\Enums\PMS\LeaseStatus;
+use App\Enums\PMS\QuotationStatus;
+use App\Filament\Pms\Resources\Leases\LeaseResource;
 use App\Filament\Pms\Resources\Leases\Pages\CreateLease;
 use App\Filament\Pms\Resources\Leases\Pages\EditLease;
 use App\Filament\Pms\Resources\Leases\Pages\ViewLease;
@@ -67,7 +69,7 @@ class LeaseResourceTest extends TestCase
         $this->assertCount(1, $lease->installments);
     }
 
-    public function test_converting_an_accepted_quotation_creates_a_contract(): void
+    public function test_converting_a_quotation_opens_the_wizard_filled_in(): void
     {
         $tenant = Party::factory()->tenant()->create();
         $unit = Unit::factory()->residential()->create();
@@ -75,15 +77,39 @@ class LeaseResourceTest extends TestCase
         $quotation = app(QuotationService::class)->generate([
             'party_id' => $tenant->id,
             'units' => [['unit_id' => $unit->id, 'offered_rent' => 60000]],
+            'security_deposit' => 3000,
+            'number_of_installments' => 4,
+            'start_date' => '2026-06-21',
+            'payment_method' => 'cash',
             'validity_date' => now()->addDays(14)->toDateString(),
         ]);
-        app(QuotationService::class)->send($quotation);
-        app(QuotationService::class)->accept($quotation);
 
+        // A draft quotation can be converted too.
         Livewire::test(ViewQuotation::class, ['record' => $quotation->getKey()])
-            ->callAction('convert_to_contract');
+            ->assertActionVisible('convert_to_contract')
+            ->assertActionHasUrl('convert_to_contract', LeaseResource::getUrl('create', ['quotation' => $quotation->getKey()]));
 
-        $this->assertSame(1, Lease::count());
+        $this->get(LeaseResource::getUrl('create', ['quotation' => $quotation->getKey()]))->assertOk();
+
+        $component = Livewire::withQueryParams(['quotation' => $quotation->getKey()])->test(CreateLease::class);
+        $data = $component->instance()->data;
+
+        $this->assertEquals($unit->property_id, $data['property_id']);
+        $this->assertSame('2026-06-21', $data['start_date']);
+        $this->assertSame('2027-06-20', $data['end_date']);
+        $this->assertSame(['2026-06-21', '2026-09-21', '2026-12-21', '2027-03-21'], array_column(array_values($data['installments']), 'payment_date'));
+
+        $component->call('create')->assertHasNoFormErrors();
+
+        $lease = Lease::sole();
+        $this->assertSame($quotation->id, $lease->quotation_id);
+        $this->assertSame('60000.00', $lease->total_base_rent);
+        $this->assertCount(5, $lease->installments);
+        $this->assertSame(QuotationStatus::ACCEPTED, $quotation->fresh()->status);
+
+        // Converted once only.
+        Livewire::test(ViewQuotation::class, ['record' => $quotation->getKey()])
+            ->assertActionHidden('convert_to_contract');
     }
 
     public function test_view_page_attest_action_activates_the_contract(): void

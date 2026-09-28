@@ -20,6 +20,16 @@ class CreateTenant extends CreateRecord
      */
     protected function handleRecordCreation(array $data): Model
     {
+        return self::createTenant($data);
+    }
+
+    /**
+     * Also used by the lease wizard's "new tenant" form.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public static function createTenant(array $data): Tenant
+    {
         return DB::transaction(function () use ($data): Tenant {
             $party = Party::create([
                 'name' => $data['name'],
@@ -32,7 +42,7 @@ class CreateTenant extends CreateRecord
                 'party_id' => $party->getKey(),
                 'tenant_type' => $data['tenant_type'],
                 'identification_type' => $data['identification_type'],
-                'identification_number' => $data['identification_number'],
+                'identification_number' => filled($data['identification_number'] ?? null) ? $data['identification_number'] : null,
                 'trn' => $data['trn'] ?? null,
                 'emergency_contact_name' => $data['emergency_contact_name'] ?? null,
                 'emergency_contact_phone' => $data['emergency_contact_phone'] ?? null,

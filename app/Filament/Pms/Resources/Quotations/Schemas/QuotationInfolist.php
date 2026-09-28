@@ -2,12 +2,14 @@
 
 namespace App\Filament\Pms\Resources\Quotations\Schemas;
 
+use App\Filament\Pms\Resources\Leases\LeaseResource;
 use App\Models\Quotation;
 use App\Services\PMS\QuotationService;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Illuminate\Support\HtmlString;
 
 class QuotationInfolist
 {
@@ -25,6 +27,33 @@ class QuotationInfolist
                         TextEntry::make('validity_date')
                             ->label(__('Valid Until'))
                             ->date(),
+                        TextEntry::make('lease.government_contract_number')
+                            ->label(__('Lease'))
+                            ->placeholder(__('Not converted yet'))
+                            ->state(fn (Quotation $record): ?string => $record->lease === null ? null : ($record->lease->government_contract_number ?: '#'.$record->lease->getKey()))
+                            ->url(fn (Quotation $record): ?string => $record->lease === null ? null : LeaseResource::getUrl('view', ['record' => $record->lease])),
+                    ])->columns(4),
+
+                Section::make(__('Contract Details'))
+                    ->schema([
+                        TextEntry::make('start_date')
+                            ->label(__('Start Date'))
+                            ->date()
+                            ->placeholder('—'),
+                        TextEntry::make('end_date')
+                            ->label(__('End Date'))
+                            ->date()
+                            ->placeholder('—'),
+                        TextEntry::make('grace_period_days')
+                            ->label(__('Grace Period (Days)')),
+                        TextEntry::make('contract_type')
+                            ->label(__('Contract Type'))
+                            ->placeholder('—'),
+                        TextEntry::make('number_of_installments')
+                            ->label(__('Number of Instalments')),
+                        TextEntry::make('payment_method')
+                            ->label(__('Payment Method'))
+                            ->placeholder('—'),
                         TextEntry::make('security_deposit')
                             ->label(__('Security Deposit'))
                             ->numeric(decimalPlaces: 2),
@@ -36,7 +65,8 @@ class QuotationInfolist
                             ->label('')
                             ->schema([
                                 TextEntry::make('unit_number')
-                                    ->label(__('Unit')),
+                                    ->label(__('Unit'))
+                                    ->state(fn ($record): string => trim(($record->property?->name ? $record->property->name.' — ' : '').$record->unit_number)),
                                 TextEntry::make('pivot.offered_rent')
                                     ->label(__('Offered Rent'))
                                     ->numeric(decimalPlaces: 2),
@@ -64,17 +94,15 @@ class QuotationInfolist
                             ->weight('bold'),
                     ])->columns(4),
 
-                Section::make(__('Payment Schedule'))
-                    ->description(__('Informational only — a Lease is what actually creates instalments.'))
+                Section::make(__('Expected Instalments'))
+                    ->description(__('What the lease would be paid in — the instalments are only created once it becomes a lease.'))
                     ->schema([
-                        TextEntry::make('payment_schedule')
-                            ->label('')
-                            ->state(fn (Quotation $record): string => collect(app(QuotationService::class)->paymentSchedule($record))
-                                ->map(fn (float $amount, int $index): string => __(':nth: :amount AED', [
-                                    'nth' => $index + 1,
-                                    'amount' => number_format($amount, 2),
-                                ]))
-                                ->implode(' · ')),
+                        TextEntry::make('expected_installments')
+                            ->hiddenLabel()
+                            ->state(fn (Quotation $record): HtmlString => new HtmlString(view('filament.pms.quotations.expected-installments', [
+                                'rows' => app(QuotationService::class)->expectedInstallments($record),
+                            ])->render()))
+                            ->html(),
                     ]),
             ]);
     }

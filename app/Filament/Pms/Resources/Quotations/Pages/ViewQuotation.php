@@ -5,9 +5,9 @@ namespace App\Filament\Pms\Resources\Quotations\Pages;
 use App\Filament\Pms\Resources\Leases\LeaseResource;
 use App\Filament\Pms\Resources\Quotations\QuotationResource;
 use App\Models\Quotation;
-use App\Services\PMS\LeaseService;
 use App\Services\PMS\QuotationService;
 use Filament\Actions\Action;
+use Filament\Actions\EditAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use LogicException;
@@ -21,6 +21,8 @@ class ViewQuotation extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            EditAction::make()
+                ->visible(fn (): bool => $this->quotation()->isEditable()),
             $this->sendAction(),
             $this->acceptAction(),
             $this->rejectAction(),
@@ -83,9 +85,10 @@ class ViewQuotation extends ViewRecord
     }
 
     /**
-     * Converting is a one-way door once units/tenants are attached, so this
-     * hands off to `LeaseResource`'s own view page rather than staying on
-     * the quotation — the quotation itself doesn't change.
+     * Opens the lease wizard filled in from this quotation — property,
+     * units, tenant, period, rent, deposit and the instalments — for the
+     * office to check and add cheque numbers and banks. Saving the lease
+     * links it here and marks the quotation accepted.
      */
     private function convertToLeaseAction(): Action
     {
@@ -93,25 +96,8 @@ class ViewQuotation extends ViewRecord
             ->label(__('Convert to Lease'))
             ->icon('heroicon-o-document-text')
             ->color('success')
-            ->requiresConfirmation()
-            ->visible(fn (): bool => $this->quotation()->isAccepted())
-            ->action(function () {
-                try {
-                    $lease = app(LeaseService::class)->createFromQuotation($this->quotation());
-                } catch (Throwable $exception) {
-                    Notification::make()
-                        ->danger()
-                        ->title(__('Could not continue'))
-                        ->body($exception instanceof RuntimeException ? $exception->getMessage() : __('Something went wrong.'))
-                        ->send();
-
-                    return null;
-                }
-
-                Notification::make()->success()->title(__('Lease created.'))->send();
-
-                return redirect(LeaseResource::getUrl('view', ['record' => $lease]));
-            });
+            ->visible(fn (): bool => $this->quotation()->canConvertToLease())
+            ->url(fn (): string => LeaseResource::getUrl('create', ['quotation' => $this->quotation()->getKey()]));
     }
 
     private function printAction(): Action

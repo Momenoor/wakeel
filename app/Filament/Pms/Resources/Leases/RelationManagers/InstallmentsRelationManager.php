@@ -8,6 +8,7 @@ use App\Models\Installment;
 use App\Models\Lease;
 use App\Services\MMS\PaymentService;
 use App\Services\PMS\InstallmentGenerator;
+use App\Support\UaeBanks;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -80,10 +81,14 @@ class InstallmentsRelationManager extends RelationManager
                     ->label(__('Method'))
                     ->badge()
                     ->placeholder('—'),
+                TextColumn::make('transaction_reference')
+                    ->label(__('Cheque / Ref.'))
+                    ->placeholder('—')
+                    ->toggleable(),
                 TextColumn::make('bank_name')
                     ->label(__('Bank'))
                     ->placeholder('—')
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->toggleable(),
                 TextColumn::make('payment_status')
                     ->label(__('Status'))
                     ->badge(),
@@ -171,6 +176,15 @@ class InstallmentsRelationManager extends RelationManager
             ->icon('heroicon-o-banknotes')
             ->color('success')
             ->visible(fn (Installment $record): bool => ! $record->isPaid())
+            // The cheque already on the schedule: its method, number, bank
+            // and the balance still owed.
+            ->fillForm(fn (Installment $record): array => [
+                'amount' => $record->balance_due,
+                'payment_method' => $record->payment_method,
+                'transaction_reference' => $record->transaction_reference,
+                'bank_name' => $record->bank_name,
+                'paid_date' => now()->toDateString(),
+            ])
             ->schema([
                 TextInput::make('amount')
                     ->label(__('Amount (AED)'))
@@ -182,9 +196,9 @@ class InstallmentsRelationManager extends RelationManager
                     ->label(__('Payment Method'))
                     ->options(InstallmentPaymentMethod::class),
                 TextInput::make('transaction_reference')
-                    ->label(__('Transaction / Cheque Reference')),
-                TextInput::make('bank_name')
-                    ->label(__('Bank Name')),
+                    ->label(__('Transaction / Cheque Reference'))
+                    ->helperText(__('A cheque number is saved as six digits: 36 becomes 000036.')),
+                UaeBanks::select(),
                 DatePicker::make('paid_date')
                     ->label(__('Paid Date'))
                     ->default(now()),

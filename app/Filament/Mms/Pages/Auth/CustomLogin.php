@@ -6,6 +6,7 @@ use Filament\Auth\Pages\Login;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Schema;
+use Illuminate\Validation\ValidationException;
 use SensitiveParameter;
 
 class CustomLogin extends Login
@@ -40,5 +41,17 @@ class CustomLogin extends Login
             $loginField => $data['login'],
             'password' => $data['password'],
         ];
+    }
+
+    /**
+     * Filament reports a failed login on `data.email`; this form's field
+     * is `login`, so the message landed on a field that isn't there, and
+     * wrong credentials showed nothing at all.
+     */
+    protected function throwFailureValidationException(): never
+    {
+        throw ValidationException::withMessages([
+            'data.login' => __('filament-panels::auth/pages/login.messages.failed'),
+        ]);
     }
 }

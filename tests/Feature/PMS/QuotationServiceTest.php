@@ -2,9 +2,10 @@
 
 namespace Tests\Feature\PMS;
 
-use App\Enums\PMS\PropertyClassification;
+use App\Enums\PMS\Emirate;
 use App\Enums\PMS\QuotationStatus;
 use App\Models\Party;
+use App\Models\Property;
 use App\Models\Setting;
 use App\Models\Unit;
 use App\Services\PMS\QuotationService;
@@ -82,7 +83,9 @@ class QuotationServiceTest extends TestCase
     {
         Setting::set('pms_attestation_fee_estimate', 500);
 
-        $unit = Unit::factory()->residential()->create();
+        $unit = Unit::factory()->residential()->create([
+            'property_id' => Property::factory()->create(['emirate' => Emirate::AJMAN])->id,
+        ]);
 
         $quotation = $this->service->generate([
             'party_id' => $this->tenant()->id,
@@ -94,21 +97,73 @@ class QuotationServiceTest extends TestCase
         $this->assertSame('50500.00', $quotation->total_amount);
     }
 
-    public function test_payment_schedule_splits_the_total_evenly_with_rounding_absorbed_by_the_last_installment(): void
+    public function test_sharjah_attestation_is_a_percentage_different_for_commercial(): void
     {
-        $unit = Unit::factory()->create(['property_classification' => PropertyClassification::RESIDENTIAL]);
+        Setting::set('pms_attestation_fee_sharjah_residential_percent', 4);
+        Setting::set('pms_attestation_fee_sharjah_commercial_percent', 2.5);
+        Setting::set('pms_attestation_fee_estimate', 500);
+
+        $sharjah = Property::factory()->create(['emirate' => Emirate::SHARJAH]);
+        $flat = Unit::factory()->residential()->create(['property_id' => $sharjah->id]);
+        $shop = Unit::factory()->commercial()->create(['property_id' => $sharjah->id]);
 
         $quotation = $this->service->generate([
             'party_id' => $this->tenant()->id,
-            'units' => [['unit_id' => $unit->id, 'offered_rent' => 100]],
-            'number_of_installments' => 3,
+            'units' => [
+                ['unit_id' => $flat->id, 'offered_rent' => 50000],
+                ['unit_id' => $shop->id, 'offered_rent' => 100000],
+            ],
             'validity_date' => now()->addDays(14)->toDateString(),
         ]);
 
-        $schedule = $this->service->paymentSchedule($quotation);
+        // 4% of 50,000 + 2.5% of 100,000; no fixed fee.
+        $this->assertSame('4500.00', $quotation->attestation_fee_estimate);
+    }
 
-        $this->assertSame([33.33, 33.33, 33.34], $schedule);
-        $this->assertSame(100.0, array_sum($schedule));
+    public function test_dubai_attestation_is_a_fixed_fee_per_contract(): void
+    {
+        Setting::set('pms_attestation_fee_dubai', 220);
+        Setting::set('pms_attestation_fee_sharjah_residential_percent', 4);
+
+        $dubai = Property::factory()->create(['emirate' => Emirate::DUBAI]);
+        $units = Unit::factory()->count(2)->residential()->create(['property_id' => $dubai->id]);
+
+        $quotation = $this->service->generate([
+            'party_id' => $this->tenant()->id,
+            'units' => $units->map(fn (Unit $unit): array => ['unit_id' => $unit->id, 'offered_rent' => 60000])->all(),
+            'validity_date' => now()->addDays(14)->toDateString(),
+        ]);
+
+        $this->assertSame('220.00', $quotation->attestation_fee_estimate);
+    }
+
+    public function test_expected_instalments_mirror_the_lease_schedule(): void
+    {
+        $unit = Unit::factory()->commercial()->create();
+
+        $quotation = $this->service->generate([
+            'party_id' => $this->tenant()->id,
+            'units' => [['unit_id' => $unit->id, 'offered_rent' => 100000]],
+            'security_deposit' => 5000,
+            'number_of_installments' => 6,
+            'start_date' => '2026-06-21',
+            'validity_date' => now()->addDays(14)->toDateString(),
+        ]);
+
+        // A full year by default.
+        $this->assertSame('2027-06-20', $quotation->end_date->toDateString());
+
+        $rows = $this->service->expectedInstallments($quotation);
+
+        // Six rent rows every two months, rounded to 10 with the difference
+        // on the first; then the 5% VAT and the deposit on their own.
+        $this->assertSame(['rent', 'rent', 'rent', 'rent', 'rent', 'rent', 'vat', 'deposit'], array_column($rows, 'kind'));
+        $this->assertSame([16650.0, 16670.0, 16670.0, 16670.0, 16670.0, 16670.0, 5000.0, 5000.0], array_column($rows, 'amount'));
+        $this->assertSame(
+            ['2026-06-21', '2026-08-21', '2026-10-21', '2026-12-21', '2027-02-21', '2027-04-21', '2026-06-21', '2026-06-21'],
+            array_map(fn ($row) => $row['due_date']->toDateString(), $rows),
+        );
+        $this->assertSame(range(1, 8), array_column($rows, 'number'));
     }
 
     public function test_status_only_moves_forward_through_the_service(): void

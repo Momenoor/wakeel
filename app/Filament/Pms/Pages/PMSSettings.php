@@ -50,6 +50,10 @@ class PMSSettings extends Page
         $this->form->fill([
             'pms_mixed_use_vat_rate' => Setting::get('pms_mixed_use_vat_rate', 0.05),
             'pms_attestation_fee_estimate' => Setting::get('pms_attestation_fee_estimate', 0),
+            'pms_attestation_fee_sharjah_residential_percent' => Setting::get('pms_attestation_fee_sharjah_residential_percent', 0),
+            'pms_attestation_fee_sharjah_commercial_percent' => Setting::get('pms_attestation_fee_sharjah_commercial_percent', 0),
+            // Until set, Dubai keeps the single estimate used before.
+            'pms_attestation_fee_dubai' => Setting::get('pms_attestation_fee_dubai', Setting::get('pms_attestation_fee_estimate', 0)),
             'pms_bounced_cheque_penalty' => Setting::get('pms_bounced_cheque_penalty', 100),
         ]);
     }

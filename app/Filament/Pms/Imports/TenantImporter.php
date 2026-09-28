@@ -16,7 +16,8 @@ use Illuminate\Support\Number;
  * `TenantForm` does — a tenant being bulk-imported has, in almost every
  * case, no existing Party record to attach to. Re-importing the same
  * tenant (matched by `identification_number`) updates their existing
- * profile/party instead of creating a duplicate.
+ * profile/party instead of creating a duplicate. The number is optional:
+ * a row without one always adds a new tenant.
  */
 class TenantImporter extends Importer
 {
@@ -53,9 +54,8 @@ class TenantImporter extends Importer
                 ->rules(['required']),
             ImportColumn::make('identification_number')
                 ->label(__('Identification Number'))
-                ->requiredMapping()
                 ->example('784-1990-1234567-1')
-                ->rules(['required', 'string']),
+                ->rules(['nullable', 'string']),
             ImportColumn::make('unified_number')
                 ->label(__('Unified No.'))
                 ->example('1234567890'),
@@ -73,7 +73,9 @@ class TenantImporter extends Importer
 
     public function resolveRecord(): Tenant
     {
-        $tenant = Tenant::firstOrNew(['identification_number' => $this->data['identification_number']]);
+        // Matched by ID number when the row has one; without it, a new tenant.
+        $number = filled($this->data['identification_number'] ?? null) ? $this->data['identification_number'] : null;
+        $tenant = $number !== null ? Tenant::firstOrNew(['identification_number' => $number]) : new Tenant;
 
         if (! $tenant->exists) {
             $party = Party::create([

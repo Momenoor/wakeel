@@ -6,8 +6,10 @@ use App\Enums\PMS\YesNo;
 use App\Filament\Pms\Resources\Leases\LeaseResource;
 use App\Filament\Pms\Resources\Leases\Schemas\LeaseWizardForm;
 use App\Models\Lease;
+use App\Models\Quotation;
 use App\Services\PMS\InstallmentGenerator;
 use App\Services\PMS\LeaseService;
+use App\Services\PMS\QuotationService;
 use Filament\Resources\Pages\Concerns\HasWizard;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
@@ -18,6 +20,29 @@ class CreateLease extends CreateRecord
     use HasWizard;
 
     protected static string $resource = LeaseResource::class;
+
+    /**
+     * The quotation being converted, when the wizard was opened from one
+     * (`?quotation=`) — its details prefill the steps.
+     */
+    public ?int $quotationId = null;
+
+    public function mount(): void
+    {
+        $quotation = Quotation::find(request()->integer('quotation') ?: null);
+        $this->quotationId = $quotation?->canConvertToLease() ? $quotation->getKey() : null;
+
+        parent::mount();
+    }
+
+    protected function afterFill(): void
+    {
+        $quotation = $this->quotationId ? Quotation::find($this->quotationId) : null;
+
+        if ($quotation !== null) {
+            $this->form->fill([...$this->form->getRawState(), ...LeaseWizardForm::fromQuotation($quotation)]);
+        }
+    }
 
     /**
      * The guided wizard, not the resource's default flat form — editing an
@@ -46,7 +71,10 @@ class CreateLease extends CreateRecord
             // LeaseService::renew() → RENEWAL), never picked on the form.
             // `payment_method`/`number_of_payments` are derived from the
             // declared instalments below rather than asked twice.
+            $quotation = $this->quotationId ? Quotation::find($this->quotationId) : null;
+
             $lease = app(LeaseService::class)->createFromRawInputs([
+                'quotation_id' => $quotation?->canConvertToLease() ? $quotation->getKey() : null,
                 'start_date' => $data['start_date'],
                 'end_date' => $data['end_date'],
                 'grace_period_days' => $data['grace_period_days'] ?? 0,
@@ -67,7 +95,25 @@ class CreateLease extends CreateRecord
                 'poa_name' => $data['poa_name'] ?? null,
             ], $data['tenants'], $unitIds);
 
-            app(InstallmentGenerator::class)->recordManualSchedule($lease, $installmentRows);
+            // The rent rows as entered (rent only), then the VAT and the
+            // security deposit each as its own instalment.
+            $rentRows = array_map(fn (array $row): array => [...$row, 'vat_handling' => 'excluded', 'is_security_deposit' => false], array_values($installmentRows));
+
+            app(InstallmentGenerator::class)->recordManualSchedule($lease, [
+                ...$rentRows,
+                ...InstallmentGenerator::separateRows(
+                    $lease,
+                    (float) $data['total_base_rent'],
+                    $lease->vatRate(),
+                    $data['start_date'],
+                    array_filter($data['vat_payment'] ?? [], 'filled'),
+                    array_filter($data['deposit_payment'] ?? [], 'filled'),
+                ),
+            ]);
+
+            if ($lease->getAttribute('quotation_id') !== null) {
+                app(QuotationService::class)->acceptOnConversion($quotation);
+            }
 
             return $lease;
         });

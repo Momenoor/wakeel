@@ -60,7 +60,7 @@ class EditTenant extends EditRecord
         $record->update([
             'tenant_type' => $data['tenant_type'],
             'identification_type' => $data['identification_type'],
-            'identification_number' => $data['identification_number'],
+            'identification_number' => filled($data['identification_number'] ?? null) ? $data['identification_number'] : null,
             'trn' => $data['trn'] ?? null,
             'emergency_contact_name' => $data['emergency_contact_name'] ?? null,
             'emergency_contact_phone' => $data['emergency_contact_phone'] ?? null,

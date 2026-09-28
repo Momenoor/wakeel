@@ -6,6 +6,7 @@ use App\Enums\PMS\InstallmentPaymentStatus;
 use App\Models\Installment;
 use App\Models\InstallmentPayment;
 use App\Models\Setting;
+use App\Support\ChequeNumber;
 use RuntimeException;
 
 /**
@@ -37,7 +38,10 @@ class PaymentService
         }
 
         $paymentMethod = $data['payment_method'] ?? $installment->getAttribute('payment_method');
-        $transactionReference = $data['transaction_reference'] ?? $installment->getAttribute('transaction_reference');
+        $transactionReference = ChequeNumber::forMethod(
+            $data['transaction_reference'] ?? $installment->getAttribute('transaction_reference'),
+            $paymentMethod,
+        );
         $bankName = $data['bank_name'] ?? $installment->getAttribute('bank_name');
         $paidDate = $data['paid_date'] ?? now()->toDateString();
 

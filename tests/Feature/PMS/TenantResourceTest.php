@@ -59,6 +59,22 @@ class TenantResourceTest extends TestCase
         $this->assertSame('CN-1234567', $profile->identification_number);
     }
 
+    public function test_a_tenant_can_be_saved_without_an_identification_number(): void
+    {
+        Livewire::test(CreateTenant::class)
+            ->fillForm([
+                'name' => 'Walk-in Tenant',
+                'tenant_type' => 'person',
+                'identification_type' => 'emirates_id',
+                'identification_number' => '',
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $profile = Tenant::whereHas('party', fn ($q) => $q->where('name', 'Walk-in Tenant'))->sole();
+        $this->assertNull($profile->identification_number);
+    }
+
     public function test_editing_a_tenant_updates_both_the_party_and_the_profile(): void
     {
         $party = Party::factory()->tenant()->create(['name' => 'Old Name']);

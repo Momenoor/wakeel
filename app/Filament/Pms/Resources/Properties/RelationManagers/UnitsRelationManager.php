@@ -27,7 +27,17 @@ class UnitsRelationManager extends RelationManager
 
     public function form(Schema $schema): Schema
     {
-        return $schema->components([
+        return $schema->components(self::fields())->columns(2);
+    }
+
+    /**
+     * The unit fields — also the "new unit" form on the lease wizard.
+     *
+     * @return list<mixed>
+     */
+    public static function fields(): array
+    {
+        return [
             TextInput::make('unit_number')
                 ->label(__('Unit Number'))
                 ->required()
@@ -77,7 +87,7 @@ class UnitsRelationManager extends RelationManager
                 ->options(UnitStatus::class)
                 ->default(UnitStatus::VACANT->value)
                 ->required(),
-        ])->columns(2);
+        ];
     }
 
     public function table(Table $table): Table

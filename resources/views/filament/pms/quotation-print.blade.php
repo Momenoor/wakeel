@@ -86,8 +86,9 @@
             font-size: 10pt;
         }
 
-        .schedule li {
-            margin-bottom: 4px;
+        .details td:nth-child(odd) {
+            color: #555;
+            width: 22%;
         }
 
         @media print {
@@ -124,6 +125,20 @@
             <div class="muted">{{ __('Printed') }}: {{ now()->translatedFormat('d M Y') }}</div>
         </div>
     </header>
+
+    {{-- A quotation usually covers one building; each is listed with its lessor. --}}
+    <table class="details">
+        <tbody>
+            @foreach ($quotation->units->pluck('property')->filter()->unique('id') as $property)
+                <tr>
+                    <td>{{ __('Building Name') }}</td>
+                    <td>{{ $property->name }}</td>
+                    <td>{{ __('Lessor Name') }}</td>
+                    <td>{{ filled($lessor = $property->landlordName()) ? $lessor : '—' }}</td>
+                </tr>
+            @endforeach
+        </tbody>
+    </table>
 
     <table>
         <thead>
@@ -166,11 +181,57 @@
         </tfoot>
     </table>
 
-    <h1 style="margin-top: 10px;">{{ __('Payment Schedule') }}</h1>
-    <ol class="schedule">
-        @foreach ($paymentSchedule as $amount)
-            <li>{{ __('Instalment :n', ['n' => $loop->iteration]) }}: {{ number_format($amount, 2) }} AED</li>
-        @endforeach
-    </ol>
+    <h1 style="margin-top: 10px;">{{ __('Contract Details') }}</h1>
+    <table class="details">
+        <tbody>
+            <tr>
+                <td>{{ __('Start Date') }}</td>
+                <td>{{ $period[0]->format('d/m/Y') }}</td>
+                <td>{{ __('End Date') }}</td>
+                <td>{{ $period[1]->format('d/m/Y') }}</td>
+            </tr>
+            <tr>
+                <td>{{ __('Contract Type') }}</td>
+                <td>{{ $quotation->contract_type?->getLabel() ?? '—' }}</td>
+                <td>{{ __('Grace Period (Days)') }}</td>
+                <td>{{ $quotation->grace_period_days }}</td>
+            </tr>
+            <tr>
+                <td>{{ __('Payment Method') }}</td>
+                <td>{{ $quotation->payment_method?->getLabel() ?? '—' }}</td>
+                <td>{{ __('Number of Instalments') }}</td>
+                <td>{{ $quotation->number_of_installments }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h1 style="margin-top: 10px;">{{ __('Expected Instalments') }}</h1>
+    <table class="schedule">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>{{ __('Instalment') }}</th>
+                <th>{{ __('Due Date') }}</th>
+                <th class="amount">{{ __('Amount (AED)') }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach ($installments as $row)
+                <tr>
+                    <td>{{ $row['number'] }}</td>
+                    <td>{{ $row['label'] }}</td>
+                    <td>{{ $row['due_date']->format('d/m/Y') }}</td>
+                    <td class="amount">{{ number_format($row['amount'], 2) }}</td>
+                </tr>
+            @endforeach
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="3">{{ __('Total') }}</td>
+                <td class="amount">{{ number_format(array_sum(array_column($installments, 'amount')), 2) }}</td>
+            </tr>
+        </tfoot>
+    </table>
+    <p class="muted">{{ __('The attestation fee is an estimate, paid separately.') }}</p>
 </body>
 </html>

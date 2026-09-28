@@ -86,7 +86,7 @@ class MmsPanelProvider extends PanelProvider
             ->discoverResources(in: app_path('Filament/Mms/Resources'), for: 'App\Filament\Mms\Resources')
             ->discoverPages(in: app_path('Filament/Mms/Pages'), for: 'App\Filament\Mms\Pages')
             // Shared with the PMS panel — outside Filament/Mms so it survives
-            // an install without MMS.
+            // an installation without MMS.
             ->pages([
                 SystemSettings::class,
                 SystemUpdates::class,
@@ -112,7 +112,7 @@ class MmsPanelProvider extends PanelProvider
                 // here or `/admin` on an unmigrated database would hit a raw
                 // connection error instead of the wizard.
                 RedirectToInstaller::class,
-                // Likewise the license check — without it here, the panels
+                // Likewise, the license check — without it here, the panels
                 // were never license-checked at all.
                 EnsureLicenseIsValid::class,
                 EncryptCookies::class,

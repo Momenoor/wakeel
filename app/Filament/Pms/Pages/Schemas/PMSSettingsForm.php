@@ -36,18 +36,50 @@ class PMSSettingsForm
                         ->default(0.05),
                 ]),
 
-            Section::make(__('Quotations & Instalments'))
-                ->icon(Heroicon::Banknotes)
+            Section::make(__('Attestation Fee Estimate'))
+                ->description(__('Itemised on a quotation as an estimate — the real government fee is confirmed at contract stage.'))
+                ->icon(Heroicon::DocumentCheck)
                 ->columns(2)
                 ->schema([
-                    TextInput::make('pms_attestation_fee_estimate')
-                        ->label(__('Attestation Fee Estimate (AED)'))
-                        ->helperText(__('Itemised on a quotation as an estimate — the real government fee is confirmed at contract stage.'))
+                    TextInput::make('pms_attestation_fee_sharjah_residential_percent')
+                        ->label(__('Sharjah — Residential (% of rent)'))
+                        ->numeric()
+                        ->minValue(0)
+                        ->maxValue(100)
+                        ->step(0.01)
+                        ->suffix('%')
+                        ->required()
+                        ->default(0),
+                    TextInput::make('pms_attestation_fee_sharjah_commercial_percent')
+                        ->label(__('Sharjah — Commercial (% of rent)'))
+                        ->helperText(__('Also used for industrial and mixed-use units.'))
+                        ->numeric()
+                        ->minValue(0)
+                        ->maxValue(100)
+                        ->step(0.01)
+                        ->suffix('%')
+                        ->required()
+                        ->default(0),
+                    TextInput::make('pms_attestation_fee_dubai')
+                        ->label(__('Dubai — Ejari fee per contract (AED)'))
                         ->numeric()
                         ->minValue(0)
                         ->step(0.01)
                         ->required()
                         ->default(0),
+                    TextInput::make('pms_attestation_fee_estimate')
+                        ->label(__('Other emirates — fee per contract (AED)'))
+                        ->numeric()
+                        ->minValue(0)
+                        ->step(0.01)
+                        ->required()
+                        ->default(0),
+                ]),
+
+            Section::make(__('Quotations & Instalments'))
+                ->icon(Heroicon::Banknotes)
+                ->columns(2)
+                ->schema([
                     TextInput::make('pms_bounced_cheque_penalty')
                         ->label(__('Bounced Cheque Penalty (AED)'))
                         ->helperText(__('Added to the balance due whenever an instalment is marked bounced.'))

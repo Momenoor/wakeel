@@ -3,7 +3,9 @@
 namespace App\Filament\Pms\Resources\Quotations\Tables;
 
 use App\Enums\PMS\QuotationStatus;
+use App\Models\Quotation;
 use Filament\Actions\CreateAction;
+use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -46,6 +48,8 @@ class QuotationsTable
             ])
             ->recordActions([
                 ViewAction::make(),
+                EditAction::make()
+                    ->visible(fn (Quotation $record): bool => $record->isEditable()),
             ])
             ->emptyStateHeading(__('No quotations yet'))
             ->emptyStateActions([
