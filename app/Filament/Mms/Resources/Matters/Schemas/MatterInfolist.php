@@ -11,8 +11,10 @@ use App\Filament\Mms\Actions\Request\RejectRequestAction;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Helpers\FileUploadHelper;
 use App\Models\IncentiveAssistantLine;
+use App\Models\MatterOneDriveFolder;
 use App\Models\Type;
 use App\Services\MMS\IncentiveCalculatorService;
+use App\Services\MMS\MatterOneDriveFolders;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
@@ -24,6 +26,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Group;
@@ -94,6 +97,7 @@ class MatterInfolist
                 ]),
                 Grid::make(1)->columnSpan(1)->schema([
                     static::expertsSection(),
+                    static::oneDriveSection(),
                     static::partiesSection(),
                     static::feesSection(),
                     static::incentiveSection(),
@@ -562,6 +566,75 @@ class MatterInfolist
             ->with(['party', 'incentiveLine.calculation'])
             ->orderBy('id')
             ->get();
+    }
+
+    /**
+     * The matter's folders in its assistants' OneDrive: a super admin sees
+     * every assistant's, anyone else only their own. "Create folders" makes
+     * any missing or failed one again — folders already made stay as they
+     * are.
+     */
+    private static function oneDriveSection(): Section
+    {
+        $visible = function ($record): Collection {
+            $user = auth()->user();
+
+            return $record->oneDriveFolders()
+                ->with('party')
+                ->when(! ($user?->hasRole('super-admin') ?? false), fn ($q) => $q->where('party_id', $user?->party?->id ?? 0))
+                ->get();
+        };
+
+        return Section::make(__('OneDrive'))
+            ->icon('heroicon-o-cloud')
+            ->collapsible()
+            ->visible(fn ($record) => $record && (
+                $visible($record)->isNotEmpty()
+                || (MatterOneDriveFolders::enabled() && auth()->user()?->can('update', $record) && $record->assistantsOnly()->exists())
+            ))
+            ->headerActions([
+                Action::make('createOneDriveFolders')
+                    ->label(__('Create folders'))
+                    ->icon('heroicon-o-folder-plus')
+                    ->size('sm')
+                    ->visible(fn ($record) => auth()->user()?->can('update', $record) && $record->assistantsOnly()->exists())
+                    ->requiresConfirmation()
+                    ->modalDescription(__('Makes the folder in each assistant\'s OneDrive where it is missing or failed. Folders already made are not changed.'))
+                    ->action(function ($record) {
+                        $queued = $record->assistantsOnly()->pluck('party_id')->unique()
+                            ->map(fn ($partyId) => MatterOneDriveFolders::queue($record, (int) $partyId))
+                            ->filter(fn ($folder) => ! $folder->isCreated())
+                            ->count();
+
+                        Notification::make()
+                            ->title($queued ? __(':count folder(s) queued — they appear here within a minute.', ['count' => $queued]) : __('Every assistant already has the folder.'))
+                            ->success()
+                            ->send();
+                    }),
+            ])
+            ->schema(fn ($record) => $record ? [
+                TextEntry::make('onedrive_folders')
+                    ->hiddenLabel()
+                    ->state(function () use ($record, $visible) {
+                        $rows = $visible($record);
+
+                        if ($rows->isEmpty()) {
+                            return __('No folders yet.');
+                        }
+
+                        return new HtmlString($rows->map(function (MatterOneDriveFolder $folder): string {
+                            $name = e($folder->party?->name ?? '—');
+                            $label = e($folder->folder_name);
+
+                            return match ($folder->status) {
+                                MatterOneDriveFolder::CREATED => "<div>{$name}: <a href=\"".e($folder->web_url).'" target="_blank" rel="noopener" style="text-decoration: underline;">'.$label.'</a></div>',
+                                MatterOneDriveFolder::FAILED => "<div>{$name}: <span style=\"color: rgb(220 38 38);\">".e(__('Failed')).' — '.e((string) $folder->error).'</span></div>',
+                                default => "<div>{$name}: <span style=\"opacity: .7;\">".e(__('Creating…')).' '.$label.'</span></div>',
+                            };
+                        })->implode(''));
+                    })
+                    ->html(),
+            ] : []);
     }
 
     private static function attachmentsSection(): Section

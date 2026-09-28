@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\MMS\MatterOneDriveFolders;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -45,6 +46,11 @@ class MatterParty extends Model
         static::deleting(function (MatterParty $matterParty) {
             $matterParty->representatives()->delete();
         });
+
+        // A newly assigned assistant gets the matter's folder in their
+        // OneDrive. Only on creation: changing who is on an existing row
+        // leaves folders as they are.
+        static::created(fn (MatterParty $matterParty) => MatterOneDriveFolders::queueFor($matterParty));
 
         static::creating(function (MatterParty $matterParty) {
             if (! $matterParty->matter_id && $matterParty->parent_id) {

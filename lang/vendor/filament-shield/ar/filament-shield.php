@@ -116,6 +116,7 @@ return [
         'view_access_control_maintenance' => 'صيانة التحكم بالوصول',
         'view_chat' => 'الدردشة',
         'view_financial_configuration' => 'الإعدادات المالية',
+        'view_one_drive_settings' => 'مجلدات OneDrive',
         'view_end_of_service_gratuity_closing_voucher' => 'سند إقفال مكافأة نهاية الخدمة',
         'view_my_incentive_report' => 'تقرير حافزي',
         'view_assistant_matter_fees_report' => 'تقرير أتعاب المساعدين',

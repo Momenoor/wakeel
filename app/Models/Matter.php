@@ -376,6 +376,16 @@ class Matter extends Model
         $this->save();
     }
 
+    /**
+     * This matter's folders in its assistants' OneDrive.
+     *
+     * @return HasMany<MatterOneDriveFolder, $this>
+     */
+    public function oneDriveFolders(): HasMany
+    {
+        return $this->hasMany(MatterOneDriveFolder::class);
+    }
+
     public function incentiveLines(): HasMany
     {
         return $this->hasMany(IncentiveLine::class);

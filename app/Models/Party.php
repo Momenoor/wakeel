@@ -36,6 +36,8 @@ class Party extends Model
         'parent_id',
         'user_id',
         'old_id',
+        'onedrive_email',
+        'onedrive_path',
     ];
 
     protected $casts = [

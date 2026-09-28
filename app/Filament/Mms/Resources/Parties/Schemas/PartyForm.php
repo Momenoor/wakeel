@@ -84,6 +84,20 @@ class PartyForm
                             ->label(__('Expertise Area'))
                             ->visible(fn ($get) => in_array('expert', $get('role.role') ?? []))
                             ->columnSpanFull(),
+                        // Where this assistant's matter folders are made — see
+                        // Settings → OneDrive Folders.
+                        TextInput::make('onedrive_email')
+                            ->label(__('OneDrive account (Microsoft 365 email)'))
+                            ->email()
+                            ->maxLength(255)
+                            ->visible(fn ($get) => in_array('assistant', $get('role.type') ?? [])),
+                        TextInput::make('onedrive_path')
+                            ->label(__('Folder for matters in their OneDrive'))
+                            ->placeholder('Work/Matters')
+                            ->helperText(__('Leave empty to put matter folders at the top of their OneDrive.'))
+                            ->maxLength(255)
+                            ->extraInputAttributes(['dir' => 'auto'])
+                            ->visible(fn ($get) => in_array('assistant', $get('role.type') ?? [])),
                         //                        Toggle::make('black_list')
                         //                            ->label(__('Black List'))
                         //                            ->default(false)
