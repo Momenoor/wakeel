@@ -30,6 +30,9 @@ use Livewire\Component;
  */
 class ChatWidget extends Component
 {
+    /** Session key holding the popup's open state and conversation. */
+    private const POPUP_STATE = 'chat.popup';
+
     public string $mode = 'page';
 
     public bool $isOpen = false;
@@ -50,6 +53,32 @@ class ChatWidget extends Component
     {
         $this->mode = $mode;
         $this->lastSeenMessageId = (int) $this->incomingMessages()->max('id');
+
+        // The popup comes back as it was left — open, on the same
+        // conversation — after a refresh or on the next page.
+        if ($mode === 'popup') {
+            $state = session(self::POPUP_STATE, []);
+            $this->isOpen = (bool) ($state['open'] ?? false);
+            $this->activeConversationId = $state['conversation'] ?? null;
+
+            if ($this->activeConversationId !== null && $this->activeConversation === null) {
+                $this->activeConversationId = null;
+            }
+
+            if ($this->isOpen) {
+                $this->markActiveConversationRead();
+            }
+        }
+    }
+
+    /**
+     * Remembers the popup's open state and conversation for the next page.
+     */
+    private function rememberState(): void
+    {
+        if ($this->mode === 'popup') {
+            session([self::POPUP_STATE => ['open' => $this->isOpen, 'conversation' => $this->activeConversationId]]);
+        }
     }
 
     /**
@@ -65,8 +94,10 @@ class ChatWidget extends Component
     }
 
     /**
-     * A new message pops the floating chat open on its conversation; when
-     * several arrived since the last check, on the newest one's.
+     * A new message pops the floating chat open on its conversation — the
+     * newest one's when several arrived — when it is closed or showing the
+     * conversation list. A conversation already open stays open; the
+     * unread badge shows the new message instead.
      */
     public function checkForNewMessages(): void
     {
@@ -85,9 +116,14 @@ class ChatWidget extends Component
             return;
         }
 
+        if ($this->isOpen && $this->activeConversationId !== null) {
+            return;
+        }
+
         $this->isOpen = true;
         $this->activeConversationId = (int) $latest->chat_conversation_id;
         $this->markActiveConversationRead();
+        $this->rememberState();
     }
 
     /**
@@ -186,8 +222,12 @@ class ChatWidget extends Component
             return [];
         }
 
+        // The leading dot: the event is broadcast as plain
+        // "chat.message.sent" (ChatMessageSent::broadcastAs()). Without it
+        // Echo listens for "App\Events\chat.message.sent" instead, which
+        // never arrives — messages then only showed at the next slow poll.
         return [
-            'echo-private:App.Models.User.'.Auth::id().',chat.message.sent' => 'onMessageReceived',
+            'echo-private:App.Models.User.'.Auth::id().',.chat.message.sent' => 'onMessageReceived',
         ];
     }
 
@@ -201,17 +241,20 @@ class ChatWidget extends Component
     public function toggleOpen(): void
     {
         $this->isOpen = ! $this->isOpen;
+        $this->rememberState();
     }
 
     public function backToList(): void
     {
         $this->activeConversationId = null;
+        $this->rememberState();
     }
 
     public function selectConversation(int $conversationId): void
     {
         $this->activeConversationId = $conversationId;
         $this->markActiveConversationRead();
+        $this->rememberState();
     }
 
     public function startConversationWith(int $userId): void
@@ -223,6 +266,7 @@ class ChatWidget extends Component
         $this->userSearch = '';
         $this->activeConversationId = $conversation->id;
         $this->markActiveConversationRead();
+        $this->rememberState();
     }
 
     /**

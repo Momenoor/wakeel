@@ -50,14 +50,62 @@ class ChatPopupTest extends TestCase
 
         $this->assertFalse($widget->instance()->isConversationUnread($withSara->fresh('participants')));
 
-        // Another from Ali while Sara's is open: switches to Ali's.
+        // Another from Ali while Sara's is open: stays on Sara's.
         $this->message($withAli, $ali, 'are you there?');
+        $widget->call('checkForNewMessages')
+            ->assertSet('isOpen', true)
+            ->assertSet('activeConversationId', $withSara->id);
+
+        // Back on the list, the next one opens its conversation.
+        $widget->call('backToList');
+        $this->message($withAli, $ali, 'hello again');
         $widget->call('checkForNewMessages')->assertSet('activeConversationId', $withAli->id);
 
         // My own messages never pop it.
         $widget->set('isOpen', false);
         $this->message($withAli, $me, 'yes');
         $widget->call('checkForNewMessages')->assertSet('isOpen', false);
+    }
+
+    public function test_the_popup_stays_as_it_was_left_on_the_next_page(): void
+    {
+        $me = User::factory()->create();
+        $ali = User::factory()->create();
+        $conversation = ChatConversation::betweenUsers($me, $ali);
+
+        $this->actingAs($me);
+        Livewire::test(ChatWidget::class, ['mode' => 'popup'])
+            ->call('toggleOpen')
+            ->call('selectConversation', $conversation->id);
+
+        // A refresh or another page: a fresh component, same state.
+        Livewire::test(ChatWidget::class, ['mode' => 'popup'])
+            ->assertSet('isOpen', true)
+            ->assertSet('activeConversationId', $conversation->id)
+            ->call('toggleOpen');
+
+        Livewire::test(ChatWidget::class, ['mode' => 'popup'])->assertSet('isOpen', false);
+
+        // The full Chat page never takes the popup's state.
+        Livewire::test(ChatWidget::class, ['mode' => 'page'])->assertSet('activeConversationId', null);
+    }
+
+    public function test_the_arrows_point_the_right_way_in_arabic(): void
+    {
+        $me = User::factory()->create();
+        $conversation = ChatConversation::betweenUsers($me, User::factory()->create());
+        $this->actingAs($me);
+
+        app()->setLocale('ar');
+        Livewire::test(ChatWidget::class, ['mode' => 'popup'])
+            ->call('toggleOpen')
+            ->call('selectConversation', $conversation->id)
+            ->assertSeeHtml('style="transform: scaleX(-1)"');
+
+        app()->setLocale('en');
+        Livewire::test(ChatWidget::class, ['mode' => 'popup'])
+            ->assertSet('isOpen', true)
+            ->assertDontSeeHtml('scaleX(-1)');
     }
 
     public function test_the_full_chat_page_does_not_pop(): void

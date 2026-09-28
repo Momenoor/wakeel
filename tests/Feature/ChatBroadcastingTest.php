@@ -40,7 +40,10 @@ class ChatBroadcastingTest extends TestCase
             ->assertSuccessful()
             ->assertSee('window.Echo = new window.EchoFactory', false)
             ->assertSee('public-key-123', false)
-            ->assertSee('echo-private:App.Models.User.'.auth()->id(), false);
+            ->assertSee('echo-private:App.Models.User.'.auth()->id(), false)
+            // A leading dot, or Echo expects "App\Events\chat.message.sent"
+            // and never matches the event as broadcast.
+            ->assertSee(',.chat.message.sent', false);
     }
 
     public function test_without_a_broadcaster_the_panel_does_not_start_echo(): void
