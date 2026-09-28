@@ -35,6 +35,12 @@ return [
         ],
     ],
 
+    // The web cron trigger (GET /cron/run?token=...) — off unless set, at
+    // least 32 characters. See App\Http\Controllers\CronWebhookController.
+    'cron' => [
+        'token' => env('CRON_TOKEN'),
+    ],
+
     'outlook' => [
         'client_id' => env('MICROSOFT_CLIENT_ID'),
         'client_secret' => env('MICROSOFT_CLIENT_SECRET'),

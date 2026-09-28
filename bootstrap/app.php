@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\CronWebhookController;
 use App\Http\Middleware\EnsureLicenseIsValid;
 use App\Http\Middleware\RedirectIfInstalled;
 use App\Http\Middleware\RedirectToInstaller;
@@ -7,6 +8,7 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -14,6 +16,13 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         channels: __DIR__.'/../routes/channels.php',
         health: '/up',
+        // Outside the web group: no session, cookies or login — an outside
+        // cron service calls it every minute with the token.
+        then: function (): void {
+            Route::get('cron/run', CronWebhookController::class)
+                ->middleware('throttle:10,1')
+                ->name('cron.run');
+        },
     )
     ->withMiddleware(function (Middleware $middleware): void {
         // Runs before everything else in the web group: a request has to be
