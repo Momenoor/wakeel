@@ -10,7 +10,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
             </svg>
             {{-- A new message in another conversation while this one is open. --}}
-            @if ($this->unreadCount > 0)
+            @if ($this->unreadElsewhereCount > 0)
                 <span class="absolute -end-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-danger-500 ring-2 ring-primary-600"></span>
             @endif
         </button>

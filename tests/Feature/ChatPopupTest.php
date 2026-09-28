@@ -20,7 +20,12 @@ class ChatPopupTest extends TestCase
 
     private function message(ChatConversation $conversation, User $from, string $body): ChatMessage
     {
-        return ChatMessage::create(['chat_conversation_id' => $conversation->id, 'user_id' => $from->id, 'body' => $body]);
+        $message = ChatMessage::create(['chat_conversation_id' => $conversation->id, 'user_id' => $from->id, 'body' => $body]);
+
+        // As ChatWidget::sendMessage() does.
+        $conversation->update(['last_message_at' => $message->created_at]);
+
+        return $message;
     }
 
     public function test_a_new_message_opens_the_popup_on_the_newest_conversation(): void
@@ -65,6 +70,35 @@ class ChatPopupTest extends TestCase
         $widget->set('isOpen', false);
         $this->message($withAli, $me, 'yes');
         $widget->call('checkForNewMessages')->assertSet('isOpen', false);
+    }
+
+    public function test_the_back_arrow_dot_is_only_for_other_conversations(): void
+    {
+        $me = User::factory()->create();
+        $ali = User::factory()->create();
+        $sara = User::factory()->create();
+        $withAli = ChatConversation::betweenUsers($me, $ali);
+        $withSara = ChatConversation::betweenUsers($me, $sara);
+
+        $this->actingAs($me);
+        $widget = Livewire::test(ChatWidget::class, ['mode' => 'popup'])
+            ->call('toggleOpen')
+            ->call('selectConversation', $withAli->id);
+
+        // A message in the conversation being read: read, no dot.
+        $this->travel(1)->seconds();
+        $this->message($withAli, $ali, 'in this one');
+        $widget->call('onMessageReceived')
+            ->assertSee('in this one')
+            ->assertSet('unreadCount', 0)
+            ->assertSet('unreadElsewhereCount', 0);
+
+        // One from someone else: the dot shows.
+        $this->travel(1)->seconds();
+        $this->message($withSara, $sara, 'elsewhere');
+        $widget->call('onMessageReceived')
+            ->assertSet('activeConversationId', $withAli->id)
+            ->assertSet('unreadElsewhereCount', 1);
     }
 
     public function test_the_popup_stays_as_it_was_left_on_the_next_page(): void

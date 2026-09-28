@@ -112,6 +112,12 @@ class ChatWidget extends Component
 
         $this->lastSeenMessageId = (int) $latest->id;
 
+        // A conversation on screen is being read as its messages arrive —
+        // otherwise its own new message counted as unread elsewhere.
+        if ($this->activeConversationId !== null && ($this->isOpen || $this->mode !== 'popup')) {
+            $this->markActiveConversationRead();
+        }
+
         if ($this->mode !== 'popup') {
             return;
         }
@@ -202,6 +208,17 @@ class ChatWidget extends Component
     public function getUnreadCountProperty(): int
     {
         return $this->conversations->filter(fn (ChatConversation $c) => $this->isConversationUnread($c))->count();
+    }
+
+    /**
+     * Unread conversations other than the one on screen — the dot on the
+     * back arrow.
+     */
+    public function getUnreadElsewhereCountProperty(): int
+    {
+        return $this->conversations
+            ->filter(fn (ChatConversation $c) => $c->id !== $this->activeConversationId && $this->isConversationUnread($c))
+            ->count();
     }
 
     /**
@@ -314,6 +331,10 @@ class ChatWidget extends Component
         }
 
         $conversation->participants()->updateExistingPivot(Auth::id(), ['last_read_at' => now()]);
+
+        // The list is cached for the request; reload it so the badge and
+        // the back-arrow dot count this conversation as read.
+        unset($this->conversations);
     }
 
     public function isConversationUnread(ChatConversation $conversation): bool
