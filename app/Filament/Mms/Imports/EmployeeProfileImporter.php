@@ -4,7 +4,7 @@ namespace App\Filament\Mms\Imports;
 
 use App\Models\EmployeeProfile;
 use App\Models\Party;
-use Carbon\Carbon;
+use App\Support\ImportDate;
 use Filament\Actions\Imports\Exceptions\RowImportFailedException;
 use Filament\Actions\Imports\ImportColumn;
 use Filament\Actions\Imports\Importer;
@@ -44,13 +44,13 @@ class EmployeeProfileImporter extends Importer
                 ->label(__('Date of Joining'))
                 ->requiredMapping()
                 ->example('2024-01-15')
-                ->castStateUsing(fn (?string $state) => self::parseDate($state))
+                ->castStateUsing(fn (?string $state) => ImportDate::parse($state))
                 ->rules(['required']),
 
             ImportColumn::make('date_of_leaving')
                 ->label(__('Date of Leaving'))
                 ->example('')
-                ->castStateUsing(fn (?string $state) => self::parseDate($state)),
+                ->castStateUsing(fn (?string $state) => ImportDate::parse($state)),
 
             ImportColumn::make('passport_no')
                 ->label(__('Passport No'))
@@ -59,7 +59,7 @@ class EmployeeProfileImporter extends Importer
             ImportColumn::make('passport_expiry')
                 ->label(__('Passport Expiry'))
                 ->example('2030-05-01')
-                ->castStateUsing(fn (?string $state) => self::parseDate($state)),
+                ->castStateUsing(fn (?string $state) => ImportDate::parse($state)),
 
             ImportColumn::make('emirates_id_no')
                 ->label(__('Emirates ID No'))
@@ -68,7 +68,7 @@ class EmployeeProfileImporter extends Importer
             ImportColumn::make('emirates_id_expiry')
                 ->label(__('Emirates ID Expiry'))
                 ->example('2028-03-10')
-                ->castStateUsing(fn (?string $state) => self::parseDate($state)),
+                ->castStateUsing(fn (?string $state) => ImportDate::parse($state)),
 
             ImportColumn::make('labour_card_no')
                 ->label(__('Labour Card No'))
@@ -81,7 +81,7 @@ class EmployeeProfileImporter extends Importer
             ImportColumn::make('labour_card_expiry')
                 ->label(__('Labour Card Expiry'))
                 ->example('2027-11-20')
-                ->castStateUsing(fn (?string $state) => self::parseDate($state)),
+                ->castStateUsing(fn (?string $state) => ImportDate::parse($state)),
 
             ImportColumn::make('residency_visa_no')
                 ->label(__('Visa No'))
@@ -94,7 +94,7 @@ class EmployeeProfileImporter extends Importer
             ImportColumn::make('residency_expiry')
                 ->label(__('Residency Expiry'))
                 ->example('2027-11-20')
-                ->castStateUsing(fn (?string $state) => self::parseDate($state)),
+                ->castStateUsing(fn (?string $state) => ImportDate::parse($state)),
 
             ImportColumn::make('sponsor_name')
                 ->label(__('Sponsor'))
@@ -143,42 +143,6 @@ class EmployeeProfileImporter extends Importer
         }
 
         return $columns;
-    }
-
-    /**
-     * Every date column shares this — Excel exports a date either as a plain
-     * string in whatever format the spreadsheet was set to, or as its own
-     * serial day-number (days since 1899-12-30). openspout already resolves
-     * a genuine Excel date cell to a string before this ever runs, so this
-     * only has to cope with the everyday variety of string formats a person
-     * might type by hand, not the numeric serial itself.
-     */
-    private static function parseDate(?string $state): ?string
-    {
-        if (blank($state)) {
-            return null;
-        }
-
-        $state = trim($state);
-
-        foreach (['Y-m-d', 'd/m/Y', 'd-m-Y', 'm/d/Y', 'd.m.Y'] as $format) {
-            $date = \DateTime::createFromFormat('!'.$format, $state);
-
-            // createFromFormat silently overflows out-of-range components
-            // (e.g. "01/15/2024" as d/m/Y rolls month 15 into next March)
-            // instead of failing, so confirm the round-trip matches before
-            // trusting the match — otherwise a later, correct format is
-            // never tried.
-            if ($date instanceof \DateTime && $date->format($format) === $state) {
-                return $date->format('Y-m-d');
-            }
-        }
-
-        try {
-            return Carbon::parse($state)->format('Y-m-d');
-        } catch (\Throwable) {
-            throw new RowImportFailedException(__('":value" is not a recognisable date.', ['value' => $state]));
-        }
     }
 
     public function resolveRecord(): EmployeeProfile

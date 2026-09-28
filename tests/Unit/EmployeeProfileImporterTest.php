@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use App\Filament\Mms\Imports\EmployeeProfileImporter;
 use App\Models\EmployeeProfile;
 use App\Models\Party;
+use App\Support\ImportDate;
 use Filament\Actions\Imports\Exceptions\RowImportFailedException;
 use Filament\Actions\Imports\Models\Import;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -79,10 +80,7 @@ class EmployeeProfileImporterTest extends TestCase
     {
         $party = Party::factory()->employee()->create(['name' => 'Mohammed Ahmed']);
 
-        $reflection = new \ReflectionMethod(EmployeeProfileImporter::class, 'parseDate');
-        $reflection->setAccessible(true);
-
-        $this->assertSame($expected, $reflection->invoke(null, $input));
+        $this->assertSame($expected, ImportDate::parse($input));
 
         // Referencing the party keeps this test meaningful if resolveRecord()
         // ever starts depending on date columns.
@@ -102,21 +100,15 @@ class EmployeeProfileImporterTest extends TestCase
 
     public function test_a_blank_date_casts_to_null(): void
     {
-        $reflection = new \ReflectionMethod(EmployeeProfileImporter::class, 'parseDate');
-        $reflection->setAccessible(true);
-
-        $this->assertNull($reflection->invoke(null, null));
-        $this->assertNull($reflection->invoke(null, ''));
+        $this->assertNull(ImportDate::parse(null));
+        $this->assertNull(ImportDate::parse(''));
     }
 
     public function test_an_unrecognisable_date_throws_a_row_import_failed_exception(): void
     {
-        $reflection = new \ReflectionMethod(EmployeeProfileImporter::class, 'parseDate');
-        $reflection->setAccessible(true);
-
         $this->expectException(RowImportFailedException::class);
 
-        $reflection->invoke(null, 'not a date');
+        ImportDate::parse('not a date');
     }
 
     public function test_the_example_download_headers_follow_the_current_locale(): void

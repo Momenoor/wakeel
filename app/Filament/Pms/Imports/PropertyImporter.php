@@ -5,6 +5,7 @@ namespace App\Filament\Pms\Imports;
 use App\Enums\PMS\Emirate;
 use App\Enums\PMS\PropertyType;
 use App\Models\Property;
+use App\Support\ImportDate;
 use Filament\Actions\Imports\ImportColumn;
 use Filament\Actions\Imports\Importer;
 use Filament\Actions\Imports\Models\Import;
@@ -47,7 +48,8 @@ class PropertyImporter extends Importer
                 ->example('TD-12345'),
             ImportColumn::make('title_deed_date')
                 ->label(__('Title Deed Date'))
-                ->example('2020-01-15'),
+                ->example('15/01/2020')
+                ->castStateUsing(fn (?string $state) => ImportDate::parse($state)),
             ImportColumn::make('plot_number')
                 ->label(__('Government No.'))
                 ->example('525-312-633'),
