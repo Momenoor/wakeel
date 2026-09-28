@@ -262,6 +262,21 @@ class MatterOneDriveFolderTest extends TestCase
         $this->assertStringNotContainsString('Nahla:', $html);
     }
 
+    public function test_the_calendar_app_is_used_when_set_up_otherwise_the_mail_app(): void
+    {
+        $this->switchOn();
+        $this->fakeGraph();
+
+        config(['services.outlook' => ['tenant_id' => 'tenant', 'client_id' => 'calendar-app', 'client_secret' => 'secret']]);
+        $this->assign($this->matter(), $this->assistant());
+        Http::assertSent(fn (Request $request) => ($request->data()['client_id'] ?? null) === 'calendar-app');
+
+        cache()->flush();
+        config(['services.outlook' => ['tenant_id' => null, 'client_id' => null, 'client_secret' => null]]);
+        MatterOneDriveFolders::queue(Matter::factory()->create(['type_id' => Type::firstOrCreate(['name' => 'خبرة'])->id]), $this->assistant(['name' => 'Nahla'])->id);
+        Http::assertSent(fn (Request $request) => ($request->data()['client_id'] ?? null) === 'client');
+    }
+
     public function test_folder_names_drop_characters_onedrive_refuses(): void
     {
         $this->assertSame('2026-5 - a b c', MatterOneDriveFolders::clean('2026-5 - a/b:c?'));

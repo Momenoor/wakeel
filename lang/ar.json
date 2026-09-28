@@ -3004,7 +3004,6 @@
     "Matters created before the feature was switched on are not touched.": "القضايا المنشأة قبل تفعيل الخاصية لا تتأثر.",
     "Standard subfolders": "المجلدات الفرعية القياسية",
     "One per line, in order. Use \"/\" for a folder inside another, e.g. \"02 المستندات/من المدعي\". Changes apply to folders made from now on; existing folders stay as they are.": "مجلد في كل سطر وبالترتيب. استخدم \"/\" لمجلد داخل آخر، مثل \"02 المستندات/من المدعي\". التغييرات تُطبَّق على المجلدات التي تُنشأ من الآن، وتبقى المجلدات الحالية كما هي.",
-    "Uses the Microsoft 365 app registration in .env (MICROSOFT_GRAPH_*), which needs the Files.ReadWrite.All application permission with admin consent.": "يستخدم تسجيل تطبيق Microsoft 365 في ملف .env (MICROSOFT_GRAPH_*)، ويحتاج صلاحية التطبيق Files.ReadWrite.All مع موافقة المسؤول.",
     "Test with an assistant's Microsoft 365 email": "اختبار ببريد Microsoft 365 لأحد المساعدين",
     "Test connection": "اختبار الاتصال",
     "Enter an email to test with.": "أدخل بريداً للاختبار.",
@@ -3022,6 +3021,7 @@
     "No OneDrive account on :name's profile.": "لا يوجد حساب OneDrive في ملف :name.",
     "Microsoft 365 refused access (:status). Check the app registration has the Files.ReadWrite.All application permission with admin consent.": "رفض Microsoft 365 الوصول (:status). تحقق من أن تسجيل التطبيق لديه صلاحية Files.ReadWrite.All مع موافقة المسؤول.",
     "OneDrive not found for this account. Check the email on the assistant's profile, and that they have signed in to OneDrive at least once.": "لم يُعثر على OneDrive لهذا الحساب. تحقق من البريد في ملف المساعد، ومن أنه سجّل الدخول إلى OneDrive مرة واحدة على الأقل.",
-    "Microsoft 365 is not set up: add MICROSOFT_GRAPH_TENANT_ID, MICROSOFT_GRAPH_CLIENT_ID and MICROSOFT_GRAPH_CLIENT_SECRET to .env.": "Microsoft 365 غير مُعد: أضف MICROSOFT_GRAPH_TENANT_ID و MICROSOFT_GRAPH_CLIENT_ID و MICROSOFT_GRAPH_CLIENT_SECRET إلى ملف .env.",
-    "Could not sign in to Microsoft 365: :error": "تعذر تسجيل الدخول إلى Microsoft 365: :error"
+    "Could not sign in to Microsoft 365: :error": "تعذر تسجيل الدخول إلى Microsoft 365: :error",
+    "Uses the Microsoft 365 app registration in .env (the Outlook calendar one, otherwise the mail one), which needs the Files.ReadWrite.All application permission with admin consent.": "يستخدم تسجيل تطبيق Microsoft 365 في ملف .env (تطبيق تقويم Outlook، وإلا تطبيق البريد)، ويحتاج صلاحية التطبيق Files.ReadWrite.All مع موافقة المسؤول.",
+    "Microsoft 365 is not set up: add the app registration (MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET) to .env.": "Microsoft 365 غير مُعد: أضف بيانات تسجيل التطبيق (MICROSOFT_TENANT_ID و MICROSOFT_CLIENT_ID و MICROSOFT_CLIENT_SECRET) إلى ملف .env."
 }

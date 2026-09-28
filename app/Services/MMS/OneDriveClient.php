@@ -9,9 +9,9 @@ use RuntimeException;
 
 /**
  * Folders in a Microsoft 365 user's OneDrive, through Microsoft Graph with
- * the same Azure app registration the Microsoft 365 mail sender uses
- * (MICROSOFT_GRAPH_* in .env). The app needs the Files.ReadWrite.All
- * application permission, with admin consent.
+ * an Azure app registration that has the Files.ReadWrite.All application
+ * permission (admin consent). The Outlook calendar app (MICROSOFT_* in
+ * .env) is used when set up, otherwise the mail app (MICROSOFT_GRAPH_*).
  */
 class OneDriveClient
 {
@@ -19,9 +19,21 @@ class OneDriveClient
 
     public function isConfigured(): bool
     {
-        $config = config('mail.mailers.microsoft-graph');
+        return $this->credentials() !== null;
+    }
 
-        return filled($config['tenant_id'] ?? null) && filled($config['client_id'] ?? null) && filled($config['client_secret'] ?? null);
+    /**
+     * @return array{tenant_id: string, client_id: string, client_secret: string}|null
+     */
+    private function credentials(): ?array
+    {
+        foreach ([config('services.outlook'), config('mail.mailers.microsoft-graph')] as $config) {
+            if (filled($config['tenant_id'] ?? null) && filled($config['client_id'] ?? null) && filled($config['client_secret'] ?? null)) {
+                return ['tenant_id' => $config['tenant_id'], 'client_id' => $config['client_id'], 'client_secret' => $config['client_secret']];
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -118,11 +130,11 @@ class OneDriveClient
 
     private function token(): string
     {
-        if (! $this->isConfigured()) {
-            throw new RuntimeException(__('Microsoft 365 is not set up: add MICROSOFT_GRAPH_TENANT_ID, MICROSOFT_GRAPH_CLIENT_ID and MICROSOFT_GRAPH_CLIENT_SECRET to .env.'));
-        }
+        $config = $this->credentials();
 
-        $config = config('mail.mailers.microsoft-graph');
+        if ($config === null) {
+            throw new RuntimeException(__('Microsoft 365 is not set up: add the app registration (MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET) to .env.'));
+        }
 
         return Cache::remember('onedrive_graph_token_'.md5($config['client_id']), 50 * 60, function () use ($config): string {
             $response = Http::asForm()->timeout(15)

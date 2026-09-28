@@ -89,7 +89,7 @@ class OneDriveSettings extends Page
                     ]),
 
                 Section::make(__('Connection'))
-                    ->description(__('Uses the Microsoft 365 app registration in .env (MICROSOFT_GRAPH_*), which needs the Files.ReadWrite.All application permission with admin consent.'))
+                    ->description(__('Uses the Microsoft 365 app registration in .env (the Outlook calendar one, otherwise the mail one), which needs the Files.ReadWrite.All application permission with admin consent.'))
                     ->icon(Heroicon::OutlinedSignal)
                     ->schema([
                         TextInput::make('test_email')
