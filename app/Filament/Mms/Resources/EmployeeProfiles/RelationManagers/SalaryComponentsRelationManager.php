@@ -39,6 +39,16 @@ class SalaryComponentsRelationManager extends RelationManager
 
     protected static string $relationship = 'salaryComponents';
 
+    public static function getModelLabel(): string
+    {
+        return __('Salary Component');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('Salary Components');
+    }
+
     protected static ?string $relatedResource = null;
 
     public static function getTitle(Model $ownerRecord, string $pageClass): string

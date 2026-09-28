@@ -32,6 +32,16 @@ class PayslipsRelationManager extends RelationManager
 
     protected static string $relationship = 'payslips';
 
+    public static function getModelLabel(): string
+    {
+        return __('Payslip');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('Payslips');
+    }
+
     public static function getTitle(Model $ownerRecord, string $pageClass): string
     {
         return __('Payslips');

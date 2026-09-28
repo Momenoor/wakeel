@@ -13,6 +13,16 @@ class MattersRelationManager extends RelationManager
 {
     protected static string $relationship = 'matters';
 
+    public static function getModelLabel(): string
+    {
+        return __('Matter');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('Matters');
+    }
+
     protected static ?string $relatedResource = MatterResource::class;
 
     public static function getTitle(Model $ownerRecord, string $pageClass): string

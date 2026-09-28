@@ -43,6 +43,10 @@ class ConfirmMatterReceivingForUnacceptedMail extends Command
             ->where('status', RequestStatus::PENDING->value)
             ->where('type', RequestType::CHANGE_DISTRIBUTED_DATE->value)
             ->whereDate('created_at', '<=', now()->subDay())
+            // A request whose matter was deleted has nothing to confirm —
+            // it failed and logged an error on every run. Left pending, so
+            // it is confirmed as usual if the matter is ever restored.
+            ->whereHas('matter')
             ->get();
 
         if ($requests->isEmpty()) {

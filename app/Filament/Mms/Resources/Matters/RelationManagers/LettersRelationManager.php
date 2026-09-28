@@ -46,6 +46,16 @@ class LettersRelationManager extends RelationManager
 {
     protected static string $relationship = 'letters';
 
+    public static function getModelLabel(): string
+    {
+        return __('Letter');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('Letters');
+    }
+
     public static function getTitle(Model $ownerRecord, string $pageClass): string
     {
         return __('Letters');

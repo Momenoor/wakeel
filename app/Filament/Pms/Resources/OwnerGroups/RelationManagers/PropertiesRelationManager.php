@@ -21,6 +21,16 @@ class PropertiesRelationManager extends RelationManager
 {
     protected static string $relationship = 'properties';
 
+    public static function getModelLabel(): string
+    {
+        return __('Property');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('Properties');
+    }
+
     public static function getTitle(Model $ownerRecord, string $pageClass): string
     {
         return __('Properties');

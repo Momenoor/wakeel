@@ -13,6 +13,7 @@ use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * Every item here is a Special Condition clause — the only section this
@@ -22,6 +23,21 @@ use Filament\Tables\Table;
 class ItemsRelationManager extends RelationManager
 {
     protected static string $relationship = 'items';
+
+    public static function getTitle(Model $ownerRecord, string $pageClass): string
+    {
+        return __('Clauses');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('Clause');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('Clauses');
+    }
 
     public function form(Schema $schema): Schema
     {

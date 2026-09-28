@@ -13,11 +13,17 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 
 class PagesRelationManager extends RelationManager
 {
     protected static string $relationship = 'pages';
+
+    public static function getTitle(Model $ownerRecord, string $pageClass): string
+    {
+        return __('Page Templates');
+    }
 
     public static function getModelLabel(): string
     {

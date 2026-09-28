@@ -17,6 +17,7 @@ use App\Services\MMS\Requests\RequestServiceFactory;
 use App\Services\MMS\Requests\ReviewReportRequestService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -302,5 +303,31 @@ class MatterRequestTest extends TestCase
         // A request raised today is left for the assistant to answer.
         $this->assertEquals(RequestStatus::PENDING, $recent->fresh()->status);
         $this->assertEquals('2026-01-01', $freshMatter->fresh()->distributed_at->toDateString());
+    }
+
+    public function test_auto_confirm_skips_a_request_whose_matter_was_deleted(): void
+    {
+        // It failed with "Attempt to read property assistantsOnly on null"
+        // and logged an error on every run, forever.
+        $matter = $this->makeMatter(['number' => '3', 'distributed_at' => '2026-01-01']);
+
+        $request = MatterRequest::create([
+            'matter_id' => $matter->id,
+            'request_by' => User::factory()->create()->id,
+            'type' => RequestType::CHANGE_DISTRIBUTED_DATE,
+            'status' => 'pending',
+            'comment' => 'orphan',
+            'extra' => ['proposed_distributed_at' => '2026-05-01'],
+        ]);
+        $request->forceFill(['created_at' => now()->subDays(3)])->saveQuietly();
+
+        $matter->delete();
+
+        Log::spy();
+
+        $this->artisan('matter:confirm-receiving')->assertSuccessful();
+
+        Log::shouldNotHaveReceived('error');
+        $this->assertEquals(RequestStatus::PENDING, $request->fresh()->status);
     }
 }

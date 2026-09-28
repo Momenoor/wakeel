@@ -3023,5 +3023,10 @@
     "OneDrive not found for this account. Check the email on the assistant's profile, and that they have signed in to OneDrive at least once.": "لم يُعثر على OneDrive لهذا الحساب. تحقق من البريد في ملف المساعد، ومن أنه سجّل الدخول إلى OneDrive مرة واحدة على الأقل.",
     "Could not sign in to Microsoft 365: :error": "تعذر تسجيل الدخول إلى Microsoft 365: :error",
     "Uses the Microsoft 365 app registration in .env (the Outlook calendar one, otherwise the mail one), which needs the Files.ReadWrite.All application permission with admin consent.": "يستخدم تسجيل تطبيق Microsoft 365 في ملف .env (تطبيق تقويم Outlook، وإلا تطبيق البريد)، ويحتاج صلاحية التطبيق Files.ReadWrite.All مع موافقة المسؤول.",
-    "Microsoft 365 is not set up: add the app registration (MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET) to .env.": "Microsoft 365 غير مُعد: أضف بيانات تسجيل التطبيق (MICROSOFT_TENANT_ID و MICROSOFT_CLIENT_ID و MICROSOFT_CLIENT_SECRET) إلى ملف .env."
+    "Microsoft 365 is not set up: add the app registration (MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET) to .env.": "Microsoft 365 غير مُعد: أضف بيانات تسجيل التطبيق (MICROSOFT_TENANT_ID و MICROSOFT_CLIENT_ID و MICROSOFT_CLIENT_SECRET) إلى ملف .env.",
+    "Salary Component": "بند الراتب",
+    "Salary Components": "بنود الراتب",
+    "Payslip": "كشف الراتب",
+    "Clause": "البند",
+    "Clauses": "البنود"
 }

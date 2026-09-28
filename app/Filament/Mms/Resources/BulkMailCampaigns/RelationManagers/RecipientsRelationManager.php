@@ -23,6 +23,7 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Livewire\Attributes\On;
@@ -31,6 +32,11 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 class RecipientsRelationManager extends RelationManager
 {
     protected static string $relationship = 'recipients';
+
+    public static function getTitle(Model $ownerRecord, string $pageClass): string
+    {
+        return __('Bulk Mail Recipients');
+    }
 
     /**
      * The campaign page's refresh (poll or Pusher) re-renders the table,

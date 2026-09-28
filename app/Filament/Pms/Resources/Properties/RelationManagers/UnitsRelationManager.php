@@ -20,10 +20,26 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class UnitsRelationManager extends RelationManager
 {
     protected static string $relationship = 'units';
+
+    public static function getTitle(Model $ownerRecord, string $pageClass): string
+    {
+        return __('Units');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('Unit');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('Units');
+    }
 
     public function form(Schema $schema): Schema
     {

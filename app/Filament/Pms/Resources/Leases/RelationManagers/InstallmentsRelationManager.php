@@ -35,6 +35,16 @@ class InstallmentsRelationManager extends RelationManager
 {
     protected static string $relationship = 'installments';
 
+    public static function getModelLabel(): string
+    {
+        return __('Instalment');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('Instalments');
+    }
+
     public static function getTitle(Model $ownerRecord, string $pageClass): string
     {
         return __('Instalments');
