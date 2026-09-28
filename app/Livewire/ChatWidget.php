@@ -7,6 +7,7 @@ use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\User;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
@@ -39,9 +40,54 @@ class ChatWidget extends Component
 
     public string $userSearch = '';
 
+    /**
+     * The newest message from someone else already seen — anything newer
+     * pops the chat open.
+     */
+    public int $lastSeenMessageId = 0;
+
     public function mount(string $mode = 'page'): void
     {
         $this->mode = $mode;
+        $this->lastSeenMessageId = (int) $this->incomingMessages()->max('id');
+    }
+
+    /**
+     * Messages from others in this user's conversations.
+     *
+     * @return Builder<ChatMessage>
+     */
+    private function incomingMessages(): Builder
+    {
+        return ChatMessage::query()
+            ->whereIn('chat_conversation_id', Auth::user()->chatConversations()->select('chat_conversations.id'))
+            ->where('user_id', '!=', Auth::id());
+    }
+
+    /**
+     * A new message pops the floating chat open on its conversation; when
+     * several arrived since the last check, on the newest one's.
+     */
+    public function checkForNewMessages(): void
+    {
+        $latest = $this->incomingMessages()
+            ->where('id', '>', $this->lastSeenMessageId)
+            ->latest('id')
+            ->first();
+
+        if ($latest === null) {
+            return;
+        }
+
+        $this->lastSeenMessageId = (int) $latest->id;
+
+        if ($this->mode !== 'popup') {
+            return;
+        }
+
+        $this->isOpen = true;
+        $this->activeConversationId = (int) $latest->chat_conversation_id;
+        $this->markActiveConversationRead();
     }
 
     /**
@@ -147,9 +193,9 @@ class ChatWidget extends Component
 
     public function onMessageReceived(): void
     {
-        // The event payload isn't consumed directly — both properties are
-        // computed straight from the database, so simply letting Livewire
-        // re-render after this picks up the new row either way.
+        // The event payload isn't consumed directly — the message is read
+        // back from the database, and the re-render after this shows it.
+        $this->checkForNewMessages();
     }
 
     public function toggleOpen(): void

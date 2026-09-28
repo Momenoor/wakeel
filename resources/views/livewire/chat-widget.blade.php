@@ -108,9 +108,9 @@
         online — so it runs faster and keeps going.
     --}}
     @if (filled(config('filament.broadcasting.echo')))
-        wire:poll.60s="$refresh"
+        wire:poll.60s="checkForNewMessages"
     @else
-        wire:poll.20s.keep-alive="$refresh"
+        wire:poll.20s.keep-alive="checkForNewMessages"
     @endif
     @if ($isPopup)
         wire:key="chat-widget-popup"
