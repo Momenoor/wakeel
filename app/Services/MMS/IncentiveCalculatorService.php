@@ -540,6 +540,48 @@ class IncentiveCalculatorService
         ));
     }
 
+    /**
+     * An assistant's fixed deduction for a calculation, spread over their
+     * matters in proportion to each matter's total (equally when every
+     * total is zero). The deduction is entered once for the whole period;
+     * this is what shows it against each matter. The parts always add up
+     * to the deduction exactly — the last line takes the rounding.
+     *
+     * @return Collection<int, float> keyed by IncentiveAssistantLine id
+     */
+    public function fixedDeductionByLine(int $calculationId, int $partyId): Collection
+    {
+        $deduction = round((float) IncentiveAssistantExtra::query()
+            ->where('incentive_calculation_id', $calculationId)
+            ->where('party_id', $partyId)
+            ->value('fixed_deduction'), 2);
+
+        $lines = IncentiveAssistantLine::query()
+            ->where('party_id', $partyId)
+            ->whereHas('incentiveLine', fn ($q) => $q->where('incentive_calculation_id', $calculationId))
+            ->orderBy('id')
+            ->get(['id', 'total_amount']);
+
+        if ($deduction <= 0 || $lines->isEmpty()) {
+            return $lines->mapWithKeys(fn ($line) => [$line->id => 0.0]);
+        }
+
+        $total = (float) $lines->sum('total_amount');
+        $shares = collect();
+        $allocated = 0.0;
+
+        foreach ($lines->values() as $i => $line) {
+            $amount = $i === $lines->count() - 1
+                ? round($deduction - $allocated, 2)
+                : round($total > 0 ? $deduction * (float) $line->total_amount / $total : $deduction / $lines->count(), 2);
+
+            $shares[$line->id] = $amount;
+            $allocated += $amount;
+        }
+
+        return $shares;
+    }
+
     public function getAssistantSummary(Model $calculation): Collection
     {
         // Per-matter fee/base totals across ALL of a matter's incentive

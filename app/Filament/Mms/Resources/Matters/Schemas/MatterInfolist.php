@@ -10,7 +10,9 @@ use App\Filament\Mms\Actions\Request\CreateRequestAction;
 use App\Filament\Mms\Actions\Request\RejectRequestAction;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Helpers\FileUploadHelper;
+use App\Models\IncentiveAssistantLine;
 use App\Models\Type;
+use App\Services\MMS\IncentiveCalculatorService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
@@ -32,7 +34,9 @@ use Filament\Support\Enums\FontWeight;
 use Filament\Support\Enums\IconPosition;
 use Filament\Support\Enums\TextSize;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\HtmlString;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class MatterInfolist
@@ -456,73 +460,108 @@ class MatterInfolist
         return Section::make(__('Incentive'))
             ->icon('heroicon-o-calculator')
             ->description(__('Finalized incentive calculations for this matter'))
-            ->visible(fn ($record) => $record && $record->incentiveLines()
-                ->whereHas('calculation', fn ($q) => $q->where('status', 'finalized'))
-                ->exists() && auth()->user()->can('View:IncentiveCalculation'))
+            ->visible(fn ($record) => $record && static::visibleIncentiveLines($record)->isNotEmpty())
             ->schema(function ($record) {
                 if (! $record) {
                     return [];
                 }
 
-                $lines = $record->incentiveLines()
-                    ->whereHas('calculation', fn ($q) => $q->where('status', 'finalized'))
-                    ->with(['calculation', 'assistantLines.party'])
-                    ->get();
+                $service = app(IncentiveCalculatorService::class);
 
-                return $lines->map(function ($line) {
-                    // These two figures are DIFFERENT stages of the same
-                    // calculation, not the same number twice: "Incentive Base"
-                    // is the office's own fee × rate − deductions, before any
-                    // per-assistant rate is applied; "Paid to Assistants" is
-                    // what actually gets disbursed, including that rate (which
-                    // is not stored per line — only looked up from the type's
-                    // current configuration, which can be edited at any time
-                    // and drift from whatever was in force when an older,
-                    // already-finalized calculation ran) plus any monthly
-                    // bonus or shortfall penalty. Showing them side by side
-                    // with no explanation, as "Net Amount" next to "Assistant
-                    // Shares", read as the same figure reported twice and
-                    // disagreeing — it is two figures that were never meant to
-                    // match.
-                    $totalPaid = $line->assistantLines->sum('total_amount');
+                return static::visibleIncentiveLines($record)
+                    ->groupBy(fn (IncentiveAssistantLine $al) => $al->incentiveLine->incentive_calculation_id)
+                    ->map(function (Collection $assistantLines, int $calculationId) use ($record, $service) {
+                        // A matter with several fees has one line per fee in a
+                        // calculation; the assistants hang off the first.
+                        $feeLines = $record->incentiveLines()->where('incentive_calculation_id', $calculationId)->with('deductions')->get();
+                        $line = $assistantLines->first()->incentiveLine;
 
-                    return Group::make()
-                        ->columns(6)
-                        ->columnSpanFull()
-                        ->schema([
-                            TextEntry::make("incentive_{$line->id}_calc")
-                                ->label(__('Calculation'))
-                                ->state($line->calculation?->name ?? '—'),
-                            TextEntry::make("incentive_{$line->id}_difficulty")
-                                ->label(__('Difficulty'))
-                                ->badge()
-                                ->state($line->difficulty ?: '—'),
-                            TextEntry::make("incentive_{$line->id}_days")
-                                ->label(__('Days'))
-                                ->state($line->completion_days ?? '—'),
-                            TextEntry::make("incentive_{$line->id}_rate")
-                                ->label(__('Rate %'))
-                                ->state($line->effective_percentage.'%'),
-                            TextEntry::make("incentive_{$line->id}_deductions")
-                                ->label(__('Deductions'))
-                                ->color('danger')
-                                ->state($line->total_deduction_pct > 0 ? '-'.$line->total_deduction_pct.'%' : '—'),
-                            TextEntry::make("incentive_{$line->id}_net")
-                                ->label(__('Incentive Base'))
-                                ->helperText(__('The fee at this rate, before the assistant rate is applied — not the amount paid out.'))
-                                ->state(number_format($line->net_amount, 2).' AED'),
-                            TextEntry::make("incentive_{$line->id}_assistants")
-                                ->label(__('Paid to Assistants'))
-                                ->columnSpanFull()
-                                ->weight(FontWeight::Bold)
-                                ->helperText(__('Includes each assistant\'s rate on the incentive base above, plus any monthly bonus or shortfall penalty — so it will not equal the base.'))
-                                ->state($line->assistantLines->isEmpty() ? '—' : $line->assistantLines->map(
-                                    fn ($al) => ($al->party?->name ?? '—').': '.number_format($al->total_amount, 2).' AED'
-                                    .($al->percentage_override !== null ? ' ('.__('override').')' : '')
-                                )->implode(' | ').' — '.__('Total').': '.number_format($totalPaid, 2).' AED'),
-                        ]);
-                })->all();
+                        $rows = $assistantLines->map(function (IncentiveAssistantLine $al) use ($service, $calculationId) {
+                            $fixed = (float) ($service->fixedDeductionByLine($calculationId, $al->party_id)[$al->id] ?? 0);
+
+                            return [
+                                'name' => $al->party?->name ?? '—',
+                                'override' => $al->percentage_override !== null,
+                                'share' => (float) $al->share_amount,
+                                'extra' => (float) $al->extra_amount,
+                                'extra_pct' => (float) $al->extra_percentage,
+                                'penalty' => (float) $al->minimum_penalty_amount,
+                                'penalty_pct' => (float) $al->minimum_penalty_pct,
+                                'fixed' => $fixed,
+                                'net' => max(0.0, round((float) $al->total_amount - $fixed, 2)),
+                            ];
+                        })->values()->all();
+
+                        $deductionTypes = $feeLines->flatMap->deductions
+                            ->map(fn ($d) => '−'.$d->percentage.'% '.__($d->type))
+                            ->unique()->implode(' · ');
+
+                        return Group::make()
+                            ->columns(6)
+                            ->columnSpanFull()
+                            ->schema([
+                                TextEntry::make("incentive_{$calculationId}_calc")
+                                    ->label(__('Calculation'))
+                                    ->state($line->calculation?->name ?? '—'),
+                                TextEntry::make("incentive_{$calculationId}_difficulty")
+                                    ->label(__('Difficulty'))
+                                    ->badge()
+                                    ->state($line->difficulty ?: '—'),
+                                TextEntry::make("incentive_{$calculationId}_days")
+                                    ->label(__('Days'))
+                                    ->state($line->completion_days ?? '—'),
+                                TextEntry::make("incentive_{$calculationId}_rate")
+                                    ->label(__('Rate %'))
+                                    ->state($line->effective_percentage.'%'),
+                                TextEntry::make("incentive_{$calculationId}_deductions")
+                                    ->label(__('Deductions'))
+                                    ->color('danger')
+                                    ->state($line->total_deduction_pct > 0 ? '-'.$line->total_deduction_pct.'%' : '—')
+                                    ->helperText($deductionTypes ?: null),
+                                // These two figures are DIFFERENT stages of the
+                                // same calculation, not the same number twice:
+                                // the base is the office's fee × rate −
+                                // deductions; each assistant's figures below
+                                // apply their own rate and any monthly bonus,
+                                // shortfall penalty or fixed deduction.
+                                TextEntry::make("incentive_{$calculationId}_net")
+                                    ->label(__('Incentive Base'))
+                                    ->helperText(__('The fee at this rate, before the assistant rate is applied — not the amount paid out.'))
+                                    ->state(number_format((float) $feeLines->sum('net_amount'), 2).' AED'),
+                                TextEntry::make("incentive_{$calculationId}_assistants")
+                                    ->label(__('Paid to Assistants'))
+                                    ->columnSpanFull()
+                                    ->helperText(__('Each assistant\'s rate on the incentive base above, plus any monthly bonus, less any shortfall penalty and their fixed deduction (spread over their matters) — so it will not equal the base.'))
+                                    ->state(new HtmlString(view('filament.mms.matters.incentive-breakdown', ['rows' => $rows])->render()))
+                                    ->html(),
+                            ]);
+                    })->values()->all();
             });
+    }
+
+    /**
+     * The finalized assistant lines on this matter the viewer may see: every
+     * assistant's for a super admin, otherwise only the viewer's own.
+     *
+     * @return Collection<int, IncentiveAssistantLine>
+     */
+    private static function visibleIncentiveLines($record): Collection
+    {
+        $user = auth()->user();
+        $seesAll = $user?->hasRole('super-admin') ?? false;
+        $ownPartyId = $user?->party?->id;
+
+        if (! $seesAll && ! $ownPartyId) {
+            return collect();
+        }
+
+        return IncentiveAssistantLine::query()
+            ->whereHas('incentiveLine', fn ($q) => $q->where('matter_id', $record->getKey())
+                ->whereHas('calculation', fn ($q) => $q->where('status', 'finalized')))
+            ->when(! $seesAll, fn ($q) => $q->where('party_id', $ownPartyId))
+            ->with(['party', 'incentiveLine.calculation'])
+            ->orderBy('id')
+            ->get();
     }
 
     private static function attachmentsSection(): Section

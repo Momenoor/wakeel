@@ -15,6 +15,7 @@ use Filament\Actions\Action;
 use Filament\Pages\Page;
 use Filament\Support\Enums\Width;
 use Filament\Tables\Columns\Summarizers\Sum;
+use Filament\Tables\Columns\Summarizers\Summarizer;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
@@ -65,6 +66,9 @@ class MyIncentiveReport extends Page implements HasTable
 
     /** @var Collection<int, int>|null */
     private ?Collection $assistantCounts = null;
+
+    /** @var Collection<int, float>|null */
+    private ?Collection $fixedDeductions = null;
 
     public static function getNavigationLabel(): string
     {
@@ -162,6 +166,24 @@ class MyIncentiveReport extends Page implements HasTable
         $extra = $this->periodTotals();
 
         return max(0.0, (float) $this->getTableQuery()->sum('total_amount') - (float) ($extra?->fixed_deduction ?? 0));
+    }
+
+    /**
+     * The period's fixed deduction spread over this assistant's matters, so
+     * each row shows what it actually pays.
+     */
+    public function fixedDeductionFor(IncentiveAssistantLine $record): float
+    {
+        $this->fixedDeductions ??= ($this->selectedCalculationId() && $this->partyId())
+            ? app(IncentiveCalculatorService::class)->fixedDeductionByLine($this->selectedCalculationId(), $this->partyId())
+            : collect();
+
+        return (float) ($this->fixedDeductions[$record->id] ?? 0);
+    }
+
+    public function netFor(IncentiveAssistantLine $record): float
+    {
+        return max(0.0, round((float) $record->total_amount - $this->fixedDeductionFor($record), 2));
     }
 
     /**
@@ -349,10 +371,32 @@ class MyIncentiveReport extends Page implements HasTable
                 TextColumn::make('total_amount')
                     ->label(__('Total'))
                     ->money('AED')
-                    ->weight('bold')
                     ->alignEnd()
                     ->sortable()
                     ->summarize(Sum::make()->label(__('Total'))->money('AED')),
+
+                TextColumn::make('fixed_deduction')
+                    ->label(__('Fixed Deduction'))
+                    ->getStateUsing(fn (IncentiveAssistantLine $record) => $this->fixedDeductionFor($record) ?: null)
+                    ->money('AED')
+                    ->color('danger')
+                    ->placeholder('—')
+                    ->alignEnd()
+                    ->summarize(Summarizer::make()
+                        ->label(__('Total'))
+                        ->using(fn () => (float) ($this->periodTotals()?->fixed_deduction ?? 0))
+                        ->money('AED')),
+
+                TextColumn::make('net')
+                    ->label(__('Net'))
+                    ->getStateUsing(fn (IncentiveAssistantLine $record) => $this->netFor($record))
+                    ->money('AED')
+                    ->weight('bold')
+                    ->alignEnd()
+                    ->summarize(Summarizer::make()
+                        ->label(__('Net Total'))
+                        ->using(fn () => $this->netTotal())
+                        ->money('AED')),
             ])
             ->filters([
                 SelectFilter::make('calculation')

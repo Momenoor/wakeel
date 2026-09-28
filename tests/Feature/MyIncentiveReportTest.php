@@ -102,6 +102,34 @@ class MyIncentiveReportTest extends TestCase
             ->assertCanNotSeeTableRecords([$otherLine]);
     }
 
+    public function test_each_row_shows_its_part_of_the_fixed_deduction_and_what_it_pays(): void
+    {
+        $this->allowEverything();
+
+        [$user, $mine] = $this->assistantUser();
+        $calculation = $this->calculation();
+        $big = $this->lineFor($calculation, $mine, 3000);
+        $small = $this->lineFor($calculation, $mine, 1000);
+
+        IncentiveAssistantExtra::create([
+            'incentive_calculation_id' => $calculation->id,
+            'party_id' => $mine->id,
+            'completed_matter_count' => 2,
+            'meets_minimum' => true,
+            'fixed_deduction' => 400,
+        ]);
+
+        $this->actingAs($user);
+
+        // 400 over 3,000 and 1,000: 300 and 100.
+        Livewire::test(MyIncentiveReport::class)
+            ->assertTableColumnStateSet('fixed_deduction', 300.0, $big)
+            ->assertTableColumnStateSet('net', 2700.0, $big)
+            ->assertTableColumnStateSet('fixed_deduction', 100.0, $small)
+            ->assertTableColumnStateSet('net', 900.0, $small)
+            ->assertSee('3,600.00');
+    }
+
     public function test_the_scope_cannot_be_widened_through_the_filter(): void
     {
         $this->allowEverything();

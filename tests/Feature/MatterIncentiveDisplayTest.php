@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
+use App\Models\IncentiveAssistantExtra;
 use App\Models\IncentiveAssistantLine;
 use App\Models\IncentiveCalculation;
 use App\Models\IncentiveLine;
@@ -12,6 +13,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
@@ -36,7 +38,12 @@ class MatterIncentiveDisplayTest extends TestCase
 
         app()->setLocale('en');
         Gate::before(fn () => true);
-        $this->actingAs(User::factory()->create());
+
+        // A super admin sees every assistant's incentive on a matter.
+        Role::firstOrCreate(['name' => 'super-admin', 'guard_name' => 'web']);
+        $admin = User::factory()->create();
+        $admin->assignRole('super-admin');
+        $this->actingAs($admin);
     }
 
     private function finalizedLineFor(Matter $matter, float $netAmount): IncentiveLine
@@ -143,6 +150,88 @@ class MatterIncentiveDisplayTest extends TestCase
 
         $html = Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])->html();
 
-        $this->assertStringContainsString('Total: 4,000.00', $html);
+        $this->assertStringContainsString('4,000.00 AED', $html);
+    }
+
+    private function assistantLine(IncentiveLine $line, Party $party, array $figures): IncentiveAssistantLine
+    {
+        return IncentiveAssistantLine::create([
+            'incentive_line_id' => $line->id,
+            'party_id' => $party->id,
+            'share_amount' => 0,
+            'extra_percentage' => 0,
+            'extra_amount' => 0,
+            'minimum_penalty_pct' => 0,
+            'minimum_penalty_amount' => 0,
+            'total_amount' => 0,
+            ...$figures,
+        ]);
+    }
+
+    public function test_the_breakdown_shows_additions_and_deductions(): void
+    {
+        $matter = Matter::factory()->create();
+        $line = $this->finalizedLineFor($matter, netAmount: 10000);
+        $party = Party::factory()->assistant()->create(['name' => 'Amr']);
+
+        // 1,000 share + 30 extra (3%) − 200 penalty = 830 total.
+        $this->assistantLine($line, $party, [
+            'share_amount' => 1000, 'extra_percentage' => 3, 'extra_amount' => 30,
+            'minimum_penalty_pct' => 2, 'minimum_penalty_amount' => 200, 'total_amount' => 830,
+        ]);
+        IncentiveAssistantExtra::create([
+            'incentive_calculation_id' => $line->incentive_calculation_id,
+            'party_id' => $party->id,
+            'completed_matter_count' => 1,
+            'meets_minimum' => false,
+            'fixed_deduction' => 100,
+            'fixed_deduction_reason' => 'Advance',
+        ]);
+
+        $html = Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])->html();
+
+        $this->assertStringContainsString('1,000.00', $html);
+        $this->assertStringContainsString('+30.00', $html);
+        $this->assertStringContainsString('−200.00', $html);
+        // The whole period deduction sits on this, the assistant's only matter.
+        $this->assertStringContainsString('−100.00', $html);
+        $this->assertStringContainsString('730.00 AED', $html);
+    }
+
+    public function test_an_assistant_sees_only_their_own_incentive_on_the_matter(): void
+    {
+        $matter = Matter::factory()->create();
+        $line = $this->finalizedLineFor($matter, netAmount: 4000);
+
+        $me = Party::factory()->assistant()->create(['name' => 'Nahla']);
+        $colleague = Party::factory()->assistant()->create(['name' => 'Amr']);
+        $this->assistantLine($line, $me, ['share_amount' => 1500, 'total_amount' => 1500]);
+        $this->assistantLine($line, $colleague, ['share_amount' => 2500, 'total_amount' => 2500]);
+
+        $user = User::factory()->create();
+        $me->update(['user_id' => $user->id]);
+        $this->actingAs($user->fresh());
+
+        $html = Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])->html();
+
+        $this->assertStringContainsString('1,500.00 AED', $html);
+        $this->assertStringNotContainsString('Amr', $html);
+        $this->assertStringNotContainsString('2,500.00', $html);
+    }
+
+    public function test_someone_with_no_line_on_the_matter_sees_no_incentive(): void
+    {
+        $matter = Matter::factory()->create();
+        $line = $this->finalizedLineFor($matter, netAmount: 4000);
+        $this->assistantLine($line, Party::factory()->assistant()->create(['name' => 'Amr']), ['share_amount' => 2500, 'total_amount' => 2500]);
+
+        $user = User::factory()->create();
+        Party::factory()->assistant()->create(['name' => 'Other', 'user_id' => $user->id]);
+        $this->actingAs($user->fresh());
+
+        $html = Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])->html();
+
+        $this->assertStringNotContainsString('Paid to Assistants', $html);
+        $this->assertStringNotContainsString('2,500.00', $html);
     }
 }
