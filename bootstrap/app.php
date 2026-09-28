@@ -43,10 +43,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // expires after 5 minutes in case a worker is ever killed mid-run.
         // With QUEUE_CONNECTION=sync nothing is ever queued and each run
         // simply finds nothing to do.
+        // What it worked on (each job, DONE or FAIL) goes to a log file of its
+        // own, one per day, instead of being thrown away.
         $schedule->command('queue:work --queue=default,mail --stop-when-empty --max-time=50 --tries=3 --timeout=45')
             ->everyMinute()
             ->withoutOverlapping(5)
-            ->runInBackground();
+            ->runInBackground()
+            ->appendOutputTo(storage_path('logs/queue-worker-'.now()->format('Y-m-d').'.log'));
     })
 
     ->withExceptions(function (Exceptions $exceptions): void {
