@@ -58,13 +58,32 @@ class MatterReferenceMatcher
         $ids = [];
 
         foreach (self::references($text) as $ref) {
-            $id = Matter::query()->where('year', $ref['year'])->where('number', $ref['number'])->value('id');
+            $id = self::matterFor($ref['number'], $ref['year']);
 
             if ($id !== null) {
-                $ids[] = (int) $id;
+                $ids[] = $id;
             }
         }
 
         return array_values(array_unique($ids));
+    }
+
+    /**
+     * The matter a number/year means. When several matters share it, the
+     * current one — not yet at its final report, the newest if more than
+     * one — or, when all are closed, the one closed last.
+     */
+    public static function matterFor(string $number, int $year): ?int
+    {
+        $id = Matter::query()
+            ->where('year', $year)
+            ->where('number', $number)
+            // Closed = final report given (Matter::status()); open first.
+            ->orderByRaw('CASE WHEN final_report_at IS NULL THEN 0 ELSE 1 END')
+            ->orderByDesc('final_report_at')
+            ->orderByDesc('id')
+            ->value('id');
+
+        return $id === null ? null : (int) $id;
     }
 }

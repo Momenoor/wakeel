@@ -9,6 +9,8 @@ use App\Filament\Mms\Actions\Request\ApproveRequestAction;
 use App\Filament\Mms\Actions\Request\CreateRequestAction;
 use App\Filament\Mms\Actions\Request\RejectRequestAction;
 use App\Filament\Mms\Resources\Matters\MatterResource;
+use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
+use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
 use App\Helpers\FileUploadHelper;
 use App\Models\CalendarEvent;
 use App\Models\IncentiveAssistantLine;
@@ -32,6 +34,7 @@ use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Group;
+use Filament\Schemas\Components\Livewire;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
@@ -139,6 +142,18 @@ class MatterInfolist
                             ->schema([
                                 static::attachmentsSection(),
                                 static::oneDriveSection(),
+                            ]),
+                        // The letters table, in its own tab rather than below
+                        // the page — the same relation manager, with its
+                        // Issue letter action.
+                        Tab::make(__('Letters'))
+                            ->icon('heroicon-o-envelope')
+                            ->badge(fn ($record) => $record ? ($record->letters()->count() ?: null) : null)
+                            ->schema([
+                                Livewire::make(LettersRelationManager::class, fn ($record) => [
+                                    'ownerRecord' => $record,
+                                    'pageClass' => ViewMatter::class,
+                                ])->key('matter-letters'),
                             ]),
                     ]),
             ]);

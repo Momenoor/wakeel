@@ -8,6 +8,7 @@ use App\Models\Setting;
 use App\Models\User;
 use App\Services\Push\WebPushSender;
 use Carbon\Carbon;
+use Carbon\Translator as CarbonTranslator;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Foundation\Events\LocaleUpdated;
 use Illuminate\Notifications\DatabaseNotification;
@@ -44,6 +45,12 @@ class AppServiceProvider extends ServiceProvider
             LocaleUpdated::class,
             fn (LocaleUpdated $event) => Carbon::setLocale($event->locale),
         );
+
+        // Arabic day names in full everywhere a short one is asked for
+        // ('D' / 'ddd'): «الثلاثاء», not Carbon's «ثلاثاء».
+        CarbonTranslator::get('ar')->setTranslations([
+            'weekdays_short' => ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'],
+        ]);
 
         Setting::applyMailConfig();
 

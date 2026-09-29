@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Filament\Mms\Resources\CalendarEvents\Pages\ListCalendarEvents;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
+use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
 use App\Models\CalendarEvent;
 use App\Models\Matter;
 use App\Models\User;
@@ -53,6 +54,7 @@ class CalendarMatterLinkingTest extends TestCase
         return CalendarEvent::create([
             'title' => $title,
             'start_datetime' => now()->addDay(),
+            'end_datetime' => now()->addDay()->addHour(),
             'type' => 'single',
             ...$attributes,
         ]);
@@ -102,6 +104,64 @@ class CalendarMatterLinkingTest extends TestCase
         // Linking again adds nothing twice.
         $this->assertSame(0, app(EventMatterLinker::class)->link($event->fresh()));
         $this->assertSame(2, DB::table('calendar_event_matter')->where('calendar_event_id', $event->id)->count());
+    }
+
+    public function test_a_shared_matter_number_links_the_current_matter_or_the_last_closed(): void
+    {
+        $closedEarly = Matter::factory()->create(['number' => 50, 'year' => 2024, 'initial_report_at' => '2024-03-01', 'final_report_at' => '2024-05-01']);
+        $closedLate = Matter::factory()->create(['number' => 50, 'year' => 2024, 'initial_report_at' => '2024-12-01', 'final_report_at' => '2025-02-01']);
+
+        // All closed: the one closed last.
+        $this->assertSame([$closedLate->id], MatterReferenceMatcher::matterIds('Session 50/2024'));
+
+        // One still open: that one.
+        $open = Matter::factory()->create(['number' => 50, 'year' => 2024, 'final_report_at' => null]);
+        $this->assertSame([$open->id], MatterReferenceMatcher::matterIds('Session 50/2024'));
+
+        $event = $this->event('Session 50/2024');
+        $this->assertSame([$open->id], $event->matters()->pluck('matters.id')->all());
+        $this->assertNotContains($closedEarly->id, $event->matters()->pluck('matters.id')->all());
+    }
+
+    public function test_the_event_form_shows_and_changes_all_its_matters(): void
+    {
+        $this->signIn();
+        $a = $this->matter(12, 2024);
+        $b = $this->matter(15, 2024);
+        $c = $this->matter(16, 2024);
+        $event = $this->event('12/2024, 15/2024 (Dubai Courts)');
+
+        Livewire::test(ListCalendarEvents::class)
+            ->mountTableAction('edit', $event)
+            ->assertTableActionDataSet(fn (array $data) => collect($data['matters'] ?? [])->map(fn ($id) => (int) $id)->sort()->values()->all() === collect([$a->id, $b->id])->sort()->values()->all())
+            ->setTableActionData(['matters' => [$b->id, $c->id]])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+
+        $this->assertEqualsCanonicalizing([$b->id, $c->id], $event->matters()->pluck('matters.id')->all());
+        $this->assertSame('bulk', $event->fresh()->type);
+    }
+
+    public function test_letters_are_a_tab_on_the_matter_page(): void
+    {
+        $this->signIn();
+        $matter = $this->matter(639, 2025);
+
+        Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])
+            ->assertSee('Letters')
+            ->assertSeeLivewire(LettersRelationManager::class);
+
+        // Not also as a table under the page.
+        $this->assertSame([], (new ViewMatter)->getRelationManagers());
+    }
+
+    public function test_arabic_day_names_are_written_in_full(): void
+    {
+        $tuesday = Carbon::parse('2026-09-29');
+
+        $this->assertSame('الثلاثاء 29/09/2026', $tuesday->copy()->locale('ar')->translatedFormat('D d/m/Y'));
+        $this->assertSame('الثلاثاء', $tuesday->copy()->locale('ar')->isoFormat('ddd'));
+        $this->assertSame('Tue', $tuesday->copy()->locale('en')->translatedFormat('D'));
     }
 
     public function test_matters_are_found_by_number_court_or_party(): void

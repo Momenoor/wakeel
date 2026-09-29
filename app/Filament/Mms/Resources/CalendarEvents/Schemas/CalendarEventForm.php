@@ -2,7 +2,11 @@
 
 namespace App\Filament\Mms\Resources\CalendarEvents\Schemas;
 
+use App\Filament\Mms\Actions\Calendar\CalendarMatterActions;
+use App\Models\CalendarEvent;
 use App\Models\Matter;
+use App\Services\MMS\Calendar\EventMatterLinker;
+use App\Support\MatterSearch;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DateTimePicker;
@@ -58,7 +62,10 @@ class CalendarEventForm
                     ->placeholder(__('Select Matter'))
                     ->searchable()
                     ->preload()
-                    ->hidden((fn ($record) => $record instanceof Matter))
+                    // An event for several matters shows them all under
+                    // "Linked matters" instead.
+                    ->hidden(fn ($record) => $record instanceof Matter
+                        || ($record instanceof CalendarEvent && $record->matters()->count() > 1))
                     ->disabled(fn ($record) => $record instanceof Matter)
                     ->live()
                     ->afterStateUpdated(function (?int $state, Set $set) {
@@ -88,6 +95,19 @@ class CalendarEventForm
                 TextInput::make('title')
                     ->label(__('Title'))
                     ->required()
+                    ->columnSpanFull(),
+
+                // Every matter the event is for — one or several — editable
+                // here as well as through "Link matters" on the calendar.
+                CalendarMatterActions::mattersField(fn (Get $get): ?string => $get('title'))
+                    ->relationship('matters', 'number')
+                    ->getSearchResultsUsing(fn (string $search): array => MatterSearch::options($search))
+                    ->getOptionLabelsUsing(fn (array $values): array => MatterSearch::labels($values))
+                    ->saveRelationshipsUsing(function (CalendarEvent $record, $state): void {
+                        $record->matters()->sync($state ?? []);
+                        app(EventMatterLinker::class)->tidy($record->fresh());
+                    })
+                    ->visibleOn('edit')
                     ->columnSpanFull(),
 
                 DateTimePicker::make('start_datetime')

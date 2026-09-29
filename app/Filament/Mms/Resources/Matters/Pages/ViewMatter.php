@@ -28,6 +28,15 @@ class ViewMatter extends ViewRecord
 {
     protected static string $resource = MatterResource::class;
 
+    /**
+     * Letters show in their own tab of the page (MatterInfolist), not as a
+     * table under it.
+     */
+    public function getRelationManagers(): array
+    {
+        return [];
+    }
+
     protected function getHeaderActions(): array
     {
         return [

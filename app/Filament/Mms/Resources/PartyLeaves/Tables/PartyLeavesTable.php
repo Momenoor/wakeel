@@ -14,7 +14,7 @@ class PartyLeavesTable
     {
         return $table
             ->columns([
-                TextColumn::make('party.name')->label(__('Assistant / Expert'))->searchable()->sortable(),
+                TextColumn::make('party.name')->label(__('Employee'))->searchable()->sortable(),
                 TextColumn::make('start_date')->label(__('Start Date'))->date()->sortable(),
                 TextColumn::make('end_date')->label(__('End Date'))->date()->sortable(),
                 TextColumn::make('reason')->label(__('Reason'))->limit(40)->placeholder('—'),

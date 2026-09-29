@@ -31,7 +31,7 @@ class VacationCalendarWidgetTest extends TestCase
 
     public function test_vacation_calendar_widget_renders(): void
     {
-        $party = Party::factory()->create(['role' => ['role' => 'expert']]);
+        $party = Party::factory()->employee()->create();
         PartyLeave::create([
             'party_id' => $party->id,
             'start_date' => now()->startOfMonth()->toDateString(),
@@ -45,7 +45,7 @@ class VacationCalendarWidgetTest extends TestCase
 
     public function test_vacation_calendar_widget_can_mount_edit_action(): void
     {
-        $party = Party::factory()->create(['role' => ['role' => 'expert']]);
+        $party = Party::factory()->employee()->create();
         $leave = PartyLeave::create([
             'party_id' => $party->id,
             'start_date' => now()->startOfMonth()->toDateString(),
