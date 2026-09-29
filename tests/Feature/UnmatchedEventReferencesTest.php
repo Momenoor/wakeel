@@ -1,0 +1,156 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Filament\Mms\Pages\AdminDashboard;
+use App\Filament\Mms\Widgets\UnmatchedEventReferencesWidget;
+use App\Mail\UnmatchedEventReferencesMail;
+use App\Models\CalendarEvent;
+use App\Models\Matter;
+use App\Models\User;
+use App\Services\MMS\Calendar\UnmatchedEventReferences;
+use Filament\Facades\Filament;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Mail;
+use Livewire\Livewire;
+use Spatie\Permission\Models\Role;
+use Tests\TestCase;
+
+/**
+ * Calendar events naming a matter number that no matter in the system has:
+ * a dashboard widget, an hourly pop-up and a daily email for admins.
+ */
+class UnmatchedEventReferencesTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        app()->setLocale('en');
+        Filament::setCurrentPanel('mms');
+        Role::firstOrCreate(['name' => 'super-admin', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+    }
+
+    private function event(string $title, string $when = '+2 days'): CalendarEvent
+    {
+        return CalendarEvent::create([
+            'title' => $title,
+            'start_datetime' => now()->modify($when),
+            'end_datetime' => now()->modify($when)->addHour(),
+            'type' => 'single',
+        ]);
+    }
+
+    private function user(?string $role = null, string $email = 'someone@firm.ae'): User
+    {
+        $user = User::factory()->create(['email' => $email]);
+
+        if ($role) {
+            $user->assignRole($role);
+        }
+
+        return $user;
+    }
+
+    public function test_it_finds_numbers_no_matter_has(): void
+    {
+        Matter::factory()->create(['number' => 639, 'year' => 2025]);
+
+        $found = $this->event('Session 639/2025');
+        $missing = $this->event('12/2024, 639/2025 (Dubai Courts)');
+        $typo = $this->event('Session 6399/2025');
+        $noNumber = $this->event('Office meeting');
+        $old = $this->event('Session 1/2020', '-60 days');
+
+        $this->assertSame([
+            $missing->id => ['12/2024'],
+            $typo->id => ['6399/2025'],
+        ], UnmatchedEventReferences::missing());
+
+        // Adding the matter clears it straight away.
+        Matter::factory()->create(['number' => 12, 'year' => 2024]);
+        $this->assertSame([$typo->id], array_keys(UnmatchedEventReferences::missing()));
+    }
+
+    public function test_the_dashboard_widget_lists_them_only_when_there_are_some(): void
+    {
+        Gate::before(fn () => true);
+        $this->actingAs($this->user('super-admin'));
+
+        $this->assertFalse(UnmatchedEventReferencesWidget::canView());
+
+        $event = $this->event('Session 6399/2025');
+
+        $this->assertTrue(UnmatchedEventReferencesWidget::canView());
+        Livewire::test(UnmatchedEventReferencesWidget::class)
+            ->assertCanSeeTableRecords([$event])
+            ->assertSee('6399/2025');
+    }
+
+    public function test_admins_get_the_popup_on_any_page_others_do_not(): void
+    {
+        Gate::before(fn () => true);
+        $this->event('Session 6399/2025');
+
+        $this->actingAs($this->user('admin'));
+        $this->get(AdminDashboard::getUrl(panel: 'mms'))
+            ->assertSuccessful()
+            ->assertSee('wakeel-unmatched-events', false)
+            ->assertSee('6399/2025');
+
+        $this->actingAs($this->user(email: 'staff@firm.ae'));
+        $this->get(AdminDashboard::getUrl(panel: 'mms'))
+            ->assertSuccessful()
+            ->assertDontSee('wakeel-unmatched-events', false);
+    }
+
+    public function test_no_popup_when_every_number_matches(): void
+    {
+        Gate::before(fn () => true);
+        Matter::factory()->create(['number' => 639, 'year' => 2025]);
+        $this->event('Session 639/2025');
+
+        $this->actingAs($this->user('super-admin'));
+        $this->get(AdminDashboard::getUrl(panel: 'mms'))->assertDontSee('wakeel-unmatched-events', false);
+    }
+
+    public function test_super_admins_and_admins_get_the_daily_email(): void
+    {
+        Mail::fake();
+        $this->user('super-admin', 'boss@firm.ae');
+        $this->user('admin', 'office@firm.ae');
+        $this->user(email: 'staff@firm.ae');
+        $this->event('Session 6399/2025');
+
+        $this->artisan('calendar:report-unmatched')->assertSuccessful();
+
+        Mail::assertSent(UnmatchedEventReferencesMail::class, 2);
+        Mail::assertSent(UnmatchedEventReferencesMail::class, fn ($mail) => $mail->hasTo('boss@firm.ae') && $mail->rows[0]['missing'] === ['6399/2025']);
+        Mail::assertSent(UnmatchedEventReferencesMail::class, fn ($mail) => $mail->hasTo('office@firm.ae'));
+        Mail::assertNotSent(UnmatchedEventReferencesMail::class, fn ($mail) => $mail->hasTo('staff@firm.ae'));
+    }
+
+    public function test_no_email_when_there_is_nothing_to_report(): void
+    {
+        Mail::fake();
+        $this->user('admin', 'office@firm.ae');
+
+        $this->artisan('calendar:report-unmatched')->assertSuccessful();
+
+        Mail::assertNothingSent();
+    }
+
+    public function test_the_email_renders(): void
+    {
+        $html = (new UnmatchedEventReferencesMail([
+            ['date' => 'Tue 29/09/2026', 'title' => 'Session 6399/2025', 'missing' => ['6399/2025']],
+        ], 'https://wakeel.test/mms'))->render();
+
+        $this->assertStringContainsString('6399/2025', $html);
+        $this->assertStringContainsString('https://wakeel.test/mms', $html);
+    }
+}

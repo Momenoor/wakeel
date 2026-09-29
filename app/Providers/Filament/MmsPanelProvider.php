@@ -4,6 +4,7 @@ namespace App\Providers\Filament;
 
 use AlizHarb\ActivityLog\ActivityLogPlugin;
 use AlizHarb\ActivityLog\RelationManagers\ActivitiesRelationManager;
+use App\Filament\Mms\Pages\AdminDashboard;
 use App\Filament\Mms\Pages\Auth\CustomLogin;
 use App\Filament\Mms\Pages\Auth\CustomProfile;
 use App\Filament\Mms\Support\SystemSwitcher;
@@ -15,7 +16,9 @@ use App\Http\Middleware\EnsureLicenseIsValid;
 use App\Http\Middleware\RedirectToInstaller;
 use App\Http\Middleware\TrackCurrentSystem;
 use App\Http\Middleware\TrackUserLastSeen;
+use App\Models\CalendarEvent;
 use App\Models\Setting;
+use App\Services\MMS\Calendar\UnmatchedEventReferences;
 use App\Services\Push\VapidKeys;
 use App\Support\Branding;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
@@ -222,6 +225,37 @@ class MmsPanelProvider extends PanelProvider
         FilamentView::registerRenderHook(
             PanelsRenderHook::BODY_END,
             fn (): string => Blade::render("@livewire('notification-poller')")
+        );
+
+        // Super admins and admins: calendar events naming a matter number
+        // that is not in the system, at most once an hour.
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::BODY_END,
+            function (): string {
+                $user = Auth::user();
+
+                if (! $user || ! $user->hasAnyRole(['admin', Utils::getSuperAdminName()]) || ! config('modules.mms', true)) {
+                    return '';
+                }
+
+                $missing = UnmatchedEventReferences::missing();
+
+                if ($missing === []) {
+                    return '';
+                }
+
+                $rows = UnmatchedEventReferences::events()->limit(10)->get()->map(fn (CalendarEvent $event) => [
+                    'date' => $event->start_datetime?->translatedFormat('D d/m/Y'),
+                    'title' => $event->title,
+                    'missing' => $missing[$event->id] ?? [],
+                ])->all();
+
+                return view('filament.partials.unmatched-events-popup', [
+                    'count' => count($missing),
+                    'rows' => $rows,
+                    'dashboardUrl' => AdminDashboard::getUrl(panel: 'mms'),
+                ])->render();
+            }
         );
 
         // The bell that turns on desktop notifications, beside the user menu,

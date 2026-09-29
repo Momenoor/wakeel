@@ -7,6 +7,7 @@ use App\Filament\Mms\Widgets\CalendarWidget;
 use App\Filament\Mms\Widgets\CollectionsAgingWidget;
 use App\Filament\Mms\Widgets\MattersPerYearWidget;
 use App\Filament\Mms\Widgets\MatterStatsWidget;
+use App\Filament\Mms\Widgets\UnmatchedEventReferencesWidget;
 use App\Filament\Mms\Widgets\UpcomingSessionsWidget;
 use App\Filament\Mms\Widgets\VacationCalendarWidget;
 use Filament\Pages\Dashboard;
@@ -43,6 +44,7 @@ class AdminDashboard extends Dashboard
         // widget declares its own canView(), so a user only ever sees the
         // ones their permissions allow.
         return [
+            UnmatchedEventReferencesWidget::class,
             AttentionNeededWidget::class,
             MatterStatsWidget::class,
             UpcomingSessionsWidget::class,

@@ -119,7 +119,8 @@ class OwnerStatement
 
         $mpdf = new Mpdf([
             'mode' => 'utf-8',
-            'format' => 'A4',
+            // Landscape, like every report when printed.
+            'format' => 'A4-L',
             'margin_top' => 15,
             'margin_bottom' => 18,
             'margin_left' => 12,

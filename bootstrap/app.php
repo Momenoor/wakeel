@@ -51,6 +51,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('calendar:sync-outlook')->everyFiveMinutes()->withoutOverlapping(10);
         $schedule->command('calendar:sync-outlook --days-back=365 --days-ahead=0')->dailyAt('02:30')->withoutOverlapping(30);
 
+        // Super admins and admins hear about calendar events naming a matter
+        // number that is not in the system — each morning, when there are any.
+        $schedule->command('calendar:report-unmatched')->dailyAt('08:00')->withoutOverlapping(30);
+
         // A queue worker for hosting without a long-running process (cPanel):
         // started every minute from the same cron, it works through whatever
         // is queued (Filament imports/exports, queued mail, the "mail" queue),

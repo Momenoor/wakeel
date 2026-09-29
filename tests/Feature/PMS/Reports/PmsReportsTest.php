@@ -194,6 +194,16 @@ class PmsReportsTest extends PmsReportTestCase
         @unlink($pdf);
     }
 
+    public function test_reports_print_landscape(): void
+    {
+        // The browser's print of any report page.
+        Livewire::test(OccupancyReport::class)->assertSeeHtml('size: A4 landscape');
+
+        // The owner statement PDF: A4 wider than it is tall (841.89 × 595.28 pt).
+        $pdf = file_get_contents(OwnerStatement::pdf($this->groupA, now()->startOfMonth(), now()->endOfMonth()));
+        $this->assertMatchesRegularExpression('~/MediaBox \[0 0 841\.8\d+ 595\.2\d+\]~', $pdf);
+    }
+
     public function test_the_owner_statement_pdf_in_arabic(): void
     {
         app()->setLocale('ar');

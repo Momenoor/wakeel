@@ -3106,5 +3106,15 @@
     "From Outlook": "من Outlook",
     "Created in Wakeel": "أُنشئ في وكيل",
     "{1} with 1 other matter|[2,*] with :count other matters": "{1} مع قضية أخرى|[2,*] مع :count قضايا أخرى",
-    "Showing the latest :shown of :total past events.": "عرض آخر :shown من أصل :total من المواعيد السابقة."
+    "Showing the latest :shown of :total past events.": "عرض آخر :shown من أصل :total من المواعيد السابقة.",
+    "Events with a matter number not in the system": "أحداث بأرقام قضايا غير موجودة في النظام",
+    "From :days days ago onwards. Add the matter, or correct the event's title or linked matters.": "اعتباراً من :days يوماً مضت. أضف القضية، أو صحّح عنوان الحدث أو القضايا المرتبطة به.",
+    "Matter number not found": "رقم القضية غير موجود",
+    "New matter": "قضية جديدة",
+    "{1} 1 event names a matter that is not in the system|[2,*] :count events name a matter that is not in the system": "{1} حدث واحد يذكر قضية غير موجودة في النظام|[2,*] :count أحداث تذكر قضايا غير موجودة في النظام",
+    "Add the matter, or correct the event's title or linked matters.": "أضف القضية، أو صحّح عنوان الحدث أو القضايا المرتبطة به.",
+    "And :more more — see the dashboard.": "و:more غيرها — راجع لوحة التحكم.",
+    "Open dashboard": "فتح لوحة التحكم",
+    "{1} 1 calendar event names a matter that is not in the system|[2,*] :count calendar events name a matter that is not in the system": "{1} حدث واحد في التقويم يذكر قضية غير موجودة في النظام|[2,*] :count أحداث في التقويم تذكر قضايا غير موجودة في النظام",
+    "These calendar events name a matter number that no matter in Wakeel has. Add the matter, or correct the event's title or linked matters.": "تذكر أحداث التقويم هذه أرقام قضايا غير موجودة في وكيل. أضف القضية، أو صحّح عنوان الحدث أو القضايا المرتبطة به."
 }

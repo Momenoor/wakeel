@@ -14,8 +14,9 @@
     {{-- Embedded Print Styling for Total Panel Isolation --}}
     <style>
         @media print {
+            /* Reports always print landscape — their tables are wide. */
             @page {
-                size: auto;
+                size: A4 landscape;
                 margin: 12mm 10mm 12mm 10mm;
             }
 

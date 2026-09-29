@@ -174,6 +174,7 @@ return [
         'view_matter_stats_widget' => 'إحصائيات القضايا',
         'view_matters_per_year_widget' => 'القضايا المستلمة سنويًا',
         'view_upcoming_sessions_widget' => 'الجلسات القادمة',
+        'view_unmatched_event_references_widget' => 'أحداث بأرقام قضايا غير موجودة',
         'view_vacation_calendar_widget' => 'تقويم الإجازات',
         'view_p_m_s_overview_widget' => 'نظرة عامة على نظام إدارة الممتلكات',
         'view_pms_revenue_chart_widget' => 'رسم إيرادات نظام إدارة الممتلكات',

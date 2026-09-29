@@ -3,9 +3,12 @@
 namespace App\Providers;
 
 use App\Events\NotificationsUpdated;
+use App\Models\CalendarEvent;
+use App\Models\Matter;
 use App\Models\PushSubscription;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\MMS\Calendar\UnmatchedEventReferences;
 use App\Services\Push\WebPushSender;
 use Carbon\Carbon;
 use Carbon\Translator as CarbonTranslator;
@@ -51,6 +54,13 @@ class AppServiceProvider extends ServiceProvider
         CarbonTranslator::get('ar')->setTranslations([
             'weekdays_short' => ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'],
         ]);
+
+        // "Events naming a matter that is not in the system" is kept for ten
+        // minutes; any change to an event or a matter starts it afresh.
+        foreach ([CalendarEvent::class, Matter::class] as $model) {
+            $model::saved(fn () => UnmatchedEventReferences::forget());
+            $model::deleted(fn () => UnmatchedEventReferences::forget());
+        }
 
         Setting::applyMailConfig();
 
