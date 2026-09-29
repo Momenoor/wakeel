@@ -8,6 +8,7 @@ use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 use Livewire\Component;
 
 class NotificationPoller extends Component
@@ -65,6 +66,17 @@ class NotificationPoller extends Component
             };
 
             $toast->send();
+
+            // The same notification as a desktop one, for when Wakeel is in
+            // a background tab — shown by the browser if the user allowed it
+            // (see filament.partials.desktop-notifications).
+            $this->dispatch(
+                'wakeel-desktop-notification',
+                id: $notification->id,
+                title: (string) ($data['title'] ?? __('notifications.new')),
+                body: Str::limit(trim(html_entity_decode(strip_tags((string) ($data['body'] ?? '')))), 200),
+                url: collect($data['actions'] ?? [])->pluck('url')->filter()->first(),
+            );
 
             $notification->markAsRead();
         }

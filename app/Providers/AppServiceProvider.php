@@ -3,10 +3,13 @@
 namespace App\Providers;
 
 use App\Events\NotificationsUpdated;
+use App\Models\PushSubscription;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\Push\WebPushSender;
 use Carbon\Carbon;
 use Illuminate\Foundation\Events\LocaleUpdated;
+use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Notifications\Events\NotificationSent;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
@@ -49,13 +52,30 @@ class AppServiceProvider extends ServiceProvider
         // per user per request (named defer), after the response, and never
         // allowed to break whatever sent the notification.
         Event::listen(NotificationSent::class, function (NotificationSent $event) {
-            if ($event->channel !== 'database'
-                || ! $event->notifiable instanceof User
-                || ! in_array(config('broadcasting.default'), ['pusher', 'reverb'], true)) {
+            if ($event->channel !== 'database' || ! $event->notifiable instanceof User) {
                 return;
             }
 
             $userId = $event->notifiable->getKey();
+
+            // And as a Web Push to every browser and phone the user allowed —
+            // shown even with no Wakeel tab open.
+            if ($event->response instanceof DatabaseNotification
+                && PushSubscription::where('user_id', $userId)->exists()) {
+                $payload = WebPushSender::payloadFor($event->response);
+
+                defer(function () use ($userId, $payload) {
+                    try {
+                        app(WebPushSender::class)->sendToUser($userId, $payload);
+                    } catch (Throwable $e) {
+                        report($e);
+                    }
+                });
+            }
+
+            if (! in_array(config('broadcasting.default'), ['pusher', 'reverb'], true)) {
+                return;
+            }
 
             defer(function () use ($userId) {
                 try {

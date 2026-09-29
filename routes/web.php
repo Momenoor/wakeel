@@ -1,10 +1,12 @@
 <?php
 
 use App\Http\Controllers\LicenseController;
+use App\Http\Controllers\PushSubscriptionController;
 use App\Livewire\Installer\InstallWizard;
 use App\Models\Setting;
 use App\Services\Updater\Updater;
 use App\Support\AppUpdate;
+use App\Support\Branding;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Route;
 
@@ -54,6 +56,31 @@ Route::get('/system-updates/live-output', function () {
 
 // The default panel's own login — MMS isn't registered on a PMS-only install.
 Route::get('/login', fn () => redirect()->to(Filament::getDefaultPanel()->getLoginUrl()))->name('login');
+
+// Web Push: the page records the browser it runs in (see
+// resources/views/filament/partials/desktop-notifications.blade.php).
+Route::middleware('auth')->group(function () {
+    Route::post('/push/subscriptions', [PushSubscriptionController::class, 'store'])->name('push.subscribe');
+    Route::delete('/push/subscriptions', [PushSubscriptionController::class, 'destroy'])->name('push.unsubscribe');
+});
+
+// Lets phones add Wakeel to the home screen — which iPhone requires
+// before it will deliver push notifications.
+Route::get('/manifest.webmanifest', function () {
+    $root = rtrim((string) config('app.url'), '/').'/';
+    $name = (string) Setting::get('app_name', config('app.name'));
+
+    return response()->json([
+        'name' => $name,
+        'short_name' => $name,
+        'start_url' => $root,
+        'scope' => $root,
+        'display' => 'standalone',
+        'background_color' => '#ffffff',
+        'theme_color' => '#1e3a8a',
+        'icons' => [['src' => Branding::faviconUrl(), 'sizes' => 'any', 'type' => 'image/png']],
+    ], 200, ['Content-Type' => 'application/manifest+json']);
+})->name('manifest');
 
 if (config('modules.mms')) {
     require __DIR__.'/mms.php';

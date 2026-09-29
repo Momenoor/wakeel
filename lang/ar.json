@@ -3028,5 +3028,10 @@
     "Salary Components": "بنود الراتب",
     "Payslip": "كشف الراتب",
     "Clause": "البند",
-    "Clauses": "البنود"
+    "Clauses": "البنود",
+    "Enable desktop notifications": "تفعيل إشعارات سطح المكتب",
+    "Desktop notifications are on": "تم تفعيل إشعارات سطح المكتب",
+    "You will be notified here even when Wakeel is in the background.": "ستصلك الإشعارات هنا حتى عندما يكون وكيل في الخلفية.",
+    "Desktop notifications are blocked": "إشعارات سطح المكتب محظورة",
+    "Desktop notifications are blocked for this site. Allow them from the lock icon in the address bar, then reload.": "إشعارات سطح المكتب محظورة لهذا الموقع. اسمح بها من أيقونة القفل في شريط العنوان ثم أعد تحميل الصفحة."
 }

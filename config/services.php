@@ -37,6 +37,14 @@ return [
 
     // The web cron trigger (GET /cron/run?token=...) — off unless set, at
     // least 32 characters. See App\Http\Controllers\CronWebhookController.
+    // Web Push (browser notifications with no Wakeel tab open). Optional:
+    // without keys here, Wakeel makes its own and keeps them in settings.
+    'webpush' => [
+        'public_key' => env('VAPID_PUBLIC_KEY'),
+        'private_key' => env('VAPID_PRIVATE_KEY'),
+        'subject' => env('VAPID_SUBJECT'),
+    ],
+
     'cron' => [
         'token' => env('CRON_TOKEN'),
     ],

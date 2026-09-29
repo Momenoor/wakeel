@@ -15,10 +15,12 @@ use App\Http\Middleware\RedirectToInstaller;
 use App\Http\Middleware\TrackCurrentSystem;
 use App\Http\Middleware\TrackUserLastSeen;
 use App\Models\Setting;
+use App\Services\Push\VapidKeys;
 use App\Support\Branding;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use BezhanSalleh\FilamentShield\Support\Utils;
 use CraftForge\FilamentLanguageSwitcher\FilamentLanguageSwitcherPlugin;
+use Filament\Facades\Filament;
 use Filament\FontProviders\LocalFontProvider;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
@@ -217,6 +219,29 @@ class MmsPanelProvider extends PanelProvider
         FilamentView::registerRenderHook(
             PanelsRenderHook::BODY_END,
             fn (): string => Blade::render("@livewire('notification-poller')")
+        );
+
+        // The bell that turns on desktop notifications, beside the user menu,
+        // and this browser's Web Push subscription.
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::USER_MENU_BEFORE,
+            fn (): string => Auth::check()
+                ? view('filament.partials.desktop-notifications', [
+                    'icon' => Branding::faviconUrl(),
+                    'pushKey' => VapidKeys::publicKey(),
+                    'workerUrl' => asset('push-sw.js'),
+                    'subscribeUrl' => route('push.subscribe'),
+                ])->render()
+                : ''
+        );
+
+        // Lets phones add Wakeel to the home screen (iPhone needs that for
+        // push notifications).
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::HEAD_END,
+            fn (): string => '<link rel="manifest" href="'.e(route('manifest')).'">'
+                .'<link rel="apple-touch-icon" href="'.e(Branding::faviconUrl()).'">'
+                .'<meta name="apple-mobile-web-app-capable" content="yes">'
         );
 
         FilamentView::registerRenderHook(
