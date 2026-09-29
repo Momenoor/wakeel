@@ -162,6 +162,15 @@ class CalendarMatterLinkingTest extends TestCase
         $this->assertSame('الثلاثاء 29/09/2026', $tuesday->copy()->locale('ar')->translatedFormat('D d/m/Y'));
         $this->assertSame('الثلاثاء', $tuesday->copy()->locale('ar')->isoFormat('ddd'));
         $this->assertSame('Tue', $tuesday->copy()->locale('en')->translatedFormat('D'));
+
+        // As the app does it: the whole app switched to Arabic.
+        app()->setLocale('ar');
+        $this->assertSame('الثلاثاء 29/09/2026', Carbon::parse('2026-09-29')->translatedFormat('D d/m/Y'));
+        $this->assertSame('الثلاثاء', Carbon::parse('2026-09-29')->isoFormat('ddd'));
+        // Month names untouched.
+        $this->assertSame('سبتمبر', Carbon::parse('2026-09-29')->translatedFormat('F'));
+        app()->setLocale('en');
+        $this->assertSame('Tue', Carbon::parse('2026-09-29')->translatedFormat('D'));
     }
 
     public function test_matters_are_found_by_number_court_or_party(): void
@@ -343,6 +352,34 @@ class CalendarMatterLinkingTest extends TestCase
             ->assertSee('1/2020, 639/2025 (Dubai Courts)')
             ->assertSee('https://teams.test/join')
             ->assertDontSee('Session 1/2020');
+    }
+
+    public function test_each_event_on_the_matter_opens_on_the_calendar(): void
+    {
+        $this->signIn();
+        $matter = $this->matter(639, 2025);
+        $upcoming = $this->event('Next session 639/2025', ['start_datetime' => now()->addDays(3)]);
+        $past = $this->event('Earlier session 639/2025', ['start_datetime' => now()->subDays(10), 'end_datetime' => now()->subDays(10)->addHour()]);
+
+        $html = Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])->html();
+
+        foreach ([$upcoming, $past] as $event) {
+            preg_match('~href="([^"]*tableActionRecord='.$event->id.'[^"]*)"~', $html, $m);
+            $this->assertNotEmpty($m, 'a link to event '.$event->id);
+            parse_str((string) parse_url(html_entity_decode($m[1]), PHP_URL_QUERY), $query);
+
+            // Following it: the page opens that event's details once its
+            // table has loaded in the browser (Filament's wire:init, the same
+            // call made here) — and the event is found under the link's own
+            // filters (a past one is outside the default "Upcoming").
+            $page = Livewire::withQueryParams($query)->test(ListCalendarEvents::class)
+                ->assertSet('defaultTableAction', 'view')
+                ->assertSet('defaultTableActionRecord', (string) $event->id);
+            $page->call('mountAction', 'view', [], $page->instance()->getDefaultTableActionUrlContext())
+                ->assertSet('mountedActions.0.name', 'view')
+                ->assertSet('mountedActions.0.context.recordKey', (string) $event->id)
+                ->assertSee($event->title);
+        }
     }
 
     public function test_an_existing_event_is_linked_from_the_matter(): void

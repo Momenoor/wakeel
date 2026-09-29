@@ -8,6 +8,7 @@ use App\Filament\Mms\Actions\Fee\CollectFeeAction;
 use App\Filament\Mms\Actions\Request\ApproveRequestAction;
 use App\Filament\Mms\Actions\Request\CreateRequestAction;
 use App\Filament\Mms\Actions\Request\RejectRequestAction;
+use App\Filament\Mms\Resources\CalendarEvents\CalendarEventResource;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
@@ -234,6 +235,16 @@ class MatterInfolist
                             'upcoming' => $events()->where('start_datetime', '>=', $today)->orderBy('start_datetime')->get(),
                             'past' => $events()->where('start_datetime', '<', $today)->orderByDesc('start_datetime')->limit(30)->get(),
                             'pastTotal' => $events()->where('start_datetime', '<', $today)->count(),
+                            // Each event opens on the Calendar, in its own
+                            // details window — for those who may see it.
+                            'eventUrl' => CalendarEventResource::canViewAny()
+                                ? fn (CalendarEvent $event): string => CalendarEventResource::getUrl('index', [
+                                    'tableAction' => 'view',
+                                    'tableActionRecord' => $event->getKey(),
+                                    // The calendar lists upcoming events by default.
+                                    ...($event->start_datetime?->isPast() ? ['filters' => ['upcoming' => ['isActive' => false]]] : []),
+                                ])
+                                : fn (): ?string => null,
                         ])->render());
                     })
                     ->html(),

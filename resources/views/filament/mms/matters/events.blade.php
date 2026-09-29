@@ -31,7 +31,11 @@
                                     </div>
                                 </td>
                                 <td style="{{ $cell }}">
-                                    <div>{{ $event->title }}</div>
+                                    @if ($url = $eventUrl($event))
+                                        <a href="{{ $url }}" style="text-decoration: underline; text-underline-offset: 3px;" title="{{ __('Open in the calendar') }}">{{ $event->title }}</a>
+                                    @else
+                                        <div>{{ $event->title }}</div>
+                                    @endif
                                     <div style="{{ $muted }}">
                                         @if (filled($event->location)) {{ $event->location }} · @endif
                                         {{ $event->imported_from_outlook ? __('From Outlook') : __('Created in Wakeel') }}

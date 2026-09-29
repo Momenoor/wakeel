@@ -50,10 +50,12 @@ class AppServiceProvider extends ServiceProvider
         );
 
         // Arabic day names in full everywhere a short one is asked for
-        // ('D' / 'ddd'): «الثلاثاء», not Carbon's «ثلاثاء».
-        CarbonTranslator::get('ar')->setTranslations([
-            'weekdays_short' => ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'],
-        ]);
+        // ('D' / 'ddd'): «الثلاثاء», not Carbon's «ثلاثاء». Set on both of
+        // Carbon's translators: the global one (used after the app switches
+        // to Arabic) and the per-locale one (a date's own ->locale('ar')).
+        $fullArabicDays = ['weekdays_short' => ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']];
+        Carbon::getTranslator()->setMessages('ar', $fullArabicDays);
+        CarbonTranslator::get('ar')->setMessages('ar', $fullArabicDays);
 
         // "Events naming a matter that is not in the system" is kept for ten
         // minutes; any change to an event or a matter starts it afresh.
