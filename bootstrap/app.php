@@ -44,6 +44,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('pms:flag-overdue-installments')->everyMinute()->withoutOverlapping();
         $schedule->command('license:verify')->daily()->withoutOverlapping();
 
+        // The shared Outlook calendar: every 5 minutes for yesterday to six
+        // months ahead (one or two Graph calls), and nightly for the past
+        // year, to catch older events edited in Outlook. Skips itself when
+        // Outlook is not set up.
+        $schedule->command('calendar:sync-outlook')->everyFiveMinutes()->withoutOverlapping(10);
+        $schedule->command('calendar:sync-outlook --days-back=365 --days-ahead=0')->dailyAt('02:30')->withoutOverlapping(30);
+
         // A queue worker for hosting without a long-running process (cPanel):
         // started every minute from the same cron, it works through whatever
         // is queued (Filament imports/exports, queued mail, the "mail" queue),

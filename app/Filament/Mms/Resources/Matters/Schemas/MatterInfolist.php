@@ -10,9 +10,11 @@ use App\Filament\Mms\Actions\Request\CreateRequestAction;
 use App\Filament\Mms\Actions\Request\RejectRequestAction;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Helpers\FileUploadHelper;
+use App\Models\CalendarEvent;
 use App\Models\IncentiveAssistantLine;
 use App\Models\MatterOneDriveFolder;
 use App\Models\Type;
+use App\Services\MMS\Calendar\EventMatterLinker;
 use App\Services\MMS\IncentiveCalculatorService;
 use App\Services\MMS\MatterOneDriveFolders;
 use Filament\Actions\Action;
@@ -31,12 +33,15 @@ use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\FontWeight;
 use Filament\Support\Enums\IconPosition;
 use Filament\Support\Enums\TextSize;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
@@ -85,25 +90,185 @@ class MatterInfolist
 
     public static function configure(Schema $schema): Schema
     {
+        // A summary strip with what is looked for first, then everything
+        // else in tabs — the page used to be two long columns of sections.
+        // The open tab is kept in the address (?tab=), so a refresh or a
+        // shared link opens the same tab.
         return $schema
-            ->columns(2)
+            ->columns(1)
             ->components([
-                Grid::make(1)->columnSpan(1)->schema([
-                    static::identitySection(),
-                    static::classificationSection(),
-                    static::datesSection(),
-                    static::requestsSection(),
-                    static::notesSection(),
-                ]),
-                Grid::make(1)->columnSpan(1)->schema([
-                    static::expertsSection(),
-                    static::oneDriveSection(),
-                    static::partiesSection(),
-                    static::feesSection(),
-                    static::incentiveSection(),
-                    static::attachmentsSection(),
-                ]),
+                static::summarySection(),
+                Tabs::make('matter')
+                    ->persistTabInQueryString('tab')
+                    ->columnSpanFull()
+                    ->tabs([
+                        Tab::make(__('Overview'))
+                            ->icon('heroicon-o-document-text')
+                            ->columns(2)
+                            ->schema([
+                                Grid::make(1)->columnSpan(1)->schema([
+                                    static::identitySection(),
+                                    static::classificationSection(),
+                                    static::datesSection(),
+                                ]),
+                                Grid::make(1)->columnSpan(1)->schema([
+                                    static::expertsSection(),
+                                    static::partiesSection(),
+                                ]),
+                            ]),
+                        Tab::make(__('Sessions & Events'))
+                            ->icon('heroicon-o-calendar-days')
+                            ->badge(fn ($record) => $record ? ($record->linkedCalendarEvents()->where('start_datetime', '>=', now()->startOfDay())->count() ?: null) : null)
+                            ->schema([static::eventsSection()]),
+                        Tab::make(__('Fees & Incentive'))
+                            ->icon('heroicon-o-banknotes')
+                            ->schema([
+                                static::feesSection(),
+                                static::incentiveSection(),
+                            ]),
+                        Tab::make(__('Requests & Notes'))
+                            ->icon('heroicon-o-chat-bubble-left-right')
+                            ->badge(fn ($record) => $record ? ($record->requests()->where('status', RequestStatus::PENDING->value)->count() ?: null) : null)
+                            ->badgeColor('warning')
+                            ->schema([
+                                static::requestsSection(),
+                                static::notesSection(),
+                            ]),
+                        Tab::make(__('Files'))
+                            ->icon('heroicon-o-paper-clip')
+                            ->schema([
+                                static::attachmentsSection(),
+                                static::oneDriveSection(),
+                            ]),
+                    ]),
             ]);
+    }
+
+    // ── Summary ───────────────────────────────────────────────────────────────
+
+    /**
+     * The facts people open a matter for, always in view above the tabs.
+     */
+    private static function summarySection(): Section
+    {
+        return Section::make()
+            ->columns(['default' => 2, 'md' => 3, 'xl' => 6])
+            ->schema([
+                TextEntry::make('reference_summary')
+                    ->label(__('Matter'))
+                    ->state(fn ($record) => $record ? $record->number.'/'.$record->year : null)
+                    ->weight(FontWeight::Bold)
+                    ->size(TextSize::Large),
+                TextEntry::make('status_summary')
+                    ->label(__('Status'))
+                    ->state(fn ($record) => $record?->status?->getLabel())
+                    ->badge()
+                    ->color(fn ($record) => $record?->status?->getColor() ?? 'gray'),
+                TextEntry::make('court.name')
+                    ->label(__('Court'))
+                    ->icon('heroicon-o-building-library')
+                    ->placeholder('—'),
+                TextEntry::make('type.name')
+                    ->label(__('Type'))
+                    ->icon('heroicon-o-rectangle-stack')
+                    ->placeholder('—'),
+                TextEntry::make('next_session_summary')
+                    ->label(__('Next Session'))
+                    ->icon('heroicon-o-calendar')
+                    ->state(function ($record) {
+                        $next = $record?->linkedCalendarEvents()->where('start_datetime', '>=', now())->orderBy('start_datetime')->value('start_datetime');
+
+                        return $next ?? $record?->next_session_date;
+                    })
+                    ->dateTime('D d/m/Y g:i A')
+                    ->placeholder('—')
+                    ->color('primary'),
+                TextEntry::make('assistants_summary')
+                    ->label(__('Assistants'))
+                    ->icon('heroicon-o-user-group')
+                    ->state(fn ($record) => $record?->assistantsOnly()->with('party:id,name')->get()->pluck('party.name')->filter()->implode('، ') ?: null)
+                    ->placeholder('—'),
+            ]);
+    }
+
+    // ── Sessions & events ─────────────────────────────────────────────────────
+
+    /**
+     * Every calendar event for the matter — from Outlook or made in Wakeel,
+     * linked as its only matter or among several — upcoming then past.
+     */
+    private static function eventsSection(): Section
+    {
+        return Section::make(__('Sessions & Events'))
+            ->key('matter-events')
+            ->icon('heroicon-o-calendar-days')
+            ->description(__('Court sessions and meetings from the calendar. Events whose title names this matter (e.g. 639/2025) are linked automatically.'))
+            ->headerActions([static::linkEventAction()])
+            ->schema([
+                TextEntry::make('events_list')
+                    ->hiddenLabel()
+                    ->state(function ($record) {
+                        if (! $record) {
+                            return null;
+                        }
+
+                        $today = now()->startOfDay();
+                        $events = fn () => $record->linkedCalendarEvents()->with('matters:id');
+
+                        return new HtmlString(view('filament.mms.matters.events', [
+                            'upcoming' => $events()->where('start_datetime', '>=', $today)->orderBy('start_datetime')->get(),
+                            'past' => $events()->where('start_datetime', '<', $today)->orderByDesc('start_datetime')->limit(30)->get(),
+                            'pastTotal' => $events()->where('start_datetime', '<', $today)->count(),
+                        ])->render());
+                    })
+                    ->html(),
+            ]);
+    }
+
+    /**
+     * Links an existing calendar event to this matter — found by its title
+     * or date.
+     */
+    private static function linkEventAction(): Action
+    {
+        return Action::make('linkCalendarEvent')
+            ->label(__('Link event'))
+            ->icon('heroicon-o-link')
+            ->size('sm')
+            ->visible(fn ($record) => auth()->user()?->can('update', $record))
+            ->schema([
+                Select::make('event_id')
+                    ->label(__('Event'))
+                    ->helperText(__('Search by title, or a date like 29/09/2026.'))
+                    ->searchable()
+                    ->required()
+                    ->getOptionLabelUsing(fn ($value): ?string => ($event = CalendarEvent::find($value))
+                        ? $event->start_datetime?->format('d/m/Y g:i A').' — '.$event->title
+                        : null)
+                    ->getSearchResultsUsing(function (string $search): array {
+                        $query = CalendarEvent::query()->orderByDesc('start_datetime')->limit(30);
+                        $day = rescue(fn () => Carbon::createFromFormat('d/m/Y', trim($search)), null, false);
+
+                        $day
+                            ? $query->whereDate('start_datetime', $day)
+                            : $query->where('title', 'like', '%'.$search.'%');
+
+                        return $query->get()->mapWithKeys(fn (CalendarEvent $event) => [
+                            $event->id => $event->start_datetime?->format('d/m/Y g:i A').' — '.$event->title,
+                        ])->all();
+                    }),
+            ])
+            ->action(function (array $data, $record, $component) {
+                $event = CalendarEvent::find($data['event_id']);
+
+                if ($event) {
+                    $event->matters()->syncWithoutDetaching([$record->getKey()]);
+                    app(EventMatterLinker::class)->tidy($event->fresh());
+                }
+
+                Notification::make()->title(__('Event linked'))->success()->send();
+                static::refreshComponent($component);
+            });
     }
 
     // ── Left column sections ──────────────────────────────────────────────────

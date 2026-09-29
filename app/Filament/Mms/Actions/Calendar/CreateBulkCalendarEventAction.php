@@ -6,6 +6,7 @@ use App\Models\CalendarEvent;
 use App\Models\Court;
 use App\Models\Matter;
 use App\Models\Type;
+use App\Services\MMS\Calendar\EventMatterLinker;
 use App\Services\MMS\OutlookCalendarService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
@@ -117,7 +118,10 @@ class CreateBulkCalendarEventAction extends Action
                     'created_by' => Auth::id(),
                 ]);
 
-                $event->matters()->attach($data['matter_ids']);
+                // syncWithoutDetaching, not attach: the event may already be
+                // linked to a matter its title names (CalendarEventObserver).
+                $event->matters()->syncWithoutDetaching($data['matter_ids']);
+                app(EventMatterLinker::class)->tidy($event->fresh());
 
                 // Update next_session_date on ALL selected matters
                 Matter::whereIn('id', $data['matter_ids'])->update(['next_session_date' => $data['start_datetime']]);

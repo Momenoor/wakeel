@@ -2,14 +2,15 @@
 
 namespace App\Filament\Mms\Resources\CalendarEvents\Tables;
 
+use App\Filament\Mms\Actions\Calendar\CalendarMatterActions;
 use App\Filament\Mms\Actions\Calendar\CreateBulkCalendarEventAction;
 use App\Filament\Mms\Actions\Calendar\CreateSingleCalendarEventAction;
-use App\Filament\Mms\Actions\Calendar\ImportFromOutlookAction;
 use App\Filament\Mms\Actions\Calendar\SyncToOutlookAction;
 use App\Filament\Mms\Resources\CalendarEvents\Schemas\CalendarEventBulkInfolist;
 use App\Filament\Mms\Resources\CalendarEvents\Schemas\CalendarEventForm;
 use App\Filament\Mms\Resources\CalendarEvents\Schemas\CalendarEventInfolist;
 use App\Models\CalendarEvent;
+use App\Services\MMS\OutlookCalendarService;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
@@ -117,18 +118,24 @@ class CalendarEventsTable
                     ->visible(fn () => auth()->user()->can('CreateSingle:CalendarEvent')),
                 CreateBulkCalendarEventAction::make('createBulk')
                     ->visible(fn () => auth()->user()->can('CreateBulk:CalendarEvent')),
-                ImportFromOutlookAction::make('import')
+                // Same permission the old one-off import had.
+                CalendarMatterActions::syncWithOutlook()
+                    ->visible(fn () => auth()->user()->can('ImportFromOutlook:CalendarEvent') && app(OutlookCalendarService::class)->isConfigured()),
+                CalendarMatterActions::linkAllFromTitles()
                     ->visible(fn () => auth()->user()->can('ImportFromOutlook:CalendarEvent')),
             ])
             ->recordActions([
                 SyncToOutlookAction::make()
                     ->visible(fn ($record) => $record instanceof CalendarEvent && auth()->user()->can('SyncToOutlook:CalendarEvent') && ! $record->synced_to_outlook),
+                CalendarMatterActions::linkMatters()
+                    ->visible(fn ($record) => auth()->user()->can('update', $record)),
                 ViewAction::make()->schema(fn (Schema $schema, $record) => $record->type == 'single' ? CalendarEventInfolist::configure($schema) : CalendarEventBulkInfolist::configure($schema))->iconButton(),
                 EditAction::make()->iconButton()->schema(fn (Schema $schema) => CalendarEventForm::configure($schema)),
                 DeleteAction::make()->iconButton(),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
+                    CalendarMatterActions::linkFromTitlesBulk(),
                     DeleteBulkAction::make(),
                     ForceDeleteBulkAction::make(),
                     RestoreBulkAction::make(),

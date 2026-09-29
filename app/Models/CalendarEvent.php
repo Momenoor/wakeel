@@ -40,6 +40,7 @@ class CalendarEvent extends Model
         'synced_to_outlook' => 'boolean',
         'imported_from_outlook' => 'boolean',
         'is_teams_meeting' => 'boolean',
+        'is_all_day' => 'boolean',
     ];
 
     public function matter(): BelongsTo

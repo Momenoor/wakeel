@@ -428,4 +428,17 @@ class Matter extends Model
     {
         return $this->belongsToMany(CalendarEvent::class, 'calendar_event_matter');
     }
+
+    /**
+     * Every calendar event for this matter, however it was linked — as its
+     * main matter or among several.
+     *
+     * @return Builder<CalendarEvent>
+     */
+    public function linkedCalendarEvents(): Builder
+    {
+        return CalendarEvent::query()->where(fn (Builder $query) => $query
+            ->where('matter_id', $this->getKey())
+            ->orWhereHas('matters', fn (Builder $q) => $q->whereKey($this->getKey())));
+    }
 }

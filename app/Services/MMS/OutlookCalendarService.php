@@ -145,6 +145,62 @@ class OutlookCalendarService
     }
 
     /**
+     * Whether the shared calendar is set up (MICROSOFT_* in .env).
+     */
+    public function isConfigured(): bool
+    {
+        $config = config('services.outlook');
+
+        return filled($config['tenant_id'] ?? null) && filled($config['client_id'] ?? null)
+            && filled($config['client_secret'] ?? null) && filled($config['user_email'] ?? null);
+    }
+
+    /**
+     * Every event in the shared calendar between two moments — each
+     * occurrence of a recurring meeting on its own — following Graph's
+     * pages to the end (the plain /events list stopped at its first 50).
+     *
+     * @return list<array<string, mixed>>
+     *
+     * @throws ConnectionException
+     */
+    public function eventsBetween(Carbon $from, Carbon $to): array
+    {
+        $url = "https://graph.microsoft.com/v1.0/users/{$this->getUserEmail()}/calendarView";
+        $query = [
+            'startDateTime' => $from->copy()->utc()->format('Y-m-d\TH:i:s\Z'),
+            'endDateTime' => $to->copy()->utc()->format('Y-m-d\TH:i:s\Z'),
+            '$select' => 'subject,body,start,end,location,id,isOnlineMeeting,onlineMeeting,isAllDay,isCancelled',
+            '$orderby' => 'start/dateTime',
+            '$top' => 100,
+        ];
+
+        $events = [];
+        $pages = 0;
+
+        while ($url !== null && $pages++ < 100) {
+            // The next page's link is called as it is: an empty query array
+            // would replace — and so drop — the query string it carries.
+            $http = Http::withToken($this->getAccessToken())->timeout(30);
+            $response = $query === [] ? $http->get($url) : $http->get($url, $query);
+
+            if ($response->failed()) {
+                throw new \RuntimeException('Failed to read Outlook events: '.($response->json('error.message') ?: $response->body()));
+            }
+
+            array_push($events, ...($response->json('value') ?? []));
+
+            // The next page's link already carries every parameter. Read
+            // from the array: json('@odata.nextLink') would take the dot as
+            // a path and never find it.
+            $url = ($response->json() ?? [])['@odata.nextLink'] ?? null;
+            $query = [];
+        }
+
+        return $events;
+    }
+
+    /**
      * @throws ConnectionException
      */
     public function importEvents(?Carbon $from = null): array

@@ -3,11 +3,29 @@
 namespace App\Observers;
 
 use App\Models\CalendarEvent;
+use App\Services\MMS\Calendar\EventMatterLinker;
 use App\Services\MMS\OutlookCalendarService;
 use Illuminate\Support\Facades\Log;
 
 class CalendarEventObserver
 {
+    /**
+     * A new or renamed event is linked straight away to the matters its
+     * title names — links already made are kept (EventMatterLinker).
+     */
+    public function saved(CalendarEvent $event): void
+    {
+        if (! $event->wasRecentlyCreated && ! $event->wasChanged('title')) {
+            return;
+        }
+
+        try {
+            app(EventMatterLinker::class)->link($event);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
     /**
      * Remove the event from Outlook when it is deleted locally.
      *

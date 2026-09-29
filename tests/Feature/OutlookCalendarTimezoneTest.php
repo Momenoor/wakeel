@@ -6,6 +6,7 @@ use App\Filament\Mms\Resources\CalendarEvents\Pages\ListCalendarEvents;
 use App\Models\CalendarEvent;
 use App\Models\User;
 use App\Services\MMS\OutlookCalendarService;
+use Filament\Actions\Testing\TestAction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
@@ -41,6 +42,13 @@ class OutlookCalendarTimezoneTest extends TestCase
         parent::setUp();
 
         $this->appTz = config('app.timezone');
+
+        // Its own Outlook settings, not whatever this machine's .env has.
+        config(['services.outlook' => [
+            'tenant_id' => 'tenant', 'client_id' => 'client', 'client_secret' => 'secret',
+            'user_email' => 'calendar@firm.ae', 'redirect_uri' => null,
+        ]]);
+        cache()->forget('outlook_access_token');
 
         Http::fake([
             'login.microsoftonline.com/*' => Http::response(['access_token' => 'test-token']),
@@ -132,7 +140,7 @@ class OutlookCalendarTimezoneTest extends TestCase
 
         Http::fake([
             'login.microsoftonline.com/*' => Http::response(['access_token' => 'test-token']),
-            'graph.microsoft.com/v1.0/users/*/events*' => Http::response([
+            'graph.microsoft.com/v1.0/users/*/calendarView*' => Http::response([
                 'value' => [
                     [
                         'id' => 'outlook-imported-1',
@@ -148,8 +156,9 @@ class OutlookCalendarTimezoneTest extends TestCase
             ]),
         ]);
 
+        // "Sync with Outlook" replaced the one-off import.
         Livewire::test(ListCalendarEvents::class)
-            ->callTableAction('import', record: null, data: ['from_date' => '2026-09-01']);
+            ->callAction(TestAction::make('syncWithOutlook')->table(), ['from' => '2026-09-01', 'to' => '2026-09-30']);
 
         $event = CalendarEvent::where('outlook_event_id', 'outlook-imported-1')->firstOrFail();
 
