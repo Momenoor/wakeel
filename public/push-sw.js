@@ -7,6 +7,13 @@
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 
+/** A Wakeel tab the user is looking at right now. */
+async function wakeelInFront() {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+
+    return windows.some((client) => client.url.startsWith(self.registration.scope) && client.visibilityState === 'visible' && client.focused);
+}
+
 self.addEventListener('push', (event) => {
     let data = {};
 
@@ -16,17 +23,27 @@ self.addEventListener('push', (event) => {
         data = { body: event.data ? event.data.text() : '' };
     }
 
-    event.waitUntil(
-        self.registration.showNotification(data.title || 'Wakeel', {
+    event.waitUntil((async () => {
+        const tag = data.tag || 'wakeel-' + Date.now();
+
+        await self.registration.showNotification(data.title || 'Wakeel', {
             body: data.body || '',
             icon: data.icon || undefined,
             badge: data.icon || undefined,
-            // One per notification: a tab that already showed it is
-            // replaced, not doubled.
-            tag: data.tag || undefined,
+            // One per notification (one per conversation for chat): shown
+            // once however many tabs and devices it reaches.
+            tag,
+            renotify: !! data.renotify,
             data: { url: data.url || self.registration.scope },
-        }),
-    );
+        });
+
+        // Wakeel is in front: its own toast / chat window already shows it.
+        // A push must still show something, so it is closed straight away.
+        if (await wakeelInFront()) {
+            const shown = await self.registration.getNotifications({ tag });
+            shown.forEach((notification) => notification.close());
+        }
+    })());
 });
 
 self.addEventListener('notificationclick', (event) => {

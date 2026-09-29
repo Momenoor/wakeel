@@ -7,11 +7,18 @@ use App\Enums\RequestType;
 use App\Mail\NewMatterNotificationMail;
 use App\Models\Matter;
 use App\Models\MatterRequest;
+use App\Services\Notify\UserAlert;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Route;
 
 class NewMatterNotification
 {
+    private static function url(string $route, mixed $parameter): ?string
+    {
+        return Route::has($route) ? route($route, $parameter) : null;
+    }
+
     public function sendToAssistants(Matter $matter): void
     {
         // Guard: already has a pending request
@@ -55,6 +62,20 @@ class NewMatterNotification
                     ->queue(new NewMatterNotificationMail($matter, $party, $matterRequest));
 
                 Log::info("NewMatterNotification: Mail queued for party #{$party->id} on Matter #{$matter->id}.");
+
+                // And in the system — bell, desktop and phone — linked to
+                // the request where the received date is confirmed.
+                UserAlert::send(
+                    $party->user,
+                    __('New matter assigned'),
+                    __('Matter :number/:year — :type — :court. Please confirm the received date.', [
+                        'number' => $matter->number,
+                        'year' => $matter->year,
+                        'type' => $matter->type?->getAttribute('name') ?? '—',
+                        'court' => $matter->court?->getAttribute('name') ?? '—',
+                    ]),
+                    self::url('filament.mms.resources.matter-requests.view', $matterRequest),
+                );
 
             } catch (\Throwable $e) {
                 Log::error("NewMatterNotification: Failed to process party #{$party->id} on Matter #{$matter->id}.", [

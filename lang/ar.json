@@ -3033,5 +3033,14 @@
     "Desktop notifications are on": "تم تفعيل إشعارات سطح المكتب",
     "You will be notified here even when Wakeel is in the background.": "ستصلك الإشعارات هنا حتى عندما يكون وكيل في الخلفية.",
     "Desktop notifications are blocked": "إشعارات سطح المكتب محظورة",
-    "Desktop notifications are blocked for this site. Allow them from the lock icon in the address bar, then reload.": "إشعارات سطح المكتب محظورة لهذا الموقع. اسمح بها من أيقونة القفل في شريط العنوان ثم أعد تحميل الصفحة."
+    "Desktop notifications are blocked for this site. Allow them from the lock icon in the address bar, then reload.": "إشعارات سطح المكتب محظورة لهذا الموقع. اسمح بها من أيقونة القفل في شريط العنوان ثم أعد تحميل الصفحة.",
+    "New matter assigned": "تم تعيين قضية جديدة",
+    "Matter :number/:year — :type — :court. Please confirm the received date.": "القضية :number/:year — :type — :court. يرجى تأكيد تاريخ الاستلام.",
+    "New leave request": "طلب إجازة جديد",
+    ":name requested leave from :start to :end.": "طلب :name إجازة من :start إلى :end.",
+    ":start to :end": "من :start إلى :end",
+    "Leave request approved": "تمت الموافقة على طلب الإجازة",
+    "Leave request rejected": "تم رفض طلب الإجازة",
+    "Your leave request for :period was approved.": "تمت الموافقة على طلب إجازتك :period.",
+    "Your leave request for :period was rejected: :reason": "تم رفض طلب إجازتك :period: :reason"
 }

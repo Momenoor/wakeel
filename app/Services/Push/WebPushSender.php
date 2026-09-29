@@ -53,6 +53,26 @@ class WebPushSender
     }
 
     /**
+     * A chat message as a push: the sender as the title, the message as
+     * the body. One notification per conversation, alerting again for each
+     * new message instead of piling up.
+     *
+     * @return array{id: string, title: string, body: string, url: string, tag: string, icon: string, renotify: bool}
+     */
+    public static function chatPayload(int $conversationId, string $senderName, string $message, string $url): array
+    {
+        return [
+            'id' => 'chat-'.$conversationId,
+            'title' => $senderName,
+            'body' => Str::limit(trim($message), 150),
+            'url' => $url,
+            'tag' => 'wakeel-chat-'.$conversationId,
+            'icon' => Branding::faviconUrl(),
+            'renotify' => true,
+        ];
+    }
+
+    /**
      * Sends to every subscription the user has; returns how many took it.
      *
      * @param  array<string, mixed>  $payload

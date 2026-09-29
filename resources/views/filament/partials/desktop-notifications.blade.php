@@ -78,7 +78,7 @@
     x-on:wakeel-desktop-notification.window="
         const n = $event.detail;
         if (state !== 'granted' || (document.visibilityState === 'visible' && document.hasFocus())) { return; }
-        const shown = new Notification(n.title, { body: n.body || '', icon: @js($icon), tag: 'wakeel-' + n.id });
+        const shown = new Notification(n.title, { body: n.body || '', icon: @js($icon), tag: 'wakeel-' + n.id, renotify: String(n.id).startsWith('chat-') });
         shown.onclick = () => { window.focus(); if (n.url) { window.location.href = n.url; } shown.close(); };
     "
     class="flex items-center"

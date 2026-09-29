@@ -8,8 +8,10 @@ use App\Models\LeaveRequest;
 use App\Models\LeaveRequestPeriod;
 use App\Models\PartyLeave;
 use App\Models\User;
+use App\Services\Notify\UserAlert;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
 use RuntimeException;
 
 /**
@@ -81,6 +83,8 @@ class LeaveRequestService
                 $this->recordAgainstEntitlement($request, $saved);
             }
 
+            DB::afterCommit(fn () => $this->tellRequester($request, approved: true));
+
             return $request->load('periods');
         });
     }
@@ -117,8 +121,32 @@ class LeaveRequestService
                 $request->periods()->pluck('id'),
             )->delete();
 
+            DB::afterCommit(fn () => $this->tellRequester($request, approved: false));
+
             return $request;
         });
+    }
+
+    /**
+     * The employee hears the decision in the system — bell, desktop, phone —
+     * however it was made (the panel or the office email's one-click link).
+     */
+    private function tellRequester(LeaveRequest $request, bool $approved): void
+    {
+        $period = __(':start to :end', [
+            'start' => $request->start_date?->format('d/m/Y') ?? '—',
+            'end' => $request->end_date?->format('d/m/Y') ?? '—',
+        ]);
+
+        UserAlert::send(
+            $request->party?->user,
+            $approved ? __('Leave request approved') : __('Leave request rejected'),
+            $approved
+                ? __('Your leave request for :period was approved.', ['period' => $period])
+                : __('Your leave request for :period was rejected: :reason', ['period' => $period, 'reason' => (string) $request->approved_comment]),
+            Route::has('filament.mms.resources.leave-requests.index') ? route('filament.mms.resources.leave-requests.index') : null,
+            $approved ? 'success' : 'danger',
+        );
     }
 
     /**

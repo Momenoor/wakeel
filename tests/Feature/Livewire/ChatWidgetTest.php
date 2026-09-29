@@ -182,11 +182,15 @@ class ChatWidgetTest extends TestCase
 
     public function test_a_closed_popup_does_not_render_its_hidden_content(): void
     {
-        // The popup panel's header (chat-body) — only there once opened.
+        // The popup panel's header (chat-body) — only there once opened. The
+        // header text itself, not the bare word: the poll attribute
+        // (wire:poll="checkForNewMessages") contains "Messages" too.
+        $header = '>'.__('Messages').'</span>';
+
         Livewire::test(ChatWidget::class, ['mode' => 'popup'])
-            ->assertDontSee(__('Messages'))
+            ->assertDontSeeHtml($header)
             ->call('toggleOpen')
-            ->assertSee(__('Messages'));
+            ->assertSeeHtml($header);
     }
 
     public function test_the_panels_stamp_last_seen_on_their_polling_requests_too(): void

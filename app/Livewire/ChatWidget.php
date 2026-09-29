@@ -5,13 +5,17 @@ namespace App\Livewire;
 use App\Events\ChatMessageSent;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
+use App\Models\PushSubscription;
 use App\Models\User;
+use App\Services\Push\WebPushSender;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Livewire\Component;
+use Throwable;
 
 /**
  * The real-time 1-on-1 chat between panel users, delivered over broadcasting
@@ -48,6 +52,14 @@ class ChatWidget extends Component
      * pops the chat open.
      */
     public int $lastSeenMessageId = 0;
+
+    /**
+     * Where a chat notification takes you: the full Chat page.
+     */
+    private static function chatUrl(): string
+    {
+        return Route::has('filament.mms.pages.chat') ? route('filament.mms.pages.chat') : url('/');
+    }
 
     public function mount(string $mode = 'page'): void
     {
@@ -111,6 +123,17 @@ class ChatWidget extends Component
         }
 
         $this->lastSeenMessageId = (int) $latest->id;
+
+        // A desktop notification too, when Wakeel is in a background tab —
+        // the same tag as its push, so it never shows twice.
+        $latest->loadMissing('sender');
+        $this->dispatch(
+            'wakeel-desktop-notification',
+            id: 'chat-'.$latest->chat_conversation_id,
+            title: (string) ($latest->sender?->display_name ?: $latest->sender?->name ?: __('Chat')),
+            body: Str::limit(trim((string) $latest->body), 150),
+            url: self::chatUrl(),
+        );
 
         // A conversation on screen is being read as its messages arrive —
         // otherwise its own new message counted as unread elsewhere.
@@ -318,6 +341,28 @@ class ChatWidget extends Component
         // Pusher no longer holds up the sender's own reply.
         $message->load('sender');
         defer(fn () => broadcast(new ChatMessageSent($message))->toOthers());
+
+        // And as a push to the other side's browsers and phones — seen even
+        // with no Wakeel tab open.
+        $recipients = $conversation->participants->pluck('id')->reject(fn ($id) => $id === Auth::id())->values()->all();
+        if (PushSubscription::whereIn('user_id', $recipients)->exists()) {
+            $payload = WebPushSender::chatPayload(
+                $conversation->id,
+                (string) ($message->sender?->display_name ?: $message->sender?->name ?: __('Chat')),
+                $message->body,
+                self::chatUrl(),
+            );
+
+            defer(function () use ($recipients, $payload) {
+                foreach ($recipients as $userId) {
+                    try {
+                        app(WebPushSender::class)->sendToUser((int) $userId, $payload);
+                    } catch (Throwable $e) {
+                        report($e);
+                    }
+                }
+            });
+        }
 
         $this->body = '';
     }
