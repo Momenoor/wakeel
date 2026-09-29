@@ -5,6 +5,7 @@ namespace App\Filament\Pms\Resources\Properties\RelationManagers;
 use App\Enums\PMS\PropertyClassification;
 use App\Enums\PMS\UnitStatus;
 use App\Enums\PMS\UnitType;
+use App\Filament\Pms\Actions\KeepsHistory;
 use App\Filament\Pms\Imports\UnitImporter;
 use App\Models\Unit;
 use Filament\Actions\CreateAction;
@@ -13,7 +14,6 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ImportAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
@@ -150,17 +150,7 @@ class UnitsRelationManager extends RelationManager
             ->recordActions([
                 EditAction::make(),
                 DeleteAction::make()
-                    ->before(function (Unit $record, DeleteAction $action): void {
-                        if ($record->hasLeaseHistory()) {
-                            Notification::make()
-                                ->danger()
-                                ->title(__('Could not continue'))
-                                ->body(__('This unit is linked to a lease and cannot be deleted.'))
-                                ->send();
-
-                            $action->halt();
-                        }
-                    }),
+                    ->before(KeepsHistory::guard()),
             ])
             ->emptyStateHeading(__('No units yet'));
     }

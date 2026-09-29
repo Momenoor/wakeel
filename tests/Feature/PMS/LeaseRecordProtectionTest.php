@@ -3,12 +3,15 @@
 namespace Tests\Feature\PMS;
 
 use App\Enums\PMS\LeasePartyRole;
+use App\Filament\Pms\Resources\OwnerGroups\Pages\ListOwnerGroups;
 use App\Filament\Pms\Resources\Properties\Pages\EditProperty;
 use App\Filament\Pms\Resources\Properties\Pages\ListProperties;
 use App\Filament\Pms\Resources\Properties\RelationManagers\UnitsRelationManager;
 use App\Filament\Pms\Resources\Tenants\Pages\ListTenants;
+use App\Models\OwnerGroup;
 use App\Models\Party;
 use App\Models\Property;
+use App\Models\Quotation;
 use App\Models\Tenant;
 use App\Models\Unit;
 use App\Models\User;
@@ -146,5 +149,85 @@ class LeaseRecordProtectionTest extends TestCase
             ->assertNotified();
 
         $this->assertDatabaseHas('tenants', ['id' => $tenant->id]);
+    }
+
+    public function test_deleting_a_property_deletes_its_units_and_restoring_brings_them_back(): void
+    {
+        $property = Property::factory()->create();
+        $earlier = Unit::factory()->residential()->create(['property_id' => $property->id]);
+        $earlier->delete();
+        $this->travel(1)->minutes();
+        $units = Unit::factory()->residential()->count(2)->create(['property_id' => $property->id]);
+
+        $property->delete();
+
+        $units->each(fn (Unit $unit) => $this->assertSoftDeleted($unit));
+
+        $this->travel(1)->minutes();
+        $property->restore();
+
+        $units->each(fn (Unit $unit) => $this->assertNotSoftDeleted($unit));
+        $this->assertSoftDeleted($earlier); // deleted on its own, before
+        $this->assertSame(2, $property->fresh()->total_units);
+    }
+
+    public function test_deleting_a_property_from_the_list_takes_its_units(): void
+    {
+        $unit = Unit::factory()->residential()->create();
+
+        Livewire::test(ListProperties::class)
+            ->callAction(TestAction::make('delete')->table($unit->property));
+
+        $this->assertSoftDeleted($unit->property);
+        $this->assertSoftDeleted($unit);
+    }
+
+    public function test_a_unit_on_a_quotation_or_an_old_deleted_lease_keeps_its_history(): void
+    {
+        $quoted = Unit::factory()->residential()->create();
+        Quotation::factory()->create()->units()->attach($quoted->id, ['offered_rent' => 50000, 'vat_amount' => 0]);
+
+        $this->assertNotNull($quoted->deletionBlockedReason());
+        $this->assertNotNull($quoted->property->deletionBlockedReason());
+
+        Livewire::test(UnitsRelationManager::class, ['ownerRecord' => $quoted->property, 'pageClass' => EditProperty::class])
+            ->callAction(TestAction::make('delete')->table($quoted))
+            ->assertNotified(__('Could not continue'));
+        $this->assertNotSoftDeleted($quoted);
+
+        $leased = $this->leasedUnit();
+        $leased->leases()->first()->delete();
+        $this->assertNotNull($leased->deletionBlockedReason());
+
+        $this->expectException(RuntimeException::class);
+        $quoted->property->delete();
+    }
+
+    public function test_a_tenant_with_a_quotation_cannot_be_deleted(): void
+    {
+        $party = Party::factory()->tenant()->create();
+        $tenant = Tenant::factory()->create(['party_id' => $party->id]);
+        Quotation::factory()->create(['party_id' => $party->id]);
+
+        Livewire::test(ListTenants::class)
+            ->callAction(TestAction::make('delete')->table($tenant))
+            ->assertNotified();
+
+        $this->assertDatabaseHas('tenants', ['id' => $tenant->id]);
+    }
+
+    public function test_an_owner_group_with_properties_cannot_be_deleted(): void
+    {
+        $group = OwnerGroup::factory()->create();
+        Property::factory()->create(['owner_group_id' => $group->id]);
+
+        Livewire::test(ListOwnerGroups::class)
+            ->callAction(TestAction::make('delete')->table($group))
+            ->assertNotified();
+        $this->assertDatabaseHas('owner_groups', ['id' => $group->id]);
+
+        $empty = OwnerGroup::factory()->create();
+        Livewire::test(ListOwnerGroups::class)->callAction(TestAction::make('delete')->table($empty));
+        $this->assertDatabaseMissing('owner_groups', ['id' => $empty->id]);
     }
 }

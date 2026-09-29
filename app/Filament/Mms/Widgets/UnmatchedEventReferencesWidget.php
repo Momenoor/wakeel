@@ -11,6 +11,7 @@ use Filament\Actions\Action;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget;
+use Illuminate\Contracts\View\View;
 
 /**
  * Calendar events that name a matter number no matter in the system has —
@@ -29,7 +30,25 @@ class UnmatchedEventReferencesWidget extends TableWidget
 
     public static function canView(): bool
     {
-        return static::shieldCanView() && UnmatchedEventReferences::count() > 0;
+        return static::shieldCanView() && self::hasEvents();
+    }
+
+    /**
+     * Nothing at all on the dashboard once the last event is sorted out —
+     * not even an empty table left behind after fixing it from here.
+     */
+    public function render(): View
+    {
+        return self::hasEvents() ? parent::render() : view('filament.widgets.hidden');
+    }
+
+    /**
+     * The events themselves, not just the cached count: an event deleted by
+     * the Outlook sync must not keep an empty widget up for ten minutes.
+     */
+    private static function hasEvents(): bool
+    {
+        return UnmatchedEventReferences::count() > 0 && UnmatchedEventReferences::events()->exists();
     }
 
     public function table(Table $table): Table

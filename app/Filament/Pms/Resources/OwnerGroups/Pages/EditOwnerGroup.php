@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pms\Resources\OwnerGroups\Pages;
 
+use App\Filament\Pms\Actions\KeepsHistory;
 use App\Filament\Pms\Resources\OwnerGroups\OwnerGroupResource;
 use App\Models\OwnerGroup;
 use Filament\Actions\DeleteAction;
@@ -15,7 +16,8 @@ class EditOwnerGroup extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            DeleteAction::make(),
+            DeleteAction::make()
+                ->before(KeepsHistory::guard()),
         ];
     }
 

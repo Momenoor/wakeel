@@ -6,11 +6,11 @@ use App\Models\Matter;
 
 /**
  * Finds the matters an event title talks about, by the way the office
- * writes a matter number: "639/2025", "2025/639", "639 of 2025" and
- * "639 لسنة 2025", in Western or Arabic-Indic digits.
+ * writes a matter number: "639/2025", "2025/639", "3153-2026", "2026-3153",
+ * "639 of 2025" and "639 لسنة 2025", in Western or Arabic-Indic digits.
  *
  * A date is never read as a matter: "29/09/2026" or "2026/09/29" is not
- * matter 9 of 2026.
+ * matter 9 of 2026. Nor is a year after the current one.
  */
 class MatterReferenceMatcher
 {
@@ -36,16 +36,49 @@ class MatterReferenceMatcher
         // the start of a longer number.
         preg_match_all('~(?<![\d/])(\d{1,6})\s*(?:/|\bof\b|لسنة|لعام|سنة)\s*((?:19|20)\d{2})(?!\d)~iu', $text, $matches, PREG_SET_ORDER);
         foreach ($matches as $m) {
-            $found[] = ['number' => ltrim($m[1], '0') ?: '0', 'year' => (int) $m[2]];
+            $found[] = [$m[1], $m[2]];
+        }
+
+        // Number, dash, year: 3153-2026 — but not 29-09-2026 or 2026-09-29.
+        preg_match_all('~(?<![\d/\-–])(\d{1,6})\s*[-–]\s*((?:19|20)\d{2})(?![\d/\-–])~u', $text, $matches, PREG_SET_ORDER);
+        foreach ($matches as $m) {
+            if (! self::looksLikeYear($m[1])) { // 2025-2026 is a span of years
+                $found[] = [$m[1], $m[2]];
+            }
         }
 
         // Year then number: 2025/639 — but not 2026/09/29.
         preg_match_all('~(?<!\d)((?:19|20)\d{2})/(\d{1,6})(?![\d/])~u', $text, $matches, PREG_SET_ORDER);
         foreach ($matches as $m) {
-            $found[] = ['number' => ltrim($m[2], '0') ?: '0', 'year' => (int) $m[1]];
+            $found[] = [$m[2], $m[1]];
         }
 
-        return array_values(array_unique($found, SORT_REGULAR));
+        // Year, dash, number: 2026-3153 — but not 2026-09-29, nor a
+        // year-month like 2026-09 (a matter number has no leading zero here).
+        preg_match_all('~(?<![\d/\-–])((?:19|20)\d{2})\s*[-–]\s*([1-9]\d{0,5})(?![\d/\-–])~u', $text, $matches, PREG_SET_ORDER);
+        foreach ($matches as $m) {
+            if (! self::looksLikeYear($m[2])) {
+                $found[] = [$m[2], $m[1]];
+            }
+        }
+
+        // A matter's year is this year or earlier — a future "year" is
+        // something else (a date, a number that happens to start with 20…).
+        $thisYear = now()->year;
+        $refs = [];
+
+        foreach ($found as [$number, $year]) {
+            if ((int) $year <= $thisYear) {
+                $refs[] = ['number' => ltrim($number, '0') ?: '0', 'year' => (int) $year];
+            }
+        }
+
+        return array_values(array_unique($refs, SORT_REGULAR));
+    }
+
+    private static function looksLikeYear(string $number): bool
+    {
+        return (bool) preg_match('~^(?:19|20)\d{2}$~', $number);
     }
 
     /**

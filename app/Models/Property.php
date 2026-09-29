@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
@@ -56,18 +57,63 @@ class Property extends Model
             }
         });
 
-        // A property with a leased unit is part of that lease's history —
-        // deleting it would leave a contract pointing at nothing.
+        // A property with a unit on a lease or a quotation is part of that
+        // record's history — deleting it would leave it pointing at nothing.
         static::deleting(function (Property $property): void {
-            if ($property->hasLeaseHistory()) {
-                throw new RuntimeException('This property has units linked to a lease and cannot be deleted.');
+            if ($reason = $property->deletionBlockedReason()) {
+                throw new RuntimeException($reason);
             }
+        });
+
+        // Its units go with it — they used to stay behind, listed under a
+        // property that no longer exists.
+        static::deleted(function (Property $property): void {
+            if (! $property->isForceDeleting()) {
+                $property->units()->get()->each(fn (Unit $unit) => $unit->delete());
+            }
+        });
+
+        // …and come back with it: the units deleted along with it, not ones
+        // deleted on their own before.
+        static::restoring(function (Property $property): void {
+            $property->units()->onlyTrashed()
+                ->where('deleted_at', '>=', $property->getAttribute('deleted_at'))
+                ->get()
+                ->each(fn (Unit $unit) => $unit->restore());
         });
     }
 
+    /**
+     * @return list<int>
+     */
+    private function allUnitIds(): array
+    {
+        return $this->units()->withTrashed()->pluck('id')->all();
+    }
+
+    /**
+     * Any lease, even a deleted one, ever held one of its units.
+     */
     public function hasLeaseHistory(): bool
     {
-        return Lease::whereHas('units', fn ($query) => $query->where('property_id', $this->getKey()))->exists();
+        return DB::table('lease_unit')->whereIn('unit_id', $this->allUnitIds())->exists();
+    }
+
+    public function hasQuotationHistory(): bool
+    {
+        return DB::table('quotation_unit')->whereIn('unit_id', $this->allUnitIds())->exists();
+    }
+
+    /**
+     * Why this property can't be deleted, or null when it can.
+     */
+    public function deletionBlockedReason(): ?string
+    {
+        return match (true) {
+            $this->hasLeaseHistory() => __('This property has units linked to a lease and cannot be deleted.'),
+            $this->hasQuotationHistory() => __('This property has units on a quotation and cannot be deleted.'),
+            default => null,
+        };
     }
 
     /**

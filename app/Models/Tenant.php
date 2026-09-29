@@ -46,11 +46,12 @@ class Tenant extends Model
 
     protected static function booted(): void
     {
-        // A tenant that has been party to a lease is part of that lease's
-        // history — deleting it would leave a contract pointing at nothing.
+        // A tenant that has been party to a lease or offered a quotation is
+        // part of that record's history — deleting it would leave it
+        // pointing at nothing.
         static::deleting(function (Tenant $tenant): void {
-            if ($tenant->hasLeaseHistory()) {
-                throw new RuntimeException('This tenant is linked to a lease and cannot be deleted.');
+            if ($reason = $tenant->deletionBlockedReason()) {
+                throw new RuntimeException($reason);
             }
         });
     }
@@ -73,5 +74,24 @@ class Tenant extends Model
         $partyId = $this->getAttribute('party_id');
 
         return $partyId !== null && LeaseParty::where('party_id', $partyId)->exists();
+    }
+
+    public function hasQuotationHistory(): bool
+    {
+        $partyId = $this->getAttribute('party_id');
+
+        return $partyId !== null && Quotation::where('party_id', $partyId)->exists();
+    }
+
+    /**
+     * Why this tenant can't be deleted, or null when it can.
+     */
+    public function deletionBlockedReason(): ?string
+    {
+        return match (true) {
+            $this->hasLeaseHistory() => __('This tenant is linked to a lease and cannot be deleted.'),
+            $this->hasQuotationHistory() => __('This tenant has a quotation and cannot be deleted.'),
+            default => null,
+        };
     }
 }

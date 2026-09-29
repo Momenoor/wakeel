@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
@@ -77,11 +78,11 @@ class Unit extends Model
             }
         });
 
-        // A unit already tied to a lease is part of that lease's history —
-        // deleting it would leave a contract pointing at nothing.
+        // A unit already on a lease or a quotation is part of that record's
+        // history — deleting it would leave it pointing at nothing.
         static::deleting(function (Unit $unit): void {
-            if ($unit->hasLeaseHistory()) {
-                throw new RuntimeException('This unit is linked to a lease and cannot be deleted.');
+            if ($reason = $unit->deletionBlockedReason()) {
+                throw new RuntimeException($reason);
             }
         });
     }
@@ -107,9 +108,38 @@ class Unit extends Model
             ->orderByDesc('leases.start_date');
     }
 
+    /**
+     * @return BelongsToMany<Quotation, $this>
+     */
+    public function quotations(): BelongsToMany
+    {
+        return $this->belongsToMany(Quotation::class, 'quotation_unit')
+            ->withTimestamps();
+    }
+
+    /**
+     * Any lease, even a deleted one, ever held this unit.
+     */
     public function hasLeaseHistory(): bool
     {
-        return $this->leases()->exists();
+        return DB::table('lease_unit')->where('unit_id', $this->getKey())->exists();
+    }
+
+    public function hasQuotationHistory(): bool
+    {
+        return DB::table('quotation_unit')->where('unit_id', $this->getKey())->exists();
+    }
+
+    /**
+     * Why this unit can't be deleted, or null when it can.
+     */
+    public function deletionBlockedReason(): ?string
+    {
+        return match (true) {
+            $this->hasLeaseHistory() => __('This unit is linked to a lease and cannot be deleted.'),
+            $this->hasQuotationHistory() => __('This unit is on a quotation and cannot be deleted.'),
+            default => null,
+        };
     }
 
     /**

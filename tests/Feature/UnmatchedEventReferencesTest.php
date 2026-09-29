@@ -91,6 +91,38 @@ class UnmatchedEventReferencesTest extends TestCase
             ->assertSee('6399/2025');
     }
 
+    public function test_the_widget_disappears_once_nothing_is_missing(): void
+    {
+        Gate::before(fn () => true);
+        $this->actingAs($this->user('super-admin'));
+        $event = $this->event('Session 3153-2026');
+
+        $widget = Livewire::test(UnmatchedEventReferencesWidget::class)->assertSee('3153/2026');
+
+        // Fixed from elsewhere while the dashboard is open: no empty table left.
+        Matter::factory()->create(['number' => 3153, 'year' => 2026]);
+        $widget->call('$refresh')->assertDontSee(__('Events with a matter number not in the system'));
+
+        // An event gone without model events (cache still lists it): hidden too.
+        Matter::query()->delete();
+        UnmatchedEventReferences::missing();
+        CalendarEvent::query()->whereKey($event->id)->delete();
+        $this->assertFalse(UnmatchedEventReferencesWidget::canView());
+    }
+
+    public function test_the_popup_closes_only_with_its_button(): void
+    {
+        Gate::before(fn () => true);
+        $this->event('Session 6399/2025');
+        $this->actingAs($this->user('admin'));
+
+        $html = $this->get(AdminDashboard::getUrl(panel: 'mms'))->assertSuccessful()->getContent();
+        $modal = substr($html, strpos($html, 'id="wakeel-unmatched-events"') ?: 0);
+
+        $this->assertStringNotContainsString('x-on:keydown.escape', substr($modal, 0, 3000));
+        $this->assertStringContainsString("close-modal', { id: 'wakeel-unmatched-events' }", $html);
+    }
+
     public function test_admins_get_the_popup_on_any_page_others_do_not(): void
     {
         Gate::before(fn () => true);

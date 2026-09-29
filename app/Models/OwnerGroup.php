@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use RuntimeException;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
@@ -35,6 +36,27 @@ class OwnerGroup extends Model
     {
         return LogOptions::defaults()
             ->logAll();
+    }
+
+    protected static function booted(): void
+    {
+        // Deleting a group takes its bank accounts and print templates with
+        // it, and unlinks its properties — not while it still has any.
+        static::deleting(function (OwnerGroup $group): void {
+            if ($reason = $group->deletionBlockedReason()) {
+                throw new RuntimeException($reason);
+            }
+        });
+    }
+
+    /**
+     * Why this group can't be deleted, or null when it can.
+     */
+    public function deletionBlockedReason(): ?string
+    {
+        return $this->properties()->exists()
+            ? __('This owner group still has properties and cannot be deleted.')
+            : null;
     }
 
     /**

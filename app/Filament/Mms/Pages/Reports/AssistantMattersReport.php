@@ -63,7 +63,12 @@ class AssistantMattersReport extends Page implements HasTable
             ->query(fn () => $this->getTableQuery())
             ->striped()
             ->extraAttributes(['class' => 'custom-compact-table [&_table]:text-xs'])
-            ->paginated(false)
+            // It used to load every assistant-matter row of every year at
+            // once. Paged on screen now, loaded just after the page appears
+            // — Print still prints them all (ReportPrintAction).
+            ->paginated([25, 50, 100, 'all'])
+            ->defaultPaginationPageOption(25)
+            ->deferLoading()
             ->columns([
 
                 // ── Matter Reference ──────────────────────────────────────
@@ -114,8 +119,16 @@ class AssistantMattersReport extends Page implements HasTable
                     ->width('7%'),
 
                 // ── Experts on the matter ─────────────────────────────────
-                TextColumn::make('matter.mainExpertsOnly.name')
+                // The matter's own certified experts, from the rows loaded
+                // with the page (not a JSON search on every party).
+                TextColumn::make('matter_experts')
                     ->label(__('Experts'))
+                    ->state(fn ($record): array => $record->matter?->expertsOnly
+                        ->where('type', 'certified')
+                        ->pluck('party.name')
+                        ->filter()
+                        ->values()
+                        ->all() ?? [])
                     ->listWithLineBreaks()
                     ->wrap()
                     ->width('13%'),
@@ -287,12 +300,19 @@ class AssistantMattersReport extends Page implements HasTable
                     $f->where('type', '!=', FeeType::VAT->value);
                 });
             }], 'amount')
+            // Everything the columns show, loaded for all rows at once — the
+            // Experts and Parties columns used to query once per row.
+            // Dotted, not a nested closure on 'matter': Filament adds its own
+            // 'matter.…' eager loads for dotted columns, and those replace a
+            // closure-built 'matter' load — which silently brought the per-row
+            // queries back.
             ->with([
-                'party',
-                'experts',
-                'matter' => function ($query) {
-                    $query->with(['court', 'type', 'notes']);
-                },
+                'party:id,name',
+                'matter.court:id,name',
+                'matter.type:id,name',
+                'matter.notes',
+                'matter.expertsOnly.party:id,name',
+                'matter.mainPartiesOnly.party:id,name',
             ])
             ->whereHas('matter') // Ensures we don't list assistants without a valid matter
             ->orderBy(

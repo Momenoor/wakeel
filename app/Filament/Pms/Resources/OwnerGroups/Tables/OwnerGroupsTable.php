@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pms\Resources\OwnerGroups\Tables;
 
+use App\Filament\Pms\Actions\KeepsHistory;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -32,7 +33,7 @@ class OwnerGroupsTable
             ->defaultSort('name')
             ->recordActions([
                 EditAction::make()->iconButton(),
-                DeleteAction::make()->iconButton(),
+                DeleteAction::make()->iconButton()->before(KeepsHistory::guard()),
             ])
             ->emptyStateHeading(__('No owner groups yet'))
             ->emptyStateActions([

@@ -250,6 +250,11 @@ class MmsPanelProvider extends PanelProvider
                     'missing' => $missing[$event->id] ?? [],
                 ])->all();
 
+                // The cached list can outlive an event deleted without model events.
+                if ($rows === []) {
+                    return '';
+                }
+
                 return view('filament.partials.unmatched-events-popup', [
                     'count' => count($missing),
                     'rows' => $rows,

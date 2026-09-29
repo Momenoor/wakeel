@@ -74,6 +74,24 @@ class CalendarMatterLinkingTest extends TestCase
         // Dates are not matter numbers.
         $this->assertSame([], MatterReferenceMatcher::references('Hearing 29/09/2026'));
         $this->assertSame([], MatterReferenceMatcher::references('Review 2026/09/29'));
+
+        // Number-dash-year, as some titles write it.
+        $this->assertSame([['number' => '3153', 'year' => 2026]], MatterReferenceMatcher::references('جلسة خبرة 3153-2026'));
+        $this->assertSame([['number' => '3153', 'year' => 2026]], MatterReferenceMatcher::references('Session 3153 - 2026 Dubai'));
+        $this->assertSame([], MatterReferenceMatcher::references('Hearing 29-09-2026'));
+        $this->assertSame([], MatterReferenceMatcher::references('Review 2026-09-29'));
+        $this->assertSame([], MatterReferenceMatcher::references('Call 050-2026123'));
+
+        // Year first with a dash, too — but not a year-month or a span of years.
+        $this->assertSame([['number' => '3153', 'year' => 2026]], MatterReferenceMatcher::references('جلسة 2026-3153'));
+        $this->assertSame([], MatterReferenceMatcher::references('Plan 2026-09'));
+        $this->assertSame([], MatterReferenceMatcher::references('Budget 2025-2026'));
+
+        // A matter's year is never in the future.
+        $this->travelTo(now()->setDate(2026, 9, 29));
+        $this->assertSame([], MatterReferenceMatcher::references('Session 15/2027'));
+        $this->assertSame([], MatterReferenceMatcher::references('Session 2027-15'));
+        $this->assertSame([['number' => '15', 'year' => 2026]], MatterReferenceMatcher::references('Session 15/2026'));
     }
 
     public function test_a_new_event_is_linked_to_the_matters_its_title_names(): void

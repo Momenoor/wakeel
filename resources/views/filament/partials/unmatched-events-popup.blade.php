@@ -24,6 +24,10 @@
         icon="heroicon-o-exclamation-triangle"
         icon-color="warning"
         width="xl"
+        {{-- Closes only with its own button, not a click outside or Esc. --}}
+        :close-by-clicking-away="false"
+        :close-by-escaping="false"
+        :close-button="false"
         :heading="trans_choice('{1} 1 event names a matter that is not in the system|[2,*] :count events name a matter that is not in the system', $count, ['count' => $count])"
         :description="__('Add the matter, or correct the event\'s title or linked matters.')"
     >
@@ -49,7 +53,7 @@
                 {{ __('Open dashboard') }}
             </x-filament::button>
             <x-filament::button color="gray" x-on:click="$dispatch('close-modal', { id: 'wakeel-unmatched-events' })">
-                {{ __('Later') }}
+                {{ __('Close') }}
             </x-filament::button>
         </x-slot>
     </x-filament::modal>
