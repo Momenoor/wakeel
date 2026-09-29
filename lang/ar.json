@@ -3050,5 +3050,13 @@
     "Set \"Notifications\" to \"Allow\".": "اجعل \"الإشعارات\" على \"السماح\".",
     "Reload the page.": "أعد تحميل الصفحة.",
     "I allowed it — reload": "سمحت بها — إعادة التحميل",
-    "Later": "لاحقاً"
+    "Later": "لاحقاً",
+    "Sign out": "تسجيل الخروج",
+    "Sign out :name?": "تسجيل خروج :name؟",
+    "They are signed out of Wakeel on every browser and device, and must log in again.": "سيتم تسجيل خروجه من وكيل على جميع المتصفحات والأجهزة، وعليه تسجيل الدخول مجدداً.",
+    "Sign out selected users": "تسجيل خروج المستخدمين المحددين",
+    "Sign out the selected users?": "تسجيل خروج المستخدمين المحددين؟",
+    "They are signed out of Wakeel on every browser and device, and must log in again. You are never signed out yourself.": "سيتم تسجيل خروجهم من وكيل على جميع المتصفحات والأجهزة، وعليهم تسجيل الدخول مجدداً. لن يتم تسجيل خروجك أنت.",
+    "{0} No one was signed out|{1} 1 user signed out|[2,*] :count users signed out": "{0} لم يتم تسجيل خروج أي مستخدم|{1} تم تسجيل خروج مستخدم واحد|[2,*] تم تسجيل خروج :count مستخدمين",
+    "Sessions are not kept in the database (SESSION_DRIVER), so already open sessions stay until they expire.": "الجلسات غير محفوظة في قاعدة البيانات (SESSION_DRIVER)، لذا تبقى الجلسات المفتوحة حتى تنتهي صلاحيتها."
 }

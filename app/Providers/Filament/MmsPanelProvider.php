@@ -7,6 +7,7 @@ use AlizHarb\ActivityLog\RelationManagers\ActivitiesRelationManager;
 use App\Filament\Mms\Pages\Auth\CustomLogin;
 use App\Filament\Mms\Pages\Auth\CustomProfile;
 use App\Filament\Mms\Support\SystemSwitcher;
+use App\Filament\Shared\Actions\ForceSignOutActions;
 use App\Filament\Shared\Pages\SystemSettings;
 use App\Filament\Shared\Pages\SystemUpdates;
 use App\Http\Middleware\CheckSystemOffline;
@@ -197,6 +198,8 @@ class MmsPanelProvider extends PanelProvider
         app(FilamentUserServices::class)->register([
             ActivitiesRelationManager::class,
         ]);
+        // "Sign out" for one user or a selection, on the Users table.
+        ForceSignOutActions::register();
         FilamentTimezone::set(config('app.timezone'));
         FileUpload::configureUsing(fn (FileUpload $component) => $component->maxSize(1024 * 1024 * 50));
 
