@@ -277,6 +277,95 @@ class MatterOneDriveFolderTest extends TestCase
         Http::assertSent(fn (Request $request) => ($request->data()['client_id'] ?? null) === 'client');
     }
 
+    public function test_the_test_folder_is_made_for_every_assistant_with_onedrive(): void
+    {
+        Filament::setCurrentPanel(Filament::getPanel('mms'));
+        $this->actingAs($this->superAdmin());
+        $this->switchOn("01 المراسلات\n02 المستندات");
+        $this->fakeGraph();
+
+        $this->assistant();
+        $this->assistant(['name' => 'Nahla', 'onedrive_email' => 'nahla@firm.ae', 'onedrive_path' => null]);
+        // No OneDrive account: not part of the test.
+        $this->assistant(['name' => 'Omar', 'onedrive_email' => null]);
+
+        Livewire::test(OneDriveSettings::class)
+            ->assertSee('Create test folder')
+            ->assertSee('Remove test folder')
+            ->call('runTest', 'create')
+            ->assertSet('testResults', fn (array $rows) => count($rows) === 2
+                && collect($rows)->every(fn ($row) => $row['ok'] && $row['url'] === 'https://onedrive.test/'.rawurlencode(MatterOneDriveFolders::TEST_FOLDER)))
+            ->assertSee('amr@firm.ae')
+            ->assertNotified();
+
+        // Amr's under his path, Nahla's at the top of her OneDrive; each
+        // with the standard subfolders.
+        $created = $this->createdFolders();
+        $this->assertContains('/items/id-Matters/children > '.MatterOneDriveFolders::TEST_FOLDER, $created);
+        $this->assertContains('/items/existing/children > '.MatterOneDriveFolders::TEST_FOLDER, $created);
+        $this->assertSame(2, collect($created)->filter(fn ($c) => str_ends_with($c, '> 02 المستندات'))->count());
+    }
+
+    public function test_the_test_folder_is_removed_where_it_is(): void
+    {
+        Filament::setCurrentPanel(Filament::getPanel('mms'));
+        $this->actingAs($this->superAdmin());
+
+        $this->assistant();
+        $this->assistant(['name' => 'Nahla', 'onedrive_email' => 'nahla@firm.ae', 'onedrive_path' => null]);
+
+        Http::fake(function (Request $request) {
+            if (str_contains($request->url(), 'login.microsoftonline.com')) {
+                return Http::response(['access_token' => 'token']);
+            }
+
+            // Amr has it; Nahla does not.
+            if ($request->method() === 'GET') {
+                return str_contains($request->url(), 'amr%40firm.ae')
+                    ? Http::response(['id' => 'test-folder-id', 'webUrl' => 'https://onedrive.test/x'])
+                    : Http::response(['error' => ['code' => 'itemNotFound']], 404);
+            }
+
+            return Http::response(null, 204);
+        });
+
+        Livewire::test(OneDriveSettings::class)
+            ->call('runTest', 'remove')
+            ->assertSet('testResults', fn (array $rows) => collect($rows)->pluck('message', 'name')->all() === [
+                'Amr' => 'Removed',
+                'Nahla' => 'Not there — nothing to remove',
+            ]);
+
+        Http::assertSent(fn (Request $request) => $request->method() === 'GET'
+            && str_ends_with(rawurldecode($request->url()), '/drive/root:/Work/Matters/'.MatterOneDriveFolders::TEST_FOLDER));
+        Http::assertSent(fn (Request $request) => $request->method() === 'DELETE'
+            && str_ends_with($request->url(), '/users/amr%40firm.ae/drive/items/test-folder-id'));
+        Http::assertNotSent(fn (Request $request) => $request->method() === 'DELETE' && str_contains($request->url(), 'nahla'));
+    }
+
+    public function test_one_assistant_failing_does_not_stop_the_others(): void
+    {
+        Filament::setCurrentPanel(Filament::getPanel('mms'));
+        $this->actingAs($this->superAdmin());
+
+        $this->assistant(['onedrive_email' => 'broken@firm.ae']);
+        $this->assistant(['name' => 'Nahla', 'onedrive_email' => 'nahla@firm.ae']);
+
+        Http::fake(function (Request $request) {
+            if (str_contains($request->url(), 'login.microsoftonline.com')) {
+                return Http::response(['access_token' => 'token']);
+            }
+
+            return str_contains($request->url(), 'broken%40firm.ae')
+                ? Http::response(['error' => ['message' => 'Access denied']], 403)
+                : Http::response(['id' => 'id-x', 'webUrl' => 'https://onedrive.test/x'], 201);
+        });
+
+        Livewire::test(OneDriveSettings::class)
+            ->call('runTest', 'create')
+            ->assertSet('testResults', fn (array $rows) => collect($rows)->pluck('ok', 'name')->all() === ['Amr' => false, 'Nahla' => true]);
+    }
+
     public function test_folder_names_drop_characters_onedrive_refuses(): void
     {
         $this->assertSame('2026-5 - a b c', MatterOneDriveFolders::clean('2026-5 - a/b:c?'));

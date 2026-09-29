@@ -69,6 +69,28 @@ class OneDriveClient
     }
 
     /**
+     * The folder at this path under the user's OneDrive root, or null when
+     * there is none.
+     *
+     * @return array{id: string, webUrl: string}|null
+     */
+    public function findFolder(string $user, string $path): ?array
+    {
+        $response = $this->request('get', "/users/{$this->user($user)}/drive/root:/".implode('/', array_map('rawurlencode', self::segments($path))), allow404: true);
+
+        return $response->status() === 404 ? null : $this->item($response);
+    }
+
+    /**
+     * Deletes a file or folder — OneDrive keeps it in the user's recycle
+     * bin, from where it can be restored.
+     */
+    public function delete(string $user, string $itemId): void
+    {
+        $this->request('delete', "/users/{$this->user($user)}/drive/items/".rawurlencode($itemId), allow404: true);
+    }
+
+    /**
      * Checks the app can reach this user's OneDrive — for the settings
      * page's connection test.
      */
@@ -109,12 +131,16 @@ class OneDriveClient
         return ['id' => (string) $response->json('id'), 'webUrl' => (string) $response->json('webUrl')];
     }
 
-    private function request(string $method, string $uri, array $body = [], bool $allow409 = false): Response
+    private function request(string $method, string $uri, array $body = [], bool $allow409 = false, bool $allow404 = false): Response
     {
         $http = Http::withToken($this->token())->acceptJson()->timeout(20);
-        $response = $method === 'get' ? $http->get(self::GRAPH.$uri) : $http->post(self::GRAPH.$uri, $body);
+        $response = match ($method) {
+            'get' => $http->get(self::GRAPH.$uri),
+            'delete' => $http->delete(self::GRAPH.$uri),
+            default => $http->post(self::GRAPH.$uri, $body),
+        };
 
-        if ($response->successful() || ($allow409 && $response->status() === 409)) {
+        if ($response->successful() || ($allow409 && $response->status() === 409) || ($allow404 && $response->status() === 404)) {
             return $response;
         }
 

@@ -20,6 +20,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\HtmlString;
 use Throwable;
 use UnitEnum;
 
@@ -37,6 +38,13 @@ class OneDriveSettings extends Page
     protected static ?int $navigationSort = 8;
 
     public ?array $data = [];
+
+    /**
+     * The last test run, one row per assistant.
+     *
+     * @var list<array{name: string, email: string, ok: bool, message: string, url: ?string}>
+     */
+    public array $testResults = [];
 
     public static function getNavigationLabel(): string
     {
@@ -86,6 +94,32 @@ class OneDriveSettings extends Page
                             ->helperText(__('One per line, in order. Use "/" for a folder inside another, e.g. "02 المستندات/من المدعي". Changes apply to folders made from now on; existing folders stay as they are.'))
                             ->rows(10)
                             ->extraInputAttributes(['dir' => 'auto']),
+                    ]),
+
+                Section::make(__('Test folder'))
+                    ->description(__('Checks the whole set-up: makes a folder named ":name", with the standard subfolders, in every assistant\'s OneDrive, then removes it again (to their OneDrive recycle bin). Save the subfolder list first.', ['name' => MatterOneDriveFolders::TEST_FOLDER]))
+                    ->icon(Heroicon::OutlinedBeaker)
+                    ->schema([
+                        Actions::make([
+                            Action::make('createTestFolder')
+                                ->label(__('Create test folder'))
+                                ->icon(Heroicon::OutlinedFolderPlus)
+                                ->color('primary')
+                                ->requiresConfirmation()
+                                ->modalDescription(fn (): string => __('Makes the test folder in the OneDrive of :count assistant(s) with a OneDrive account on their profile.', ['count' => MatterOneDriveFolders::assistantsWithOneDrive()->count()]))
+                                ->action(fn () => $this->runTest('create')),
+                            Action::make('removeTestFolder')
+                                ->label(__('Remove test folder'))
+                                ->icon(Heroicon::OutlinedTrash)
+                                ->color('danger')
+                                ->requiresConfirmation()
+                                ->modalDescription(__('Removes the test folder from every assistant\'s OneDrive. It goes to their OneDrive recycle bin. Nothing else is touched.'))
+                                ->action(fn () => $this->runTest('remove')),
+                        ]),
+                        Placeholder::make('test_results')
+                            ->hiddenLabel()
+                            ->visible(fn (): bool => $this->testResults !== [])
+                            ->content(fn (): HtmlString => new HtmlString(view('filament.mms.onedrive-test-results', ['rows' => $this->testResults])->render())),
                     ]),
 
                 Section::make(__('Connection'))
@@ -161,5 +195,53 @@ class OneDriveSettings extends Page
         }
 
         Notification::make()->title(__('Connected to OneDrive'))->body($url)->success()->send();
+    }
+
+    /**
+     * Creates or removes the test folder in each assistant's OneDrive, one
+     * at a time, recording how each went — one failing never stops the rest.
+     */
+    public function runTest(string $what): void
+    {
+        if (! in_array($what, ['create', 'remove'], true)) {
+            return;
+        }
+
+        @set_time_limit(300);
+
+        $folders = app(MatterOneDriveFolders::class);
+        $rows = [];
+
+        foreach (MatterOneDriveFolders::assistantsWithOneDrive() as $party) {
+            $row = ['name' => $party->name, 'email' => (string) $party->onedrive_email, 'ok' => true, 'message' => '', 'url' => null];
+
+            try {
+                if ($what === 'create') {
+                    $item = $folders->createTestFolder($party);
+                    $row['message'] = __('Created');
+                    $row['url'] = $item['webUrl'] ?: null;
+                } else {
+                    $row['message'] = $folders->removeTestFolder($party) ? __('Removed') : __('Not there — nothing to remove');
+                }
+            } catch (Throwable $exception) {
+                $row['ok'] = false;
+                $row['message'] = $exception->getMessage();
+            }
+
+            $rows[] = $row;
+        }
+
+        $this->testResults = $rows;
+
+        $failed = collect($rows)->where('ok', false)->count();
+
+        Notification::make()
+            ->title(match (true) {
+                $rows === [] => __('No assistant has a OneDrive account on their profile yet.'),
+                $failed === 0 => $what === 'create' ? __('Test folder created for every assistant.') : __('Test folder removed for every assistant.'),
+                default => __(':failed of :total failed — see the table.', ['failed' => $failed, 'total' => count($rows)]),
+            })
+            ->status($rows === [] ? 'warning' : ($failed === 0 ? 'success' : 'danger'))
+            ->send();
     }
 }

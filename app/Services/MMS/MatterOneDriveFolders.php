@@ -8,6 +8,7 @@ use App\Models\MatterOneDriveFolder;
 use App\Models\MatterParty;
 use App\Models\Party;
 use App\Models\Setting;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 
 /**
@@ -133,14 +134,30 @@ class MatterOneDriveFolders
      */
     public function create(MatterOneDriveFolder $folder): void
     {
-        $party = $folder->party;
+        $item = $this->makeFolder($folder->party, $folder->folder_name);
 
+        $folder->update([
+            'status' => MatterOneDriveFolder::CREATED,
+            'drive_item_id' => $item['id'],
+            'web_url' => $item['webUrl'],
+            'error' => null,
+        ]);
+    }
+
+    /**
+     * A folder with the standard subfolders in the assistant's OneDrive,
+     * under the path on their profile. Folders already there are reused.
+     *
+     * @return array{id: string, webUrl: string}
+     */
+    public function makeFolder(?Party $party, string $name): array
+    {
         if (! $party instanceof Party || blank($party->onedrive_email)) {
             throw new \RuntimeException(__('No OneDrive account on :name\'s profile.', ['name' => $party?->name ?? '—']));
         }
 
         $parent = $this->client->ensureFolder($party->onedrive_email, (string) $party->onedrive_path);
-        $item = $this->client->ensureFolder($party->onedrive_email, self::clean($folder->folder_name), $parent['id']);
+        $item = $this->client->ensureFolder($party->onedrive_email, self::clean($name), $parent['id']);
 
         foreach (self::subfolders() as $subfolder) {
             $path = implode('/', array_map([self::class, 'clean'], OneDriveClient::segments($subfolder)));
@@ -150,11 +167,57 @@ class MatterOneDriveFolders
             }
         }
 
-        $folder->update([
-            'status' => MatterOneDriveFolder::CREATED,
-            'drive_item_id' => $item['id'],
-            'web_url' => $item['webUrl'],
-            'error' => null,
-        ]);
+        return $item;
+    }
+
+    /** The test folder's name — fixed, so the test can find it to remove it. */
+    public const TEST_FOLDER = 'Wakeel test folder';
+
+    /**
+     * Everyone matter folders can be made for: a OneDrive account on
+     * their profile.
+     *
+     * @return Collection<int, Party>
+     */
+    public static function assistantsWithOneDrive(): Collection
+    {
+        return Party::query()
+            ->whereNotNull('onedrive_email')
+            ->where('onedrive_email', '!=', '')
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * The test folder, with the standard subfolders, in this assistant's
+     * OneDrive — the same way a matter folder is made.
+     *
+     * @return array{id: string, webUrl: string}
+     */
+    public function createTestFolder(Party $party): array
+    {
+        return $this->makeFolder($party, self::TEST_FOLDER);
+    }
+
+    /**
+     * Removes the test folder (to the assistant's OneDrive recycle bin).
+     * False when there was none.
+     */
+    public function removeTestFolder(Party $party): bool
+    {
+        if (blank($party->onedrive_email)) {
+            throw new \RuntimeException(__('No OneDrive account on :name\'s profile.', ['name' => $party->name]));
+        }
+
+        $path = implode('/', [...OneDriveClient::segments((string) $party->onedrive_path), self::TEST_FOLDER]);
+        $folder = $this->client->findFolder($party->onedrive_email, $path);
+
+        if ($folder === null) {
+            return false;
+        }
+
+        $this->client->delete($party->onedrive_email, $folder['id']);
+
+        return true;
     }
 }

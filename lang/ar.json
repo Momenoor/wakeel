@@ -3058,5 +3058,19 @@
     "Sign out the selected users?": "تسجيل خروج المستخدمين المحددين؟",
     "They are signed out of Wakeel on every browser and device, and must log in again. You are never signed out yourself.": "سيتم تسجيل خروجهم من وكيل على جميع المتصفحات والأجهزة، وعليهم تسجيل الدخول مجدداً. لن يتم تسجيل خروجك أنت.",
     "{0} No one was signed out|{1} 1 user signed out|[2,*] :count users signed out": "{0} لم يتم تسجيل خروج أي مستخدم|{1} تم تسجيل خروج مستخدم واحد|[2,*] تم تسجيل خروج :count مستخدمين",
-    "Sessions are not kept in the database (SESSION_DRIVER), so already open sessions stay until they expire.": "الجلسات غير محفوظة في قاعدة البيانات (SESSION_DRIVER)، لذا تبقى الجلسات المفتوحة حتى تنتهي صلاحيتها."
+    "Sessions are not kept in the database (SESSION_DRIVER), so already open sessions stay until they expire.": "الجلسات غير محفوظة في قاعدة البيانات (SESSION_DRIVER)، لذا تبقى الجلسات المفتوحة حتى تنتهي صلاحيتها.",
+    "Test folder": "مجلد الاختبار",
+    "Checks the whole set-up: makes a folder named \":name\", with the standard subfolders, in every assistant's OneDrive, then removes it again (to their OneDrive recycle bin). Save the subfolder list first.": "يختبر الإعداد كاملاً: ينشئ مجلداً باسم \":name\" مع المجلدات الفرعية القياسية في OneDrive لكل مساعد، ثم يحذفه مجدداً (إلى سلة محذوفات OneDrive). احفظ قائمة المجلدات الفرعية أولاً.",
+    "Create test folder": "إنشاء مجلد الاختبار",
+    "Remove test folder": "حذف مجلد الاختبار",
+    "Makes the test folder in the OneDrive of :count assistant(s) with a OneDrive account on their profile.": "سيتم إنشاء مجلد الاختبار في OneDrive لعدد :count من المساعدين الذين لديهم حساب OneDrive في ملفاتهم.",
+    "Removes the test folder from every assistant's OneDrive. It goes to their OneDrive recycle bin. Nothing else is touched.": "سيتم حذف مجلد الاختبار من OneDrive لكل مساعد، وينتقل إلى سلة المحذوفات. لن يُمس أي شيء آخر.",
+    "Removed": "تم الحذف",
+    "Not there — nothing to remove": "غير موجود — لا شيء للحذف",
+    "No assistant has a OneDrive account on their profile yet.": "لا يوجد مساعد لديه حساب OneDrive في ملفه بعد.",
+    "Test folder created for every assistant.": "تم إنشاء مجلد الاختبار لجميع المساعدين.",
+    "Test folder removed for every assistant.": "تم حذف مجلد الاختبار لجميع المساعدين.",
+    ":failed of :total failed — see the table.": "فشل :failed من :total — راجع الجدول.",
+    "OneDrive account": "حساب OneDrive",
+    "Result": "النتيجة"
 }
