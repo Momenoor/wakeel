@@ -50,6 +50,23 @@ class DesktopNotificationTest extends TestCase
             ->assertNotDispatched('wakeel-desktop-notification');
     }
 
+    public function test_the_prompt_opens_on_the_first_page_after_every_login(): void
+    {
+        $user = User::factory()->create(['password' => bcrypt('secret-password')]);
+        Filament::setCurrentPanel('mms');
+
+        $this->assertTrue(auth()->attempt(['email' => $user->email, 'password' => 'secret-password']));
+
+        $this->get(Chat::getUrl())->assertSuccessful()->assertSee('promptAfterLogin: true', false);
+        // Only the first page after it.
+        $this->get(Chat::getUrl())->assertSuccessful()->assertSee('promptAfterLogin: false', false);
+
+        // And again at the next login.
+        auth()->logout();
+        $this->assertTrue(auth()->attempt(['email' => $user->email, 'password' => 'secret-password']));
+        $this->get(Chat::getUrl())->assertSee('promptAfterLogin: true', false);
+    }
+
     public function test_the_panel_offers_to_turn_them_on(): void
     {
         $this->actingAs(User::factory()->create());

@@ -3042,5 +3042,13 @@
     "Leave request approved": "تمت الموافقة على طلب الإجازة",
     "Leave request rejected": "تم رفض طلب الإجازة",
     "Your leave request for :period was approved.": "تمت الموافقة على طلب إجازتك :period.",
-    "Your leave request for :period was rejected: :reason": "تم رفض طلب إجازتك :period: :reason"
+    "Your leave request for :period was rejected: :reason": "تم رفض طلب إجازتك :period: :reason",
+    "Turn on desktop notifications": "تفعيل إشعارات سطح المكتب",
+    "Get new matters, requests, leave decisions and chat messages as notifications on this computer or phone — even when Wakeel is not open.": "تصلك القضايا الجديدة والطلبات وقرارات الإجازات ورسائل المحادثة كإشعارات على هذا الجهاز أو الهاتف — حتى عندما لا يكون وكيل مفتوحاً.",
+    "Notifications are blocked for Wakeel in this browser. To allow them:": "الإشعارات محظورة لوكيل في هذا المتصفح. للسماح بها:",
+    "Click the lock (or settings) icon at the left of the address bar.": "اضغط على أيقونة القفل (أو الإعدادات) في شريط العنوان.",
+    "Set \"Notifications\" to \"Allow\".": "اجعل \"الإشعارات\" على \"السماح\".",
+    "Reload the page.": "أعد تحميل الصفحة.",
+    "I allowed it — reload": "سمحت بها — إعادة التحميل",
+    "Later": "لاحقاً"
 }

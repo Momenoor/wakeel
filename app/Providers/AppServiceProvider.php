@@ -8,6 +8,7 @@ use App\Models\Setting;
 use App\Models\User;
 use App\Services\Push\WebPushSender;
 use Carbon\Carbon;
+use Illuminate\Auth\Events\Login;
 use Illuminate\Foundation\Events\LocaleUpdated;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Notifications\Events\NotificationSent;
@@ -51,6 +52,14 @@ class AppServiceProvider extends ServiceProvider
         // bell and toasts show it at once rather than on the next poll. Once
         // per user per request (named defer), after the response, and never
         // allowed to break whatever sent the notification.
+        // After every login, the first page offers desktop notifications
+        // again if this browser does not have them on.
+        Event::listen(Login::class, function (): void {
+            if (app()->bound('session')) {
+                session()->put('wakeel.prompt_desktop_notifications', true);
+            }
+        });
+
         Event::listen(NotificationSent::class, function (NotificationSent $event) {
             if ($event->channel !== 'database' || ! $event->notifiable instanceof User) {
                 return;

@@ -11,14 +11,19 @@
       when Wakeel is in the background — for browsers without push. One tag
       per notification, so push and tabs never show it twice.
 
-    The bell asks for permission — browsers only allow that from a click —
-    and disappears once answered. When blocked, a crossed bell says how to
-    allow it again.
+    While notifications are off (not asked yet, or blocked) one bell opens a
+    window: "Enable" asks the browser — only allowed from a click — or, when
+    blocked, the steps to allow it again. The window also opens by itself
+    after every login until this browser has them on. The bell disappears
+    once they are.
 --}}
 <div
     x-data="{
         state: ('Notification' in window) ? Notification.permission : 'unsupported',
         pushKey: @js($pushKey),
+        promptAfterLogin: @js($promptAfterLogin),
+        openPrompt() { this.$dispatch('open-modal', { id: 'wakeel-desktop-notifications' }); },
+        closePrompt() { this.$dispatch('close-modal', { id: 'wakeel-desktop-notifications' }); },
         enable() {
             Notification.requestPermission().then((permission) => {
                 this.state = permission;
@@ -74,7 +79,11 @@
             }
         },
     }"
-    x-init="subscribe()"
+    x-init="
+        subscribe();
+        // Every login, until this browser has notifications on.
+        if (promptAfterLogin && (state === 'default' || state === 'denied')) { setTimeout(() => openPrompt(), 600); }
+    "
     x-on:wakeel-desktop-notification.window="
         const n = $event.detail;
         if (state !== 'granted' || (document.visibilityState === 'visible' && document.hasFocus())) { return; }
@@ -83,22 +92,55 @@
     "
     class="flex items-center"
 >
-    <template x-if="state === 'default'">
+    {{-- One bell while notifications are off — not asked yet or blocked —
+         opening the window below. --}}
+    <template x-if="state === 'default' || state === 'denied'">
         <x-filament::icon-button
             icon="heroicon-o-bell-alert"
             color="warning"
             :label="__('Enable desktop notifications')"
             :tooltip="__('Enable desktop notifications')"
-            x-on:click="enable()"
+            x-on:click="openPrompt()"
         />
     </template>
 
-    <template x-if="state === 'denied'">
-        <x-filament::icon-button
-            icon="heroicon-o-bell-slash"
-            color="gray"
-            :label="__('Desktop notifications are blocked')"
-            :tooltip="__('Desktop notifications are blocked for this site. Allow them from the lock icon in the address bar, then reload.')"
-        />
-    </template>
+    <x-filament::modal
+        id="wakeel-desktop-notifications"
+        icon="heroicon-o-bell-alert"
+        icon-color="warning"
+        alignment="center"
+        width="md"
+        :heading="__('Turn on desktop notifications')"
+    >
+        <div class="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+            <p>{{ __('Get new matters, requests, leave decisions and chat messages as notifications on this computer or phone — even when Wakeel is not open.') }}</p>
+
+            <template x-if="state === 'denied'">
+                <div class="space-y-2">
+                    <p class="font-medium text-gray-950 dark:text-white">{{ __('Notifications are blocked for Wakeel in this browser. To allow them:') }}</p>
+                    <ol class="space-y-1" style="list-style: decimal; padding-inline-start: 1.25rem;">
+                        <li>{{ __('Click the lock (or settings) icon at the left of the address bar.') }}</li>
+                        <li>{{ __('Set "Notifications" to "Allow".') }}</li>
+                        <li>{{ __('Reload the page.') }}</li>
+                    </ol>
+                </div>
+            </template>
+        </div>
+
+        <x-slot name="footerActions">
+            <template x-if="state === 'default'">
+                <x-filament::button color="warning" icon="heroicon-o-bell-alert" x-on:click="enable(); closePrompt()">
+                    {{ __('Enable') }}
+                </x-filament::button>
+            </template>
+            <template x-if="state === 'denied'">
+                <x-filament::button x-on:click="window.location.reload()">
+                    {{ __('I allowed it — reload') }}
+                </x-filament::button>
+            </template>
+            <x-filament::button color="gray" x-on:click="closePrompt()">
+                {{ __('Later') }}
+            </x-filament::button>
+        </x-slot>
+    </x-filament::modal>
 </div>

@@ -231,6 +231,9 @@ class MmsPanelProvider extends PanelProvider
                     'pushKey' => VapidKeys::publicKey(),
                     'workerUrl' => asset('push-sw.js'),
                     'subscribeUrl' => route('push.subscribe'),
+                    // Set at login (AppServiceProvider): the first page after
+                    // it opens the prompt when notifications are off.
+                    'promptAfterLogin' => (bool) session()->pull('wakeel.prompt_desktop_notifications', false),
                 ])->render()
                 : ''
         );
