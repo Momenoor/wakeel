@@ -9,6 +9,7 @@ use App\Models\BulkMailCampaign;
 use App\Models\BulkMailLog;
 use App\Models\BulkMailRecipient;
 use Carbon\CarbonInterface;
+use Closure;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -21,25 +22,54 @@ use Webklex\PHPIMAP\Message;
  * Brings emails already sent by hand — outside the system — into a bulk
  * mail campaign, recorded as sent: one recipient per email, on the date it
  * was sent, keeping that email's own subject and body (they differ — the
- * company name …) for its PDF and view. The campaign is created completed, so nothing is ever sent
- * again. An email already brought in (same Message-ID) is skipped, so
- * running it twice adds nothing.
+ * company name …) for its PDF and view. The campaign is created completed,
+ * so nothing is ever sent again. An email already brought in (same
+ * Message-ID) is skipped, so running it twice adds nothing.
  *
- * Reads the sender mailbox's Sent folder: over IMAP for a cPanel (SMTP)
- * sender — the same connection SentFolder copies sent mail into — or
- * through Microsoft Graph for a Microsoft 365 sender (which needs the
- * Mail.Read application permission).
+ * Reads the sender mailbox's sent mail: over IMAP for a cPanel (SMTP)
+ * sender — every folder that may hold it (Sent, Sent Items …) — or through
+ * Microsoft Graph for a Microsoft 365 sender (which needs the Mail.Read
+ * application permission). run() reports as it goes (SentMailImportProgress).
  */
 class SentMailImporter
 {
+    /** Reports progress: (changes, a line saying what it did). */
+    private ?Closure $report = null;
+
     public function __construct(
         private readonly SentFolder $sentFolder,
         private readonly OutlookCalendarService $graph,
     ) {}
 
     /**
+     * The whole import, reporting into the given progress run. Never throws:
+     * a failure is recorded on the run for the progress window to show.
+     */
+    public function run(string $runId, string $name, string $senderKey, string $subjectContains, CarbonInterface $from, CarbonInterface $to, int $userId): void
+    {
+        $this->report = fn (array $changes = [], ?string $step = null) => SentMailImportProgress::update($runId, $changes, $step);
+
+        try {
+            $messages = $this->sentMessages($senderKey, $subjectContains, $from, $to);
+            $campaign = $this->import($name, $senderKey, $messages, $userId);
+
+            SentMailImportProgress::update($runId, [
+                'status' => SentMailImportProgress::DONE,
+                'campaign_id' => $campaign->id,
+            ], __('Done: :count emails imported.', ['count' => $campaign->total_recipients]));
+        } catch (Throwable $e) {
+            SentMailImportProgress::update($runId, [
+                'status' => SentMailImportProgress::FAILED,
+                'error' => $e->getMessage(),
+            ], $e->getMessage());
+        } finally {
+            $this->report = null;
+        }
+    }
+
+    /**
      * Emails sent from the sender's mailbox in a date range whose subject
-     * contains the given text, oldest first.
+     * contains the given text, oldest first, each once.
      *
      * @return list<array<string, mixed>>
      */
@@ -48,13 +78,8 @@ class SentMailImporter
         $sender = SenderMailer::sender($senderKey);
 
         $messages = SenderMailer::isMicrosoft($sender)
-            ? $this->fromGraph((string) $sender['address'], $from, $to)
+            ? $this->fromGraph((string) $sender['address'], $subjectContains, $from, $to)
             : $this->fromImap($senderKey, $subjectContains, $from, $to);
-
-        $messages = array_values(array_filter(
-            $messages,
-            fn (array $message): bool => mb_stripos((string) ($message['subject'] ?? ''), $subjectContains) !== false,
-        ));
 
         usort($messages, fn (array $a, array $b): int => strcmp((string) $a['sentDateTime'], (string) $b['sentDateTime']));
 
@@ -78,9 +103,15 @@ class SentMailImporter
             fn (array $message): bool => ! in_array($message['internetMessageId'] ?? null, $known, true) && self::addresses($message['toRecipients'] ?? []) !== [],
         ));
 
+        if ($known !== []) {
+            $this->report([], __(':count were brought in before and are skipped.', ['count' => count($known)]));
+        }
+
         if ($messages === []) {
             throw new RuntimeException(__('No new sent emails to bring in — none matched, or they were brought in already.'));
         }
+
+        $this->report([], __('Saving :count emails into the campaign…', ['count' => count($messages)]));
 
         return DB::transaction(function () use ($name, $senderKey, $messages, $userId): BulkMailCampaign {
             $first = $messages[0];
@@ -97,7 +128,7 @@ class SentMailImporter
                 'created_by' => $userId,
             ]);
 
-            foreach ($messages as $message) {
+            foreach ($messages as $i => $message) {
                 $to = $message['toRecipients'] ?? [];
                 $sentAt = Carbon::parse($message['sentDateTime'])->setTimezone(config('app.timezone'));
 
@@ -122,6 +153,8 @@ class SentMailImporter
                     'metadata' => ['imported' => true, 'subject' => $message['subject'] ?? null],
                     'timestamp' => $sentAt,
                 ]);
+
+                $this->report(['imported' => $i + 1]);
             }
 
             return $campaign;
@@ -151,49 +184,86 @@ class SentMailImporter
     }
 
     /**
-     * @return list<array<string, mixed>>
-     */
-    /**
-     * In two passes, so a Sent folder full of attachments never has to fit
-     * in memory at once: headers only for the date range, filtered by
-     * subject; then each matching email fetched whole, one at a time, and
-     * let go once its body is taken.
+     * Every sent folder, in two passes so a folder full of attachments never
+     * has to fit in memory: headers only for the date range, filtered by
+     * subject (and each Message-ID once — an email can sit in two folders);
+     * then each match fetched whole, one at a time, and let go once its body
+     * is taken.
      *
      * @return list<array<string, mixed>>
      */
     private function fromImap(string $senderKey, string $subjectContains, CarbonInterface $from, CarbonInterface $to): array
     {
-        // One email at a time can take a while on a big folder.
+        // One email at a time can take a while on a big mailbox.
         @set_time_limit(0);
 
         try {
-            $folder = $this->sentFolder->folder($senderKey);
+            $this->report([], __('Connecting to the mailbox…'));
+            $folders = $this->sentFolder->sentFolders($senderKey);
+        } catch (Throwable $e) {
+            throw new RuntimeException(__('Could not read the Sent folder: :error', ['error' => $e->getMessage()]), previous: $e);
+        }
 
-            $headers = $folder->query()
-                ->whereSince($from->copy()->startOfDay())
-                ->whereBefore($to->copy()->addDay()->startOfDay())
-                ->leaveUnread()
-                ->setFetchBody(false)
-                ->setFetchFlags(false)
-                ->get();
+        if ($folders === []) {
+            throw new RuntimeException(__('No sent folder was found in this mailbox.'));
+        }
 
-            $uids = [];
+        $names = array_map(fn ($folder): string => $folder->full_name, $folders);
+        $this->report(['folders' => $names], __('Sent folders found: :names', ['names' => implode(', ', $names)]));
 
-            foreach ($headers as $header) {
-                if (mb_stripos((string) $header->getSubject(), $subjectContains) !== false) {
-                    $uids[] = (int) $header->uid;
+        $seen = [];
+        $wanted = [];
+        $scanned = 0;
+
+        try {
+            foreach ($folders as $folder) {
+                $headers = $folder->query()
+                    ->whereSince($from->copy()->startOfDay())
+                    ->whereBefore($to->copy()->addDay()->startOfDay())
+                    ->leaveUnread()
+                    ->setFetchBody(false)
+                    ->setFetchFlags(false)
+                    ->get();
+
+                $matched = 0;
+                $inFolder = 0;
+
+                foreach ($headers as $header) {
+                    $scanned++;
+                    $inFolder++;
+                    $id = trim((string) $header->getMessageId());
+
+                    if (mb_stripos((string) $header->getSubject(), $subjectContains) === false || ($id !== '' && isset($seen[$id]))) {
+                        continue;
+                    }
+
+                    $seen[$id !== '' ? $id : uniqid('', true)] = true;
+                    $wanted[] = [$folder, (int) $header->uid];
+                    $matched++;
                 }
+
+                unset($headers);
+
+                $this->report(['scanned' => $scanned, 'matched' => count($wanted)], __(':folder: :scanned emails in the dates, :matched matching.', [
+                    'folder' => $folder->full_name,
+                    'scanned' => $inFolder,
+                    'matched' => $matched,
+                ]));
             }
 
-            unset($headers);
+            if ($wanted !== []) {
+                $this->report([], __('Reading :count matching emails…', ['count' => count($wanted)]));
+            }
 
             $out = [];
 
-            foreach ($uids as $uid) {
+            foreach ($wanted as $i => [$folder, $uid]) {
                 $message = $folder->query()->leaveUnread()->setFetchFlags(false)->getMessageByUid($uid);
                 $out[] = self::imapMessage($message);
                 unset($message);
                 gc_collect_cycles();
+
+                $this->report(['fetched' => $i + 1]);
             }
         } catch (Throwable $e) {
             throw new RuntimeException(__('Could not read the Sent folder: :error', ['error' => $e->getMessage()]), previous: $e);
@@ -205,8 +275,10 @@ class SentMailImporter
     /**
      * @return list<array<string, mixed>>
      */
-    private function fromGraph(string $mailbox, CarbonInterface $from, CarbonInterface $to): array
+    private function fromGraph(string $mailbox, string $subjectContains, CarbonInterface $from, CarbonInterface $to): array
     {
+        $this->report(['folders' => ['Sent Items']], __('Reading Sent Items from Microsoft 365…'));
+
         $url = 'https://graph.microsoft.com/v1.0/users/'.rawurlencode($mailbox).'/mailFolders/SentItems/messages';
         $query = [
             '$filter' => sprintf('sentDateTime ge %s and sentDateTime le %s', $from->copy()->startOfDay()->utc()->format('Y-m-d\TH:i:s\Z'), $to->copy()->endOfDay()->utc()->format('Y-m-d\TH:i:s\Z')),
@@ -215,6 +287,7 @@ class SentMailImporter
         ];
 
         $messages = [];
+        $scanned = 0;
 
         while ($url !== null) {
             $response = Http::withToken($this->graph->getAccessToken())->get($url, $query);
@@ -228,7 +301,16 @@ class SentMailImporter
             }
 
             $body = $response->json();
-            array_push($messages, ...($body['value'] ?? []));
+
+            foreach ($body['value'] ?? [] as $message) {
+                $scanned++;
+
+                if (mb_stripos((string) ($message['subject'] ?? ''), $subjectContains) !== false) {
+                    $messages[] = $message;
+                }
+            }
+
+            $this->report(['scanned' => $scanned, 'matched' => count($messages), 'fetched' => count($messages)]);
 
             // The next link carries the query itself; the key has a dot, so
             // read it off the array. Its query must go as null: an empty array
@@ -238,6 +320,16 @@ class SentMailImporter
         }
 
         return $messages;
+    }
+
+    /**
+     * @param  array<string, mixed>  $changes
+     */
+    private function report(array $changes = [], ?string $step = null): void
+    {
+        if ($this->report !== null) {
+            ($this->report)($changes, $step);
+        }
     }
 
     /**

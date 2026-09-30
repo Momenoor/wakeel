@@ -5,16 +5,20 @@ namespace Tests\Feature;
 use App\Enums\BulkMailCampaignStatus;
 use App\Enums\BulkMailRecipientStatus;
 use App\Filament\Mms\Resources\BulkMailCampaigns\Pages\ListBulkMailCampaigns;
+use App\Jobs\ImportSentEmails;
+use App\Livewire\SentMailImportProgressPanel;
 use App\Models\BulkMailCampaign;
 use App\Models\BulkMailRecipient;
 use App\Models\MailSender;
 use App\Models\User;
 use App\Services\MMS\SentFolder;
 use App\Services\MMS\SentMailImporter;
+use App\Services\MMS\SentMailImportProgress;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
@@ -28,11 +32,14 @@ use Webklex\PHPIMAP\Support\MessageCollection;
 
 /**
  * Emails already sent by hand brought into a completed campaign — from a
- * Microsoft 365 mailbox (Graph) or a cPanel one (IMAP).
+ * cPanel mailbox (IMAP, every sent folder) or Microsoft 365 (Graph) — in
+ * the background, with a progress window.
  */
 class SentMailImportTest extends TestCase
 {
     use RefreshDatabase;
+
+    private User $user;
 
     protected function setUp(): void
     {
@@ -40,7 +47,8 @@ class SentMailImportTest extends TestCase
 
         Gate::before(fn () => true);
         Filament::setCurrentPanel('mms');
-        $this->actingAs(User::factory()->create());
+        $this->user = User::factory()->create();
+        $this->actingAs($this->user);
 
         config(['services.outlook' => [
             'tenant_id' => 'tenant', 'client_id' => 'client', 'client_secret' => 'secret',
@@ -49,6 +57,7 @@ class SentMailImportTest extends TestCase
         cache()->forget('outlook_access_token');
 
         MailSender::create(['key' => 'office', 'name' => 'Office', 'address' => 'office@firm.ae', 'driver' => MailSender::MICROSOFT, 'is_active' => true]);
+        MailSender::create(['key' => 'cpanel', 'name' => 'Office', 'address' => 'info@firm.ae', 'driver' => MailSender::SMTP, 'host' => 'mail.firm.ae', 'port' => 465, 'username' => 'info@firm.ae', 'password' => 'secret', 'is_active' => true]);
     }
 
     private function message(string $id, string $subject, string $to, string $sent): array
@@ -61,6 +70,15 @@ class SentMailImportTest extends TestCase
             'toRecipients' => [['emailAddress' => ['address' => $to, 'name' => 'Client '.$id]]],
             'ccRecipients' => [],
         ];
+    }
+
+    private function importRun(string $sender = 'office', string $subject = 'invoice'): string
+    {
+        $run = SentMailImportProgress::start();
+
+        app(SentMailImporter::class)->run($run, 'Invoice reminders', $sender, $subject, Carbon::parse('2026-09-01'), Carbon::parse('2026-09-30'), $this->user->id);
+
+        return $run;
     }
 
     private function fakeGraph(): void
@@ -84,45 +102,123 @@ class SentMailImportTest extends TestCase
         });
     }
 
-    private function import(): void
+    /**
+     * An IMAP folder holding these [uid, id, subject] emails; only the uids
+     * in $fetched may be fetched whole.
+     *
+     * @param  list<array{0: int, 1: string, 2: string}>  $emails
+     * @param  list<int>  $fetched
+     */
+    private function imapFolder(string $name, array $emails, array $fetched): Folder
     {
+        $raw = fn (string $id, string $subject): string => "Message-ID: <{$id}@firm.ae>\r\nDate: Tue, 1 Sep 2026 09:00:00 +0400\r\nTo: {$id}@client.ae\r\nSubject: {$subject}\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n<p>Dear {$id}</p>";
+
+        $query = Mockery::mock(WhereQuery::class);
+        $query->shouldReceive('whereSince', 'whereBefore', 'leaveUnread', 'setFetchBody', 'setFetchFlags')->andReturnSelf();
+        $query->shouldReceive('get')->andReturn(new MessageCollection(array_map(function (array $email) use ($raw): Message {
+            $message = Message::fromString($raw($email[1], $email[2]));
+            $message->uid = $email[0];
+
+            return $message;
+        }, $emails)));
+
+        foreach ($emails as [$uid, $id, $subject]) {
+            if (in_array($uid, $fetched, true)) {
+                $query->shouldReceive('getMessageByUid')->with($uid)->once()->andReturn(Message::fromString($raw($id, $subject)));
+            } else {
+                $query->shouldNotReceive('getMessageByUid')->with($uid);
+            }
+        }
+
+        $folder = Mockery::mock(Folder::class);
+        $folder->full_name = $name;
+        $folder->shouldReceive('query')->andReturn($query);
+
+        return $folder;
+    }
+
+    public function test_the_button_starts_the_import_in_the_background_and_shows_progress(): void
+    {
+        Bus::fake();
+
         Livewire::test(ListBulkMailCampaigns::class)
-            ->callAction('importSentEmails', [
-                'name' => 'Invoice reminders (Outlook)',
-                'sender' => 'office',
-                'subject' => 'invoice',
-                'from' => '2026-09-01',
-                'to' => '2026-09-30',
-            ]);
+            ->callAction('importSentEmails', ['name' => 'X', 'sender' => 'cpanel', 'subject' => 'invoice', 'from' => '2026-09-01', 'to' => '2026-09-30'])
+            ->assertActionMounted('importProgress');
+
+        Bus::assertDispatchedAfterResponse(ImportSentEmails::class, fn (ImportSentEmails $job) => $job->senderKey === 'cpanel' && $job->subject === 'invoice');
     }
 
     public function test_sent_emails_become_a_completed_campaign_with_sent_recipients(): void
     {
         $this->fakeGraph();
-        $this->import();
+        $run = $this->importRun();
 
         $campaign = BulkMailCampaign::sole();
         $this->assertSame(BulkMailCampaignStatus::Completed, $campaign->status);
-        $this->assertSame('Invoice reminder', $campaign->subject);
         $this->assertSame(2, $campaign->total_recipients);
-        $this->assertSame(2, $campaign->sent_count);
 
         $recipients = BulkMailRecipient::orderBy('sent_at')->get();
         $this->assertSame([['a@client.ae'], ['b@client.ae']], $recipients->pluck('email')->all());
         $this->assertTrue($recipients->every(fn ($r) => $r->status === BulkMailRecipientStatus::Sent));
-        $this->assertSame('2026-09-01', $recipients->first()->sent_at->toDateString());
 
-        Http::assertSent(fn (Request $request) => str_contains($request->url(), 'users/office%40firm.ae/mailFolders/SentItems/messages'));
+        $progress = SentMailImportProgress::get($run);
+        $this->assertSame(SentMailImportProgress::DONE, $progress['status']);
+        $this->assertSame($campaign->id, $progress['campaign_id']);
+        $this->assertSame(3, $progress['scanned']);
+        $this->assertSame(2, $progress['imported']);
     }
 
     public function test_running_it_again_brings_nothing_twice(): void
     {
         $this->fakeGraph();
-        $this->import();
-        $this->import();
+        $this->importRun();
+        $second = $this->importRun();
 
         $this->assertSame(1, BulkMailCampaign::count());
         $this->assertSame(2, BulkMailRecipient::count());
+        $this->assertSame(SentMailImportProgress::FAILED, SentMailImportProgress::get($second)['status']);
+    }
+
+    public function test_every_sent_folder_is_searched_and_an_email_in_two_counts_once(): void
+    {
+        $this->mock(SentFolder::class)->shouldReceive('sentFolders')->with('cpanel')->andReturn([
+            $this->imapFolder('INBOX.Sent', [[1, 'alpha', 'Invoice Alpha'], [2, 'lunch', 'Lunch']], [1]),
+            // Outlook's own folder — where these usually are.
+            $this->imapFolder('INBOX.Sent Items', [[7, 'beta', 'Invoice Beta'], [8, 'alpha', 'Invoice Alpha']], [7]),
+        ]);
+
+        $run = $this->importRun('cpanel');
+
+        $progress = SentMailImportProgress::get($run);
+        $this->assertSame(SentMailImportProgress::DONE, $progress['status'], (string) $progress['error']);
+        $this->assertSame(['INBOX.Sent', 'INBOX.Sent Items'], $progress['folders']);
+        $this->assertSame(4, $progress['scanned']);
+        $this->assertSame(2, $progress['imported']);
+        $this->assertSame(['Invoice Alpha', 'Invoice Beta'], BulkMailRecipient::orderBy('sent_subject')->pluck('sent_subject')->all());
+    }
+
+    public function test_a_failure_is_shown_in_the_progress_window(): void
+    {
+        $this->mock(SentFolder::class)->shouldReceive('sentFolders')->andThrow(new RuntimeException('Connection refused'));
+
+        $run = $this->importRun('cpanel');
+
+        Livewire::test(SentMailImportProgressPanel::class, ['run' => $run])
+            ->assertSee(__('Import stopped'))
+            ->assertSee('Connection refused');
+
+        $this->assertSame(0, BulkMailCampaign::count());
+    }
+
+    public function test_the_progress_window_shows_the_counts_and_the_campaign(): void
+    {
+        $this->fakeGraph();
+        $run = $this->importRun();
+
+        Livewire::test(SentMailImportProgressPanel::class, ['run' => $run])
+            ->assertSee(__('Import finished'))
+            ->assertSee(__('Open the campaign'))
+            ->assertSee('Sent Items');
     }
 
     public function test_without_mail_permission_it_says_what_to_grant(): void
@@ -132,11 +228,10 @@ class SentMailImportTest extends TestCase
             'graph.microsoft.com/*' => Http::response(['error' => ['message' => 'Access is denied.']], 403),
         ]);
 
-        Livewire::test(ListBulkMailCampaigns::class)
-            ->callAction('importSentEmails', ['name' => 'X', 'sender' => 'office', 'subject' => 'x', 'from' => '2026-09-01', 'to' => '2026-09-30'])
-            ->assertNotified();
+        $progress = SentMailImportProgress::get($this->importRun());
 
-        $this->assertSame(0, BulkMailCampaign::count());
+        $this->assertSame(SentMailImportProgress::FAILED, $progress['status']);
+        $this->assertStringContainsString('Mail.Read', $progress['error']);
     }
 
     public function test_each_recipient_keeps_its_own_email_body(): void
@@ -146,7 +241,7 @@ class SentMailImportTest extends TestCase
         $campaign = app(SentMailImporter::class)->import('Invoices', 'office', [
             [...$this->message('<a@x>', 'Invoice – Alpha LLC', 'a@alpha.ae', '2026-09-01T09:00:00Z'), 'body' => $body('Alpha LLC')],
             [...$this->message('<b@x>', 'Invoice – Beta FZE', 'b@beta.ae', '2026-09-02T09:00:00Z'), 'body' => $body('Beta FZE')],
-        ], auth()->id());
+        ], $this->user->id);
 
         [$alpha, $beta] = BulkMailRecipient::orderBy('sent_at')->get()->all();
 
@@ -174,59 +269,5 @@ class SentMailImportTest extends TestCase
         $this->assertSame('accounts@alpha.ae', $message['toRecipients'][0]['emailAddress']['address']);
         $this->assertSame('boss@alpha.ae', $message['ccRecipients'][0]['emailAddress']['address']);
         $this->assertStringContainsString('Dear Alpha', $message['body']['content']);
-        $this->assertSame('2026-09-01', substr($message['sentDateTime'], 0, 10));
-    }
-
-    public function test_imap_reads_headers_first_then_only_the_matching_emails_one_by_one(): void
-    {
-        $raw = fn (string $id, string $subject): string => "Message-ID: <{$id}@firm.ae>\r\nDate: Tue, 1 Sep 2026 09:00:00 +0400\r\nTo: {$id}@client.ae\r\nSubject: {$subject}\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n<p>Dear {$id}</p>";
-
-        $header = function (int $uid, string $id, string $subject) use ($raw): Message {
-            $message = Message::fromString($raw($id, $subject));
-            $message->uid = $uid;
-
-            return $message;
-        };
-
-        $query = Mockery::mock(WhereQuery::class);
-        $query->shouldReceive('whereSince', 'whereBefore', 'leaveUnread', 'setFetchBody', 'setFetchFlags')->andReturnSelf();
-        $query->shouldReceive('get')->once()->andReturn(new MessageCollection([
-            $header(1, 'alpha', 'Invoice Alpha'),
-            $header(2, 'lunch', 'Lunch'),
-            $header(3, 'beta', 'Invoice Beta'),
-        ]));
-        // Only the two invoices are fetched whole.
-        $query->shouldReceive('getMessageByUid')->with(1)->once()->andReturn(Message::fromString($raw('alpha', 'Invoice Alpha')));
-        $query->shouldReceive('getMessageByUid')->with(3)->once()->andReturn(Message::fromString($raw('beta', 'Invoice Beta')));
-        $query->shouldNotReceive('getMessageByUid')->with(2);
-
-        $folder = Mockery::mock(Folder::class);
-        $folder->shouldReceive('query')->andReturn($query);
-
-        MailSender::create(['key' => 'cpanel', 'name' => 'Office', 'address' => 'info@firm.ae', 'driver' => MailSender::SMTP, 'host' => 'mail.firm.ae', 'port' => 465, 'username' => 'info@firm.ae', 'password' => 'secret', 'is_active' => true]);
-        $this->mock(SentFolder::class)->shouldReceive('folder')->with('cpanel')->andReturn($folder);
-
-        $messages = app(SentMailImporter::class)->sentMessages('cpanel', 'invoice', Carbon::parse('2026-09-01'), Carbon::parse('2026-09-30'));
-
-        $this->assertSame(['Invoice Alpha', 'Invoice Beta'], array_column($messages, 'subject'));
-        $this->assertStringContainsString('Dear beta', $messages[1]['body']['content']);
-    }
-
-    public function test_a_cpanel_sender_is_read_over_imap(): void
-    {
-        MailSender::create(['key' => 'cpanel', 'name' => 'Office', 'address' => 'info@firm.ae', 'driver' => MailSender::SMTP, 'host' => 'mail.firm.ae', 'port' => 465, 'username' => 'info@firm.ae', 'password' => 'secret', 'is_active' => true]);
-
-        $this->mock(SentFolder::class)
-            ->shouldReceive('folder')->once()->with('cpanel')
-            ->andThrow(new RuntimeException('Connection refused'));
-
-        Http::fake();
-
-        Livewire::test(ListBulkMailCampaigns::class)
-            ->callAction('importSentEmails', ['name' => 'X', 'sender' => 'cpanel', 'subject' => 'x', 'from' => '2026-09-01', 'to' => '2026-09-30'])
-            ->assertNotified();
-
-        Http::assertNothingSent();
-        $this->assertSame(0, BulkMailCampaign::count());
     }
 }

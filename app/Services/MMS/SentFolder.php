@@ -3,6 +3,7 @@
 namespace App\Services\MMS;
 
 use App\Models\BulkMailCampaign;
+use Webklex\PHPIMAP\Client;
 use Webklex\PHPIMAP\ClientManager;
 use Webklex\PHPIMAP\Folder;
 
@@ -37,19 +38,49 @@ class SentFolder
     }
 
     /**
-     * The sender mailbox's "Sent" folder over IMAP — to copy mail into, or
-     * to read what was sent from it by hand (SentMailImporter).
+     * The sender mailbox's "Sent" folder over IMAP, where sent mail is
+     * copied to.
      *
      * @param  array<string, mixed>|null  $sender
      */
     public function folder(string $senderKey, ?array $sender = null): Folder
+    {
+        return $this->client($senderKey, $sender)->getFolder('Sent');
+    }
+
+    /**
+     * Every folder in the mailbox that may hold sent mail — a mail app picks
+     * its own: "Sent", "Sent Items" (Outlook), "Sent Messages", "INBOX.Sent"
+     * on cPanel, or a translated name.
+     *
+     * @return list<Folder>
+     */
+    public function sentFolders(string $senderKey): array
+    {
+        $folders = [];
+
+        foreach ($this->client($senderKey)->getFolders(false) as $folder) {
+            if (! $folder->no_select && preg_match(self::SENT_NAMES, $folder->full_name.' '.$folder->name)) {
+                $folders[] = $folder;
+            }
+        }
+
+        return $folders;
+    }
+
+    private const SENT_NAMES = '~sent|المرسل|المُرسل|envoy|gesendet|enviad|inviat|verzonden~iu';
+
+    /**
+     * @param  array<string, mixed>|null  $sender
+     */
+    private function client(string $senderKey, ?array $sender = null): Client
     {
         $sender ??= SenderMailer::sender($senderKey);
 
         $client = (new ClientManager($this->config($senderKey, $sender)))->account($senderKey);
         $client->connect();
 
-        return $client->getFolder('Sent');
+        return $client;
     }
 
     /**

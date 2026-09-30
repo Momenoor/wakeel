@@ -3,16 +3,15 @@
 namespace App\Filament\Mms\Resources\BulkMailCampaigns\Pages;
 
 use App\Filament\Mms\Resources\BulkMailCampaigns\BulkMailCampaignResource;
+use App\Jobs\ImportSentEmails;
 use App\Services\MMS\SenderMailer;
-use App\Services\MMS\SentMailImporter;
+use App\Services\MMS\SentMailImportProgress;
 use Filament\Actions;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
-use Illuminate\Support\Carbon;
-use Throwable;
+use Illuminate\Contracts\View\View;
 
 class ListBulkMailCampaigns extends ListRecords
 {
@@ -60,25 +59,27 @@ class ListBulkMailCampaigns extends ListRecords
                     ->afterOrEqual('from')
                     ->required(),
             ])
-            ->action(function (array $data, Actions\Action $action): void {
-                $importer = app(SentMailImporter::class);
+            // Runs once the page has answered (it can take a while); the
+            // progress window follows it.
+            ->action(function (array $data): void {
+                $run = SentMailImportProgress::start();
 
-                try {
-                    $messages = $importer->sentMessages($data['sender'], $data['subject'], Carbon::parse($data['from']), Carbon::parse($data['to']));
-                    $campaign = $importer->import($data['name'], $data['sender'], $messages, (int) auth()->id());
-                } catch (Throwable $exception) {
-                    Notification::make()->danger()->title(__('Could not continue'))->body($exception->getMessage())->persistent()->send();
-                    $action->halt();
+                ImportSentEmails::dispatchAfterResponse($run, $data['name'], $data['sender'], $data['subject'], (string) $data['from'], (string) $data['to'], (int) auth()->id());
 
-                    return;
-                }
-
-                Notification::make()
-                    ->success()
-                    ->title(__(':count sent emails brought in.', ['count' => $campaign->total_recipients]))
-                    ->send();
-
-                $this->redirect(BulkMailCampaignResource::getUrl('view', ['record' => $campaign]));
+                $this->replaceMountedAction('importProgress', ['run' => $run]);
             });
+    }
+
+    /**
+     * The progress window, opened by the import (not a button of its own).
+     */
+    public function importProgressAction(): Actions\Action
+    {
+        return Actions\Action::make('importProgress')
+            ->modalHeading(__('Importing sent emails'))
+            ->modalContent(fn (array $arguments): View => view('filament.bulk-mail.import-progress', ['run' => $arguments['run'] ?? '']))
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel(__('Close'))
+            ->closeModalByClickingAway(false);
     }
 }
