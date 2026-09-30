@@ -49,7 +49,7 @@ class SentMailImporter
 
         $messages = SenderMailer::isMicrosoft($sender)
             ? $this->fromGraph((string) $sender['address'], $from, $to)
-            : $this->fromImap($senderKey, $from, $to);
+            : $this->fromImap($senderKey, $subjectContains, $from, $to);
 
         $messages = array_values(array_filter(
             $messages,
@@ -153,23 +153,50 @@ class SentMailImporter
     /**
      * @return list<array<string, mixed>>
      */
-    private function fromImap(string $senderKey, CarbonInterface $from, CarbonInterface $to): array
+    /**
+     * In two passes, so a Sent folder full of attachments never has to fit
+     * in memory at once: headers only for the date range, filtered by
+     * subject; then each matching email fetched whole, one at a time, and
+     * let go once its body is taken.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function fromImap(string $senderKey, string $subjectContains, CarbonInterface $from, CarbonInterface $to): array
     {
+        // One email at a time can take a while on a big folder.
+        @set_time_limit(0);
+
         try {
-            $messages = $this->sentFolder->folder($senderKey)
-                ->query()
+            $folder = $this->sentFolder->folder($senderKey);
+
+            $headers = $folder->query()
                 ->whereSince($from->copy()->startOfDay())
                 ->whereBefore($to->copy()->addDay()->startOfDay())
                 ->leaveUnread()
+                ->setFetchBody(false)
+                ->setFetchFlags(false)
                 ->get();
+
+            $uids = [];
+
+            foreach ($headers as $header) {
+                if (mb_stripos((string) $header->getSubject(), $subjectContains) !== false) {
+                    $uids[] = (int) $header->uid;
+                }
+            }
+
+            unset($headers);
+
+            $out = [];
+
+            foreach ($uids as $uid) {
+                $message = $folder->query()->leaveUnread()->setFetchFlags(false)->getMessageByUid($uid);
+                $out[] = self::imapMessage($message);
+                unset($message);
+                gc_collect_cycles();
+            }
         } catch (Throwable $e) {
             throw new RuntimeException(__('Could not read the Sent folder: :error', ['error' => $e->getMessage()]), previous: $e);
-        }
-
-        $out = [];
-
-        foreach ($messages as $message) {
-            $out[] = self::imapMessage($message);
         }
 
         return $out;

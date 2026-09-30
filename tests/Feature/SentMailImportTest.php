@@ -11,15 +11,20 @@ use App\Models\MailSender;
 use App\Models\User;
 use App\Services\MMS\SentFolder;
 use App\Services\MMS\SentMailImporter;
-use RuntimeException;
-use Webklex\PHPIMAP\Message;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
+use Mockery;
+use RuntimeException;
 use Tests\TestCase;
+use Webklex\PHPIMAP\Folder;
+use Webklex\PHPIMAP\Message;
+use Webklex\PHPIMAP\Query\WhereQuery;
+use Webklex\PHPIMAP\Support\MessageCollection;
 
 /**
  * Emails already sent by hand brought into a completed campaign — from a
@@ -170,6 +175,41 @@ class SentMailImportTest extends TestCase
         $this->assertSame('boss@alpha.ae', $message['ccRecipients'][0]['emailAddress']['address']);
         $this->assertStringContainsString('Dear Alpha', $message['body']['content']);
         $this->assertSame('2026-09-01', substr($message['sentDateTime'], 0, 10));
+    }
+
+    public function test_imap_reads_headers_first_then_only_the_matching_emails_one_by_one(): void
+    {
+        $raw = fn (string $id, string $subject): string => "Message-ID: <{$id}@firm.ae>\r\nDate: Tue, 1 Sep 2026 09:00:00 +0400\r\nTo: {$id}@client.ae\r\nSubject: {$subject}\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n<p>Dear {$id}</p>";
+
+        $header = function (int $uid, string $id, string $subject) use ($raw): Message {
+            $message = Message::fromString($raw($id, $subject));
+            $message->uid = $uid;
+
+            return $message;
+        };
+
+        $query = Mockery::mock(WhereQuery::class);
+        $query->shouldReceive('whereSince', 'whereBefore', 'leaveUnread', 'setFetchBody', 'setFetchFlags')->andReturnSelf();
+        $query->shouldReceive('get')->once()->andReturn(new MessageCollection([
+            $header(1, 'alpha', 'Invoice Alpha'),
+            $header(2, 'lunch', 'Lunch'),
+            $header(3, 'beta', 'Invoice Beta'),
+        ]));
+        // Only the two invoices are fetched whole.
+        $query->shouldReceive('getMessageByUid')->with(1)->once()->andReturn(Message::fromString($raw('alpha', 'Invoice Alpha')));
+        $query->shouldReceive('getMessageByUid')->with(3)->once()->andReturn(Message::fromString($raw('beta', 'Invoice Beta')));
+        $query->shouldNotReceive('getMessageByUid')->with(2);
+
+        $folder = Mockery::mock(Folder::class);
+        $folder->shouldReceive('query')->andReturn($query);
+
+        MailSender::create(['key' => 'cpanel', 'name' => 'Office', 'address' => 'info@firm.ae', 'driver' => MailSender::SMTP, 'host' => 'mail.firm.ae', 'port' => 465, 'username' => 'info@firm.ae', 'password' => 'secret', 'is_active' => true]);
+        $this->mock(SentFolder::class)->shouldReceive('folder')->with('cpanel')->andReturn($folder);
+
+        $messages = app(SentMailImporter::class)->sentMessages('cpanel', 'invoice', Carbon::parse('2026-09-01'), Carbon::parse('2026-09-30'));
+
+        $this->assertSame(['Invoice Alpha', 'Invoice Beta'], array_column($messages, 'subject'));
+        $this->assertStringContainsString('Dear beta', $messages[1]['body']['content']);
     }
 
     public function test_a_cpanel_sender_is_read_over_imap(): void
