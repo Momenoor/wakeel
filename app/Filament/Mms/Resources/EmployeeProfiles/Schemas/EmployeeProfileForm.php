@@ -8,6 +8,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 
 class EmployeeProfileForm
@@ -133,7 +134,7 @@ class EmployeeProfileForm
                             ->label(__('Opening Leave Balance (days)'))
                             ->numeric()
                             ->default(0)
-                            ->helperText(__('Days carried over from before leave was tracked here, added once to their first year of entitlement.')),
+                            ->helperText(__('The starting point of the annual leave balance. After it: 30 days every 1 January, less the annual leave taken.')),
                         TextInput::make('opening_eosg_balance')
                             ->label(__('Opening EOSG Balance (AED)'))
                             ->suffix('AED')
@@ -152,6 +153,23 @@ class EmployeeProfileForm
                             ->helperText(__('Cumulative gratuity actually paid out. Compared against the closing balance to mark the EOSG closing voucher unpaid, partially paid, or paid in full.')),
                         DatePicker::make('eosg_paid_at')
                             ->label(__('EOSG Last Paid On')),
+                    ])->columns(2),
+
+                Section::make(__('Flight Ticket'))
+                    ->schema([
+                        Toggle::make('flight_ticket_entitled')
+                            ->label(__('Entitled to a yearly flight ticket'))
+                            ->live()
+                            ->helperText(__('On: a ticket for the amount below is due every 1 January (pro-rated in the joining year), to pay through a payroll run or directly.')),
+                        TextInput::make('flight_ticket_amount')
+                            ->label(__('Yearly Ticket Amount (AED)'))
+                            ->suffix('AED')
+                            ->numeric()
+                            ->minValue(0)
+                            ->step(0.01)
+                            ->default(0)
+                            ->required(fn (Get $get): bool => (bool) $get('flight_ticket_entitled'))
+                            ->visible(fn (Get $get): bool => (bool) $get('flight_ticket_entitled')),
                     ])->columns(2),
             ]);
     }

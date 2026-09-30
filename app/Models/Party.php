@@ -209,6 +209,16 @@ class Party extends Model
         return $this->hasMany(LeaveEntitlement::class);
     }
 
+    public function leaveBalanceEntries(): HasMany
+    {
+        return $this->hasMany(LeaveBalanceEntry::class);
+    }
+
+    public function flightTickets(): HasMany
+    {
+        return $this->hasMany(FlightTicket::class);
+    }
+
     public function loans(): HasMany
     {
         return $this->hasMany(EmployeeLoan::class);

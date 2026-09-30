@@ -111,6 +111,7 @@ class FinancialConfiguration extends Page
                 'payroll_loan_rounding_step' => Setting::get('payroll_loan_rounding_step', 50),
 
                 'payroll_bank_fee_amount' => Setting::get('payroll_bank_fee_amount', 0),
+                'payroll_flight_ticket_gl_account' => Setting::get('payroll_flight_ticket_gl_account', 'Air Ticket Allowance Expense'),
 
                 'payroll_wps_employer_id' => Setting::get('payroll_wps_employer_id'),
                 'payroll_wps_trade_license' => Setting::get('payroll_wps_trade_license'),

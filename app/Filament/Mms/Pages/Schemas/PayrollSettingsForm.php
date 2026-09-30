@@ -50,6 +50,13 @@ class PayrollSettingsForm
                         ->required()
                         ->default(0)
                         ->helperText(__('A fixed charge the bank makes for the salary transfer batch, posted once per run regardless of headcount. Already includes VAT — the salary authorization form below splits it back out.')),
+
+                    TextInput::make('payroll_flight_ticket_gl_account')
+                        ->label(__('Flight Ticket GL Account'))
+                        ->maxLength(255)
+                        ->default('Air Ticket Allowance Expense')
+                        ->required()
+                        ->helperText(__('The account flight tickets paid through payroll are posted to in the journal voucher.')),
                 ]),
 
             Section::make(__('Salary Authorization Form (WPS)'))
@@ -108,7 +115,7 @@ class PayrollSettingsForm
                 ]),
 
             Section::make(__('Annual Leave — Federal Decree-Law 33/2021, Article 29'))
-                ->description(__('Statutory minimums for paid annual leave.'))
+                ->description(__('The annual days are added to every employee\'s balance each 1 January (pro-rated in the joining year).'))
                 ->icon(Heroicon::Sun)
                 ->columns(2)
                 ->schema([

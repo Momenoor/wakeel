@@ -33,6 +33,7 @@ class LeaveRequestService
 {
     public function __construct(
         private readonly LeaveEntitlementService $entitlements,
+        private readonly LeaveBalanceService $balances,
     ) {}
 
     /**
@@ -56,6 +57,7 @@ class LeaveRequestService
         }
 
         $this->assertPeriodsCoverTheRequest($request, $periods);
+        $this->assertAnnualWithinBalance($request, $periods);
 
         return DB::transaction(function () use ($request, $approver, $periods, $comment): LeaveRequest {
             $request->forceFill([
@@ -81,6 +83,7 @@ class LeaveRequestService
 
                 $this->publishToLedger($request, $saved);
                 $this->recordAgainstEntitlement($request, $saved);
+                $this->balances->recordTaken($request, $saved);
             }
 
             DB::afterCommit(fn () => $this->tellRequester($request, approved: true));
@@ -150,9 +153,10 @@ class LeaveRequestService
     }
 
     /**
-     * A starting split for the approver: the whole absence as one block of
-     * `$type` (the employee's own requested type by default, falling back to
-     * annual leave if none was stated).
+     * A starting split for the approver. Annual leave (the default when the
+     * employee stated no type) comes out of the balance while it lasts and
+     * the rest is unpaid — all of it unpaid with no balance left. Any other
+     * type is the whole absence as one block of that type.
      *
      * Offered as a default rather than applied automatically. It is right often
      * enough to save typing and visible enough that changing it is obviously the
@@ -163,8 +167,14 @@ class LeaveRequestService
      */
     public function suggestSplit(LeaveRequest $request, ?LeaveType $type = null): array
     {
+        $type ??= $request->getAttribute('requested_leave_type') ?? LeaveType::ANNUAL;
+
+        if ($type === LeaveType::ANNUAL) {
+            return $this->balances->suggestSplit($request);
+        }
+
         return [[
-            'leave_type' => ($type ?? $request->getAttribute('requested_leave_type') ?? LeaveType::ANNUAL)->value,
+            'leave_type' => $type->value,
             'start_date' => $request->getAttribute('start_date')->toDateString(),
             'end_date' => $request->getAttribute('end_date')->toDateString(),
             'day_count' => $request->requestedDays(),
@@ -212,6 +222,33 @@ class LeaveRequestService
                 rtrim(rtrim(number_format($total, 1), '0'), '.'),
                 rtrim(rtrim(number_format($request->requestedDays(), 1), '0'), '.'),
             ));
+        }
+    }
+
+    /**
+     * Annual days can only come out of what the balance holds; anything
+     * beyond it is unpaid leave, and has to be booked as such.
+     *
+     * @param  list<array{leave_type: string|LeaveType, start_date: string, end_date: string, day_count: float|string}>  $periods
+     */
+    private function assertAnnualWithinBalance(LeaveRequest $request, array $periods): void
+    {
+        $annual = 0.0;
+
+        foreach ($periods as $period) {
+            $type = $period['leave_type'] instanceof LeaveType ? $period['leave_type'] : LeaveType::tryFrom((string) $period['leave_type']);
+
+            if ($type === LeaveType::ANNUAL) {
+                $annual += (float) $period['day_count'];
+            }
+        }
+
+        $balance = $this->balances->balance((int) $request->getAttribute('party_id'));
+
+        if ($annual > 0 && $annual > $balance + 0.001) {
+            throw new RuntimeException(__('Only :balance annual leave days are left in the balance; book the rest as unpaid leave.', [
+                'balance' => rtrim(rtrim(number_format(max(0, $balance), 1), '0'), '.'),
+            ]));
         }
     }
 

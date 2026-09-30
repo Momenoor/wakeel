@@ -83,6 +83,7 @@ class PayrollRunService
         return DB::transaction(function () use ($run): PayrollRun {
             $this->bookGratuityAccruals($run);
             $this->settleFullyRecoveredLoans($run);
+            app(FlightTicketService::class)->settleRun($run);
 
             return $this->moveTo($run, PayrollRunStatus::DISBURSED, ['disbursed_at' => now()]);
         });

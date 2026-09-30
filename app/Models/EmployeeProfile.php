@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\MMS\LeaveBalanceService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -43,6 +44,8 @@ class EmployeeProfile extends Model
         'include_in_salary_authorization_form',
         'is_eosg_applicable',
         'opening_leave_balance',
+        'flight_ticket_entitled',
+        'flight_ticket_amount',
         'opening_eosg_balance',
         'eosg_paid_amount',
         'eosg_paid_at',
@@ -58,6 +61,8 @@ class EmployeeProfile extends Model
         'residency_expiry' => 'date',
         'include_in_salary_authorization_form' => 'boolean',
         'is_eosg_applicable' => 'boolean',
+        'flight_ticket_entitled' => 'boolean',
+        'flight_ticket_amount' => 'decimal:2',
         'opening_leave_balance' => 'decimal:1',
         'opening_eosg_balance' => 'decimal:2',
         'eosg_paid_amount' => 'decimal:2',
@@ -68,6 +73,17 @@ class EmployeeProfile extends Model
     {
         return LogOptions::defaults()
             ->logAll();
+    }
+
+    protected static function booted(): void
+    {
+        // The opening leave balance is the first entry of the running
+        // balance; changing it on the profile changes that entry.
+        static::saved(function (EmployeeProfile $profile): void {
+            if ($profile->wasRecentlyCreated || $profile->wasChanged(['opening_leave_balance', 'party_id'])) {
+                app(LeaveBalanceService::class)->syncOpening($profile);
+            }
+        });
     }
 
     /**

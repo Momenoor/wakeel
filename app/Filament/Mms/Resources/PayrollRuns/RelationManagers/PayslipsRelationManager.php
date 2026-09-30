@@ -82,6 +82,10 @@ class PayslipsRelationManager extends RelationManager
                 TextColumn::make('incentive_amount')
                     ->label(__('Incentive'))
                     ->numeric(decimalPlaces: 2),
+                TextColumn::make('flight_ticket_amount')
+                    ->label(__('Flight Ticket'))
+                    ->numeric(decimalPlaces: 2)
+                    ->toggleable(),
                 TextColumn::make('gross')
                     ->label(__('Gross'))
                     ->numeric(decimalPlaces: 2)
@@ -202,7 +206,8 @@ class PayslipsRelationManager extends RelationManager
         $manual = (float) ($data['manual_deduction'] ?? 0);
 
         $gross = round(
-            (float) $record->basic_snapshot + (float) $record->allowances_snapshot + $incentive,
+            (float) $record->basic_snapshot + (float) $record->allowances_snapshot + $incentive
+                + (float) $record->flight_ticket_amount,
             2,
         );
 

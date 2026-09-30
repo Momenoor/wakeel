@@ -14,6 +14,7 @@ use App\Models\Party;
 use App\Models\PartyLeave;
 use App\Models\PayrollRun;
 use App\Models\User;
+use App\Services\MMS\LeaveBalanceService;
 use App\Services\MMS\LeaveEntitlementService;
 use App\Services\MMS\LeaveRequestService;
 use App\Services\MMS\PayrollService;
@@ -47,7 +48,9 @@ class LeaveRequestTest extends TestCase
     {
         $party = Party::factory()->employee()->create();
 
-        EmployeeProfile::create(['party_id' => $party->id, 'date_of_joining' => $joinedOn]);
+        // 30 days of annual leave to draw on — the running balance starts
+        // from the opening balance.
+        EmployeeProfile::create(['party_id' => $party->id, 'date_of_joining' => $joinedOn, 'opening_leave_balance' => 30]);
 
         EmployeeSalaryComponent::create([
             'party_id' => $party->id,
@@ -181,7 +184,8 @@ class LeaveRequestTest extends TestCase
             ->forDate($party, Carbon::parse('2026-06-01'));
 
         $this->assertSame('5.0', $entitlement->annual_taken_days);
-        $this->assertSame(25.0, $entitlement->annualRemaining());
+        // The running balance: 30 opening days less the 5 taken.
+        $this->assertSame(25.0, app(LeaveBalanceService::class)->balance($party->id));
     }
 
     public function test_unpaid_leave_draws_on_no_balance(): void

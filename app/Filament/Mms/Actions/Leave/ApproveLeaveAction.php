@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Actions\Leave;
 use App\Enums\LeaveType;
 use App\Filament\Mms\Concerns\PayrollRefresh;
 use App\Models\LeaveRequest;
+use App\Services\MMS\LeaveBalanceService;
 use App\Services\MMS\LeaveEntitlementService;
 use App\Services\MMS\LeaveRequestService;
 use Filament\Actions\Action;
@@ -209,7 +210,7 @@ class ApproveLeaveAction extends Action
         $sickHalfLeft = max(0.0, $entitlements->sickHalfDays() - (float) $entitlement->sick_half_taken);
 
         return __('Annual remaining: :annual · Sick at full pay: :full · Sick at half pay: :half', [
-            'annual' => number_format($entitlement->annualRemaining(), 1)
+            'annual' => number_format(app(LeaveBalanceService::class)->balance((int) $record->party_id), 1)
                     |> (fn ($x) => rtrim($x, '0'))
                     |> (fn ($x) => rtrim($x, '.')),
             'full' => number_format($sickFullLeft, 1)

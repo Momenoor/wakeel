@@ -5,11 +5,14 @@ namespace App\Filament\Mms\Resources\PayrollRuns\Pages;
 use App\Enums\PayrollRunStatus;
 use App\Filament\Mms\Concerns\RefreshesPayrollData;
 use App\Filament\Mms\Resources\PayrollRuns\PayrollRunResource;
+use App\Models\FlightTicket;
 use App\Models\PayrollRun;
+use App\Services\MMS\FlightTicketService;
 use App\Services\MMS\PayrollJournalVoucherService;
 use App\Services\MMS\PayrollRunService;
 use App\Services\MMS\PayrollService;
 use Filament\Actions\Action;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Illuminate\Contracts\View\View;
@@ -26,6 +29,7 @@ class ViewPayrollRun extends ViewRecord
     {
         return [
             $this->generateAction(),
+            $this->flightTicketsAction(),
             $this->submitAction(),
             $this->hrApproveAction(),
             $this->financeApproveAction(),
@@ -93,13 +97,81 @@ class ViewPayrollRun extends ViewRecord
                     ]);
                 }
 
-                $clean = $skipped->isEmpty() && $pending->isEmpty();
+                // Tickets waiting to be paid: say so, so the run can take them.
+                $dueTickets = FlightTicket::query()->due()->count();
+
+                if ($dueTickets > 0) {
+                    $body .= ' '.__(':count flight tickets are due — use Flight Tickets to add them to this run.', ['count' => $dueTickets]);
+                }
+
+                $clean = $skipped->isEmpty() && $pending->isEmpty() && $dueTickets === 0;
 
                 Notification::make()
                     ->{$clean ? 'success' : 'warning'}()
                     ->title(__('Payslips generated'))
                     ->body($body)
                     ->persistent()
+                    ->send();
+
+                $this->dispatchPayrollDataUpdated();
+            });
+    }
+
+    /**
+     * Which due flight tickets this run pays. Ticked ones go on their
+     * employees' payslips (the payslips are rebuilt), and are paid when the
+     * run is disbursed; unticking one takes it back out.
+     */
+    private function flightTicketsAction(): Action
+    {
+        return Action::make('flight_tickets')
+            ->label(fn (): string => __('Flight Tickets').' ('.FlightTicket::where('payroll_run_id', $this->run()->getKey())->count().')')
+            ->icon('heroicon-o-paper-airplane')
+            ->color(fn (): string => FlightTicket::query()->due()->exists() ? 'warning' : 'gray')
+            ->authorize('generate')
+            ->visible(fn (): bool => $this->run()->isEditable()
+                && app(FlightTicketService::class)->availableFor($this->run())->isNotEmpty())
+            ->modalHeading(__('Flight tickets to pay in this run'))
+            ->modalDescription(__('Ticked tickets are added to the employees\' payslips and marked paid when the run is disbursed.'))
+            ->fillForm(fn (): array => [
+                'tickets' => app(FlightTicketService::class)->availableFor($this->run())->pluck('id')->all(),
+            ])
+            ->schema([
+                CheckboxList::make('tickets')
+                    ->hiddenLabel()
+                    ->options(fn (): array => app(FlightTicketService::class)->availableFor($this->run())
+                        ->mapWithKeys(fn (FlightTicket $ticket): array => [$ticket->getKey() => sprintf(
+                            '%s — %s %d%s — %s AED',
+                            $ticket->party?->name,
+                            __('Ticket'),
+                            $ticket->year,
+                            $ticket->is_prorated ? ' ('.__('pro-rated').')' : '',
+                            number_format((float) $ticket->amount, 2),
+                        )])
+                        ->all())
+                    ->bulkToggleable()
+                    ->columns(1),
+            ])
+            ->action(function (array $data): void {
+                $service = app(FlightTicketService::class);
+
+                try {
+                    $service->setForRun($this->run(), array_map('intval', $data['tickets'] ?? []));
+                } catch (Throwable $exception) {
+                    Notification::make()->danger()->title(__('Could not continue'))->body($exception->getMessage())->send();
+
+                    return;
+                }
+
+                // Rebuilt so the payslips carry exactly the chosen tickets.
+                if ($this->run()->payslips()->exists()) {
+                    app(PayrollService::class)->generate($this->run());
+                }
+
+                Notification::make()
+                    ->success()
+                    ->title(__('Flight tickets updated'))
+                    ->body(__(':count flight tickets in this run.', ['count' => FlightTicket::where('payroll_run_id', $this->run()->getKey())->count()]))
                     ->send();
 
                 $this->dispatchPayrollDataUpdated();
@@ -160,7 +232,7 @@ class ViewPayrollRun extends ViewRecord
             ->icon('heroicon-o-banknotes')
             ->color('success')
             ->requiresConfirmation()
-            ->modalDescription(__('Records that the transfers went out. Gratuity accruals are booked and fully recovered loans are closed. This cannot be undone.'))
+            ->modalDescription(__('Records that the transfers went out. Gratuity accruals are booked, fully recovered loans are closed and the run\'s flight tickets are marked paid. This cannot be undone.'))
             ->authorize('disburse')
             ->visible(fn (): bool => $this->run()->status === PayrollRunStatus::APPROVED)
             ->action(fn () => $this->runLadderStep(

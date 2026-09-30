@@ -5,11 +5,15 @@ namespace App\Filament\Mms\Resources\LeaveRequests\Schemas;
 use App\Enums\LeaveType;
 use App\Models\LeaveRequest;
 use App\Models\Party;
+use App\Services\MMS\LeaveBalanceService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Text;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
+use Illuminate\Support\Carbon;
 
 /**
  * What an employee fills in: who, when, and why.
@@ -41,14 +45,17 @@ class LeaveRequestForm
                             // field is a courtesy, not a barrier.
                             ->disabled(fn (): bool => ! self::managesOthers())
                             ->dehydrated()
+                            ->live()
                             ->helperText(fn (): ?string => self::managesOthers()
                                 ? __('You can file a request on behalf of any employee.')
                                 : null),
                         DatePicker::make('start_date')
                             ->label(__('From'))
+                            ->live(onBlur: true)
                             ->required(),
                         DatePicker::make('end_date')
                             ->label(__('To'))
+                            ->live(onBlur: true)
                             ->required()
                             ->afterOrEqual('start_date'),
                         Select::make('requested_leave_type')
@@ -56,13 +63,52 @@ class LeaveRequestForm
                             ->options(LeaveType::class)
                             ->default(LeaveType::ANNUAL->value)
                             ->required()
+                            ->live()
                             ->helperText(__('What you believe this absence should be. The approver still decides how it is actually split.')),
+                        Text::make(fn (Get $get): ?string => self::balanceNote($get))
+                            ->color('warning')
+                            ->columnSpanFull(),
                         Textarea::make('comment')
                             ->label(__('Reason'))
                             ->rows(2)
                             ->columnSpanFull(),
                     ])->columns(3),
             ]);
+    }
+
+    /**
+     * The annual balance, and how much of these dates it will not cover —
+     * those days are unpaid.
+     */
+    private static function balanceNote(Get $get): ?string
+    {
+        $partyId = $get('party_id');
+
+        if (blank($partyId)) {
+            return null;
+        }
+
+        $balance = app(LeaveBalanceService::class)->balance((int) $partyId);
+        $note = __('Annual leave balance: :days days.', ['days' => self::days($balance)]);
+
+        $type = $get('requested_leave_type');
+        $type = $type instanceof LeaveType ? $type : LeaveType::tryFrom((string) $type);
+
+        if ($type !== LeaveType::ANNUAL || blank($get('start_date')) || blank($get('end_date'))) {
+            return $note;
+        }
+
+        $requested = Carbon::parse($get('start_date'))->startOfDay()->diffInDays(Carbon::parse($get('end_date'))->startOfDay()) + 1;
+        $unpaid = $requested - min($requested, max(0, floor($balance)));
+
+        return $unpaid > 0
+            ? $note.' '.__(':days of the :requested days requested will be unpaid.', ['days' => self::days($unpaid), 'requested' => self::days($requested)])
+            : $note;
+    }
+
+    private static function days(float $days): string
+    {
+        return rtrim(rtrim(number_format($days, 1), '0'), '.');
     }
 
     /**

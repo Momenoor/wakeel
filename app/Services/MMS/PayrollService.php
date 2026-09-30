@@ -5,6 +5,7 @@ namespace App\Services\MMS;
 use App\Enums\PayslipLineKind;
 use App\Enums\SalaryComponent;
 use App\Models\EmployeeSalaryComponent;
+use App\Models\FlightTicket;
 use App\Models\IncentiveCalculation;
 use App\Models\LoanInstallment;
 use App\Models\Party;
@@ -211,6 +212,10 @@ class PayrollService
         // quietly write itself off.
         LoanInstallment::whereIn('payslip_id', $payslipIds)->update(['payslip_id' => null]);
 
+        // Flight tickets stay in the run (payroll_run_id) — only the payslip
+        // carrying them goes; the next generation puts them on the new one.
+        FlightTicket::whereIn('payslip_id', $payslipIds)->update(['payslip_id' => null]);
+
         PayslipLine::whereIn('payslip_id', $payslipIds)->delete();
         $run->payslips()->delete();
     }
@@ -284,7 +289,16 @@ class PayrollService
         $installments = $this->dueInstallments($party, $run->getAttribute('period'));
         $loanDeduction = round((float) $installments->sum('amount'), 2);
 
-        $gross = round($basic + $allowances + $incentive, 2);
+        // Flight tickets someone chose to pay in this run.
+        $tickets = FlightTicket::query()
+            ->where('payroll_run_id', $run->getKey())
+            ->where('party_id', $party->getKey())
+            ->whereNull('paid_at')
+            ->orderBy('year')
+            ->get();
+        $ticketAmount = round((float) $tickets->sum('amount'), 2);
+
+        $gross = round($basic + $allowances + $incentive + $ticketAmount, 2);
         $totalDeductions = round($unpaidDeduction + $loanDeduction + $manualDeduction, 2);
         $net = round($gross - $totalDeductions, 2);
 
@@ -297,6 +311,7 @@ class PayrollService
             'allowances_snapshot' => $allowances,
             'incentive_amount' => $incentive,
             'incentive_overridden' => $incentiveOverridden,
+            'flight_ticket_amount' => $ticketAmount,
             'gross' => $gross,
             'unpaid_days' => $unpaidDays,
             'unpaid_deduction' => $unpaidDeduction,
@@ -317,7 +332,10 @@ class PayrollService
         $installments->each(fn (LoanInstallment $installment) => $installment
             ->forceFill(['payslip_id' => $payslip->getKey()])->save());
 
-        $this->writeLines($payslip, $salary, $incentive, $unpaidDeduction, $installments, $manualDeduction);
+        $tickets->each(fn (FlightTicket $ticket) => $ticket
+            ->forceFill(['payslip_id' => $payslip->getKey()])->save());
+
+        $this->writeLines($payslip, $salary, $incentive, $unpaidDeduction, $installments, $manualDeduction, $tickets);
 
         return $payslip;
     }
@@ -333,6 +351,7 @@ class PayrollService
         float $unpaidDeduction,
         Collection $installments,
         float $manualDeduction,
+        ?Collection $tickets = null,
     ): void {
         $lines = [];
 
@@ -357,6 +376,15 @@ class PayrollService
                 'label' => __('Incentive'),
                 'amount' => $incentive,
                 'gl_account' => self::GL_INCENTIVE,
+            ];
+        }
+
+        foreach ($tickets ?? [] as $ticket) {
+            $lines[] = [
+                'kind' => PayslipLineKind::EARNING,
+                'label' => __('Flight Ticket :year', ['year' => $ticket->getAttribute('year')]),
+                'amount' => (float) $ticket->getAttribute('amount'),
+                'gl_account' => FlightTicketService::glAccount(),
             ];
         }
 

@@ -3,7 +3,7 @@
 namespace App\Mail;
 
 use App\Models\LeaveRequest;
-use App\Services\MMS\LeaveEntitlementService;
+use App\Services\MMS\LeaveBalanceService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -44,9 +44,7 @@ class LeaveRequestSubmittedMail extends Mailable
             now()->addDays(7),
         );
 
-        $this->annualLeaveBalance = app(LeaveEntitlementService::class)
-            ->forDate($leaveRequest->party, $leaveRequest->start_date)
-            ->annualRemaining();
+        $this->annualLeaveBalance = app(LeaveBalanceService::class)->balance((int) $leaveRequest->party_id);
     }
 
     public function envelope(): Envelope

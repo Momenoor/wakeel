@@ -11,7 +11,6 @@ use App\Models\EmployeeProfile;
 use App\Models\EmployeeSalaryComponent;
 use App\Models\LeaveRequest;
 use App\Models\Party;
-use App\Services\MMS\LeaveEntitlementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
@@ -30,7 +29,7 @@ class LeaveRequestEmailActionTest extends TestCase
     {
         $party = Party::factory()->employee()->create(['email' => ['employee@example.com']]);
 
-        EmployeeProfile::create(['party_id' => $party->id, 'date_of_joining' => '2020-01-01']);
+        EmployeeProfile::create(['party_id' => $party->id, 'date_of_joining' => '2020-01-01', 'opening_leave_balance' => 12.5]);
 
         EmployeeSalaryComponent::create([
             'party_id' => $party->id,
@@ -77,9 +76,8 @@ class LeaveRequestEmailActionTest extends TestCase
         $party = $this->employee();
         $request = $this->request($party);
 
-        $expected = app(LeaveEntitlementService::class)
-            ->forDate($party, $request->start_date)
-            ->annualRemaining();
+        // The running balance: here, just the opening balance.
+        $expected = 12.5;
 
         Mail::assertQueued(
             LeaveRequestSubmittedMail::class,

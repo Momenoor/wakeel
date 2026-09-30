@@ -55,6 +55,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // number that is not in the system — each morning, when there are any.
         $schedule->command('calendar:report-unmatched')->dailyAt('08:00')->withoutOverlapping(30);
 
+        // The yearly annual-leave days and flight tickets, from 1 January
+        // (and pro-rated for new joiners); each is given once.
+        $schedule->command('payroll:grant-yearly')->hourly()->withoutOverlapping(30);
+
         // A queue worker for hosting without a long-running process (cPanel):
         // started every minute from the same cron, it works through whatever
         // is queued (Filament imports/exports, queued mail, the "mail" queue),

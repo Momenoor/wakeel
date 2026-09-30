@@ -127,6 +127,7 @@ return [
         'view_deductions_reconciliation_report' => 'مطابقة الخصومات',
         'view_fee_collection_aging_report' => 'تحصيل الأتعاب والتقادم',
         'view_fee_data_maintenance' => 'صيانة بيانات الأتعاب',
+        'view_flight_tickets' => 'تذاكر السفر',
         'view_fix_matters_difficulty' => 'تصحيح صعوبة القضايا',
         'view_incentive_configuration' => 'تهيئة الحافز',
         'view_matter_quality_report' => 'الجودة وإعادة العمل',

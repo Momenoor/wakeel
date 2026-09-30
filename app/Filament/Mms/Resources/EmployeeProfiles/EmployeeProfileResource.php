@@ -6,6 +6,8 @@ use App\Filament\Concerns\HasModuleGate;
 use App\Filament\Mms\Resources\EmployeeProfiles\Pages\CreateEmployeeProfile;
 use App\Filament\Mms\Resources\EmployeeProfiles\Pages\EditEmployeeProfile;
 use App\Filament\Mms\Resources\EmployeeProfiles\Pages\ListEmployeeProfiles;
+use App\Filament\Mms\Resources\EmployeeProfiles\RelationManagers\FlightTicketsRelationManager;
+use App\Filament\Mms\Resources\EmployeeProfiles\RelationManagers\LeaveBalanceRelationManager;
 use App\Filament\Mms\Resources\EmployeeProfiles\RelationManagers\SalaryComponentsRelationManager;
 use App\Filament\Mms\Resources\EmployeeProfiles\Schemas\EmployeeProfileForm;
 use App\Filament\Mms\Resources\EmployeeProfiles\Tables\EmployeeProfilesTable;
@@ -66,6 +68,8 @@ class EmployeeProfileResource extends Resource
     {
         return [
             SalaryComponentsRelationManager::class,
+            LeaveBalanceRelationManager::class,
+            FlightTicketsRelationManager::class,
         ];
     }
 
