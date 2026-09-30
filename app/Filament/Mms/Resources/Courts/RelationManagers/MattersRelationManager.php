@@ -2,8 +2,10 @@
 
 namespace App\Filament\Mms\Resources\Courts\RelationManagers;
 
+use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\Tables\MattersTable;
+use App\Support\ScreenPermissions;
 use Filament\Actions\ViewAction;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Table;
@@ -11,6 +13,13 @@ use Illuminate\Database\Eloquent\Model;
 
 class MattersRelationManager extends RelationManager
 {
+    use HasRelationManagerPermission;
+
+    public static function viewPermission(): string
+    {
+        return ScreenPermissions::COURT_MATTERS;
+    }
+
     protected static string $relationship = 'matters';
 
     public static function getModelLabel(): string

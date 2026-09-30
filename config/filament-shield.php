@@ -8,9 +8,11 @@ use App\Filament\Mms\Resources\EmployeeLoans\EmployeeLoanResource;
 use App\Filament\Mms\Resources\Incentive\IncentiveCalculations\IncentiveCalculationResource;
 use App\Filament\Mms\Resources\Incentive\IncentiveMetaAdjustments\IncentiveMetaAdjustmentResource;
 use App\Filament\Mms\Resources\LeaveRequests\LeaveRequestResource;
+use App\Filament\Mms\Resources\LetterItems\LetterItemResource;
 use App\Filament\Mms\Resources\LetterTemplates\LetterTemplateResource;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\PayrollRuns\PayrollRunResource;
+use App\Support\ScreenPermissions;
 use BezhanSalleh\FilamentShield\Resources\Roles\RoleResource;
 use Filament\Pages\Dashboard;
 use Filament\Widgets\AccountWidget;
@@ -280,6 +282,9 @@ return [
             LetterTemplateResource::class => [
                 'deleteAny',
             ],
+            LetterItemResource::class => [
+                'deleteAny',
+            ],
         ],
         'exclude' => [
             //
@@ -351,6 +356,8 @@ return [
         // grant it, and would silently strip it from pms-admin/super-admin/
         // admin the next time anyone saved those roles through the UI.
         'Access:MultipleSystems',
+        // One per relation manager and per tab — see App\Support\ScreenPermissions.
+        ...ScreenPermissions::all(),
     ],
 
     /*

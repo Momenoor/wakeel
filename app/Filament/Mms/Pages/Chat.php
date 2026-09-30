@@ -36,4 +36,13 @@ class Chat extends Page
     {
         return __('Communication');
     }
+
+    /**
+     * Its own permission — the floating popup (MmsPanelProvider) and the
+     * chat component follow it too.
+     */
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->can('View:Chat') ?? false;
+    }
 }

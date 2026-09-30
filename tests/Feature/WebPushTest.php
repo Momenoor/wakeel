@@ -16,6 +16,7 @@ use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Gate;
 use Minishlink\WebPush\VAPID;
 use Tests\TestCase;
 
@@ -26,6 +27,14 @@ use Tests\TestCase;
 class WebPushTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Chat has its own page permission; these users hold it.
+        Gate::before(fn ($user, string $ability) => $ability === 'View:Chat' ? true : null);
+    }
 
     /**
      * Push encryption needs OpenSSL EC keys; PHP on Windows only makes them

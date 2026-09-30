@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 
+use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Models\CalendarEvent;
 use App\Models\EmailTemplate;
 use App\Models\Letterhead;
@@ -13,6 +14,7 @@ use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterMailer;
 use App\Services\MMS\SenderMailer;
+use App\Support\ScreenPermissions;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -44,6 +46,13 @@ use Illuminate\Database\Eloquent\Model;
  */
 class LettersRelationManager extends RelationManager
 {
+    use HasRelationManagerPermission;
+
+    public static function viewPermission(): string
+    {
+        return ScreenPermissions::MATTER_LETTERS;
+    }
+
     protected static string $relationship = 'letters';
 
     public static function getModelLabel(): string

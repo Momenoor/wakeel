@@ -2,10 +2,12 @@
 
 namespace App\Filament\Mms\Resources\PayrollRuns\RelationManagers;
 
+use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Mms\Concerns\RefreshesPayrollData;
 use App\Models\LoanInstallment;
 use App\Models\PayrollRun;
 use App\Models\Payslip;
+use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -28,7 +30,13 @@ use LogicException;
  */
 class PayslipsRelationManager extends RelationManager
 {
+    use HasRelationManagerPermission;
     use RefreshesPayrollData;
+
+    public static function viewPermission(): string
+    {
+        return ScreenPermissions::PAYROLL_PAYSLIPS;
+    }
 
     protected static string $relationship = 'payslips';
 

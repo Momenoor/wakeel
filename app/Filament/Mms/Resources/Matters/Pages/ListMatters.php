@@ -6,6 +6,7 @@ use App\Filament\Mms\Exports\AssistantMattersExporter;
 use App\Filament\Mms\Exports\MatterExporter;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Models\Matter;
+use App\Support\ScreenPermissions;
 use Filament\Actions\BulkAction;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteBulkAction;
@@ -24,12 +25,41 @@ class ListMatters extends ListRecords
 {
     protected static string $resource = MatterResource::class;
 
+    /**
+     * In Progress — or the first tab this role may see.
+     */
     public function getDefaultActiveTab(): string|int|null
     {
-        return 'in_progress';
+        $tabs = array_keys($this->getCachedTabs());
+
+        return in_array('in_progress', $tabs, true) ? 'in_progress' : ($tabs[0] ?? null);
     }
 
+    /**
+     * Each tab has its own permission (ScreenPermissions); a role sees only
+     * the tabs it holds.
+     */
     public function getTabs(): array
+    {
+        $permissions = [
+            'all' => ScreenPermissions::MATTERS_ALL_TAB,
+            'in_progress' => ScreenPermissions::MATTERS_IN_PROGRESS_TAB,
+            'initial_prepared' => ScreenPermissions::MATTERS_INITIAL_TAB,
+            'final_submitted' => ScreenPermissions::MATTERS_FINAL_TAB,
+            'deleted' => ScreenPermissions::MATTERS_DELETED_TAB,
+        ];
+
+        return array_filter(
+            $this->allTabs(),
+            fn (string $key): bool => ScreenPermissions::can($permissions[$key]),
+            ARRAY_FILTER_USE_KEY,
+        );
+    }
+
+    /**
+     * @return array<string, Tab>
+     */
+    private function allTabs(): array
     {
         return [
             'all' => Tab::make('All')

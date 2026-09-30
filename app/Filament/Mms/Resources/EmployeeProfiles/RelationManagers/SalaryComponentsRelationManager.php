@@ -3,9 +3,11 @@
 namespace App\Filament\Mms\Resources\EmployeeProfiles\RelationManagers;
 
 use App\Enums\SalaryComponent;
+use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Mms\Concerns\RefreshesPayrollData;
 use App\Models\EmployeeProfile;
 use App\Models\EmployeeSalaryComponent;
+use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -35,7 +37,13 @@ use LogicException;
  */
 class SalaryComponentsRelationManager extends RelationManager
 {
+    use HasRelationManagerPermission;
     use RefreshesPayrollData;
+
+    public static function viewPermission(): string
+    {
+        return ScreenPermissions::EMPLOYEE_SALARY;
+    }
 
     protected static string $relationship = 'salaryComponents';
 
@@ -54,12 +62,6 @@ class SalaryComponentsRelationManager extends RelationManager
     public static function getTitle(Model $ownerRecord, string $pageClass): string
     {
         return __('Salary Structure');
-    }
-
-    public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
-    {
-        // Example: Only allow users with a specific permission to view this relation
-        return auth()->user()->can('View:PayrollRun');
     }
 
     /**

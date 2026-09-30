@@ -6,6 +6,7 @@ use App\Filament\Mms\Pages\Chat;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Gate;
 use Tests\TestCase;
 
 /**
@@ -20,6 +21,9 @@ class ChatBroadcastingTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Chat has its own page permission; these users hold it.
+        Gate::before(fn ($user, string $ability) => $ability === 'View:Chat' ? true : null);
 
         $this->actingAs(User::factory()->create());
 

@@ -8,6 +8,7 @@ use App\Filament\Mms\Pages\Auth\CustomProfile;
 use App\Filament\Mms\Support\SystemSwitcher;
 use App\Filament\Pms\Pages\PmsDashboard;
 use App\Filament\Pms\Pages\PMSSettings;
+use App\Filament\Shared\ActivityLog\AuditDashboard;
 use App\Filament\Shared\Pages\SystemSettings;
 use App\Filament\Shared\Pages\SystemUpdates;
 use App\Http\Middleware\CheckSystemOffline;
@@ -93,6 +94,7 @@ class PmsPanelProvider extends PanelProvider
                 PMSSettings::class,
                 SystemSettings::class,
                 SystemUpdates::class,
+                AuditDashboard::class,
             ])
             ->renderHook(
                 PanelsRenderHook::CONTENT_START,
@@ -143,7 +145,10 @@ class PmsPanelProvider extends PanelProvider
                     ->timezone(config('app.timezone'))
                     ->editable()
                     ->selectable(),
+                // Its Audit Dashboard has no access check of its own; ours
+                // (behind a Shield permission) is registered instead.
                 ActivityLogPlugin::make()
+                    ->dashboard(false)
                     ->navigationGroup(fn () => __('Settings'))
                     ->navigationSort(99),
                 // FilamentUiSwitcherPlugin::make(),

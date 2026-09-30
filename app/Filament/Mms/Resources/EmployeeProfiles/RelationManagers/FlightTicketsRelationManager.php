@@ -3,9 +3,11 @@
 namespace App\Filament\Mms\Resources\EmployeeProfiles\RelationManagers;
 
 use App\Enums\FlightTicketStatus;
+use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Models\EmployeeProfile;
 use App\Models\FlightTicket;
 use App\Services\MMS\FlightTicketService;
+use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -30,6 +32,13 @@ use Throwable;
  */
 class FlightTicketsRelationManager extends RelationManager
 {
+    use HasRelationManagerPermission;
+
+    public static function viewPermission(): string
+    {
+        return ScreenPermissions::EMPLOYEE_FLIGHT_TICKETS;
+    }
+
     protected static string $relationship = 'flightTickets';
 
     public static function getTitle(Model $ownerRecord, string $pageClass): string
@@ -45,11 +54,6 @@ class FlightTicketsRelationManager extends RelationManager
     public static function getPluralModelLabel(): string
     {
         return __('Flight Tickets');
-    }
-
-    public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
-    {
-        return auth()->user()?->can('View:PayrollRun') ?? false;
     }
 
     public function getRelationship(): Relation

@@ -3,7 +3,6 @@
 namespace App\Support;
 
 use App\Models\License;
-use BezhanSalleh\FilamentShield\Support\Utils;
 use Throwable;
 
 /**
@@ -147,6 +146,7 @@ class AppUpdate
      */
     public static function canManage(): bool
     {
-        return auth()->user()?->hasRole(Utils::getSuperAdminName()) ?? false;
+        // Its own page permission; the super admin holds every permission.
+        return auth()->user()?->can('View:SystemUpdates') ?? false;
     }
 }

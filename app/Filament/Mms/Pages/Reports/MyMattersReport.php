@@ -58,7 +58,8 @@ class MyMattersReport extends Page implements HasTable
      */
     public static function canAccess(): bool
     {
-        return auth()->user()?->party !== null;
+        return auth()->user()?->party !== null
+            && auth()->user()->can('View:MyMattersReport');
     }
 
     public static function shouldRegisterNavigation(): bool

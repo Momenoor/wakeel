@@ -3,7 +3,9 @@
 namespace App\Filament\Pms\Resources\ConditionTemplates\RelationManagers;
 
 use App\Enums\PMS\ConditionSection;
+use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Models\ConditionTemplateItem;
+use App\Support\ScreenPermissions;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -22,6 +24,13 @@ use Illuminate\Database\Eloquent\Model;
  */
 class ItemsRelationManager extends RelationManager
 {
+    use HasRelationManagerPermission;
+
+    public static function viewPermission(): string
+    {
+        return ScreenPermissions::CONDITION_TEMPLATE_ITEMS;
+    }
+
     protected static string $relationship = 'items';
 
     public static function getTitle(Model $ownerRecord, string $pageClass): string

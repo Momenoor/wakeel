@@ -2,6 +2,8 @@
 
 namespace App\Filament\Mms\Resources\Types\RelationManagers;
 
+use App\Filament\Concerns\HasRelationManagerPermission;
+use App\Support\ScreenPermissions;
 use Filament\Actions\AttachAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
@@ -28,6 +30,13 @@ use Illuminate\Database\Eloquent\Model;
 
 class FieldDefinitionsRelationManager extends RelationManager
 {
+    use HasRelationManagerPermission;
+
+    public static function viewPermission(): string
+    {
+        return ScreenPermissions::TYPE_FIELD_DEFINITIONS;
+    }
+
     protected static string $relationship = 'fieldDefinitions';
 
     public static function getTitle(Model $ownerRecord, string $pageClass): string

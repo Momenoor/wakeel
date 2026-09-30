@@ -3,9 +3,11 @@
 namespace App\Filament\Mms\Resources\BulkMailCampaigns\RelationManagers;
 
 use App\Enums\BulkMailRecipientStatus;
+use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Mms\Imports\BulkMailRecipientImporter;
 use App\Models\BulkMailRecipient;
 use App\Services\MMS\BulkMailService;
+use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -31,6 +33,13 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class RecipientsRelationManager extends RelationManager
 {
+    use HasRelationManagerPermission;
+
+    public static function viewPermission(): string
+    {
+        return ScreenPermissions::BULK_MAIL_RECIPIENTS;
+    }
+
     protected static string $relationship = 'recipients';
 
     public static function getTitle(Model $ownerRecord, string $pageClass): string

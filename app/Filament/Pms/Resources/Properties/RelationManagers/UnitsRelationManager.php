@@ -5,9 +5,11 @@ namespace App\Filament\Pms\Resources\Properties\RelationManagers;
 use App\Enums\PMS\PropertyClassification;
 use App\Enums\PMS\UnitStatus;
 use App\Enums\PMS\UnitType;
+use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Pms\Actions\KeepsHistory;
 use App\Filament\Pms\Imports\UnitImporter;
 use App\Models\Unit;
+use App\Support\ScreenPermissions;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -24,6 +26,13 @@ use Illuminate\Database\Eloquent\Model;
 
 class UnitsRelationManager extends RelationManager
 {
+    use HasRelationManagerPermission;
+
+    public static function viewPermission(): string
+    {
+        return ScreenPermissions::PROPERTY_UNITS;
+    }
+
     protected static string $relationship = 'units';
 
     public static function getTitle(Model $ownerRecord, string $pageClass): string

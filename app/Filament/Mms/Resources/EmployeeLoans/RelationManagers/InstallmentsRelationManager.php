@@ -2,8 +2,10 @@
 
 namespace App\Filament\Mms\Resources\EmployeeLoans\RelationManagers;
 
+use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Mms\Concerns\RefreshesPayrollData;
 use App\Models\LoanInstallment;
+use App\Support\ScreenPermissions;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Columns\Summarizers\Sum;
 use Filament\Tables\Columns\TextColumn;
@@ -19,7 +21,13 @@ use Illuminate\Database\Eloquent\Model;
  */
 class InstallmentsRelationManager extends RelationManager
 {
+    use HasRelationManagerPermission;
     use RefreshesPayrollData;
+
+    public static function viewPermission(): string
+    {
+        return ScreenPermissions::LOAN_INSTALLMENTS;
+    }
 
     protected static string $relationship = 'installments';
 

@@ -4,10 +4,12 @@ namespace App\Filament\Pms\Resources\Leases\RelationManagers;
 
 use App\Enums\PMS\InstallmentPaymentMethod;
 use App\Enums\PMS\InstallmentPaymentStatus;
+use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Models\Installment;
 use App\Models\Lease;
 use App\Services\MMS\PaymentService;
 use App\Services\PMS\InstallmentGenerator;
+use App\Support\ScreenPermissions;
 use App\Support\UaeBanks;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
@@ -33,6 +35,13 @@ use Throwable;
  */
 class InstallmentsRelationManager extends RelationManager
 {
+    use HasRelationManagerPermission;
+
+    public static function viewPermission(): string
+    {
+        return ScreenPermissions::LEASE_INSTALLMENTS;
+    }
+
     protected static string $relationship = 'installments';
 
     public static function getModelLabel(): string

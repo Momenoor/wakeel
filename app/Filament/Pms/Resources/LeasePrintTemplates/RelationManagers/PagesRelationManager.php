@@ -2,6 +2,8 @@
 
 namespace App\Filament\Pms\Resources\LeasePrintTemplates\RelationManagers;
 
+use App\Filament\Concerns\HasRelationManagerPermission;
+use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -18,6 +20,13 @@ use Illuminate\Support\Facades\Storage;
 
 class PagesRelationManager extends RelationManager
 {
+    use HasRelationManagerPermission;
+
+    public static function viewPermission(): string
+    {
+        return ScreenPermissions::PRINT_TEMPLATE_PAGES;
+    }
+
     protected static string $relationship = 'pages';
 
     public static function getTitle(Model $ownerRecord, string $pageClass): string

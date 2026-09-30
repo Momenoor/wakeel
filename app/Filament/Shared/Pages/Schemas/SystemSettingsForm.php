@@ -4,6 +4,7 @@ namespace App\Filament\Shared\Pages\Schemas;
 
 use App\Filament\Schemas\BrandingSettingsSection;
 use App\Services\MMS\SenderMailer;
+use App\Support\ScreenPermissions;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -25,6 +26,7 @@ class SystemSettingsForm
                 ->contained(false)
                 ->tabs([
                     Tabs\Tab::make(__('Maintenance & Offline'))
+                        ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::SETTINGS_MAINTENANCE_TAB))
                         ->icon(Heroicon::SignalSlash)
                         ->schema([
                             Section::make(__('System Status & Offline Mode'))
@@ -53,6 +55,7 @@ class SystemSettingsForm
                         ]),
 
                     Tabs\Tab::make(__('General Settings'))
+                        ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::SETTINGS_GENERAL_TAB))
                         ->icon(Heroicon::Cog6Tooth)
                         ->schema([
                             Section::make(__('Application Defaults'))
@@ -118,6 +121,7 @@ class SystemSettingsForm
                         ]),
 
                     Tabs\Tab::make(__('Email Settings'))
+                        ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::SETTINGS_EMAIL_TAB))
                         ->icon(Heroicon::Envelope)
                         ->schema([
                             Section::make(__('Mail Server Configuration'))
@@ -201,6 +205,7 @@ class SystemSettingsForm
                         ]),
 
                     Tabs\Tab::make(__('Notifications & Announcements'))
+                        ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::SETTINGS_NOTIFICATIONS_TAB))
                         ->icon(Heroicon::Bell)
                         ->schema([
                             Section::make(__('User Defaults & Announcements'))

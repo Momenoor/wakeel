@@ -7,8 +7,10 @@ use AlizHarb\ActivityLog\RelationManagers\ActivitiesRelationManager;
 use App\Filament\Mms\Pages\AdminDashboard;
 use App\Filament\Mms\Pages\Auth\CustomLogin;
 use App\Filament\Mms\Pages\Auth\CustomProfile;
+use App\Filament\Mms\Pages\Chat;
 use App\Filament\Mms\Support\SystemSwitcher;
 use App\Filament\Shared\Actions\ForceSignOutActions;
+use App\Filament\Shared\ActivityLog\AuditDashboard;
 use App\Filament\Shared\Pages\SystemSettings;
 use App\Filament\Shared\Pages\SystemUpdates;
 use App\Http\Middleware\CheckSystemOffline;
@@ -96,6 +98,7 @@ class MmsPanelProvider extends PanelProvider
             ->pages([
                 SystemSettings::class,
                 SystemUpdates::class,
+                AuditDashboard::class,
             ])
             ->renderHook(
                 PanelsRenderHook::CONTENT_START,
@@ -169,7 +172,10 @@ class MmsPanelProvider extends PanelProvider
                 // (filament-activity-log::activity.label /.plural_label) —
                 // hardcoding 'Log'/'Logs' here only overrode that with
                 // untranslated English.
+                // Its Audit Dashboard has no access check of its own; ours
+                // (behind a Shield permission) is registered instead.
                 ActivityLogPlugin::make()
+                    ->dashboard(false)
                     ->navigationGroup(fn () => __('Settings')),
                 // FilamentUiSwitcherPlugin::make(),
                 FilamentLanguageSwitcherPlugin::make()
@@ -292,7 +298,7 @@ class MmsPanelProvider extends PanelProvider
         FilamentView::registerRenderHook(
             PanelsRenderHook::BODY_END,
             function (): string {
-                if (! Auth::check()) {
+                if (! Auth::check() || ! Chat::canAccess()) {
                     return '';
                 }
 

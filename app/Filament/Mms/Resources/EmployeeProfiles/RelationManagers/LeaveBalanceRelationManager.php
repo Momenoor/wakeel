@@ -3,9 +3,11 @@
 namespace App\Filament\Mms\Resources\EmployeeProfiles\RelationManagers;
 
 use App\Enums\LeaveBalanceEntryKind;
+use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Models\EmployeeProfile;
 use App\Models\LeaveBalanceEntry;
 use App\Services\MMS\LeaveBalanceService;
+use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Forms\Components\DatePicker;
@@ -23,6 +25,13 @@ use LogicException;
  */
 class LeaveBalanceRelationManager extends RelationManager
 {
+    use HasRelationManagerPermission;
+
+    public static function viewPermission(): string
+    {
+        return ScreenPermissions::EMPLOYEE_LEAVE_BALANCE;
+    }
+
     protected static string $relationship = 'leaveBalanceEntries';
 
     public static function getTitle(Model $ownerRecord, string $pageClass): string
@@ -38,11 +47,6 @@ class LeaveBalanceRelationManager extends RelationManager
     public static function getPluralModelLabel(): string
     {
         return __('Leave balance entries');
-    }
-
-    public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
-    {
-        return auth()->user()?->can('View:PayrollRun') ?? false;
     }
 
     public function getRelationship(): Relation

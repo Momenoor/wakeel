@@ -59,7 +59,7 @@ class FlightTickets extends Page implements HasTable
 
     public static function canAccess(): bool
     {
-        return static::isModuleEnabled() && (auth()->user()?->can('View:PayrollRun') ?? false);
+        return static::isModuleEnabled() && (auth()->user()?->can('View:FlightTickets') ?? false);
     }
 
     public function table(Table $table): Table

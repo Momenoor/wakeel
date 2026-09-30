@@ -20,6 +20,7 @@ use App\Models\Type;
 use App\Services\MMS\Calendar\EventMatterLinker;
 use App\Services\MMS\IncentiveCalculatorService;
 use App\Services\MMS\MatterOneDriveFolders;
+use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
@@ -108,6 +109,7 @@ class MatterInfolist
                     ->tabs([
                         Tab::make(__('Overview'))
                             ->icon('heroicon-o-document-text')
+                            ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_OVERVIEW_TAB))
                             ->columns(2)
                             ->schema([
                                 Grid::make(1)->columnSpan(1)->schema([
@@ -122,16 +124,19 @@ class MatterInfolist
                             ]),
                         Tab::make(__('Sessions & Events'))
                             ->icon('heroicon-o-calendar-days')
+                            ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_SESSIONS_TAB))
                             ->badge(fn ($record) => $record ? ($record->linkedCalendarEvents()->where('start_datetime', '>=', now()->startOfDay())->count() ?: null) : null)
                             ->schema([static::eventsSection()]),
                         Tab::make(__('Fees & Incentive'))
                             ->icon('heroicon-o-banknotes')
+                            ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_FEES_TAB))
                             ->schema([
                                 static::feesSection(),
                                 static::incentiveSection(),
                             ]),
                         Tab::make(__('Requests & Notes'))
                             ->icon('heroicon-o-chat-bubble-left-right')
+                            ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_REQUESTS_TAB))
                             ->badge(fn ($record) => $record ? ($record->requests()->where('status', RequestStatus::PENDING->value)->count() ?: null) : null)
                             ->badgeColor('warning')
                             ->schema([
@@ -140,6 +145,7 @@ class MatterInfolist
                             ]),
                         Tab::make(__('Files'))
                             ->icon('heroicon-o-paper-clip')
+                            ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_FILES_TAB))
                             ->schema([
                                 static::attachmentsSection(),
                                 static::oneDriveSection(),
@@ -149,6 +155,8 @@ class MatterInfolist
                         // Issue letter action.
                         Tab::make(__('Letters'))
                             ->icon('heroicon-o-envelope')
+                            ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_LETTERS_TAB)
+                                && ScreenPermissions::can(ScreenPermissions::MATTER_LETTERS))
                             ->badge(fn ($record) => $record ? ($record->letters()->count() ?: null) : null)
                             ->schema([
                                 Livewire::make(LettersRelationManager::class, fn ($record) => [

@@ -9,6 +9,7 @@ use Filament\Actions\Action;
 use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -19,6 +20,14 @@ use Tests\TestCase;
 class DesktopNotificationTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Chat has its own page permission; these users hold it.
+        Gate::before(fn ($user, string $ability) => $ability === 'View:Chat' ? true : null);
+    }
 
     public function test_a_new_notification_is_sent_to_the_browser_as_well(): void
     {

@@ -8,6 +8,7 @@ use App\Filament\Mms\Widgets\IncentiveExtraRulesOverviewWidget;
 use App\Filament\Mms\Widgets\IncentiveMetaAdjustmentsOverviewWidget;
 use App\Filament\Mms\Widgets\IncentiveTypeConfigsOverviewWidget;
 use App\Models\Setting;
+use App\Support\ScreenPermissions;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -62,31 +63,18 @@ class FinancialConfiguration extends Page
         return $user?->can('View:FinancialConfiguration') ?? false;
     }
 
+    /**
+     * The Incentive and Payroll tabs each have their own permission
+     * (ScreenPermissions), as do the tabs inside Incentive.
+     */
     protected function canViewIncentiveCluster(): bool
     {
-        $user = auth()->user();
-
-        if (! $user) {
-            return false;
-        }
-
-        // If user has specific resource permission or has super-admin/FinancialConfiguration
-        return $user->can('ViewAny:MatterTypeIncentiveConfig')
-            || $user->can('ViewAny:IncentiveExtraRule')
-            || (! $user->can('ViewAny:PayrollRun') && ! $user->can('ViewAny:EmployeeProfile') && $user->can('View:FinancialConfiguration'));
+        return ScreenPermissions::can(ScreenPermissions::FINANCIAL_INCENTIVE_TAB);
     }
 
     protected function canViewPayrollCluster(): bool
     {
-        $user = auth()->user();
-
-        if (! $user) {
-            return false;
-        }
-
-        return $user->can('ViewAny:PayrollRun')
-            || $user->can('ViewAny:EmployeeProfile')
-            || (! $user->can('ViewAny:MatterTypeIncentiveConfig') && ! $user->can('ViewAny:IncentiveExtraRule') && $user->can('View:FinancialConfiguration'));
+        return ScreenPermissions::can(ScreenPermissions::FINANCIAL_PAYROLL_TAB);
     }
 
     public function mount(): void
@@ -157,6 +145,7 @@ class FinancialConfiguration extends Page
                         ->tabs([
                             Tabs\Tab::make(__('Rates & Deductions'))
                                 ->icon(Heroicon::AdjustmentsHorizontal)
+                                ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::FINANCIAL_INCENTIVE_RATES_TAB))
                                 ->schema([
                                     Form::make([
                                         EmbeddedSchema::make('incentiveForm'),
@@ -171,18 +160,21 @@ class FinancialConfiguration extends Page
 
                             Tabs\Tab::make(__('Type Configurations'))
                                 ->icon(Heroicon::Cog6Tooth)
+                                ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::FINANCIAL_TYPE_CONFIGS_TAB))
                                 ->schema([
                                     Livewire::make(IncentiveTypeConfigsOverviewWidget::class),
                                 ]),
 
                             Tabs\Tab::make(__('Extra % Rules'))
                                 ->icon(Heroicon::PlusCircle)
+                                ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::FINANCIAL_EXTRA_RULES_TAB))
                                 ->schema([
                                     Livewire::make(IncentiveExtraRulesOverviewWidget::class),
                                 ]),
 
                             Tabs\Tab::make(__('Meta Adjustments'))
                                 ->icon(Heroicon::PuzzlePiece)
+                                ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::FINANCIAL_META_ADJUSTMENTS_TAB))
                                 ->schema([
                                     Livewire::make(IncentiveMetaAdjustmentsOverviewWidget::class),
                                 ]),
@@ -245,6 +237,8 @@ class FinancialConfiguration extends Page
 
     public function saveIncentive(): void
     {
+        abort_unless($this->canViewIncentiveCluster() && ScreenPermissions::can(ScreenPermissions::FINANCIAL_INCENTIVE_RATES_TAB), 403);
+
         $state = $this->incentiveForm->getState();
 
         foreach ($state as $key => $value) {
@@ -259,6 +253,8 @@ class FinancialConfiguration extends Page
 
     public function savePayroll(): void
     {
+        abort_unless($this->canViewPayrollCluster(), 403);
+
         $state = $this->payrollForm->getState();
 
         foreach ($state as $key => $value) {

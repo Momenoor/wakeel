@@ -6,6 +6,7 @@ use App\Services\MMS\LeaveBalanceService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
@@ -129,5 +130,18 @@ class EmployeeProfile extends Model
     public function salaryComponents()
     {
         return $this->hasMany(EmployeeSalaryComponent::class);
+    }
+
+    /**
+     * Keyed to the party, like the relation managers that show them.
+     */
+    public function leaveBalanceEntries(): HasMany
+    {
+        return $this->hasMany(LeaveBalanceEntry::class, 'party_id', 'party_id');
+    }
+
+    public function flightTickets(): HasMany
+    {
+        return $this->hasMany(FlightTicket::class, 'party_id', 'party_id');
     }
 }

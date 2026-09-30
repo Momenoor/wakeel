@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Events\ChatMessageSent;
+use App\Filament\Mms\Pages\Chat;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\PushSubscription;
@@ -63,6 +64,8 @@ class ChatWidget extends Component
 
     public function mount(string $mode = 'page'): void
     {
+        abort_unless(Chat::canAccess(), 403);
+
         $this->mode = $mode;
         $this->lastSeenMessageId = (int) $this->incomingMessages()->max('id');
 

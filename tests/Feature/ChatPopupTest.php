@@ -7,6 +7,7 @@ use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -17,6 +18,14 @@ use Tests\TestCase;
 class ChatPopupTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Chat has its own page permission; these users hold it.
+        Gate::before(fn ($user, string $ability) => $ability === 'View:Chat' ? true : null);
+    }
 
     private function message(ChatConversation $conversation, User $from, string $body): ChatMessage
     {

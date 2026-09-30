@@ -20,6 +20,7 @@ use App\Services\MMS\NewMatterNotification;
 use App\Services\Notify\UserAlert;
 use App\Services\Push\WebPushSender;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -39,6 +40,9 @@ class SystemNotificationsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Chat has its own page permission; these users hold it.
+        Gate::before(fn ($user, string $ability) => $ability === 'View:Chat' ? true : null);
 
         app()->setLocale('en');
         Mail::fake();

@@ -4,10 +4,11 @@ declare(strict_types=1);
 use AlizHarb\ActivityLog\Pages\UserActivitiesPage;
 use AlizHarb\ActivityLog\Resources\ActivityLogs\ActivityLogResource;
 use AlizHarb\ActivityLog\Taps\SetActivityContextTap;
-use AlizHarb\ActivityLog\Widgets\ActivityChartWidget;
-use AlizHarb\ActivityLog\Widgets\ActivityHeatmapWidget;
-use AlizHarb\ActivityLog\Widgets\ActivityStatsWidget;
-use AlizHarb\ActivityLog\Widgets\LatestActivityWidget;
+// The plugin's widgets behind Shield permissions (App\Filament\Shared\ActivityLog).
+use App\Filament\Shared\ActivityLog\ActivityChartWidget;
+use App\Filament\Shared\ActivityLog\ActivityHeatmapWidget;
+use App\Filament\Shared\ActivityLog\ActivityStatsWidget;
+use App\Filament\Shared\ActivityLog\LatestActivityWidget;
 
 return [
     /*

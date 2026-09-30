@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Resources\Parties\Pages;
 
 use App\Filament\Mms\Resources\Parties\PartyResource;
 use App\Models\Party;
+use App\Support\ScreenPermissions;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
@@ -20,7 +21,31 @@ class ListParties extends ListRecords
         ];
     }
 
+    /**
+     * Each tab has its own permission (ScreenPermissions); a role sees only
+     * the tabs it holds.
+     */
     public function getTabs(): array
+    {
+        $permissions = [
+            'all' => ScreenPermissions::PARTIES_ALL_TAB,
+            'parties' => ScreenPermissions::PARTIES_PARTIES_TAB,
+            'representatives' => ScreenPermissions::PARTIES_REPRESENTATIVES_TAB,
+            'experts' => ScreenPermissions::PARTIES_EXPERTS_TAB,
+            'employees' => ScreenPermissions::PARTIES_EMPLOYEES_TAB,
+        ];
+
+        return array_filter(
+            $this->allTabs(),
+            fn (string $key): bool => ScreenPermissions::can($permissions[$key]),
+            ARRAY_FILTER_USE_KEY,
+        );
+    }
+
+    /**
+     * @return array<string, Tab>
+     */
+    private function allTabs(): array
     {
         return [
             'all' => Tab::make(__('All')),

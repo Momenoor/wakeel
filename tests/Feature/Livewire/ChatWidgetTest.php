@@ -12,6 +12,7 @@ use Filament\Facades\Filament;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -26,6 +27,9 @@ class ChatWidgetTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Chat has its own page permission; these users hold it.
+        Gate::before(fn ($user, string $ability) => $ability === 'View:Chat' ? true : null);
 
         $this->me = User::factory()->create();
         $this->colleague = User::factory()->create();

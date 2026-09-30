@@ -87,7 +87,8 @@ class MyIncentiveReport extends Page implements HasTable
      */
     public static function canAccess(): bool
     {
-        return auth()->user()?->party !== null;
+        return auth()->user()?->party !== null
+            && auth()->user()->can('View:MyIncentiveReport');
     }
 
     public static function shouldRegisterNavigation(): bool

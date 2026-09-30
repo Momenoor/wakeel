@@ -2,9 +2,11 @@
 
 namespace App\Filament\Pms\Resources\OwnerGroups\RelationManagers;
 
+use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Models\OwnerGroup;
 use App\Models\OwnerGroupBankAccount;
 use App\Models\Property;
+use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -19,6 +21,13 @@ use LogicException;
  */
 class PropertiesRelationManager extends RelationManager
 {
+    use HasRelationManagerPermission;
+
+    public static function viewPermission(): string
+    {
+        return ScreenPermissions::OWNER_GROUP_PROPERTIES;
+    }
+
     protected static string $relationship = 'properties';
 
     public static function getModelLabel(): string
