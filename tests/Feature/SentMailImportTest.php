@@ -21,6 +21,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Mockery;
 use RuntimeException;
@@ -260,6 +261,71 @@ class SentMailImportTest extends TestCase
         $this->assertTrue(SentMailImporter::subjectMatches($subject, 'رقم ٢١/٢٠٢٦'));
         $this->assertTrue(SentMailImporter::subjectMatches($subject, '  إجراءات   إفلاس '));
         $this->assertFalse(SentMailImporter::subjectMatches($subject, 'إجراءات تصفية'));
+    }
+
+    public function test_the_recipient_is_named_from_the_letters_salutation(): void
+    {
+        $this->assertSame('Arco Interiors LLC', SentMailImporter::addressee('<p>السادة/ Arco Interiors LLC                                            ووكيله القانوني المحترمين</p><p>تحية طيبة</p>'));
+        $this->assertSame('شركة ألفا للتجارة ذ.م.م', SentMailImporter::addressee('<div><br></div><div>السادة / شركة ألفا للتجارة ذ.م.م&nbsp;&nbsp;&nbsp;&nbsp; ووكيله القانوني المحترمين</div>'));
+        $this->assertSame('Beta FZE', SentMailImporter::addressee('<p>&#8207;السادة: Beta FZE المحترمين</p>'));
+        $this->assertSame('أحمد علي', SentMailImporter::addressee('<p>إلى السيد/ أحمد علي المحترم</p>'));
+        $this->assertNull(SentMailImporter::addressee('<p>تحية طيبة</p><p>Dear Sir</p>'));
+
+        app(SentMailImporter::class)->import('Cases', 'office', [
+            [...$this->message('<a@x>', 'القضية رقم 21/2026 إجراءات إفلاس', 'legal@arco.ae', '2026-09-01T09:00:00Z'),
+                'body' => ['content' => '<p>السادة/ Arco Interiors LLC      ووكيله القانوني المحترمين</p>']],
+            // No salutation: the To address's display name.
+            $this->message('<b@x>', 'القضية رقم 22/2026 إجراءات إفلاس', 'b@beta.ae', '2026-09-02T09:00:00Z'),
+        ], $this->user->id);
+
+        $this->assertSame(['Arco Interiors LLC', 'Client <b@x>'], BulkMailRecipient::orderBy('sent_at')->pluck('name')->all());
+    }
+
+    public function test_the_shared_attachment_is_kept_once_on_the_campaign(): void
+    {
+        Storage::fake('public');
+
+        $withPdf = fn (string $id): string => "Message-ID: <{$id}@firm.ae>\r\n"
+            ."Date: Tue, 1 Sep 2026 09:00:00 +0400\r\n"
+            ."To: {$id}@client.ae\r\n"
+            ."Subject: Invoice {$id}\r\n"
+            ."MIME-Version: 1.0\r\n"
+            ."Content-Type: multipart/mixed; boundary=\"b1\"\r\n\r\n"
+            ."--b1\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n<p>السادة/ {$id} LLC   المحترمين</p>\r\n"
+            ."--b1\r\nContent-Type: application/pdf; name=\"notice.pdf\"\r\nContent-Disposition: attachment; filename=\"notice.pdf\"\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+            .base64_encode('%PDF-1.4 notice')."\r\n--b1--\r\n";
+
+        $query = Mockery::mock(WhereQuery::class);
+        $query->shouldReceive('whereSince', 'whereBefore', 'leaveUnread', 'setFetchBody', 'setFetchFlags')->andReturnSelf();
+        $query->shouldReceive('get')->andReturn(new MessageCollection(array_map(function (array $email) use ($withPdf): Message {
+            $message = Message::fromString($withPdf($email[1]));
+            $message->uid = $email[0];
+
+            return $message;
+        }, [[1, 'alpha'], [2, 'beta']])));
+        $query->shouldReceive('getMessageByUid')->with(1)->andReturn(Message::fromString($withPdf('alpha')));
+        $query->shouldReceive('getMessageByUid')->with(2)->andReturn(Message::fromString($withPdf('beta')));
+
+        $folder = Mockery::mock(Folder::class);
+        $folder->full_name = 'INBOX.Sent Items';
+        $folder->shouldReceive('query')->andReturn($query);
+        $this->mock(SentFolder::class)->shouldReceive('sentFolders')->andReturn([$folder]);
+
+        $run = $this->importRun('cpanel');
+        $this->assertSame(SentMailImportProgress::DONE, SentMailImportProgress::get($run)['status'], (string) SentMailImportProgress::get($run)['error']);
+
+        $campaign = BulkMailCampaign::sole();
+        $this->assertTrue($campaign->has_attachment);
+        $this->assertCount(1, $campaign->attachment_path);
+        $this->assertStringEndsWith('/notice.pdf', $campaign->attachment_path[0]);
+        Storage::disk('public')->assertExists($campaign->attachment_path[0]);
+        $this->assertCount(1, Storage::disk('public')->allFiles('mail_attachments/imported'));
+
+        // Every recipient carries it, and is named from the letter.
+        foreach (BulkMailRecipient::all() as $recipient) {
+            $this->assertSame($campaign->attachment_path, $campaign->attachmentsFor($recipient));
+        }
+        $this->assertSame(['alpha LLC', 'beta LLC'], BulkMailRecipient::orderBy('name')->pluck('name')->all());
     }
 
     public function test_an_encoded_arabic_imap_subject_is_read_and_matched(): void

@@ -3209,5 +3209,6 @@
     "Matching": "مطابقة",
     "Read": "مقروءة",
     "Open the campaign": "فتح الحملة",
-    "Importing sent emails": "استيراد الرسائل المرسلة"
+    "Importing sent emails": "استيراد الرسائل المرسلة",
+    "Attachment kept for the campaign: :names": "المرفق المحفوظ للحملة: :names"
 }

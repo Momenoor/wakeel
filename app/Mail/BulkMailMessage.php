@@ -56,11 +56,10 @@ class BulkMailMessage extends Mailable
     {
         $attachments = [];
 
-        if ($this->campaign->has_attachment && $this->campaign->attachment_path) {
+        $paths = $this->campaign->attachmentsFor($this->recipient);
+
+        if ($paths !== []) {
             $disk = 'public';
-            $paths = is_array($this->campaign->attachment_path)
-                ? $this->campaign->attachment_path
-                : json_decode($this->campaign->attachment_path, true) ?? [];
 
             foreach ($paths as $path) {
 

@@ -29,7 +29,7 @@ class BulkMailService
         $sentAt = $recipient->sent_at ?? now();
         $cc = array_merge($campaign->cc_emails ?? [], $recipient->cc_emails ?? []);
         $bcc = $campaign->bcc_emails ?? [];
-        $attachments = $campaign->attachment_path ?? [];
+        $attachments = $campaign->attachmentsFor($recipient);
 
         // Detect if content is Arabic/RTL
         $isRtl = self::containsArabic($subject.$html);

@@ -22,7 +22,7 @@ class BulkMailController extends Controller
         $html = $campaign->renderBody($recipient);
         $sender = $campaign->sender_config;
         $sentAt = $recipient->sent_at ?? now();
-        $attachments = $campaign->attachment_path ?? [];
+        $attachments = $campaign->attachmentsFor($recipient);
         $cc = array_merge($campaign->cc_emails ?? [], $recipient->cc_emails ?? []);
         $bcc = $campaign->bcc_emails ?? [];
 

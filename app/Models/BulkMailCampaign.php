@@ -116,6 +116,23 @@ class BulkMailCampaign extends Model
         return $body;
     }
 
+    /**
+     * The attachments a recipient gets (paths on the public disk) — the
+     * campaign's, when it has them switched on.
+     *
+     * @return list<string>
+     */
+    public function attachmentsFor(BulkMailRecipient $recipient): array
+    {
+        if (! $this->has_attachment || empty($this->attachment_path)) {
+            return [];
+        }
+
+        $paths = is_array($this->attachment_path) ? $this->attachment_path : (json_decode((string) $this->attachment_path, true) ?? []);
+
+        return array_values(array_filter($paths));
+    }
+
     public function renderSubject(BulkMailRecipient $recipient, array $recipientPlaceholders = []): string
     {
         if (filled($recipient->sent_subject)) {

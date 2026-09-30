@@ -13,6 +13,8 @@ use Closure;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use RuntimeException;
 use Throwable;
 use Webklex\PHPIMAP\Address;
@@ -113,7 +115,16 @@ class SentMailImporter
 
         $this->report([], __('Saving :count emails into the campaign…', ['count' => count($messages)]));
 
-        return DB::transaction(function () use ($name, $senderKey, $messages, $userId): BulkMailCampaign {
+        $attachments = [];
+
+        foreach ($messages as $message) {
+            if (! empty($message['attachments'])) {
+                $attachments = array_values($message['attachments']);
+                break;
+            }
+        }
+
+        return DB::transaction(function () use ($name, $senderKey, $messages, $userId, $attachments): BulkMailCampaign {
             $first = $messages[0];
 
             $campaign = BulkMailCampaign::create([
@@ -123,6 +134,9 @@ class SentMailImporter
                 'from_sender_key' => $senderKey,
                 'status' => BulkMailCampaignStatus::Completed,
                 'total_recipients' => count($messages),
+                // The attachment every one of these emails carried.
+                'has_attachment' => $attachments !== [],
+                'attachment_path' => $attachments ?: null,
                 'sent_count' => count($messages),
                 'failed_count' => 0,
                 'created_by' => $userId,
@@ -135,7 +149,9 @@ class SentMailImporter
                 $recipient = BulkMailRecipient::create([
                     'campaign_id' => $campaign->id,
                     'email' => self::addresses($to),
-                    'name' => ($to[0]['emailAddress']['name'] ?? null) ?: null,
+                    // Who the letter is addressed to ("السادة/ Arco Interiors LLC"),
+                    // else the To address's display name.
+                    'name' => self::addressee((string) ($message['body']['content'] ?? '')) ?? (($to[0]['emailAddress']['name'] ?? null) ?: null),
                     'cc_emails' => self::addresses($message['ccRecipients'] ?? []) ?: null,
                     'status' => BulkMailRecipientStatus::Sent,
                     'sent_at' => $sentAt,
@@ -172,6 +188,39 @@ class SentMailImporter
         $lookingFor = self::normalize($lookingFor);
 
         return $lookingFor === '' || str_contains(self::normalize($subject), $lookingFor);
+    }
+
+    /**
+     * The addressee from the letter's salutation — the first line opening
+     * with السادة / السيد / السيدة: what follows the slash or colon, up to
+     * "ووكيله …" / "المحترم…" or a wide gap. Null when there is none.
+     */
+    public static function addressee(string $html): ?string
+    {
+        $text = html_entity_decode(strip_tags(preg_replace('~<(br|/p|/div|/tr|/li|/h[1-6])\b[^>]*>~i', '
+', $html) ?? $html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = str_replace(' ', ' ', $text);
+
+        foreach (preg_split('~\R~u', $text) ?: [] as $line) {
+            $line = trim(preg_replace('~[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}\x{FEFF}]~u', '', $line) ?? $line);
+
+            if ($line === '') {
+                continue;
+            }
+
+            if (! preg_match('~^(?:إلى\s+)?(?:السادة|السيد|السيدة)\s*[/:：]\s*(.+)$~u', $line, $m)) {
+                continue;
+            }
+
+            // The name ends where the courtesy starts, or at a wide gap.
+            $name = preg_split('~\s{3,}|	|\s+و?وكيل|\s+و?وكلاء|\s+المحترم~u', $m[1])[0] ?? '';
+            // Unicode-aware: trim() works on bytes and would cut Arabic letters.
+            $name = preg_replace('~^[\s\-–—,،.:/]+|[\s\-–—,،.:/]+$~u', '', $name) ?? $name;
+
+            return $name !== '' ? $name : null;
+        }
+
+        return null;
     }
 
     /**
@@ -303,10 +352,20 @@ class SentMailImporter
             }
 
             $out = [];
+            $attachmentsSaved = false;
 
             foreach ($wanted as $i => [$folder, $uid]) {
                 $message = $folder->query()->leaveUnread()->setFetchFlags(false)->getMessageByUid($uid);
-                $out[] = self::imapMessage($message);
+                $read = self::imapMessage($message);
+
+                // They all carry the same attachment: kept once, from the
+                // first email that has one, for the campaign.
+                if (! $attachmentsSaved && $message->hasAttachments()) {
+                    $read['attachments'] = $this->saveImapAttachments($message);
+                    $attachmentsSaved = $read['attachments'] !== [];
+                }
+
+                $out[] = $read;
                 unset($message);
                 gc_collect_cycles();
 
@@ -329,12 +388,13 @@ class SentMailImporter
         $url = 'https://graph.microsoft.com/v1.0/users/'.rawurlencode($mailbox).'/mailFolders/SentItems/messages';
         $query = [
             '$filter' => sprintf('sentDateTime ge %s and sentDateTime le %s', $from->copy()->startOfDay()->utc()->format('Y-m-d\TH:i:s\Z'), $to->copy()->endOfDay()->utc()->format('Y-m-d\TH:i:s\Z')),
-            '$select' => 'subject,toRecipients,ccRecipients,sentDateTime,body,internetMessageId',
+            '$select' => 'id,subject,toRecipients,ccRecipients,sentDateTime,body,internetMessageId,hasAttachments',
             '$top' => 100,
         ];
 
         $messages = [];
         $scanned = 0;
+        $attachmentsSaved = false;
 
         while ($url !== null) {
             $response = Http::withToken($this->graph->getAccessToken())->get($url, $query);
@@ -353,6 +413,11 @@ class SentMailImporter
                 $scanned++;
 
                 if (self::subjectMatches((string) ($message['subject'] ?? ''), $subjectContains)) {
+                    if (! $attachmentsSaved && ($message['hasAttachments'] ?? false)) {
+                        $message['attachments'] = $this->saveGraphAttachments($mailbox, (string) $message['id']);
+                        $attachmentsSaved = $message['attachments'] !== [];
+                    }
+
                     $messages[] = $message;
                 }
             }
@@ -367,6 +432,72 @@ class SentMailImporter
         }
 
         return $messages;
+    }
+
+    /**
+     * An email's real attachments (not inline signature images), saved
+     * where campaign attachments live.
+     *
+     * @return list<string> paths on the public disk
+     */
+    private function saveImapAttachments(Message $message): array
+    {
+        $files = [];
+
+        foreach ($message->getAttachments() as $attachment) {
+            if ($attachment->disposition === 'inline' && filled($attachment->id)) {
+                continue;
+            }
+
+            $files[] = [self::decodeHeader((string) ($attachment->name ?: $attachment->filename)), (string) $attachment->content];
+        }
+
+        return $this->storeAttachments($files);
+    }
+
+    /**
+     * @return list<string> paths on the public disk
+     */
+    private function saveGraphAttachments(string $mailbox, string $messageId): array
+    {
+        $response = Http::withToken($this->graph->getAccessToken())
+            ->get('https://graph.microsoft.com/v1.0/users/'.rawurlencode($mailbox).'/messages/'.rawurlencode($messageId).'/attachments');
+
+        $files = [];
+
+        foreach ($response->successful() ? ($response->json()['value'] ?? []) : [] as $attachment) {
+            if (($attachment['isInline'] ?? false) || ! isset($attachment['contentBytes'])) {
+                continue;
+            }
+
+            $files[] = [(string) ($attachment['name'] ?? ''), (string) base64_decode($attachment['contentBytes'])];
+        }
+
+        return $this->storeAttachments($files);
+    }
+
+    /**
+     * @param  list<array{0: string, 1: string}>  $files  [name, content]
+     * @return list<string>
+     */
+    private function storeAttachments(array $files): array
+    {
+        $directory = 'mail_attachments/imported/'.Str::lower(Str::random(10));
+        $paths = [];
+
+        foreach ($files as $i => [$name, $content]) {
+            $name = trim(preg_replace('~[\\/:*?"<>|\x{0000}-\x{001F}]+~u', ' ', $name) ?? '') ?: 'attachment-'.($i + 1);
+            $path = $directory.'/'.$name;
+
+            Storage::disk('public')->put($path, $content);
+            $paths[] = $path;
+        }
+
+        if ($paths !== []) {
+            $this->report([], __('Attachment kept for the campaign: :names', ['names' => implode(', ', array_map('basename', $paths))]));
+        }
+
+        return $paths;
     }
 
     /**
