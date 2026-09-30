@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Resources\Parties\Schemas;
 
+use App\Models\ExpertiseArea;
 use App\Models\Party;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
@@ -9,6 +10,7 @@ use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 
 class PartyForm
@@ -59,17 +61,11 @@ class PartyForm
                             ->visible(fn ($get) => in_array('expert', $get('role.role') ?? []))
                             ->columns(2)
                             ->columnSpanFull(),
+                        // Managed in Settings → Expertise Areas; a hidden area
+                        // still shows for the expert who has it.
                         Select::make('role.field')
-                            ->options([
-                                'accounting' => __('Accounting'),
-                                'finance' => __('Finance'),
-                                'technology' => __('Technology'),
-                                'engineering' => __('Engineering'),
-                                'architecture' => __('Architecture'),
-                                'civil' => __('Civil'),
-                                'it' => __('IT'),
-                                'banking' => __('Banking'),
-                            ])
+                            ->options(fn (Get $get): array => ExpertiseArea::options($get('role.field')))
+                            ->searchable()
                             ->label(__('Expertise Area'))
                             ->visible(fn ($get) => in_array('expert', $get('role.role') ?? []))
                             ->columnSpanFull(),

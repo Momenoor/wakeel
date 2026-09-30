@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Resources\Parties\Schemas;
 
+use App\Models\ExpertiseArea;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
@@ -119,7 +120,7 @@ class PartyInfolist
                                                         ->first();
                                                 }
 
-                                                return $field ? __($field ? ucfirst($field) : '') : null;
+                                                return ExpertiseArea::labelFor($field);
                                             })
                                             ->placeholder('—')
                                             ->columnSpanFull(),

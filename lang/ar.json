@@ -3174,5 +3174,10 @@
     "EOSG": "مكافأة نهاية الخدمة",
     "Mark as left": "تسجيل كمغادر",
     ":count employees updated.": "تم تحديث :count موظف.",
-    "Leave empty to keep each employee's current amount.": "اتركه فارغاً للإبقاء على المبلغ الحالي لكل موظف."
+    "Leave empty to keep each employee's current amount.": "اتركه فارغاً للإبقاء على المبلغ الحالي لكل موظف.",
+    "Expertise Areas": "مجالات الخبرة",
+    "Name (English)": "الاسم (إنجليزي)",
+    "Name (Arabic)": "الاسم (عربي)",
+    "Offered on the party form": "متاح في نموذج الطرف",
+    "Experts have this area. Switch it off instead, so it is no longer offered.": "لدى بعض الخبراء هذا المجال. أوقفه بدلاً من حذفه حتى لا يُعرض بعد الآن."
 }

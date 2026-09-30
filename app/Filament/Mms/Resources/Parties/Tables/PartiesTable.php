@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Resources\Parties\Tables;
 
+use App\Models\ExpertiseArea;
 use App\Models\Party;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -49,7 +50,7 @@ class PartiesTable
                                 $label .= ' ('.__($role['type'] ? ucfirst($role['type']) : '').')';
                             }
                             if (isset($role['field'])) {
-                                $label .= ' - '.__($role['field'] ? ucfirst($role['field']) : '');
+                                $label .= ' - '.ExpertiseArea::labelFor($role['field']);
                             }
 
                             return $label;
