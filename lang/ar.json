@@ -3180,8 +3180,6 @@
     "Name (Arabic)": "الاسم (عربي)",
     "Offered on the party form": "متاح في نموذج الطرف",
     "Experts have this area. Switch it off instead, so it is no longer offered.": "لدى بعض الخبراء هذا المجال. أوقفه بدلاً من حذفه حتى لا يُعرض بعد الآن.",
-    "Import sent emails from Outlook": "استيراد الرسائل المرسلة من Outlook",
-    "Reads the sender's Outlook Sent Items and creates a completed campaign: one recipient per email whose subject matches, marked as sent on the date it was sent. Nothing is sent. Emails brought in before are skipped.": "يقرأ العناصر المرسلة في Outlook للمرسل وينشئ حملة مكتملة: مستلم واحد لكل رسالة يطابق موضوعها، مسجّل كمرسل بتاريخ إرساله. لا يُرسل أي شيء، وتُتجاوز الرسائل المستوردة سابقاً.",
     "Campaign name": "اسم الحملة",
     "Sent from": "مرسلة من",
     "Subject contains": "الموضوع يحتوي على",
@@ -3189,6 +3187,8 @@
     "Sent to date": "أُرسلت حتى تاريخ",
     ":count sent emails brought in.": "تم استيراد :count رسالة مرسلة.",
     "Microsoft 365 refused to read this mailbox. Grant the Outlook app the Mail.Read application permission (with admin consent), then try again.": "رفض Microsoft 365 قراءة صندوق البريد هذا. امنح تطبيق Outlook صلاحية Mail.Read (مع موافقة المسؤول) ثم أعد المحاولة.",
-    "Could not read Sent Items: :error": "تعذّرت قراءة العناصر المرسلة: :error",
-    "No new sent emails to bring in — none matched, or they were brought in already.": "لا توجد رسائل مرسلة جديدة للاستيراد — لا يوجد تطابق، أو تم استيرادها سابقاً."
+    "No new sent emails to bring in — none matched, or they were brought in already.": "لا توجد رسائل مرسلة جديدة للاستيراد — لا يوجد تطابق، أو تم استيرادها سابقاً.",
+    "Import sent emails": "استيراد الرسائل المرسلة",
+    "Reads the sender mailbox's Sent folder and creates a completed campaign: one recipient per email whose subject matches, marked as sent on the date it was sent. Nothing is sent. Emails brought in before are skipped.": "يقرأ مجلد المرسل في صندوق بريد المرسِل وينشئ حملة مكتملة: مستلم واحد لكل رسالة يطابق موضوعها، مسجّل كمرسل بتاريخ إرساله. لا يُرسل أي شيء، وتُتجاوز الرسائل المستوردة سابقاً.",
+    "Could not read the Sent folder: :error": "تعذّرت قراءة مجلد المرسل: :error"
 }

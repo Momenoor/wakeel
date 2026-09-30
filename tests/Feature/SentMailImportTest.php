@@ -9,6 +9,10 @@ use App\Models\BulkMailCampaign;
 use App\Models\BulkMailRecipient;
 use App\Models\MailSender;
 use App\Models\User;
+use App\Services\MMS\SentFolder;
+use App\Services\MMS\SentMailImporter;
+use RuntimeException;
+use Webklex\PHPIMAP\Message;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -18,9 +22,10 @@ use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
- * Emails already sent from Outlook brought into a completed campaign.
+ * Emails already sent by hand brought into a completed campaign — from a
+ * Microsoft 365 mailbox (Graph) or a cPanel one (IMAP).
  */
-class OutlookSentMailImportTest extends TestCase
+class SentMailImportTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -77,7 +82,7 @@ class OutlookSentMailImportTest extends TestCase
     private function import(): void
     {
         Livewire::test(ListBulkMailCampaigns::class)
-            ->callAction('importFromOutlook', [
+            ->callAction('importSentEmails', [
                 'name' => 'Invoice reminders (Outlook)',
                 'sender' => 'office',
                 'subject' => 'invoice',
@@ -123,9 +128,65 @@ class OutlookSentMailImportTest extends TestCase
         ]);
 
         Livewire::test(ListBulkMailCampaigns::class)
-            ->callAction('importFromOutlook', ['name' => 'X', 'sender' => 'office', 'subject' => 'x', 'from' => '2026-09-01', 'to' => '2026-09-30'])
+            ->callAction('importSentEmails', ['name' => 'X', 'sender' => 'office', 'subject' => 'x', 'from' => '2026-09-01', 'to' => '2026-09-30'])
             ->assertNotified();
 
+        $this->assertSame(0, BulkMailCampaign::count());
+    }
+
+    public function test_each_recipient_keeps_its_own_email_body(): void
+    {
+        $body = fn (string $company): array => ['content' => "<p>Dear {$company},</p><p>Please find our invoice.</p>"];
+
+        $campaign = app(SentMailImporter::class)->import('Invoices', 'office', [
+            [...$this->message('<a@x>', 'Invoice – Alpha LLC', 'a@alpha.ae', '2026-09-01T09:00:00Z'), 'body' => $body('Alpha LLC')],
+            [...$this->message('<b@x>', 'Invoice – Beta FZE', 'b@beta.ae', '2026-09-02T09:00:00Z'), 'body' => $body('Beta FZE')],
+        ], auth()->id());
+
+        [$alpha, $beta] = BulkMailRecipient::orderBy('sent_at')->get()->all();
+
+        $this->assertStringContainsString('Dear Alpha LLC', $campaign->renderBody($alpha));
+        $this->assertStringContainsString('Dear Beta FZE', $campaign->renderBody($beta));
+        $this->assertSame('Invoice – Beta FZE', $campaign->renderSubject($beta));
+    }
+
+    public function test_an_imap_message_is_read_into_the_same_shape(): void
+    {
+        $raw = "Message-ID: <abc@firm.ae>\r\n"
+            ."Date: Tue, 1 Sep 2026 09:00:00 +0400\r\n"
+            ."From: Office <office@firm.ae>\r\n"
+            ."To: Alpha Accounts <accounts@alpha.ae>\r\n"
+            ."Cc: boss@alpha.ae\r\n"
+            ."Subject: Invoice Alpha\r\n"
+            ."MIME-Version: 1.0\r\n"
+            ."Content-Type: text/html; charset=UTF-8\r\n\r\n"
+            .'<p>Dear Alpha</p>';
+
+        $message = SentMailImporter::imapMessage(Message::fromString($raw));
+
+        $this->assertStringContainsString('abc@firm.ae', $message['internetMessageId']);
+        $this->assertSame('Invoice Alpha', $message['subject']);
+        $this->assertSame('accounts@alpha.ae', $message['toRecipients'][0]['emailAddress']['address']);
+        $this->assertSame('boss@alpha.ae', $message['ccRecipients'][0]['emailAddress']['address']);
+        $this->assertStringContainsString('Dear Alpha', $message['body']['content']);
+        $this->assertSame('2026-09-01', substr($message['sentDateTime'], 0, 10));
+    }
+
+    public function test_a_cpanel_sender_is_read_over_imap(): void
+    {
+        MailSender::create(['key' => 'cpanel', 'name' => 'Office', 'address' => 'info@firm.ae', 'driver' => MailSender::SMTP, 'host' => 'mail.firm.ae', 'port' => 465, 'username' => 'info@firm.ae', 'password' => 'secret', 'is_active' => true]);
+
+        $this->mock(SentFolder::class)
+            ->shouldReceive('folder')->once()->with('cpanel')
+            ->andThrow(new RuntimeException('Connection refused'));
+
+        Http::fake();
+
+        Livewire::test(ListBulkMailCampaigns::class)
+            ->callAction('importSentEmails', ['name' => 'X', 'sender' => 'cpanel', 'subject' => 'x', 'from' => '2026-09-01', 'to' => '2026-09-30'])
+            ->assertNotified();
+
+        Http::assertNothingSent();
         $this->assertSame(0, BulkMailCampaign::count());
     }
 }

@@ -96,6 +96,12 @@ class BulkMailCampaign extends Model
 
     public function renderBody(BulkMailRecipient $recipient, array $recipientPlaceholders = []): string
     {
+        // Sent by hand and brought in: exactly what this recipient got
+        // (signature included), not the template.
+        if (filled($recipient->sent_body)) {
+            return (string) $recipient->sent_body;
+        }
+
         $body = BulkMailPlaceholders::apply(
             (string) $this->body,
             [...BulkMailPlaceholders::for($this, $recipient), ...$recipientPlaceholders],
@@ -112,6 +118,10 @@ class BulkMailCampaign extends Model
 
     public function renderSubject(BulkMailRecipient $recipient, array $recipientPlaceholders = []): string
     {
+        if (filled($recipient->sent_subject)) {
+            return (string) $recipient->sent_subject;
+        }
+
         return BulkMailPlaceholders::apply(
             (string) $this->subject,
             [...BulkMailPlaceholders::for($this, $recipient), ...$recipientPlaceholders],

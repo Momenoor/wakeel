@@ -27,6 +27,8 @@ class BulkMailRecipient extends Model
         'attempt_count',
         'unsubscribe_token',
         'pdf_path',
+        'sent_subject',
+        'sent_body',
     ];
 
     protected $casts = [

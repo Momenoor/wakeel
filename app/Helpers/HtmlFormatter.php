@@ -43,7 +43,11 @@ class HtmlFormatter
         return nl2br($linked);
     }
 
-    private static function cleanHtml(string $html): string
+    /**
+     * HTML someone else wrote (an email, an Outlook description), safe to
+     * show: the document's head/style/script dropped, then sanitized.
+     */
+    public static function cleanHtml(string $html): string
     {
         $html = preg_replace('~<(head|style|script|title)\b[^>]*>.*?</\1\s*>~is', '', $html) ?? '';
 

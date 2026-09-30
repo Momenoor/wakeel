@@ -3,8 +3,8 @@
 namespace App\Filament\Mms\Resources\BulkMailCampaigns\Pages;
 
 use App\Filament\Mms\Resources\BulkMailCampaigns\BulkMailCampaignResource;
-use App\Services\MMS\OutlookSentMailImporter;
 use App\Services\MMS\SenderMailer;
+use App\Services\MMS\SentMailImporter;
 use Filament\Actions;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -22,22 +22,23 @@ class ListBulkMailCampaigns extends ListRecords
     {
         return [
             Actions\CreateAction::make(),
-            $this->importFromOutlookAction(),
+            $this->importSentEmailsAction(),
         ];
     }
 
     /**
-     * Emails already sent from Outlook, outside the system, brought in as a
-     * completed campaign with every recipient marked sent.
+     * Emails already sent by hand from the sender's mailbox (cPanel over
+     * IMAP, or Microsoft 365), brought in as a completed campaign with every
+     * recipient marked sent.
      */
-    private function importFromOutlookAction(): Actions\Action
+    private function importSentEmailsAction(): Actions\Action
     {
-        return Actions\Action::make('importFromOutlook')
-            ->label(__('Import sent emails from Outlook'))
+        return Actions\Action::make('importSentEmails')
+            ->label(__('Import sent emails'))
             ->icon('heroicon-o-inbox-arrow-down')
             ->color('gray')
             ->visible(fn (): bool => auth()->user()?->can('Create:BulkMailCampaign') ?? false)
-            ->modalDescription(__('Reads the sender\'s Outlook Sent Items and creates a completed campaign: one recipient per email whose subject matches, marked as sent on the date it was sent. Nothing is sent. Emails brought in before are skipped.'))
+            ->modalDescription(__('Reads the sender mailbox\'s Sent folder and creates a completed campaign: one recipient per email whose subject matches, marked as sent on the date it was sent. Nothing is sent. Emails brought in before are skipped.'))
             ->schema([
                 TextInput::make('name')
                     ->label(__('Campaign name'))
@@ -60,11 +61,10 @@ class ListBulkMailCampaigns extends ListRecords
                     ->required(),
             ])
             ->action(function (array $data, Actions\Action $action): void {
-                $importer = app(OutlookSentMailImporter::class);
+                $importer = app(SentMailImporter::class);
 
                 try {
-                    $mailbox = (string) (SenderMailer::sender($data['sender'])['address'] ?? '');
-                    $messages = $importer->sentMessages($mailbox, $data['subject'], Carbon::parse($data['from']), Carbon::parse($data['to']));
+                    $messages = $importer->sentMessages($data['sender'], $data['subject'], Carbon::parse($data['from']), Carbon::parse($data['to']));
                     $campaign = $importer->import($data['name'], $data['sender'], $messages, (int) auth()->id());
                 } catch (Throwable $exception) {
                     Notification::make()->danger()->title(__('Could not continue'))->body($exception->getMessage())->persistent()->send();

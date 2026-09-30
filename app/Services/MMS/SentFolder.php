@@ -4,6 +4,7 @@ namespace App\Services\MMS;
 
 use App\Models\BulkMailCampaign;
 use Webklex\PHPIMAP\ClientManager;
+use Webklex\PHPIMAP\Folder;
 
 /**
  * Copies a sent mail into the sender mailbox's IMAP "Sent" folder, so it
@@ -28,14 +29,27 @@ class SentFolder
             return;
         }
 
-        $client = (new ClientManager($this->config($senderKey, $sender)))->account($senderKey);
-        $client->connect();
-
-        $client->getFolder('Sent')->appendMessage(
+        $this->folder($senderKey, $sender)->appendMessage(
             $rawMessage,
             ['\Seen'],
             now()->format('d-M-Y h:i:s O')
         );
+    }
+
+    /**
+     * The sender mailbox's "Sent" folder over IMAP — to copy mail into, or
+     * to read what was sent from it by hand (SentMailImporter).
+     *
+     * @param  array<string, mixed>|null  $sender
+     */
+    public function folder(string $senderKey, ?array $sender = null): Folder
+    {
+        $sender ??= SenderMailer::sender($senderKey);
+
+        $client = (new ClientManager($this->config($senderKey, $sender)))->account($senderKey);
+        $client->connect();
+
+        return $client->getFolder('Sent');
     }
 
     /**
