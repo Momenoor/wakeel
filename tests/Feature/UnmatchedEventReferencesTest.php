@@ -92,6 +92,16 @@ class UnmatchedEventReferencesTest extends TestCase
         $this->assertArrayHasKey($typo->id, UnmatchedEventReferences::missing());
     }
 
+    public function test_a_year_first_title_is_not_read_as_a_second_missing_matter(): void
+    {
+        $this->travelTo(now()->setDate(2026, 9, 30));
+        $matter = Matter::factory()->create(['number' => 1957, 'year' => 2026]);
+        $event = $this->event('Session 2026/1957');
+        $event->matters()->syncWithoutDetaching([$matter->id]);
+
+        $this->assertSame([], UnmatchedEventReferences::missing());
+    }
+
     public function test_an_event_naming_two_numbers_needs_both_accounted_for(): void
     {
         $found = Matter::factory()->create(['number' => 12, 'year' => 2024]);

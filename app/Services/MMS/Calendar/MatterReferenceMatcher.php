@@ -10,10 +10,14 @@ use App\Models\Matter;
  * "639 of 2025" and "639 لسنة 2025", in Western or Arabic-Indic digits.
  *
  * A date is never read as a matter: "29/09/2026" or "2026/09/29" is not
- * matter 9 of 2026. Nor is a year after the current one.
+ * matter 9 of 2026. Nor is a year before the first matters (2018) or after
+ * the current one.
  */
 class MatterReferenceMatcher
 {
+    /** The year the office's first matter was opened. */
+    public const FIRST_YEAR = 2018;
+
     private const DIGITS = ['٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4', '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9',
         '۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4', '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9'];
 
@@ -29,48 +33,62 @@ class MatterReferenceMatcher
         }
 
         $text = strtr($text, self::DIGITS);
-        $found = [];
 
-        // Number then year: 639/2025, 639 of 2025, 639 لسنة 2025. The number
-        // is not itself the end of a date (…/09/2026) and the year is not
-        // the start of a longer number.
-        preg_match_all('~(?<![\d/])(\d{1,6})\s*(?:/|\bof\b|لسنة|لعام|سنة)\s*((?:19|20)\d{2})(?!\d)~iu', $text, $matches, PREG_SET_ORDER);
-        foreach ($matches as $m) {
-            $found[] = [$m[1], $m[2]];
-        }
+        // Readings of the text, grouped by where they sit in it: "1957/2026"
+        // matches both number-first and year-first, and is still one matter.
+        // [number group, year group, preference — lower wins]
+        $patterns = [
+            // Number then year: 639/2025, 639 of 2025, 639 لسنة 2025. The
+            // number is not itself the end of a date (…/09/2026) and the year
+            // is not the start of a longer number.
+            ['~(?<![\d/])(\d{1,6})\s*(?:/|\bof\b|لسنة|لعام|سنة)\s*((?:19|20)\d{2})(?!\d)~iu', 1, 2, 0],
+            // Number, dash, year: 3153-2026 — but not 29-09-2026 or 2026-09-29.
+            ['~(?<![\d/\-–])(\d{1,6})\s*[-–]\s*((?:19|20)\d{2})(?![\d/\-–])~u', 1, 2, 0],
+            // Year then number: 2025/639 — but not 2026/09/29.
+            ['~(?<!\d)((?:19|20)\d{2})/(\d{1,6})(?![\d/])~u', 2, 1, 1],
+            // Year, dash, number: 2026-3153 — but not 2026-09-29, nor a
+            // year-month like 2026-09 (a matter number has no leading zero here).
+            ['~(?<![\d/\-–])((?:19|20)\d{2})\s*[-–]\s*([1-9]\d{0,5})(?![\d/\-–])~u', 2, 1, 1],
+        ];
 
-        // Number, dash, year: 3153-2026 — but not 29-09-2026 or 2026-09-29.
-        preg_match_all('~(?<![\d/\-–])(\d{1,6})\s*[-–]\s*((?:19|20)\d{2})(?![\d/\-–])~u', $text, $matches, PREG_SET_ORDER);
-        foreach ($matches as $m) {
-            if (! self::looksLikeYear($m[1])) { // 2025-2026 is a span of years
-                $found[] = [$m[1], $m[2]];
-            }
-        }
-
-        // Year then number: 2025/639 — but not 2026/09/29.
-        preg_match_all('~(?<!\d)((?:19|20)\d{2})/(\d{1,6})(?![\d/])~u', $text, $matches, PREG_SET_ORDER);
-        foreach ($matches as $m) {
-            $found[] = [$m[2], $m[1]];
-        }
-
-        // Year, dash, number: 2026-3153 — but not 2026-09-29, nor a
-        // year-month like 2026-09 (a matter number has no leading zero here).
-        preg_match_all('~(?<![\d/\-–])((?:19|20)\d{2})\s*[-–]\s*([1-9]\d{0,5})(?![\d/\-–])~u', $text, $matches, PREG_SET_ORDER);
-        foreach ($matches as $m) {
-            if (! self::looksLikeYear($m[2])) {
-                $found[] = [$m[2], $m[1]];
-            }
-        }
-
-        // A matter's year is this year or earlier — a future "year" is
-        // something else (a date, a number that happens to start with 20…).
         $thisYear = now()->year;
+        $spans = [];
+
+        foreach ($patterns as [$pattern, $numberGroup, $yearGroup, $preference]) {
+            preg_match_all($pattern, $text, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
+
+            foreach ($matches as $m) {
+                $number = $m[$numberGroup][0];
+                $year = (int) $m[$yearGroup][0];
+
+                // 2025-2026 is a span of years, not a matter.
+                if (preg_match('~[-–]~u', $m[0][0]) && self::looksLikeYear($number)) {
+                    continue;
+                }
+
+                // Matters start in FIRST_YEAR and never run ahead of this
+                // year: any other "year" is something else (1957 in 2026/1957,
+                // a date, a number that happens to start with 20…).
+                if ($year < self::FIRST_YEAR || $year > $thisYear) {
+                    continue;
+                }
+
+                $spans[$m[0][1]][] = [
+                    'number' => ltrim($number, '0') ?: '0',
+                    'year' => $year,
+                    // Where both readings are possible years (2025/2026), the
+                    // office's number/year wins.
+                    'rank' => $preference,
+                ];
+            }
+        }
+
+        ksort($spans);
         $refs = [];
 
-        foreach ($found as [$number, $year]) {
-            if ((int) $year <= $thisYear) {
-                $refs[] = ['number' => ltrim($number, '0') ?: '0', 'year' => (int) $year];
-            }
+        foreach ($spans as $readings) {
+            usort($readings, fn (array $a, array $b): int => $a['rank'] <=> $b['rank']);
+            $refs[] = ['number' => $readings[0]['number'], 'year' => $readings[0]['year']];
         }
 
         return array_values(array_unique($refs, SORT_REGULAR));

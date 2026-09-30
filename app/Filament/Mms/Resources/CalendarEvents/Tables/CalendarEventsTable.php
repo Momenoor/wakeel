@@ -47,8 +47,24 @@ class CalendarEventsTable
                 TextColumn::make('matters')
                     ->label(__('Matter'))
                     ->bulleted()
-                    ->searchable(['number', 'year']) // Ensure search works on these fields
-                    ->sortable()
+                    // Number and year are the linked matters' columns, not the
+                    // event's: search through the link. "1957/2024" matches
+                    // that matter exactly; "1957" any number or year with it.
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        $search = trim($search);
+
+                        return $query->orWhereHas('matters', function (Builder $matters) use ($search): void {
+                            if (preg_match('~^(\d+)\s*/\s*(\d{4})$~', $search, $m)) {
+                                $matters->where('matters.number', $m[1])->where('matters.year', $m[2]);
+
+                                return;
+                            }
+
+                            $matters->where(fn (Builder $q) => $q
+                                ->where('matters.number', 'like', "%{$search}%")
+                                ->orWhere('matters.year', 'like', "%{$search}%"));
+                        });
+                    })
                     ->formatStateUsing(function ($state) {
                         // $state is the collection of related Matter models
                         return "{$state->number}/{$state->year}";

@@ -60,6 +60,34 @@ class CalendarMatterLinkingTest extends TestCase
         ]);
     }
 
+    public function test_the_events_list_is_searched_by_linked_matter_number(): void
+    {
+        Gate::before(fn () => true);
+        Filament::setCurrentPanel('mms');
+        $this->actingAs(User::factory()->create());
+
+        $linked = $this->event('Site visit');
+        $linked->matters()->attach($this->matter(1957, 2024)->id);
+        $other = $this->event('Office meeting');
+        $other->matters()->attach($this->matter(88, 2025)->id);
+
+        Livewire::test(ListCalendarEvents::class)
+            ->searchTable('1957')
+            ->assertCanSeeTableRecords([$linked])
+            ->assertCanNotSeeTableRecords([$other]);
+
+        Livewire::test(ListCalendarEvents::class)
+            ->searchTable('1957/2024')
+            ->assertCanSeeTableRecords([$linked])
+            ->assertCanNotSeeTableRecords([$other]);
+
+        // The title is still searched.
+        Livewire::test(ListCalendarEvents::class)
+            ->searchTable('Office')
+            ->assertCanSeeTableRecords([$other])
+            ->assertCanNotSeeTableRecords([$linked]);
+    }
+
     public function test_titles_are_read_the_way_the_office_writes_matter_numbers(): void
     {
         $this->assertSame([['number' => '639', 'year' => 2025]], MatterReferenceMatcher::references('جلسة 639/2025 محاكم دبي'));
@@ -74,6 +102,17 @@ class CalendarMatterLinkingTest extends TestCase
         // Dates are not matter numbers.
         $this->assertSame([], MatterReferenceMatcher::references('Hearing 29/09/2026'));
         $this->assertSame([], MatterReferenceMatcher::references('Review 2026/09/29'));
+
+        // Matters start in 2018: an earlier year is never a matter's.
+        $this->assertSame([], MatterReferenceMatcher::references('Session 12/2015'));
+
+        // Both numbers look like years: one matter, not two — 1957 cannot be
+        // a year (before 2018), and 2025/2026 is read number/year.
+        $this->travelTo(now()->setDate(2026, 9, 30));
+        $this->assertSame([['number' => '1957', 'year' => 2026]], MatterReferenceMatcher::references('Session 2026/1957'));
+        $this->assertSame([['number' => '1957', 'year' => 2026]], MatterReferenceMatcher::references('Session 1957/2026'));
+        $this->assertSame([['number' => '2025', 'year' => 2026]], MatterReferenceMatcher::references('Session 2025/2026'));
+        $this->travelBack();
 
         // Number-dash-year, as some titles write it.
         $this->assertSame([['number' => '3153', 'year' => 2026]], MatterReferenceMatcher::references('جلسة خبرة 3153-2026'));
