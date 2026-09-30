@@ -53,6 +53,7 @@ return [
 
         // Panel access.
         'access_multiple_systems' => 'الوصول إلى عدة أنظمة',
+        'impersonate_user' => 'تقمص مستخدم',
 
         // Payroll — EOSG closing voucher (no Filament Resource of its own).
         'view_eosg_closing_voucher' => 'عرض سند إقفال مكافأة نهاية الخدمة',

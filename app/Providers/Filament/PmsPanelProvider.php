@@ -11,6 +11,7 @@ use App\Filament\Pms\Pages\PMSSettings;
 use App\Filament\Shared\ActivityLog\AuditDashboard;
 use App\Filament\Shared\Pages\SystemSettings;
 use App\Filament\Shared\Pages\SystemUpdates;
+use App\Filament\Shared\Users\TranslateUsersPluginLabels;
 use App\Http\Middleware\CheckSystemOffline;
 use App\Http\Middleware\EnsureLicenseIsValid;
 use App\Http\Middleware\RedirectToInstaller;
@@ -157,6 +158,9 @@ class PmsPanelProvider extends PanelProvider
                 FilamentUsersPlugin::make()
                     ->useAvatar(),
             ])
+            // The users plugin fixes some labels at boot, in whatever language
+            // was active then; re-translated when drawn instead.
+            ->bootUsing(fn () => TranslateUsersPluginLabels::apply())
             ->databaseNotifications()
             // With Pusher, new notifications arrive live (NotificationsUpdated),
             // so polling is only a slow safety net.

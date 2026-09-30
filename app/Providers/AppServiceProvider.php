@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Events\NotificationsUpdated;
+use App\Filament\Shared\Users\ImpersonateUserAction;
 use App\Models\CalendarEvent;
 use App\Models\Matter;
 use App\Models\PushSubscription;
@@ -19,6 +20,7 @@ use Illuminate\Notifications\Events\NotificationSent;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Throwable;
+use TomatoPHP\FilamentUsers\Filament\Resources\Users\Tables\UserActions;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -65,6 +67,10 @@ class AppServiceProvider extends ServiceProvider
         }
 
         Setting::applyMailConfig();
+
+        // Our Impersonate button on the users table, in place of the
+        // package's (config/filament-users.php explains why).
+        UserActions::register(ImpersonateUserAction::make());
 
         // Every database notification — a Laravel Notification or Filament's
         // sendToDatabase() — pings the user's open tabs over Pusher, so the

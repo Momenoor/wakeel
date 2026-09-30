@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\Branding;
+use BezhanSalleh\FilamentShield\Support\Utils;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Models\Contracts\HasAvatar;
 use Filament\Panel;
@@ -112,6 +113,25 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
             ->using(ChatConversationUser::class)
             ->withPivot('last_read_at')
             ->withTimestamps();
+    }
+
+    /**
+     * Impersonating is its own permission, not a side effect of seeing the
+     * users list.
+     */
+    public function canImpersonate(): bool
+    {
+        return $this->can('Impersonate:User');
+    }
+
+    /**
+     * Only a super admin may become a super admin.
+     */
+    public function canBeImpersonated(): bool
+    {
+        $superAdmin = Utils::getSuperAdminName();
+
+        return ! $this->hasRole($superAdmin) || (auth()->user()?->hasRole($superAdmin) ?? false);
     }
 
     public function canAccessPanel(Panel $panel): bool

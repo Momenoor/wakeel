@@ -356,6 +356,8 @@ return [
         // grant it, and would silently strip it from pms-admin/super-admin/
         // admin the next time anyone saved those roles through the UI.
         'Access:MultipleSystems',
+        // Signing in as another user (the Impersonate button, User::canImpersonate()).
+        'Impersonate:User',
         // One per relation manager and per tab — see App\Support\ScreenPermissions.
         ...ScreenPermissions::all(),
     ],

@@ -52,7 +52,12 @@ return [
      * if you are using filament impersonate, you can set this to true.
      */
     'impersonate' => [
-        'enabled' => true,
+        // Off: the package builds its Impersonate button once, at boot, with
+        // the label already translated — so it stayed in whichever language
+        // was active then. Ours (App\Filament\Shared\Users\ImpersonateUserAction)
+        // is registered instead; the banner and the leave route still come
+        // from the package.
+        'enabled' => false,
         'banner' => [
             // Available hooks: https://filamentphp.com/docs/3.x/support/render-hooks#available-render-hooks
             'render_hook' => env('FILAMENT_IMPERSONATE_BANNER_RENDER_HOOK', 'panels::body.start'),
@@ -79,9 +84,11 @@ return [
                 ],
             ],
         ],
-        'redirect_to' => '/admin',
-        'back_to' => '/admin',
-        'leave_middleware' => 'auth',
+        'redirect_to' => '/mms',
+        'back_to' => '/mms',
+        // `web` too: without the session the leave route cannot see who is
+        // impersonating whom, and only sent people to '/'.
+        'leave_middleware' => ['web', 'auth'],
         'auth_guard' => 'web',
     ],
 
