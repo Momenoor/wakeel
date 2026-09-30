@@ -6,12 +6,14 @@ use App\Enums\BulkMailCampaignStatus;
 use App\Enums\BulkMailRecipientStatus;
 use App\Filament\Mms\Resources\BulkMailCampaigns\Pages\ViewBulkMailCampaign;
 use App\Filament\Mms\Resources\BulkMailCampaigns\RelationManagers\RecipientsRelationManager;
+use App\Jobs\RebuildCampaignPdfs;
 use App\Models\BulkMailCampaign;
 use App\Models\BulkMailRecipient;
 use App\Models\User;
 use App\Services\MMS\BulkMailService;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
@@ -153,5 +155,33 @@ class BulkMailPdfTest extends TestCase
         $this->assertSame(BulkMailRecipientStatus::Pending, $failed->fresh()->status);
         $this->assertSame(0, $failed->fresh()->attempt_count);
         $this->assertSame(0, $this->campaign->fresh()->failed_count);
+    }
+
+    public function test_the_pdfs_are_deleted_and_made_again(): void
+    {
+        $this->actingAs(User::factory()->create()->assignRole(
+            Role::firstOrCreate(['name' => config('filament-shield.super_admin.name', 'super_admin'), 'guard_name' => 'web'])
+        ));
+        Filament::setCurrentPanel('admin');
+        Bus::fake();
+
+        $alpha = $this->recipient('Alpha LLC');
+        $service = app(BulkMailService::class);
+        $old = $service->ensurePdf($alpha);
+        Storage::disk(BulkMailService::DISK)->assertExists($old);
+
+        Livewire::test(RecipientsRelationManager::class, [
+            'ownerRecord' => $this->campaign,
+            'pageClass' => ViewBulkMailCampaign::class,
+        ])->callTableAction('regeneratePdfs')->assertNotified();
+
+        // Deleted at once; made again after the page answers.
+        $this->assertNull($alpha->fresh()->pdf_path);
+        Storage::disk(BulkMailService::DISK)->assertMissing($old);
+        Bus::assertDispatchedAfterResponse(RebuildCampaignPdfs::class, fn ($job) => $job->campaignId === $this->campaign->id);
+
+        (new RebuildCampaignPdfs($this->campaign->id))->handle($service);
+
+        Storage::disk(BulkMailService::DISK)->assertExists($alpha->fresh()->pdf_path);
     }
 }

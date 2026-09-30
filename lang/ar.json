@@ -3210,5 +3210,8 @@
     "Read": "مقروءة",
     "Open the campaign": "فتح الحملة",
     "Importing sent emails": "استيراد الرسائل المرسلة",
-    "Attachment kept for the campaign: :names": "المرفق المحفوظ للحملة: :names"
+    "Attachment kept for the campaign: :names": "المرفق المحفوظ للحملة: :names",
+    "Regenerate PDFs": "إعادة إنشاء ملفات PDF",
+    "Deletes every PDF of this campaign and makes them again from the emails as they now read. They are rebuilt in the background; any not ready yet is made when downloaded.": "يحذف جميع ملفات PDF لهذه الحملة وينشئها من جديد من الرسائل بصيغتها الحالية. يُعاد إنشاؤها في الخلفية، وأي ملف لم يجهز بعد يُنشأ عند تنزيله.",
+    ":count PDFs deleted and being made again.": "تم حذف :count ملف PDF وجارٍ إنشاؤها من جديد."
 }

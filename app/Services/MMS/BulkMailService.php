@@ -97,6 +97,38 @@ class BulkMailService
     }
 
     /**
+     * Delete every stored PDF of a campaign, so each is made again from the
+     * mail as it now reads (rebuildPdfs(), or on download).
+     *
+     * @return int how many sent recipients will get a new PDF
+     */
+    public function deletePdfs(BulkMailCampaign $campaign): int
+    {
+        Storage::disk(self::DISK)->deleteDirectory("bulk-mail-pdfs/{$campaign->id}");
+        $campaign->recipients()->update(['pdf_path' => null]);
+
+        return $campaign->recipients()->whereNotNull('sent_at')->count();
+    }
+
+    /**
+     * Make the PDF of every sent recipient that has none, one at a time.
+     */
+    public function rebuildPdfs(BulkMailCampaign $campaign): void
+    {
+        @set_time_limit(0);
+
+        $campaign->recipients()->whereNotNull('sent_at')->whereNull('pdf_path')->orderBy('id')
+            ->each(function (BulkMailRecipient $recipient): void {
+                try {
+                    $this->ensurePdf($recipient);
+                } catch (\Throwable $e) {
+                    // Left for the next download to try again.
+                    report($e);
+                }
+            });
+    }
+
+    /**
      * The recipient's PDF, generated now if it is missing (never made, or
      * its file was lost) — null for a recipient the mail never went to.
      */

@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Resources\BulkMailCampaigns\RelationManagers;
 use App\Enums\BulkMailRecipientStatus;
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Mms\Imports\BulkMailRecipientImporter;
+use App\Jobs\RebuildCampaignPdfs;
 use App\Models\BulkMailRecipient;
 use App\Services\MMS\BulkMailService;
 use App\Support\ScreenPermissions;
@@ -120,6 +121,27 @@ class RecipientsRelationManager extends RelationManager
                         $livewire->getOwnerRecord()->update([
                             'total_recipients' => $livewire->getOwnerRecord()->recipients_count,
                         ]);
+                    }),
+                // Every stored PDF deleted and made again from the mail as it
+                // now reads — after a fix to the body, name or attachment.
+                Action::make('regeneratePdfs')
+                    ->label(__('Regenerate PDFs'))
+                    ->icon('heroicon-o-arrow-path')
+                    ->color('gray')
+                    ->requiresConfirmation()
+                    ->modalDescription(__('Deletes every PDF of this campaign and makes them again from the emails as they now read. They are rebuilt in the background; any not ready yet is made when downloaded.'))
+                    ->visible(fn ($livewire) => (auth()->user()?->can('update', $livewire->getOwnerRecord()) ?? false)
+                        && $livewire->getOwnerRecord()->recipients()->whereNotNull('sent_at')->exists())
+                    ->action(function ($livewire): void {
+                        $campaign = $livewire->getOwnerRecord();
+                        $count = app(BulkMailService::class)->deletePdfs($campaign);
+
+                        RebuildCampaignPdfs::dispatchAfterResponse($campaign->id);
+
+                        Notification::make()
+                            ->success()
+                            ->title(__(':count PDFs deleted and being made again.', ['count' => $count]))
+                            ->send();
                     }),
                 Action::make('downloadAllPdfs')
                     ->label(__('bulk_mail.actions.download_all_pdfs'))
