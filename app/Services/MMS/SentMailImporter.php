@@ -162,6 +162,53 @@ class SentMailImporter
     }
 
     /**
+     * Whether a subject contains the text looked for — ignoring what makes
+     * the same Arabic words differ unseen: hamza forms of alef (إ أ آ → ا),
+     * ى/ي and ة/ه, diacritics and tatweel, right-to-left marks, Arabic-Indic
+     * digits, letter case and repeated spaces.
+     */
+    public static function subjectMatches(string $subject, string $lookingFor): bool
+    {
+        $lookingFor = self::normalize($lookingFor);
+
+        return $lookingFor === '' || str_contains(self::normalize($subject), $lookingFor);
+    }
+
+    /**
+     * A header as text. The IMAP library can hand back an encoded header
+     * as it came ("=?UTF-8?B?2KfZhNmC…?=") — which is how Outlook sends an
+     * Arabic subject — so it is decoded here.
+     */
+    public static function decodeHeader(string $value): string
+    {
+        if (! str_contains($value, '=?')) {
+            return $value;
+        }
+
+        $decoded = @iconv_mime_decode($value, ICONV_MIME_DECODE_CONTINUE_ON_ERROR, 'UTF-8');
+
+        if (! is_string($decoded) || $decoded === '') {
+            $decoded = mb_decode_mimeheader($value);
+        }
+
+        return $decoded;
+    }
+
+    private static function normalize(string $text): string
+    {
+        $text = strtr($text, [
+            'إ' => 'ا', 'أ' => 'ا', 'آ' => 'ا', 'ٱ' => 'ا', 'ى' => 'ي', 'ة' => 'ه',
+            '٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4', '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9',
+            '۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4', '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9',
+        ]);
+
+        // Diacritics, tatweel, and the invisible direction/joining marks.
+        $text = preg_replace('~[\x{064B}-\x{065F}\x{0670}\x{0640}\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}\x{FEFF}]~u', '', $text) ?? $text;
+
+        return trim(preg_replace('~\s+~u', ' ', mb_strtolower($text)) ?? '');
+    }
+
+    /**
      * An IMAP message in the shape the import reads (Microsoft Graph's).
      *
      * @return array<string, mixed>
@@ -169,13 +216,13 @@ class SentMailImporter
     public static function imapMessage(Message $message): array
     {
         $recipients = fn (string $header): array => array_map(
-            fn (Address $address): array => ['emailAddress' => ['address' => $address->mail, 'name' => $address->personal]],
+            fn (Address $address): array => ['emailAddress' => ['address' => $address->mail, 'name' => self::decodeHeader($address->personal)]],
             array_values(array_filter($message->get($header)?->all() ?? [], fn ($a) => $a instanceof Address)),
         );
 
         return [
             'internetMessageId' => trim((string) $message->getMessageId()) ?: null,
-            'subject' => (string) $message->getSubject(),
+            'subject' => self::decodeHeader((string) $message->getSubject()),
             'sentDateTime' => $message->getDate()->toDate()->utc()->toIso8601String(),
             'body' => ['content' => $message->hasHTMLBody() ? $message->getHTMLBody() : nl2br(e($message->getTextBody()))],
             'toRecipients' => $recipients('to'),
@@ -233,7 +280,7 @@ class SentMailImporter
                     $inFolder++;
                     $id = trim((string) $header->getMessageId());
 
-                    if (mb_stripos((string) $header->getSubject(), $subjectContains) === false || ($id !== '' && isset($seen[$id]))) {
+                    if (! self::subjectMatches(self::decodeHeader((string) $header->getSubject()), $subjectContains) || ($id !== '' && isset($seen[$id]))) {
                         continue;
                     }
 
@@ -305,7 +352,7 @@ class SentMailImporter
             foreach ($body['value'] ?? [] as $message) {
                 $scanned++;
 
-                if (mb_stripos((string) ($message['subject'] ?? ''), $subjectContains) !== false) {
+                if (self::subjectMatches((string) ($message['subject'] ?? ''), $subjectContains)) {
                     $messages[] = $message;
                 }
             }

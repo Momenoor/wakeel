@@ -250,6 +250,34 @@ class SentMailImportTest extends TestCase
         $this->assertSame('Invoice – Beta FZE', $campaign->renderSubject($beta));
     }
 
+    public function test_arabic_subjects_match_however_they_were_typed(): void
+    {
+        // As Outlook stored it: a right-to-left mark in front.
+        $subject = "\u{200F}القضية رقم 21/2026 إجراءات إفلاس";
+
+        $this->assertTrue(SentMailImporter::subjectMatches($subject, 'إجراءات إفلاس'));
+        $this->assertTrue(SentMailImporter::subjectMatches($subject, 'اجراءات افلاس'));
+        $this->assertTrue(SentMailImporter::subjectMatches($subject, 'رقم ٢١/٢٠٢٦'));
+        $this->assertTrue(SentMailImporter::subjectMatches($subject, '  إجراءات   إفلاس '));
+        $this->assertFalse(SentMailImporter::subjectMatches($subject, 'إجراءات تصفية'));
+    }
+
+    public function test_an_encoded_arabic_imap_subject_is_read_and_matched(): void
+    {
+        $subject = 'القضية رقم 21/2026 إجراءات إفلاس';
+        $raw = "Message-ID: <case21@firm.ae>\r\n"
+            ."Date: Tue, 1 Sep 2026 09:00:00 +0400\r\n"
+            ."To: client@alpha.ae\r\n"
+            .'Subject: =?UTF-8?B?'.base64_encode($subject)."?=\r\n"
+            ."Content-Type: text/html; charset=UTF-8\r\n\r\n"
+            .'<p>السادة المحترمين</p>';
+
+        $message = SentMailImporter::imapMessage(Message::fromString($raw));
+
+        $this->assertSame($subject, $message['subject']);
+        $this->assertTrue(SentMailImporter::subjectMatches($message['subject'], 'إجراءات إفلاس'));
+    }
+
     public function test_an_imap_message_is_read_into_the_same_shape(): void
     {
         $raw = "Message-ID: <abc@firm.ae>\r\n"
