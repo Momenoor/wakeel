@@ -9,7 +9,9 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class PartiesTable
 {
@@ -67,7 +69,32 @@ class PartiesTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                //
+                // Any of the chosen roles.
+                SelectFilter::make('role')
+                    ->label(__('Role'))
+                    ->options(Party::roleOptions())
+                    ->multiple()
+                    ->query(fn (Builder $query, array $data) => $query->when(
+                        $data['values'] ?? [],
+                        fn (Builder $query, array $roles) => $query->where(function (Builder $query) use ($roles): void {
+                            foreach ($roles as $role) {
+                                $query->orWhere(fn (Builder $q) => $q->withRole($role));
+                            }
+                        }),
+                    )),
+                // Experts of any of the chosen types.
+                SelectFilter::make('sub_role')
+                    ->label(__('Sub Role'))
+                    ->options(Party::expertTypeOptions())
+                    ->multiple()
+                    ->query(fn (Builder $query, array $data) => $query->when(
+                        $data['values'] ?? [],
+                        fn (Builder $query, array $types) => $query->where(function (Builder $query) use ($types): void {
+                            foreach ($types as $type) {
+                                $query->orWhere(fn (Builder $q) => $q->withRole('expert', $type));
+                            }
+                        }),
+                    )),
             ])
             ->recordActions([
                 ViewAction::make()->visible(fn ($record) => auth()->user()->can('view', $record)),

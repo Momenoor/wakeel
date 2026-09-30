@@ -46,14 +46,7 @@ class PartyForm
                             ->label(__('Fax')),
                         CheckboxList::make('role.role')
                             ->label(__('Role'))
-                            ->options([
-                                'party' => __('Party'),
-                                'expert' => __('Expert'),
-                                'representative' => __('Representative'),
-                                'employee' => __('Employee'),
-                                'tenant' => __('Tenant'),
-                                'owner' => __('Owner'),
-                            ])
+                            ->options(Party::roleOptions())
                             ->default(['party'])
                             ->required()
                             ->columns(4)
@@ -61,12 +54,8 @@ class PartyForm
                             ->live(),
                         CheckboxList::make('role.type')
                             ->label(__('Expert Type'))
-                            ->options([
-                                'certified' => __('Certified Expert'),
-                                'assistant' => __('Assistant Expert'),
-                                'external' => __('External Expert'),
-                                'external-assistant' => __('External Assistant'),
-                            ])->required(fn ($get) => in_array('expert', $get('role.role')))
+                            ->options(Party::expertTypeOptions())
+                            ->required(fn ($get) => in_array('expert', $get('role.role')))
                             ->visible(fn ($get) => in_array('expert', $get('role.role') ?? []))
                             ->columns(2)
                             ->columnSpanFull(),

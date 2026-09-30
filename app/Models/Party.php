@@ -120,6 +120,38 @@ class Party extends Model
     }
 
     /**
+     * The roles a party can hold.
+     *
+     * @return array<string, string>
+     */
+    public static function roleOptions(): array
+    {
+        return [
+            'party' => __('Party'),
+            'expert' => __('Expert'),
+            'representative' => __('Representative'),
+            'employee' => __('Employee'),
+            'tenant' => __('Tenant'),
+            'owner' => __('Owner'),
+        ];
+    }
+
+    /**
+     * An expert's sub role.
+     *
+     * @return array<string, string>
+     */
+    public static function expertTypeOptions(): array
+    {
+        return [
+            'certified' => __('Certified Expert'),
+            'assistant' => __('Assistant Expert'),
+            'external' => __('External Expert'),
+            'external-assistant' => __('External Assistant'),
+        ];
+    }
+
+    /**
      * Parties holding a given role, optionally narrowed to an expert type.
      *
      * `role` is a JSON array of objects, and every report asked about it with

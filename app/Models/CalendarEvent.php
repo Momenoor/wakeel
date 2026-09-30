@@ -50,7 +50,7 @@ class CalendarEvent extends Model
 
     public function matters(): BelongsToMany
     {
-        return $this->belongsToMany(Matter::class, 'calendar_event_matter');
+        return $this->belongsToMany(Matter::class, 'calendar_event_matter')->using(CalendarEventMatter::class);
     }
 
     public function createdBy(): BelongsTo

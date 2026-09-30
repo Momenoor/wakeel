@@ -127,7 +127,6 @@ class LeaveBalanceRelationManager extends RelationManager
                             ->maxLength(255)
                             ->columnSpanFull(),
                     ])
-                    ->columns(2)
                     ->action(function (array $data): void {
                         LeaveBalanceEntry::create([
                             'party_id' => $this->profile()->party_id,

@@ -3169,5 +3169,10 @@
     "This ticket is already paid.": "هذه التذكرة مدفوعة بالفعل.",
     "This ticket is in a payroll run; take it out of the run first.": "هذه التذكرة ضمن مسير رواتب؛ أخرجها من المسير أولاً.",
     "Only :balance annual leave days are left in the balance; book the rest as unpaid leave.": "المتبقي في الرصيد :balance يوماً فقط من الإجازة السنوية؛ سجّل الباقي كإجازة بدون أجر.",
-    "Flight Ticket :year": "تذكرة سفر :year"
+    "Flight Ticket :year": "تذكرة سفر :year",
+    "Sub Role": "الدور الفرعي",
+    "EOSG": "مكافأة نهاية الخدمة",
+    "Mark as left": "تسجيل كمغادر",
+    ":count employees updated.": "تم تحديث :count موظف.",
+    "Leave empty to keep each employee's current amount.": "اتركه فارغاً للإبقاء على المبلغ الحالي لكل موظف."
 }

@@ -76,6 +76,36 @@ class UnmatchedEventReferencesTest extends TestCase
         $this->assertSame([$typo->id], array_keys(UnmatchedEventReferences::missing()));
     }
 
+    public function test_an_event_linked_by_hand_to_a_matter_is_no_longer_listed(): void
+    {
+        $matter = Matter::factory()->create(['number' => 639, 'year' => 2025]);
+        $typo = $this->event('Session 6399/2025');
+
+        $this->assertArrayHasKey($typo->id, UnmatchedEventReferences::missing());
+
+        // Linking clears the cached list straight away.
+        $typo->matters()->attach($matter->id);
+        $this->assertSame([], UnmatchedEventReferences::missing());
+
+        // …and unlinking brings it back.
+        $typo->matters()->detach($matter->id);
+        $this->assertArrayHasKey($typo->id, UnmatchedEventReferences::missing());
+    }
+
+    public function test_an_event_naming_two_numbers_needs_both_accounted_for(): void
+    {
+        $found = Matter::factory()->create(['number' => 12, 'year' => 2024]);
+        $other = Matter::factory()->create(['number' => 77, 'year' => 2024]);
+        $event = $this->event('12/2024, 15/2024 (Dubai Courts)');
+
+        // 12/2024 is linked from the title; 15/2024 is still missing.
+        $event->matters()->syncWithoutDetaching([$found->id]);
+        $this->assertSame([$event->id => ['15/2024']], UnmatchedEventReferences::missing());
+
+        $event->matters()->syncWithoutDetaching([$other->id]);
+        $this->assertSame([], UnmatchedEventReferences::missing());
+    }
+
     public function test_the_dashboard_widget_lists_them_only_when_there_are_some(): void
     {
         Gate::before(fn () => true);

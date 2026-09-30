@@ -8,6 +8,9 @@ use App\Enums\PayrollRunStatus;
 use App\Enums\RequestStatus;
 use App\Enums\SalaryComponent;
 use App\Filament\Mms\Pages\FlightTickets;
+use App\Filament\Mms\Resources\EmployeeProfiles\Pages\EditEmployeeProfile;
+use App\Filament\Mms\Resources\EmployeeProfiles\RelationManagers\FlightTicketsRelationManager;
+use App\Filament\Mms\Resources\EmployeeProfiles\RelationManagers\LeaveBalanceRelationManager;
 use App\Filament\Mms\Resources\PayrollRuns\Pages\ViewPayrollRun;
 use App\Models\EmployeeProfile;
 use App\Models\EmployeeSalaryComponent;
@@ -23,6 +26,7 @@ use App\Services\MMS\LeaveBalanceService;
 use App\Services\MMS\LeaveRequestService;
 use App\Services\MMS\PayrollRunService;
 use App\Services\MMS\PayrollService;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -245,6 +249,29 @@ class LeaveBalanceAndFlightTicketTest extends TestCase
 
         $this->assertSame('paid', $ticket->fresh()->status()->value);
         $this->assertSame(FlightTicket::PAID_VIA_DIRECT, $ticket->fresh()->paid_via);
+    }
+
+    public function test_hr_adjusts_the_balance_and_adds_a_ticket_on_the_employee_page(): void
+    {
+        Gate::before(fn () => true);
+        Filament::setCurrentPanel('mms');
+        $this->actingAs(User::factory()->create());
+
+        $party = $this->employee(10, '2020-01-01', ['flight_ticket_entitled' => true, 'flight_ticket_amount' => 1800]);
+        $owner = ['ownerRecord' => $party->employeeProfile, 'pageClass' => EditEmployeeProfile::class];
+
+        Livewire::test(LeaveBalanceRelationManager::class, $owner)
+            ->assertSee(__('Annual leave balance: :days days', ['days' => '10']))
+            ->callAction(TestAction::make('adjust')->table(), ['days' => -2.5, 'entry_date' => '2026-10-01', 'note' => 'Correction'])
+            ->assertHasNoActionErrors();
+
+        $this->assertSame(7.5, $this->balances->balance($party->id));
+
+        Livewire::test(FlightTicketsRelationManager::class, $owner)
+            ->callAction(TestAction::make('create')->table(), ['year' => 2026, 'amount' => 1800])
+            ->assertHasNoActionErrors();
+
+        $this->assertSame('1800.00', FlightTicket::where('party_id', $party->id)->sole()->amount);
     }
 
     public function test_the_flight_tickets_page_lists_every_ticket(): void

@@ -7,6 +7,7 @@ use App\Models\Matter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Calendar events whose titles name a matter number (639/2025 …) that no
@@ -74,9 +75,16 @@ class UnmatchedEventReferences
         }
 
         $existing = self::existing(collect($refsByEvent)->flatten(1)->unique(fn ($ref) => $ref['number'].'/'.$ref['year']));
+        $links = self::linkCounts(array_keys($refsByEvent));
         $missing = [];
 
         foreach ($refsByEvent as $eventId => $refs) {
+            // Linked by hand to as many matters as the title names numbers
+            // (a mistyped number linked to the right matter): accounted for.
+            if (($links[$eventId] ?? 0) >= count($refs)) {
+                continue;
+            }
+
             $gone = collect($refs)
                 ->reject(fn ($ref) => isset($existing[$ref['number'].'/'.$ref['year']]))
                 ->map(fn ($ref) => $ref['number'].'/'.$ref['year'])
@@ -89,6 +97,30 @@ class UnmatchedEventReferences
         }
 
         return $missing;
+    }
+
+    /**
+     * How many matters each event is linked to.
+     *
+     * @param  list<int>  $eventIds
+     * @return array<int, int>
+     */
+    private static function linkCounts(array $eventIds): array
+    {
+        $counts = [];
+
+        foreach (array_chunk($eventIds, 500) as $chunk) {
+            DB::table('calendar_event_matter')
+                ->whereIn('calendar_event_id', $chunk)
+                ->selectRaw('calendar_event_id, COUNT(DISTINCT matter_id) as links')
+                ->groupBy('calendar_event_id')
+                ->get()
+                ->each(function (object $row) use (&$counts): void {
+                    $counts[(int) $row->calendar_event_id] = (int) $row->links;
+                });
+        }
+
+        return $counts;
     }
 
     /**

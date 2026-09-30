@@ -426,7 +426,7 @@ class Matter extends Model
 
     public function bulkCalendarEvents(): BelongsToMany
     {
-        return $this->belongsToMany(CalendarEvent::class, 'calendar_event_matter');
+        return $this->belongsToMany(CalendarEvent::class, 'calendar_event_matter')->using(CalendarEventMatter::class);
     }
 
     /**
