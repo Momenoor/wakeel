@@ -45,6 +45,15 @@ enum FeeType: string implements HasColor, HasLabel
         };
     }
 
+    /**
+     * Whether a fee's type — the enum, or its stored value from a form's
+     * state — is VAT.
+     */
+    public static function isVat(mixed $type): bool
+    {
+        return ($type instanceof self ? $type : self::tryFrom((string) $type)) === self::VAT;
+    }
+
     public function isNegative(): bool
     {
         return match ($this) {

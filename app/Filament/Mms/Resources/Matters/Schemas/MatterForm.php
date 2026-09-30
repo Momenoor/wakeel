@@ -476,7 +476,7 @@ class MatterForm
                                                         $currentPos = array_search($currentKey, $keys, true);
                                                         $nextKey = $keys[$currentPos + 1] ?? null;
 
-                                                        if (! $nextKey || ($fees[$nextKey]['type'] ?? '') !== 'vat') {
+                                                        if (! $nextKey || ! FeeType::isVat($fees[$nextKey]['type'] ?? null)) {
                                                             return;
                                                         }
 
@@ -495,7 +495,7 @@ class MatterForm
                                                     ->live()
                                                     ->inline(false)
                                                     ->extraAttributes(['class' => 'mx-4'])
-                                                    ->disabled(fn (Get $get) => $get('type') === 'vat')
+                                                    ->disabled(fn (Get $get) => FeeType::isVat($get('type')))
                                                     ->afterStateUpdated(function (bool $state, Set $set, Get $get) {
                                                         $amount = (float) $get('amount');
                                                         $rowId = $get('row_id');
@@ -529,7 +529,7 @@ class MatterForm
 
                                                             $vatRow = [
                                                                 'row_id' => (string) Str::uuid(),
-                                                                'type' => 'vat',
+                                                                'type' => FeeType::VAT->value,
                                                                 'amount' => $vat,
                                                                 'including_vat' => false,
                                                             ];
@@ -546,7 +546,7 @@ class MatterForm
                                                         } else {
                                                             $nextKey = $keys[$currentPos + 1] ?? null;
 
-                                                            if ($nextKey && ($fees[$nextKey]['type'] ?? '') === 'vat') {
+                                                            if ($nextKey && FeeType::isVat($fees[$nextKey]['type'] ?? null)) {
                                                                 $vatAmount = (float) $fees[$nextKey]['amount'];
                                                                 $restored = round($amount + $vatAmount, 2);
 

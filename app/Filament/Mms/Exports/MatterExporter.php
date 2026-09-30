@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Exports;
 
+use App\Enums\FeeType;
 use App\Models\Matter;
 use Filament\Actions\Exports\ExportColumn;
 use Filament\Actions\Exports\Exporter;
@@ -65,11 +66,11 @@ class MatterExporter extends Exporter
 
             ExportColumn::make('total_fees_without_vat')
                 ->label(__('Total Fees (Without VAT)'))
-                ->getStateUsing(fn ($record) => number_format($record->fees->where('type', '!=', 'vat')->sum('amount'))),
+                ->getStateUsing(fn ($record) => number_format($record->fees->reject(fn ($fee) => $fee->type === FeeType::VAT)->sum('amount'))),
 
             ExportColumn::make('total_vat')
                 ->label(__('Total VAT'))
-                ->getStateUsing(fn ($record) => number_format($record->fees->where('type', 'vat')->sum('amount'))),
+                ->getStateUsing(fn ($record) => number_format($record->fees->filter(fn ($fee) => $fee->type === FeeType::VAT)->sum('amount'))),
 
             ExportColumn::make('total_fees')
                 ->label(__('Total'))
