@@ -54,6 +54,7 @@ class LetterIssuer
                 'sent_by' => $userId,
                 'subject' => $composer->subject(),
                 'attention' => filled($attention) ? trim($attention) : null,
+                'locale' => $template->locale ?: 'ar',
                 'body' => (string) $template->body,
                 'inputs' => $inputs,
                 'rendered_html' => $composer->bodyHtml(),
@@ -83,8 +84,10 @@ class LetterIssuer
     {
         $letter->loadMissing(['template', 'matter', 'letterhead', 'recipients']);
 
-        // The wording as issued, not the template's current one.
-        $template = ($letter->template ?? new LetterTemplate(['locale' => 'ar']))->replicate();
+        // The wording as issued, not the template's current one. A letter
+        // written without a template: its own language and subject.
+        $template = ($letter->template ?? new LetterTemplate(['subject' => $letter->subject]))->replicate();
+        $template->locale = $letter->locale ?? $template->locale ?? 'ar';
         $template->body = (string) $letter->body;
 
         return new LetterComposer(
@@ -106,18 +109,20 @@ class LetterIssuer
 
     /**
      * Change an issued letter — its date, letterhead, attention line and
-     * recipients — keeping its reference and its wording as issued; the
-     * letter's text is rendered again from them.
+     * recipients, and its wording if given (this letter's only: the
+     * template stays as it is) — keeping its reference; the letter's text
+     * is rendered again from them.
      *
      * @param  list<array{name: string, role: ?string, emails: list<string>, party_id?: int|null}>  $recipients
      */
-    public function revise(MatterLetter $letter, array $recipients, CarbonInterface $date, ?Letterhead $letterhead, ?string $attention): MatterLetter
+    public function revise(MatterLetter $letter, array $recipients, CarbonInterface $date, ?Letterhead $letterhead, ?string $attention, ?string $body = null): MatterLetter
     {
-        return DB::transaction(function () use ($letter, $recipients, $date, $letterhead, $attention) {
+        return DB::transaction(function () use ($letter, $recipients, $date, $letterhead, $attention, $body) {
             $letter->update([
                 'letter_date' => $date,
                 'letterhead_id' => $letterhead?->getKey() ?? $letter->letterhead_id,
                 'attention' => filled($attention) ? trim($attention) : null,
+                ...(filled(strip_tags((string) $body)) ? ['body' => LetterComposer::normalizeMergeTags((string) $body)] : []),
             ]);
 
             $letter->recipients()->delete();

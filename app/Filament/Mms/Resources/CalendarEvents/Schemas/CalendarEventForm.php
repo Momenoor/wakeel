@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\CalendarEvents\Schemas;
 
 use App\Filament\Mms\Actions\Calendar\CalendarMatterActions;
+use App\Filament\Support\RichEditorDirection;
 use App\Models\CalendarEvent;
 use App\Models\Matter;
 use App\Services\MMS\Calendar\EventMatterLinker;
@@ -139,6 +140,7 @@ class CalendarEventForm
 
                 RichEditor::make('description')
                     ->label(__('Description'))
+                    ->extraInputAttributes(['dir' => 'auto'], merge: true)->tap(RichEditorDirection::apply(...))
                     ->columnSpanFull(),
 
                 Toggle::make('update_next_session_date')

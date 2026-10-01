@@ -10,6 +10,7 @@ use App\Models\MatterLetterRecipient;
 use App\Services\MMS\BulkMailPlaceholders;
 use App\Services\MMS\SenderMailer;
 use App\Services\MMS\SentFolder;
+use App\Support\TextDirection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -36,6 +37,8 @@ class LetterMailer
      * @param  list<int>  $recipientIds  MatterLetterRecipient ids
      * @param  list<string>  $formats  'pdf' and/or 'docx'
      * @param  list<string>  $cc
+     * @param  ?string  $subject  this send's own subject, instead of the template's
+     * @param  ?string  $body  this send's own covering email, instead of the template's
      * @return array{sent: int, failed: int, skipped: int, errors: list<string>}
      */
     public function send(
@@ -47,6 +50,8 @@ class LetterMailer
         array $recipientIds = [],
         array $cc = [],
         bool $separate = false,
+        ?string $subject = null,
+        ?string $body = null,
     ): array {
         $sender = SenderMailer::sender($senderKey);
         $composer = LetterIssuer::composerFor($letter);
@@ -67,7 +72,7 @@ class LetterMailer
 
         foreach ($groups as $group) {
             $to = $group->flatMap(fn (MatterLetterRecipient $r) => $this->emails($r))->unique()->values()->all();
-            $email = $this->email($composer, $mode, $template, $separate ? $group->first() : null, $files);
+            $email = $this->email($composer, $mode, $template, $separate ? $group->first() : null, $files, $subject, $body);
 
             try {
                 $sent = SenderMailer::using($sender, fn () => Mail::to($to ?: $cc)->cc($to ? $cc : [])->send($email));
@@ -110,9 +115,58 @@ class LetterMailer
     }
 
     /**
+     * The subject and covering email to start from in the send screen: the
+     * template's (or the built-in note), with the letter's details already
+     * filled in — {{recipient.name}} stays, for each recipient's own. Edited
+     * there, it's used for that one send only; the template stays as it is.
+     *
+     * @return array{subject: string, body: ?string}
+     */
+    public function draft(MatterLetter $letter, string $mode, ?EmailTemplate $template): array
+    {
+        $composer = LetterIssuer::composerFor($letter);
+        $values = array_map('strip_tags', $composer->values());
+
+        if ($mode === self::BODY) {
+            return ['subject' => self::bodySubject($values), 'body' => null];
+        }
+
+        return [
+            'subject' => BulkMailPlaceholders::apply($template?->subject ?? '{{reference}} — {{subject}}', $values),
+            'body' => BulkMailPlaceholders::apply(LetterComposer::normalizeMergeTags($template?->body ?? self::defaultCoverNote($composer->isArabic())), $values, escape: true),
+        ];
+    }
+
+    /**
+     * The email exactly as it will go to one recipient (no attachments),
+     * its images inline — for the preview before sending.
+     *
+     * @return array{subject: string, html: string, rtl: bool}
+     */
+    public function preview(MatterLetter $letter, string $mode, ?EmailTemplate $template, ?MatterLetterRecipient $recipient, ?string $subject = null, ?string $body = null): array
+    {
+        $email = $this->email(LetterIssuer::composerFor($letter), $mode, $template, $recipient, [], $subject, $body);
+
+        $html = $email->letterHtml;
+        foreach ($email->images as $token => $path) {
+            $html = str_replace($token, 'data:'.(mime_content_type($path) ?: 'image/png').';base64,'.base64_encode((string) file_get_contents($path)), $html);
+        }
+
+        return ['subject' => $email->emailSubject, 'html' => $html, 'rtl' => $email->rtl];
+    }
+
+    /**
+     * @param  array<string, string>  $values
+     */
+    private static function bodySubject(array $values): string
+    {
+        return trim($values['reference'].' — '.$values['subject'], ' —');
+    }
+
+    /**
      * @param  list<array{name: string, data: string, mime: string}>  $files
      */
-    private function email(LetterComposer $composer, string $mode, ?EmailTemplate $template, ?MatterLetterRecipient $recipient, array $files): LetterEmail
+    private function email(LetterComposer $composer, string $mode, ?EmailTemplate $template, ?MatterLetterRecipient $recipient, array $files, ?string $subjectOverride = null, ?string $bodyOverride = null): LetterEmail
     {
         $values = [
             ...$composer->values(),
@@ -128,22 +182,24 @@ class LetterMailer
             [$html, $images] = $this->embeddable($header.$composer->bodyHtml());
 
             return new LetterEmail(
-                trim($values['reference'].' — '.$values['subject'], ' —'),
+                BulkMailPlaceholders::apply(filled($subjectOverride) ? $subjectOverride : self::bodySubject($values), array_map('strip_tags', $values)),
                 $html,
                 $arabic,
                 $images,
             );
         }
 
-        $subject = $template?->subject ?? '{{reference}} — {{subject}}';
-        $body = $template?->body ?? self::defaultCoverNote($composer->isArabic());
+        $subject = filled($subjectOverride) ? $subjectOverride : ($template?->subject ?? '{{reference}} — {{subject}}');
+        $body = filled(strip_tags((string) $bodyOverride)) ? $bodyOverride : ($template?->body ?? self::defaultCoverNote($composer->isArabic()));
+        $rtl = ($template?->locale ?? ($composer->isArabic() ? 'ar' : 'en')) !== 'en';
         $html = BulkMailPlaceholders::apply(LetterComposer::normalizeMergeTags($body), array_map('strip_tags', $values), escape: true);
-        [$html, $images] = $this->embeddable($html);
+        // Outlook knows no start or end: the editor's alignment as left/right.
+        [$html, $images] = $this->embeddable(TextDirection::physicalAlignment($html, $rtl));
 
         return new LetterEmail(
             BulkMailPlaceholders::apply($subject, array_map('strip_tags', $values)),
             $html,
-            ($template?->locale ?? ($composer->isArabic() ? 'ar' : 'en')) !== 'en',
+            $rtl,
             $images,
             $files,
         );

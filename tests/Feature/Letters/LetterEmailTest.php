@@ -164,6 +164,62 @@ class LetterEmailTest extends TestCase
         $this->assertStringContainsString('نرفق لكم طيه الخطاب رقم JPA/2026/986/1', $this->sent[0]->getHtmlBody());
     }
 
+    public function test_the_email_is_previewed_and_can_be_changed_for_this_send_only(): void
+    {
+        $template = EmailTemplate::create([
+            'name' => 'Cover', 'locale' => 'ar', 'is_active' => true,
+            'subject' => 'خطابنا {{reference}}',
+            'body' => '<p>السادة/ {{recipient.name}}</p><p>مرفق الخطاب {{reference}}.</p>',
+        ]);
+        $mona = $this->letter->recipients->first();
+
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->letter->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('email', $this->letter)
+            ->setTableActionData(['sender' => 'iflas', 'email_template_id' => $template->id, 'recipients' => [$mona->id], 'separate' => true])
+            // Starts from the template, the letter's details filled in; each
+            // recipient's name still to come.
+            ->assertTableActionDataSet([
+                'subject' => 'خطابنا JPA/2026/986/1',
+                'body' => '<p>السادة/ {{recipient.name}}</p><p>مرفق الخطاب JPA/2026/986/1.</p>',
+            ])
+            // The preview: as it goes to the first recipient.
+            ->assertMountedActionModalSee(['السادة/ منى أحمد', 'mona@example.com'])
+            ->setTableActionData([
+                'subject' => 'خطاب عاجل',
+                'body' => '<p>السادة/ {{recipient.name}}</p><p>نص لهذه المرة فقط.</p>',
+            ])
+            ->assertMountedActionModalSee('نص لهذه المرة فقط.')
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+
+        $this->assertCount(1, $this->sent);
+        $this->assertSame('خطاب عاجل', $this->sent[0]->getSubject());
+        $this->assertStringContainsString('السادة/ منى أحمد', $this->sent[0]->getHtmlBody());
+        $this->assertStringContainsString('نص لهذه المرة فقط.', $this->sent[0]->getHtmlBody());
+        // The template stays as it was.
+        $this->assertSame('خطابنا {{reference}}', $template->fresh()->subject);
+    }
+
+    public function test_the_covering_emails_alignment_goes_out_as_left_and_right(): void
+    {
+        app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::ATTACHMENT, null, ['pdf'], [$this->letter->recipients->first()->id],
+            body: '<p style="text-align: start">تحية طيبة</p><p style="text-align: end">المخلص</p>');
+
+        $html = $this->sent[0]->getHtmlBody();
+        $this->assertStringContainsString('<p style="text-align: right">تحية طيبة</p><p style="text-align: left">المخلص</p>', $html);
+    }
+
+    public function test_the_letter_as_the_email_is_previewed_with_its_signature(): void
+    {
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->letter->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('email', $this->letter)
+            ->setTableActionData(['mode' => LetterMailer::BODY])
+            ->assertTableActionDataSet(['subject' => 'JPA/2026/986/1 — إشعار الدعوى رقم 986/2026'])
+            ->assertMountedActionModalSee('نص الخطاب.')
+            // The signature, inline in the preview.
+            ->assertMountedActionModalSeeHtml('data:image/png;base64,');
+    }
+
     public function test_the_email_templates_screen(): void
     {
         $this->get(EmailTemplateResource::getUrl())->assertSuccessful();

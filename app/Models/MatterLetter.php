@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * frozen copy of the letter as issued — editing the template afterwards
  * never changes a letter already sent.
  */
-#[Fillable('letter_template_id', 'matter_id', 'reference', 'sequence', 'letterhead_id', 'sent_by', 'sender_key', 'subject', 'attention', 'body', 'inputs', 'rendered_html', 'letter_date', 'status', 'sent_at')]
+#[Fillable('letter_template_id', 'matter_id', 'reference', 'sequence', 'letterhead_id', 'sent_by', 'sender_key', 'subject', 'attention', 'locale', 'body', 'inputs', 'rendered_html', 'letter_date', 'status', 'sent_at')]
 class MatterLetter extends Model
 {
     public function casts(): array

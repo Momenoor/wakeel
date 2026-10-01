@@ -8,6 +8,8 @@ use App\Models\LetterTemplate;
 use App\Models\Matter;
 use App\Models\MatterParty;
 use App\Services\MMS\BulkMailPlaceholders;
+use App\Services\MMS\Letters\Blocks\SignatureBlock;
+use App\Support\TextDirection;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
@@ -256,7 +258,16 @@ class LetterComposer
         $text = array_diff_key($values, $blocks);
         $html = BulkMailPlaceholders::apply($html, $text, escape: true);
 
-        return BulkMailPlaceholders::apply($html, $blocks);
+        return $this->physicalAlignment(BulkMailPlaceholders::apply($html, $blocks));
+    }
+
+    /**
+     * The editor aligns to the text's start or end; mPDF and Word know only
+     * left and right — in an Arabic letter the start is the right.
+     */
+    private function physicalAlignment(string $html): string
+    {
+        return TextDirection::physicalAlignment($html, $this->isArabic());
     }
 
     public function subject(): string
@@ -265,17 +276,12 @@ class LetterComposer
     }
 
     /**
-     * The rich editor stores an inserted merge tag as
-     * <span data-type="mergeTag" data-id="key">…</span>; the letter treats
-     * it exactly like a typed {{key}}.
+     * The template's HTML as the letter reads it: an inserted merge tag as
+     * a typed {{key}}, and a signature block as its lines and images.
      */
     public static function normalizeMergeTags(string $html): string
     {
-        return preg_replace(
-            '/<span[^>]*data-type="mergeTag"[^>]*data-id="([^"]+)"[^>]*>.*?<\/span>/su',
-            '{{$1}}',
-            $html,
-        ) ?? $html;
+        return BulkMailPlaceholders::normalizeMergeTags(SignatureBlock::expand($html));
     }
 
     /**

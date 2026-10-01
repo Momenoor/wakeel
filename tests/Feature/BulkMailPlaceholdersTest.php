@@ -194,6 +194,76 @@ class BulkMailPlaceholdersTest extends TestCase
             ->assertSee('Dubai Courts');
     }
 
+    public function test_the_editors_placeholder_menu_follows_the_form(): void
+    {
+        $this->actingAs(User::factory()->create()->assignRole(
+            Role::firstOrCreate(['name' => config('filament-shield.super_admin.name', 'super_admin'), 'guard_name' => 'web'])
+        ));
+        Filament::setCurrentPanel('admin');
+
+        $page = Livewire::test(CreateBulkMailCampaign::class)
+            ->assertSeeHtml('data-id="name"')
+            ->assertDontSeeHtml('data-id="claim_amount"')
+            ->assertDontSeeHtml('data-id="matter.court"');
+        $key = fn (string $html): string => preg_match('/wire:key="(merge-tags-body-[0-9a-f]+)"/', $html, $m) ? $m[1] : '';
+        $before = $key($page->html());
+
+        // A key defined, and a matter chosen: both in the menu, which is
+        // drawn again (a new key) to show them.
+        $page->fillForm(['placeholders' => ['claim_amount'], 'matter_id' => $this->matter()->id])
+            ->assertSeeHtml('data-id="claim_amount"')
+            ->assertSeeHtml('data-id="matter.court"')
+            ->assertSeeHtml('data-id="matter.custom.Trustee Name"');
+        $this->assertNotSame($before, $key($page->html()));
+
+        // Removed again: gone from the menu.
+        $page->fillForm(['placeholders' => []])->assertDontSeeHtml('data-id="claim_amount"');
+    }
+
+    public function test_placeholders_inserted_from_the_menu_are_filled(): void
+    {
+        $campaign = $this->campaign(
+            $this->matter(),
+            'Notice',
+            '<p>Dear <span data-type="mergeTag" data-id="name">Recipient name</span>, matter <span data-type="mergeTag" data-id="matter.reference">Matter number/year</span>.</p>',
+        );
+
+        $this->assertStringContainsString('Dear Emirates Trading LLC, matter 125/2025.', $campaign->renderBody($this->recipient($campaign)));
+    }
+
+    public function test_the_editor_has_left_right_and_justify_and_reads_as_typed(): void
+    {
+        $this->actingAs(User::factory()->create()->assignRole(
+            Role::firstOrCreate(['name' => config('filament-shield.super_admin.name', 'super_admin'), 'guard_name' => 'web'])
+        ));
+        Filament::setCurrentPanel('admin');
+
+        $html = Livewire::test(CreateBulkMailCampaign::class)->html();
+
+        $this->assertStringContainsString('aria-label="Align left"', $html);
+        $this->assertStringContainsString('aria-label="Align right"', $html);
+        $this->assertStringContainsString('aria-label="Align justify"', $html);
+        $this->assertStringNotContainsString('aria-label="Align start"', $html);
+        // No language of its own: Arabic typed in the English interface runs right to left.
+        $this->assertStringContainsString('dir="auto"', $html);
+    }
+
+    public function test_the_alignment_goes_out_as_left_and_right(): void
+    {
+        // Arabic: the start is the right.
+        $campaign = $this->campaign(null, 'إشعار', '<p style="text-align: start">السادة/ {{name}}</p><p style="text-align: end">مع التحية</p><p style="text-align: justify">نص</p>');
+        $this->assertStringContainsString(
+            '<p style="text-align: right">السادة/ Emirates Trading LLC</p><p style="text-align: left">مع التحية</p><p style="text-align: justify">نص</p>',
+            $campaign->renderBody($this->recipient($campaign)),
+        );
+
+        $campaign = $this->campaign(null, 'Notice', '<p style="text-align: start">Dear {{name}}</p><p style="text-align: end">Regards</p>');
+        $this->assertStringContainsString(
+            '<p style="text-align: left">Dear Emirates Trading LLC</p><p style="text-align: right">Regards</p>',
+            $campaign->renderBody($this->recipient($campaign)),
+        );
+    }
+
     public function test_the_import_keeps_every_extra_column_as_a_placeholder(): void
     {
         $campaign = $this->campaign(null, 's', 'b');

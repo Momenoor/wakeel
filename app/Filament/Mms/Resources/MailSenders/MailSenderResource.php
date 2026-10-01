@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Resources\MailSenders;
 
 use App\Filament\Concerns\HasModuleGate;
 use App\Filament\Mms\Resources\MailSenders\Pages\ManageMailSenders;
+use App\Filament\Support\RichEditorDirection;
 use App\Models\MailSender;
 use App\Services\MMS\MailboxDetector;
 use App\Services\MMS\SenderMailer;
@@ -177,7 +178,7 @@ class MailSenderResource extends Resource
                 ->collapsed()
                 ->columnSpanFull()
                 ->schema([
-                    RichEditor::make('signature')->hiddenLabel(),
+                    RichEditor::make('signature')->hiddenLabel()->extraInputAttributes(['dir' => 'auto'], merge: true)->tap(RichEditorDirection::apply(...)),
                 ]),
         ]);
     }

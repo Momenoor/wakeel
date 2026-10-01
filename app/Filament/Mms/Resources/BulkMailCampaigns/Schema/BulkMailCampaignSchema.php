@@ -3,6 +3,8 @@
 namespace App\Filament\Mms\Resources\BulkMailCampaigns\Schema;
 
 use App\Enums\BulkMailCampaignStatus;
+use App\Filament\Support\LiveMergeTags;
+use App\Filament\Support\RichEditorDirection;
 use App\Models\BulkMailCampaign;
 use App\Models\Matter;
 use App\Services\MMS\BulkMailPlaceholders;
@@ -33,13 +35,19 @@ class BulkMailCampaignSchema
                         ->label(__('bulk_mail.fields.subject'))
                         ->required()
                         ->hint(__('bulk_mail.hints.subject')),
-                    RichEditor::make('body')
-                        ->label(__('bulk_mail.fields.body'))
-                        ->required()
-                        ->hint(__('bulk_mail.hints.body'))
-
-                        ->columnSpanFull()
-                        ->live(),
+                    // The placeholder menu: the recipient's fields, the keys
+                    // defined below, the imported columns and, with a matter
+                    // chosen, its details — redrawn as any of them change.
+                    LiveMergeTags::wrap(
+                        RichEditor::make('body')
+                            ->label(__('bulk_mail.fields.body'))
+                            ->required()
+                            ->hint(__('bulk_mail.hints.body'))
+                            ->mergeTags(fn ($get, ?BulkMailCampaign $record) => self::mergeTags($get, $record))
+                            ->extraInputAttributes(['dir' => 'auto'], merge: true)->tap(RichEditorDirection::apply(...))
+                            ->live(),
+                        fn ($get, ?BulkMailCampaign $record) => self::mergeTags($get, $record),
+                    )->columnSpanFull(),
 
                     Select::make('from_sender_key')
                         ->label(__('bulk_mail.fields.from_sender'))
@@ -86,7 +94,8 @@ class BulkMailCampaignSchema
 
                     TagsInput::make('placeholders')
                         ->label(__('bulk_mail.fields.placeholders'))
-                        ->hint(__('bulk_mail.hints.placeholders')),
+                        ->hint(__('bulk_mail.hints.placeholders'))
+                        ->live(),
                 ]),
 
             Section::make(__('bulk_mail.sections.attachment'))
@@ -123,6 +132,43 @@ class BulkMailCampaignSchema
                         ->default(BulkMailCampaignStatus::Draft),
                 ])->columns(3),
         ]);
+    }
+
+    /**
+     * The editor's placeholder menu, key => label.
+     *
+     * @return array<string, string>
+     */
+    public static function mergeTags(callable $get, ?BulkMailCampaign $campaign): array
+    {
+        $tags = [
+            'name' => __('Recipient name'),
+            'email' => __('Recipient email'),
+        ];
+
+        foreach (array_filter((array) ($get('placeholders') ?? []), 'filled') as $key) {
+            $tags[(string) $key] ??= (string) $key;
+        }
+
+        $imported = collect($campaign?->recipients()->whereNotNull('placeholders')->limit(50)->pluck('placeholders'))
+            ->flatMap(fn ($placeholders) => array_keys((array) $placeholders))
+            ->unique();
+
+        foreach ($imported as $key) {
+            $tags[(string) $key] ??= (string) $key;
+        }
+
+        $matter = filled($get('matter_id')) ? Matter::find($get('matter_id')) : null;
+
+        if ($matter) {
+            $tags += BulkMailPlaceholders::matterCatalog();
+
+            foreach (array_keys(BulkMailPlaceholders::forMatter($matter)) as $key) {
+                $tags[$key] ??= str_replace('matter.custom.', '', $key);
+            }
+        }
+
+        return $tags;
     }
 
     /**

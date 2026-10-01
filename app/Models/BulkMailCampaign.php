@@ -4,7 +4,9 @@ namespace App\Models;
 
 use App\Enums\BulkMailCampaignStatus;
 use App\Services\MMS\BulkMailPlaceholders;
+use App\Services\MMS\BulkMailService;
 use App\Services\MMS\SenderMailer;
+use App\Support\TextDirection;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
@@ -103,10 +105,15 @@ class BulkMailCampaign extends Model
         }
 
         $body = BulkMailPlaceholders::apply(
-            (string) $this->body,
+            BulkMailPlaceholders::normalizeMergeTags((string) $this->body),
             [...BulkMailPlaceholders::for($this, $recipient), ...$recipientPlaceholders],
             escape: true,
         );
+
+        // Outlook knows no start or end: the editor's alignment as left/right,
+        // the way the email reads (right to left with any Arabic in it, as
+        // BulkMailMessage lays it out).
+        $body = TextDirection::physicalAlignment($body, BulkMailService::containsArabic($body));
 
         $sender = $this->sender_config;
         if ($sender && isset($sender['signature'])) {

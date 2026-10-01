@@ -3,8 +3,11 @@
 namespace App\Filament\Mms\Resources\LetterTemplates\Schemas;
 
 use App\Enums\LetterTemplateCategories;
+use App\Filament\Support\LiveMergeTags;
+use App\Filament\Support\RichEditorDirection;
 use App\Models\Letterhead;
 use App\Models\LetterItem;
+use App\Services\MMS\Letters\Blocks\SignatureBlock;
 use App\Services\MMS\Letters\LetterComposer;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\RichEditor;
@@ -108,6 +111,8 @@ class LetterTemplateForm
                                     ->label(__('Key'))
                                     ->required()
                                     ->alphaDash()
+                                    // The editor's placeholder menu follows it.
+                                    ->live(onBlur: true)
                                     ->helperText(__('Used as {{input.KEY}}')),
                                 Select::make('type')
                                     ->label(__('Type'))
@@ -149,22 +154,29 @@ class LetterTemplateForm
                 Section::make(__('Letter'))
                     ->columnSpanFull()
                     ->schema([
-                        RichEditor::make('body')
-                            ->label('')
-                            ->required()
-                            ->toolbarButtons([
-                                ['bold', 'italic', 'underline', 'textColor', 'highlight'],
-                                ['h2', 'h3', 'bulletList', 'orderedList', 'horizontalRule', 'table'],
-                                ['alignStart', 'alignCenter', 'alignEnd', 'alignJustify'],
-                                ['mergeTags'],
-                                ['undo', 'redo'],
-                            ])
-                            ->mergeTags(fn (Get $get) => LetterComposer::catalog(null, $get('inputs') ?? []))
-                            ->extraInputAttributes(fn (Get $get) => ['dir' => $get('locale') === 'en' ? 'ltr' : 'rtl', 'style' => 'min-height: 30rem;']),
+                        // The placeholder menu is redrawn as fields are added,
+                        // renamed or removed above.
+                        LiveMergeTags::wrap(
+                            RichEditor::make('body')
+                                ->label('')
+                                ->required()
+                                ->toolbarButtons([
+                                    ['bold', 'italic', 'underline', 'textColor', 'highlight'],
+                                    ['h2', 'h3', 'bulletList', 'orderedList', 'horizontalRule', 'table'],
+                                    ['alignStart', 'alignCenter', 'alignEnd', 'alignJustify'],
+                                    ['mergeTags', 'customBlocks'],
+                                    ['undo', 'redo'],
+                                ])
+                                ->mergeTags(fn (Get $get) => LetterComposer::catalog(null, $get('inputs') ?? []))
+                                ->customBlocks([SignatureBlock::class])
+                                ->tap(RichEditorDirection::apply(...))
+                                ->extraInputAttributes(fn (Get $get) => ['dir' => $get('locale') === 'en' ? 'ltr' : 'rtl', 'style' => 'min-height: 30rem;']),
+                            fn (Get $get) => LetterComposer::catalog(null, $get('inputs') ?? []),
+                        ),
 
                         TextEntry::make('placeholder_help')
                             ->hiddenLabel()
-                            ->state(new HtmlString(e(__('Insert placeholders from the { } menu, or type them: {{recipients}} puts the addressee block (put it alone on its own line), {{input.KEY}} what was filled in, {{input.KEY.day}} a date\'s weekday, {{signature}} and {{stamp}} the letterhead\'s images.')))),
+                            ->state(new HtmlString(e(__('Insert placeholders from the { } menu, or type them: {{recipients}} puts the addressee block (put it alone on its own line), {{input.KEY}} what was filled in, {{input.KEY.day}} a date\'s weekday, {{signature}} and {{stamp}} the letterhead\'s images. The blocks menu has a ready signature block: the expert\'s name with the signature and stamp, placed where you drop it.')))),
                     ]),
             ]);
     }

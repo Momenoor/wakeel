@@ -7,6 +7,7 @@ use App\Filament\Mms\Resources\Letterheads\Pages\DesignLetterhead;
 use App\Filament\Mms\Resources\LetterItems\LetterItemResource;
 use App\Filament\Mms\Resources\LetterTemplates\Actions\PreviewLetterTemplateAction;
 use App\Filament\Mms\Resources\LetterTemplates\LetterTemplateResource;
+use App\Filament\Mms\Resources\LetterTemplates\Pages\CreateLetterTemplate;
 use App\Filament\Mms\Resources\LetterTemplates\Pages\ViewLetterTemplate;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
@@ -21,6 +22,7 @@ use App\Models\Party;
 use App\Models\Setting;
 use App\Models\Type;
 use App\Models\User;
+use App\Services\MMS\Letters\Blocks\SignatureBlock;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterDocx;
 use App\Services\MMS\Letters\LetterIssuer;
@@ -274,6 +276,172 @@ class LetterBuilderTest extends TestCase
         $this->assertSame('2026-10-02', $letter->letter_date->toDateString());
         $this->assertSame(['شركة ألفا', 'Court clerk'], $letter->recipients()->pluck('name')->all());
         $this->assertStringContainsString('لعناية السيد/ Ahmed Ali المحترم', LetterIssuer::composerFor($letter)->values()['recipients']);
+    }
+
+    public function test_a_letters_wording_can_be_changed_for_that_letter_only(): void
+    {
+        $candidates = array_values(LetterComposer::candidates($this->matter));
+        $letter = app(LetterIssuer::class)->issue($this->template, $this->matter, [$candidates[0]], []);
+
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('editLetter', $letter)
+            // The wording as issued, placeholders and all, to change.
+            ->assertTableActionDataSet(['body' => $letter->body])
+            ->setTableActionData([
+                'body' => '<p>{{recipients}}</p><p>نص معدّل للدعوى رقم <span data-type="mergeTag" data-id="matter.number">matter.number</span>.</p>',
+            ])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+
+        $letter->refresh();
+        $this->assertSame('<p>{{recipients}}</p><p>نص معدّل للدعوى رقم {{matter.number}}.</p>', $letter->body);
+        $this->assertStringContainsString('نص معدّل للدعوى رقم 986.', $letter->rendered_html);
+        $this->assertStringContainsString('منى أحمد', $letter->rendered_html);
+        // The template is untouched.
+        $this->assertStringContainsString('{{input.documents}}', $this->template->fresh()->body);
+    }
+
+    public function test_a_letter_can_be_written_without_a_template(): void
+    {
+        $candidateIds = array_keys(LetterComposer::candidates($this->matter));
+
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('write')
+            ->assertTableActionDataSet(['body' => LettersRelationManager::freeLetterBody(true)])
+            ->setTableActionData(['locale' => 'en'])
+            // Untouched wording follows the language.
+            ->assertTableActionDataSet(['body' => LettersRelationManager::freeLetterBody(false)])
+            ->setTableActionData([
+                'subject' => 'Documents requested',
+                'recipients' => [$candidateIds[0]],
+                'attention' => 'Ahmed Ali',
+                'body' => '<p>{{recipients}}</p><p>Subject: {{subject}}</p><p>Please send the documents for case {{matter.number}}.</p><p>{{signature}}</p>',
+            ])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+
+        $letter = MatterLetter::sole();
+        $this->assertNull($letter->letter_template_id);
+        $this->assertSame('JPA/2026/986/1', $letter->reference);
+        $this->assertSame('Documents requested', $letter->subject);
+        $this->assertSame('en', $letter->locale);
+
+        // Rebuilt later — as PDF or Word — the same: its language and subject kept.
+        $composer = LetterIssuer::composerFor($letter);
+        $this->assertFalse($composer->isArabic());
+        $html = $composer->bodyHtml();
+        $this->assertStringContainsString('Subject: Documents requested', $html);
+        $this->assertStringContainsString('Please send the documents for case 986.', $html);
+        $this->assertStringContainsString('Attention: Mr. Ahmed Ali', $html);
+        $this->assertStringStartsWith('%PDF', (new LetterPdf($composer))->render());
+    }
+
+    public function test_a_letter_can_be_deleted_from_the_matter_page(): void
+    {
+        $letter = app(LetterIssuer::class)->issue($this->template, $this->matter, [array_values(LetterComposer::candidates($this->matter))[0]], []);
+
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->assertTableActionVisible('deleteLetter', $letter)
+            ->callTableAction('deleteLetter', $letter);
+
+        $this->assertModelMissing($letter);
+        $this->assertSame(0, $letter->recipients()->count());
+    }
+
+    public function test_a_letter_is_previewed_as_it_prints(): void
+    {
+        $letter = app(LetterIssuer::class)->issue($this->template, $this->matter, [array_values(LetterComposer::candidates($this->matter))[0]], []);
+
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('preview', $letter)
+            ->assertMountedActionModalSeeHtml([route('letters.pdf', $letter), '<iframe']);
+    }
+
+    public function test_a_templates_list_of_items_starts_as_an_empty_list(): void
+    {
+        // Left unset, the checkboxes would share one true/false value —
+        // ticking one would tick them all.
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('issue')
+            ->setTableActionData(['letter_template_id' => $this->template->id])
+            ->assertTableActionDataSet(['inputs.documents' => []])
+            ->setTableActionData(['inputs.documents' => [$this->items[1]]])
+            ->assertTableActionDataSet(['inputs.documents' => [$this->items[1]]]);
+    }
+
+    public function test_the_templates_placeholder_menu_follows_its_fields(): void
+    {
+        $page = Livewire::test(CreateLetterTemplate::class)
+            ->assertSeeHtml('data-id="matter.experts"')
+            ->assertDontSeeHtml('data-id="input.amount"')
+            // The signature block is in the blocks menu.
+            ->assertSee(SignatureBlock::getLabel());
+
+        $page->fillForm(['inputs' => [['label' => 'Amount', 'key' => 'amount', 'type' => 'text'], ['label' => 'Due', 'key' => 'due', 'type' => 'date']]])
+            ->assertSeeHtml('data-id="input.amount"')
+            ->assertSeeHtml('data-id="input.due.day"');
+
+        $page->fillForm(['inputs' => [['label' => 'Due', 'key' => 'due', 'type' => 'date']]])
+            ->assertDontSeeHtml('data-id="input.amount"')
+            ->assertSeeHtml('data-id="input.due"');
+    }
+
+    public function test_the_align_buttons_follow_the_letters_direction(): void
+    {
+        // Left and right buttons, each setting start or end by the way the
+        // text runs when clicked — and Justify.
+        $html = Livewire::test(CreateLetterTemplate::class)->html();
+        $this->assertStringContainsString('aria-label="Align left"', $html);
+        $this->assertStringContainsString('aria-label="Align right"', $html);
+        $this->assertStringContainsString("getComputedStyle(\$getEditor().view.dom).direction === 'rtl' : false) ? 'start' : 'end'", $html);
+        $this->assertStringContainsString('aria-label="Align justify"', $html);
+        // Filament's start/end buttons are gone.
+        $this->assertStringNotContainsString('aria-label="Align start"', $html);
+
+        // And it prints as right: mPDF has no start or end.
+        $this->template->update(['body' => '<p style="text-align: start">يمين</p><p style="text-align: end;">يسار</p><p style="text-align: center">وسط</p>']);
+        $html = (new LetterComposer($this->template->fresh(), $this->matter))->bodyHtml();
+        $this->assertStringContainsString('<p style="text-align: right">يمين</p><p style="text-align: left;">يسار</p><p style="text-align: center">وسط</p>', $html);
+
+        $this->template->update(['locale' => 'en', 'body' => '<p style="text-align: start">a</p><p style="text-align: end">b</p>']);
+        $html = (new LetterComposer($this->template->fresh(), $this->matter))->bodyHtml();
+        $this->assertStringContainsString('<p style="text-align: left">a</p><p style="text-align: right">b</p>', $html);
+    }
+
+    public function test_the_signature_block_signs_off_the_letter(): void
+    {
+        Storage::disk('public')->put('letterheads/sig.png', base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='));
+        Storage::disk('public')->put('letterheads/stamp.png', base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='));
+        $letterhead = Letterhead::create(['name' => 'Main', 'signature_image' => 'letterheads/sig.png', 'stamp_image' => 'letterheads/stamp.png', 'elements' => Letterhead::defaultElements()]);
+        MatterParty::create(['matter_id' => $this->matter->id, 'role' => 'expert', 'type' => 'certified',
+            'party_id' => Party::factory()->create(['name' => 'رضا حسن'])->id]);
+
+        // As the editor saves it.
+        $block = fn (array $config): string => '<div data-type="customBlock" data-config="'.e(json_encode($config)).'" data-id="signature_block"></div>';
+        $this->template->update(['body' => '<p>نص الخطاب.</p>'
+            .$block(['title' => 'الخبير المحاسبي', 'expert' => 'matter', 'signature' => true, 'stamp' => true, 'align' => 'left'])]);
+
+        $letter = app(LetterIssuer::class)->issue($this->template->fresh(), $this->matter, [], [], null, $letterhead);
+        $html = LetterIssuer::composerFor($letter)->bodyHtml();
+
+        $this->assertStringContainsString('<p style="text-align: left; margin: 0;"><strong>الخبير المحاسبي</strong></p>', $html);
+        $this->assertStringContainsString('<strong>رضا حسن</strong>', $html);
+        // Signature and stamp side by side, at the letterhead's sizes.
+        $this->assertMatchesRegularExpression('/<div style="text-align: left; margin: 0;"><img src="[^"]+sig\.png" style="height: 45mm;" \/> <img src="[^"]+stamp\.png" style="height: 40mm;" \/><\/div>/', $html);
+        $this->assertStringNotContainsString('customBlock', $html);
+        $this->assertStringStartsWith('%PDF', (new LetterPdf(LetterIssuer::composerFor($letter)))->render());
+        $docx = (new LetterDocx(LetterIssuer::composerFor($letter)))->save(storage_path('app/temp/test-signature-block.docx'));
+        $zip = new ZipArchive;
+        $zip->open($docx);
+        $document = (string) $zip->getFromName('word/document.xml');
+        $zip->close();
+        @unlink($docx);
+        $this->assertStringContainsString('رضا حسن', $document);
+        $this->assertSame(2, substr_count($document, '<w:drawing') ?: substr_count($document, '<v:shape'));
+
+        // A typed name, no stamp, centred.
+        $html = LetterComposer::normalizeMergeTags($block(['expert' => 'custom', 'name' => 'Ahmed & Co', 'signature' => true, 'stamp' => false, 'align' => 'center']));
+        $this->assertSame('<p style="text-align: center; margin: 0;"><strong>Ahmed &amp; Co</strong></p><div style="text-align: center; margin: 0;">{{signature}}</div>', $html);
     }
 
     public function test_templates_are_offered_for_the_matter_types_they_are_linked_to(): void

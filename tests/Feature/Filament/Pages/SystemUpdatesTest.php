@@ -11,6 +11,7 @@ use App\Services\Updater\Updater;
 use App\Support\AppUpdate;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
@@ -190,6 +191,23 @@ class SystemUpdatesTest extends TestCase
         $this->assertStringNotContainsString('[39m', $updater->state()['log']);
     }
 
+    public function test_the_caches_are_rebuilt_after_they_are_cleared(): void
+    {
+        $updater = app(Updater::class);
+        $steps = array_keys($updater->steps());
+        $this->assertSame(array_search('cleanup', $steps, true) + 1, array_search('optimize', $steps, true));
+
+        $this->startAfter($updater, '1.2.0', ['preflight', 'maintenance', 'code', 'dependencies', 'database', 'permissions', 'cleanup']);
+
+        // Not for real here: it would cache the tests' own configuration.
+        Artisan::shouldReceive('call')->once()->with('optimize', [])->andReturn(0);
+        Artisan::shouldReceive('output')->andReturn('config ... DONE');
+
+        $this->assertTrue($updater->runNextStep());
+        $this->assertContains('optimize', $updater->state()['completed']);
+        $this->assertStringContainsString('== Rebuild caches ==', $updater->state()['log']);
+    }
+
     public function test_the_running_steps_output_is_readable_while_it_runs(): void
     {
         $updater = app(Updater::class);
@@ -233,7 +251,7 @@ class SystemUpdatesTest extends TestCase
         $updater->runNextStep(); // maintenance on
 
         $state = $updater->state();
-        $state['completed'] = ['preflight', 'maintenance', 'code', 'dependencies', 'database', 'permissions', 'cleanup'];
+        $state['completed'] = ['preflight', 'maintenance', 'code', 'dependencies', 'database', 'permissions', 'cleanup', 'optimize'];
         Setting::set(Updater::STATE_KEY, $state, 'system', 'json');
 
         $this->assertTrue($updater->runNextStep());

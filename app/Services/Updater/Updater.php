@@ -52,6 +52,7 @@ class Updater
             'database' => __('Update the database'),
             'permissions' => __('Refresh permissions'),
             'cleanup' => __('Clear caches'),
+            'optimize' => __('Rebuild caches'),
             'finish' => __('Bring the site back online'),
         ];
     }
@@ -190,6 +191,9 @@ class Updater
             'database' => $this->artisan('migrate', ['--force' => true]),
             'permissions' => $this->refreshPermissions(),
             'cleanup' => $this->artisan('optimize:clear'),
+            // The configuration, routes, events, views and Filament's
+            // components cached for the new version.
+            'optimize' => $this->artisan('optimize'),
             'finish' => $this->finish(),
         };
     }

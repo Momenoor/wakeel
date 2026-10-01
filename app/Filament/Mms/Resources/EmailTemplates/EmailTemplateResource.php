@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Resources\EmailTemplates;
 
 use App\Filament\Concerns\HasModuleGate;
 use App\Filament\Mms\Resources\EmailTemplates\Pages\ManageEmailTemplates;
+use App\Filament\Support\RichEditorDirection;
 use App\Models\EmailTemplate;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterMailer;
@@ -97,6 +98,7 @@ class EmailTemplateResource extends Resource
                     ['undo', 'redo'],
                 ])
                 ->mergeTags(fn () => static::placeholders())
+                ->tap(RichEditorDirection::apply(...))
                 ->extraInputAttributes(fn (Get $get) => ['dir' => $get('locale') === 'en' ? 'ltr' : 'rtl'])
                 ->columnSpanFull(),
             Toggle::make('is_default')->label(__('Default')),

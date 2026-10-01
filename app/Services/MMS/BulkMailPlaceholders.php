@@ -162,6 +162,20 @@ class BulkMailPlaceholders
     }
 
     /**
+     * The rich editor stores an inserted merge tag as
+     * <span data-type="mergeTag" data-id="key">…</span>; it's read exactly
+     * like a typed {{key}}.
+     */
+    public static function normalizeMergeTags(string $html): string
+    {
+        return preg_replace(
+            '/<span[^>]*data-type="mergeTag"[^>]*data-id="([^"]+)"[^>]*>.*?<\/span>/su',
+            '{{$1}}',
+            $html,
+        ) ?? $html;
+    }
+
+    /**
      * "Claim Amount", "claim_amount" and "claim-amount" are one key.
      */
     public static function normalize(string $key): string

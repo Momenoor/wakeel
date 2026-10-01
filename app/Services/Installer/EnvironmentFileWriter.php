@@ -64,6 +64,13 @@ class EnvironmentFileWriter
         }
 
         File::put($this->envPath(), $contents);
+
+        // With the configuration cached (System Updates runs `optimize`),
+        // Laravel never reads .env — drop the cache so the new values apply
+        // from the next request.
+        if ($this->envPath() === base_path('.env') && is_file($cached = app()->getCachedConfigPath())) {
+            @unlink($cached);
+        }
     }
 
     /**

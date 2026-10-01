@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 
 use App\Filament\Concerns\HasRelationManagerPermission;
+use App\Filament\Support\RichEditorDirection;
 use App\Models\CalendarEvent;
 use App\Models\EmailTemplate;
 use App\Models\Letterhead;
@@ -10,6 +11,7 @@ use App\Models\LetterItem;
 use App\Models\LetterTemplate;
 use App\Models\Matter;
 use App\Models\MatterLetter;
+use App\Services\MMS\Letters\Blocks\SignatureBlock;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterMailer;
@@ -18,12 +20,13 @@ use App\Support\ScreenPermissions;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
-use Filament\Actions\DeleteAction;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
@@ -90,8 +93,10 @@ class LettersRelationManager extends RelationManager
             ])
             ->headerActions([
                 $this->issueAction(),
+                $this->writeAction(),
             ])
             ->recordActions([
+                $this->previewAction(),
                 Action::make('pdf')
                     ->label('PDF')
                     ->icon('heroicon-o-document-arrow-down')
@@ -104,7 +109,7 @@ class LettersRelationManager extends RelationManager
                 $this->emailAction(),
                 ActionGroup::make([
                     $this->editAction(),
-                    DeleteAction::make(),
+                    $this->deleteAction(),
                 ]),
             ]);
     }
@@ -130,6 +135,7 @@ class LettersRelationManager extends RelationManager
                 'formats' => ['pdf'],
                 'recipients' => $record->recipients->pluck('id')->all(),
                 'separate' => false,
+                ...app(LetterMailer::class)->draft($record, LetterMailer::ATTACHMENT, EmailTemplate::default()),
             ])
             ->schema(fn (MatterLetter $record) => [
                 Select::make('sender')
@@ -143,11 +149,14 @@ class LettersRelationManager extends RelationManager
                         LetterMailer::BODY => __('As the email itself'),
                     ])
                     ->required()
-                    ->live(),
+                    ->live()
+                    ->afterStateUpdated(fn (Get $get, Set $set) => self::redraft($record, $get, $set)),
                 Select::make('email_template_id')
                     ->label(__('Covering email'))
                     ->options(fn () => EmailTemplate::query()->where('is_active', true)->orderBy('name')->pluck('name', 'id'))
                     ->placeholder(__('A short standard note'))
+                    ->live()
+                    ->afterStateUpdated(fn (Get $get, Set $set) => self::redraft($record, $get, $set))
                     ->visible(fn (Get $get) => $get('mode') === LetterMailer::ATTACHMENT),
                 CheckboxList::make('formats')
                     ->label(__('Attach as'))
@@ -159,14 +168,52 @@ class LettersRelationManager extends RelationManager
                     ->label(__('To'))
                     ->options($record->recipients->mapWithKeys(fn ($r) => [$r->id => trim($r->name.($r->role ? ' ('.$r->role.')' : ''))]))
                     ->descriptions($record->recipients->mapWithKeys(fn ($r) => [$r->id => implode(' · ', $r->emails ?: array_filter([$r->email])) ?: __('No email')]))
-                    ->bulkToggleable(),
+                    ->bulkToggleable()
+                    ->live(),
                 TagsInput::make('cc')
                     ->label(__('CC'))
                     ->placeholder('name@example.com')
-                    ->nestedRecursiveRules(['email']),
+                    ->nestedRecursiveRules(['email'])
+                    ->live(),
                 Toggle::make('separate')
                     ->label(__('A separate email to each recipient'))
-                    ->helperText(__('Each then sees only their own address, and {{recipient.name}} greets them by name.')),
+                    ->helperText(__('Each then sees only their own address, and {{recipient.name}} greets them by name.'))
+                    ->live(),
+
+                // This email's own wording: starts from the template, with the
+                // letter's details filled in; changed here, for this send only.
+                Section::make(__('The email'))
+                    ->description(__('Changes here are for this email only — the email template stays as it is.'))
+                    ->schema([
+                        TextInput::make('subject')
+                            ->label(__('Subject'))
+                            ->required()
+                            ->maxLength(255)
+                            ->live(onBlur: true),
+                        RichEditor::make('body')
+                            ->label(__('Email'))
+                            ->toolbarButtons([
+                                ['bold', 'italic', 'underline', 'link'],
+                                ['bulletList', 'orderedList'],
+                                ['alignStart', 'alignCenter', 'alignEnd'],
+                                ['undo', 'redo'],
+                            ])
+                            ->tap(RichEditorDirection::apply(...))
+                            ->extraInputAttributes(['dir' => LetterIssuer::composerFor($record)->isArabic() ? 'rtl' : 'ltr'])
+                            ->live(onBlur: true)
+                            ->visible(fn (Get $get) => $get('mode') === LetterMailer::ATTACHMENT),
+                        Placeholder::make('as_body')
+                            ->hiddenLabel()
+                            ->content(__('The letter itself is the email. To change its wording, use Edit on the letter.'))
+                            ->visible(fn (Get $get) => $get('mode') === LetterMailer::BODY),
+                    ]),
+                Section::make(__('Preview'))
+                    ->collapsible()
+                    ->schema([
+                        Placeholder::make('email_preview')
+                            ->hiddenLabel()
+                            ->content(fn (Get $get) => self::emailPreview($record, $get)),
+                    ]),
             ])
             ->action(function (MatterLetter $record, array $data) {
                 $result = app(LetterMailer::class)->send(
@@ -178,6 +225,8 @@ class LettersRelationManager extends RelationManager
                     array_map('intval', $data['recipients'] ?? []),
                     array_values($data['cc'] ?? []),
                     (bool) ($data['separate'] ?? false),
+                    $data['subject'] ?? null,
+                    ($data['mode'] ?? null) === LetterMailer::ATTACHMENT ? ($data['body'] ?? null) : null,
                 );
 
                 $notification = Notification::make()
@@ -199,6 +248,120 @@ class LettersRelationManager extends RelationManager
     }
 
     /**
+     * Another covering email or way of sending chosen: start the subject
+     * and email again from it.
+     */
+    private static function redraft(MatterLetter $record, Get $get, Set $set): void
+    {
+        $template = filled($get('email_template_id')) ? EmailTemplate::find($get('email_template_id')) : null;
+        $draft = app(LetterMailer::class)->draft($record, (string) $get('mode'), $template);
+
+        $set('subject', $draft['subject']);
+        $set('body', $draft['body']);
+    }
+
+    /**
+     * The email as it will go out — to the first ticked recipient when each
+     * gets their own.
+     */
+    private static function emailPreview(MatterLetter $record, Get $get): HtmlString
+    {
+        $mode = (string) ($get('mode') ?: LetterMailer::ATTACHMENT);
+        $ticked = $record->recipients->whereIn('id', array_map('intval', $get('recipients') ?? []))->values();
+        $separate = (bool) $get('separate');
+        $template = filled($get('email_template_id')) ? EmailTemplate::find($get('email_template_id')) : null;
+        $body = $get('body');
+
+        $preview = app(LetterMailer::class)->preview(
+            $record,
+            $mode,
+            $template,
+            $separate ? $ticked->first() : null,
+            $get('subject'),
+            $mode === LetterMailer::ATTACHMENT && is_string($body) ? $body : null,
+        );
+
+        $addresses = fn ($recipient) => trim($recipient->name.' <'.implode(', ', $recipient->emails ?: array_filter([$recipient->email])).'>', ' <>');
+        $to = $separate
+            ? ($ticked->first() ? $addresses($ticked->first()).($ticked->count() > 1 ? ' — '.__('and a separate email to each of the other :count', ['count' => $ticked->count() - 1]) : '') : '')
+            : $ticked->map($addresses)->implode(' · ');
+
+        $name = LetterIssuer::fileName($record);
+        $attachments = $mode === LetterMailer::ATTACHMENT
+            ? array_map(fn (string $format) => $name.'.'.$format, array_values(array_intersect(['pdf', 'docx'], $get('formats') ?? [])))
+            : [];
+
+        return new HtmlString(view('filament.mms.letters.email-preview', [
+            ...$preview,
+            'to' => $to,
+            'cc' => implode(', ', $get('cc') ?? []),
+            'attachments' => $attachments,
+        ])->render());
+    }
+
+    /**
+     * The letter as it prints, on its letterhead — then print it, download
+     * it, change it or send it from there.
+     */
+    private function previewAction(): Action
+    {
+        return Action::make('preview')
+            ->label(__('Preview'))
+            ->icon('heroicon-o-eye')
+            ->color('gray')
+            ->modalHeading(fn (MatterLetter $record) => __('Letter :reference', ['reference' => $record->reference]))
+            ->modalWidth('6xl')
+            ->modalContent(fn (MatterLetter $record) => view('filament.mms.letters.preview', [
+                // A fresh copy each time, so a change shows at once.
+                'url' => route('letters.pdf', $record).'?v='.$record->updated_at?->timestamp,
+                'title' => $record->reference,
+            ]))
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel(__('Close'))
+            ->extraModalFooterActions(fn (MatterLetter $record): array => [
+                Action::make('printPdf')
+                    ->label(__('Open to print'))
+                    ->icon('heroicon-o-printer')
+                    ->url(route('letters.pdf', $record), shouldOpenInNewTab: true),
+                Action::make('downloadWord')
+                    ->label('Word')
+                    ->icon('heroicon-o-document-text')
+                    ->color('gray')
+                    ->url(route('letters.docx', $record)),
+                Action::make('editFromPreview')
+                    ->label(__('Edit'))
+                    ->icon('heroicon-o-pencil')
+                    ->color('gray')
+                    ->action(fn () => $this->replaceMountedAction('editLetter', context: ['table' => true, 'recordKey' => (string) $record->getKey()])),
+                Action::make('emailFromPreview')
+                    ->label(__('Send by email'))
+                    ->icon('heroicon-o-paper-airplane')
+                    ->color('success')
+                    ->action(fn () => $this->replaceMountedAction('email', context: ['table' => true, 'recordKey' => (string) $record->getKey()])),
+            ]);
+    }
+
+    /**
+     * Delete a letter. Filament's own Delete is switched off on the matter's
+     * View page (its tabs are read-only there), so this is the letters' own.
+     */
+    private function deleteAction(): Action
+    {
+        return Action::make('deleteLetter')
+            ->label(__('Delete'))
+            ->icon('heroicon-o-trash')
+            ->color('danger')
+            ->requiresConfirmation()
+            ->modalHeading(fn (MatterLetter $record) => __('Delete letter :reference', ['reference' => $record->reference]))
+            ->visible(fn (): bool => auth()->user()?->can('update', $this->getOwnerRecord()) ?? false)
+            ->action(function (MatterLetter $record): void {
+                $record->delete();
+
+                Notification::make()->success()->title(__('Letter :reference deleted', ['reference' => $record->reference]))->send();
+            });
+    }
+
+    /**
      * "لعناية السيد/ … المحترم" under the addressees, when filled in.
      */
     private static function attentionField(): TextInput
@@ -211,8 +374,9 @@ class LettersRelationManager extends RelationManager
     }
 
     /**
-     * Change an issued letter: its date, letterhead, attention line and
-     * recipients. Its reference and wording stay as issued.
+     * Change an issued letter: its date, letterhead, attention line,
+     * recipients and wording — this letter's only, the template stays as it
+     * is. Its reference stays as issued.
      */
     private function editAction(): Action
     {
@@ -225,6 +389,7 @@ class LettersRelationManager extends RelationManager
                 'letter_date' => $record->letter_date?->toDateString(),
                 'letterhead_id' => $record->letterhead_id,
                 'attention' => $record->attention,
+                'body' => (string) $record->body,
                 'recipients' => $record->recipients->map(fn ($recipient) => [
                     'name' => $recipient->name,
                     'role' => $recipient->role,
@@ -232,7 +397,7 @@ class LettersRelationManager extends RelationManager
                     'party_id' => $recipient->recipient_id,
                 ])->all(),
             ])
-            ->schema([
+            ->schema(fn (MatterLetter $record): array => [
                 Section::make()
                     ->columns(2)
                     ->schema([
@@ -257,6 +422,12 @@ class LettersRelationManager extends RelationManager
                             ]),
                         self::attentionField(),
                     ]),
+                Section::make(__('The letter'))
+                    ->description(__('Changes here are for this letter only — the template stays as it is.'))
+                    ->collapsible()
+                    ->schema([
+                        self::bodyEditor(fn () => LetterComposer::catalog($record->template, $record->template?->inputs), fn () => LetterIssuer::composerFor($record)->isArabic()),
+                    ]),
             ])
             ->action(function (MatterLetter $record, array $data): void {
                 app(LetterIssuer::class)->revise(
@@ -270,10 +441,148 @@ class LettersRelationManager extends RelationManager
                     Carbon::parse($data['letter_date']),
                     filled($data['letterhead_id'] ?? null) ? Letterhead::find($data['letterhead_id']) : null,
                     $data['attention'] ?? null,
+                    $data['body'] ?? null,
                 );
 
                 Notification::make()->success()->title(__('Letter :reference updated', ['reference' => $record->reference]))->send();
             });
+    }
+
+    /**
+     * Who the letter goes to: the matter's parties ticked, others typed in,
+     * one letter to all or one each, and who it's for the attention of.
+     */
+    private static function recipientsSection(Matter $matter): Section
+    {
+        $candidates = LetterComposer::candidates($matter);
+
+        return Section::make(__('Recipients'))
+            ->schema([
+                CheckboxList::make('recipients')
+                    ->label('')
+                    ->options(collect($candidates)->map(fn ($c) => trim($c['name'].($c['role'] ? ' ('.$c['role'].')' : '')))->all())
+                    ->descriptions(collect($candidates)->map(fn ($c) => implode(' · ', $c['emails']))->all())
+                    ->default([])
+                    ->bulkToggleable()
+                    ->live()
+                    ->columns(2),
+                Repeater::make('extra_recipients')
+                    ->label(__('Other recipients'))
+                    ->addActionLabel(__('Add recipient'))
+                    ->defaultItems(0)
+                    ->live()
+                    ->columns(3)
+                    ->schema([
+                        TextInput::make('name')->label(__('Name'))->required(),
+                        TextInput::make('role')->label(__('Capacity')),
+                        TagsInput::make('emails')->label(__('Emails'))->nestedRecursiveRules(['email']),
+                    ]),
+                // Several recipients: one letter to all of them, or each
+                // their own letter (own reference, only them on it).
+                Toggle::make('separately')
+                    ->label(__('Issue a separate letter to each recipient'))
+                    ->helperText(__('Off: one letter addressed to all of them. On: each recipient gets their own letter, with its own reference.'))
+                    ->default(false)
+                    ->visible(fn (Get $get): bool => count($get('recipients') ?? []) + count($get('extra_recipients') ?? []) > 1),
+                self::attentionField(),
+            ]);
+    }
+
+    /**
+     * The letter's wording, as in the template editor: the same toolbar and
+     * the same {{placeholders}} menu.
+     *
+     * @param  \Closure(): array<string, string>  $mergeTags
+     * @param  \Closure(): bool  $arabic
+     */
+    private static function bodyEditor(\Closure $mergeTags, \Closure $arabic): RichEditor
+    {
+        return RichEditor::make('body')
+            ->hiddenLabel()
+            ->required()
+            ->toolbarButtons([
+                ['bold', 'italic', 'underline', 'textColor', 'highlight'],
+                ['h2', 'h3', 'bulletList', 'orderedList', 'horizontalRule', 'table'],
+                ['alignStart', 'alignCenter', 'alignEnd', 'alignJustify'],
+                ['mergeTags', 'customBlocks'],
+                ['undo', 'redo'],
+            ])
+            ->mergeTags($mergeTags)
+            ->customBlocks([SignatureBlock::class])
+            ->tap(RichEditorDirection::apply(...))
+            ->extraInputAttributes(fn () => ['dir' => $arabic() ? 'rtl' : 'ltr', 'style' => 'min-height: 24rem;']);
+    }
+
+    /**
+     * A letter written here and now, without a template: the same
+     * recipients, letterhead and date as any other, its own wording.
+     */
+    private function writeAction(): Action
+    {
+        return Action::make('write')
+            ->label(__('Write a letter'))
+            ->icon('heroicon-o-document-plus')
+            ->color('gray')
+            ->modalWidth('5xl')
+            ->modalSubmitActionLabel(__('Issue'))
+            ->fillForm(fn (): array => [
+                'locale' => 'ar',
+                'letter_date' => now()->toDateString(),
+                'letterhead_id' => Letterhead::default()?->getKey(),
+                'recipients' => [],
+                'body' => self::freeLetterBody(true),
+            ])
+            ->schema(fn (): array => [
+                Section::make()
+                    ->columns(3)
+                    ->schema([
+                        TextInput::make('subject')
+                            ->label(__('Subject'))
+                            ->required()
+                            ->maxLength(255)
+                            ->columnSpan(2),
+                        Radio::make('locale')
+                            ->label(__('Language'))
+                            ->options(['ar' => __('Arabic'), 'en' => __('English')])
+                            ->inline()
+                            ->required()
+                            ->live()
+                            // Untouched wording follows the language.
+                            ->afterStateUpdated(function (?string $state, ?string $old, Get $get, Set $set) {
+                                if ($get('body') === self::freeLetterBody($old !== 'en')) {
+                                    $set('body', self::freeLetterBody($state !== 'en'));
+                                }
+                            }),
+                        DatePicker::make('letter_date')
+                            ->label(__('Letter date'))
+                            ->required(),
+                        Select::make('letterhead_id')
+                            ->label(__('Letterhead'))
+                            ->options(fn () => Letterhead::query()->orderBy('name')->pluck('name', 'id'))
+                            ->placeholder(__('The default letterhead'))
+                            ->columnSpan(2),
+                    ]),
+                self::recipientsSection($this->getOwnerRecord()),
+                Section::make(__('The letter'))
+                    ->description(__('{{recipients}} places the addressees and {{signature}} the signature; the menu has the matter\'s other details.'))
+                    ->schema([
+                        self::bodyEditor(fn () => LetterComposer::catalog(), fn (): bool => true),
+                    ]),
+            ])
+            ->action(function (array $data) {
+                $this->notifyIssued($this->issue($this->getOwnerRecord(), $data));
+            });
+    }
+
+    /**
+     * Where a free letter starts: addressees, greeting, a space to write
+     * in, closing and signature.
+     */
+    public static function freeLetterBody(bool $arabic): string
+    {
+        return $arabic
+            ? '<p>{{recipients}}</p><p>تحية طيبة وبعد،</p><p><strong>الموضوع: {{subject}}</strong></p><p></p><p>وتفضلوا بقبول فائق الاحترام والتقدير،</p><p>{{signature}}</p>'
+            : '<p>{{recipients}}</p><p>Dear Sir/Madam,</p><p><strong>Subject: {{subject}}</strong></p><p></p><p>Yours faithfully,</p><p>{{signature}}</p>';
     }
 
     private function issueAction(): Action
@@ -285,29 +594,35 @@ class LettersRelationManager extends RelationManager
             ->modalSubmitActionLabel(__('Issue'))
             ->schema(fn () => $this->issueForm($this->getOwnerRecord()))
             ->action(function (array $data) {
-                $letters = $this->issue($this->getOwnerRecord(), $data);
-
-                if (count($letters) > 1) {
-                    Notification::make()
-                        ->success()
-                        ->title(__(':count letters issued, one for each recipient', ['count' => count($letters)]))
-                        ->body(new HtmlString(collect($letters)->map(fn (MatterLetter $letter) => e($letter->reference.' — '.$letter->recipients->pluck('name')->implode(', ')))->implode('<br>')))
-                        ->send();
-
-                    return;
-                }
-
-                $letter = $letters[0];
-
-                Notification::make()
-                    ->success()
-                    ->title(__('Letter :reference issued', ['reference' => $letter->reference]))
-                    ->actions([
-                        Action::make('pdf')->label('PDF')->url(route('letters.pdf', $letter), shouldOpenInNewTab: true),
-                        Action::make('word')->label('Word')->url(route('letters.docx', $letter)),
-                    ])
-                    ->send();
+                $this->notifyIssued($this->issue($this->getOwnerRecord(), $data));
             });
+    }
+
+    /**
+     * @param  list<MatterLetter>  $letters
+     */
+    private function notifyIssued(array $letters): void
+    {
+        if (count($letters) > 1) {
+            Notification::make()
+                ->success()
+                ->title(__(':count letters issued, one for each recipient', ['count' => count($letters)]))
+                ->body(new HtmlString(collect($letters)->map(fn (MatterLetter $letter) => e($letter->reference.' — '.$letter->recipients->pluck('name')->implode(', ')))->implode('<br>')))
+                ->send();
+
+            return;
+        }
+
+        $letter = $letters[0];
+
+        Notification::make()
+            ->success()
+            ->title(__('Letter :reference issued', ['reference' => $letter->reference]))
+            ->actions([
+                Action::make('pdf')->label('PDF')->url(route('letters.pdf', $letter), shouldOpenInNewTab: true),
+                Action::make('word')->label('Word')->url(route('letters.docx', $letter)),
+            ])
+            ->send();
     }
 
     /**
@@ -315,8 +630,6 @@ class LettersRelationManager extends RelationManager
      */
     private function issueForm(Matter $matter): array
     {
-        $candidates = LetterComposer::candidates($matter);
-
         return [
             Section::make()
                 ->columns(3)
@@ -341,35 +654,7 @@ class LettersRelationManager extends RelationManager
                         ->columnSpan(3),
                 ]),
 
-            Section::make(__('Recipients'))
-                ->schema([
-                    CheckboxList::make('recipients')
-                        ->label('')
-                        ->options(collect($candidates)->map(fn ($c) => trim($c['name'].($c['role'] ? ' ('.$c['role'].')' : '')))->all())
-                        ->descriptions(collect($candidates)->map(fn ($c) => implode(' · ', $c['emails']))->all())
-                        ->bulkToggleable()
-                        ->live()
-                        ->columns(2),
-                    Repeater::make('extra_recipients')
-                        ->label(__('Other recipients'))
-                        ->addActionLabel(__('Add recipient'))
-                        ->defaultItems(0)
-                        ->live()
-                        ->columns(3)
-                        ->schema([
-                            TextInput::make('name')->label(__('Name'))->required(),
-                            TextInput::make('role')->label(__('Capacity')),
-                            TagsInput::make('emails')->label(__('Emails'))->nestedRecursiveRules(['email']),
-                        ]),
-                    // Several recipients: one letter to all of them, or each
-                    // their own letter (own reference, only them on it).
-                    Toggle::make('separately')
-                        ->label(__('Issue a separate letter to each recipient'))
-                        ->helperText(__('Off: one letter addressed to all of them. On: each recipient gets their own letter, with its own reference.'))
-                        ->default(false)
-                        ->visible(fn (Get $get): bool => count($get('recipients') ?? []) + count($get('extra_recipients') ?? []) > 1),
-                    self::attentionField(),
-                ]),
+            self::recipientsSection($matter),
 
             Section::make(__('Letter details'))
                 ->visible(fn (Get $get) => filled($get('letter_template_id')))
@@ -449,6 +734,13 @@ class LettersRelationManager extends RelationManager
 
         foreach ($template->inputs ?? [] as $input) {
             $key = $input['key'] ?? '';
+
+            // A list of items starts as an empty list. Left unset, its
+            // checkboxes share one true/false value, and ticking one ticks
+            // them all.
+            if (($input['type'] ?? null) === 'items' && $key !== '') {
+                $set('inputs.'.$key, []);
+            }
             if (! $event || ! str_contains($key, 'meeting') && ! str_contains($key, 'teams')) {
                 continue;
             }
@@ -470,7 +762,14 @@ class LettersRelationManager extends RelationManager
      */
     public function issue(Matter $matter, array $data): array
     {
-        $template = LetterTemplate::findOrFail($data['letter_template_id']);
+        // Written here without a template: its own wording, subject and language.
+        $template = filled($data['letter_template_id'] ?? null)
+            ? LetterTemplate::findOrFail($data['letter_template_id'])
+            : new LetterTemplate([
+                'locale' => ($data['locale'] ?? 'ar') === 'en' ? 'en' : 'ar',
+                'subject' => (string) ($data['subject'] ?? ''),
+                'body' => LetterComposer::normalizeMergeTags((string) ($data['body'] ?? '')),
+            ]);
         $candidates = LetterComposer::candidates($matter);
 
         $recipients = [
