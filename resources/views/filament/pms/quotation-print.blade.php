@@ -107,6 +107,7 @@
             cursor: pointer;
         }
     </style>
+    {{ \App\Support\Currency::fontLink() }}
 </head>
 <body>
     <div class="no-print">

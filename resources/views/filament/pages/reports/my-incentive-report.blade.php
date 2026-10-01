@@ -14,7 +14,7 @@
                 <div>
                     <dt class="text-sm text-gray-500 dark:text-gray-400">{{ __('Share') }}</dt>
                     <dd class="text-lg font-semibold text-gray-950 dark:text-white">
-                        {{ number_format($this->shareTotal(), 2) }} <span class="text-sm font-normal">{{ \App\Support\Currency::symbol() }}</span>
+                        <span dir="ltr" style="white-space:nowrap"><span class="text-sm font-normal">{{ \App\Support\Currency::symbol() }}</span> {{ number_format($this->shareTotal(), 2) }}</span>
                     </dd>
                 </div>
 
@@ -48,7 +48,7 @@
                 <div>
                     <dt class="text-sm text-gray-500 dark:text-gray-400">{{ __('Net Total') }}</dt>
                     <dd class="text-xl font-bold text-primary-600 dark:text-primary-400">
-                        {{ number_format($this->netTotal(), 2) }} <span class="text-sm font-normal">{{ \App\Support\Currency::symbol() }}</span>
+                        <span dir="ltr" style="white-space:nowrap"><span class="text-sm font-normal">{{ \App\Support\Currency::symbol() }}</span> {{ number_format($this->netTotal(), 2) }}</span>
                     </dd>
                 </div>
             </dl>

@@ -150,7 +150,7 @@ class MatterIncentiveDisplayTest extends TestCase
 
         $html = Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])->html();
 
-        $this->assertStringContainsString('4,000.00 <svg class="wakeel-aed"', $html);
+        $this->assertMatchesRegularExpression('~<span class="wakeel-aed"[^>]*>D</span> 4,000.00~', $html);
     }
 
     private function assistantLine(IncentiveLine $line, Party $party, array $figures): IncentiveAssistantLine
@@ -195,7 +195,7 @@ class MatterIncentiveDisplayTest extends TestCase
         $this->assertStringContainsString('−200.00', $html);
         // The whole period deduction sits on this, the assistant's only matter.
         $this->assertStringContainsString('−100.00', $html);
-        $this->assertStringContainsString('730.00 <svg class="wakeel-aed"', $html);
+        $this->assertMatchesRegularExpression('~<span class="wakeel-aed"[^>]*>D</span> 730.00~', $html);
     }
 
     public function test_an_assistant_sees_only_their_own_incentive_on_the_matter(): void
@@ -214,7 +214,7 @@ class MatterIncentiveDisplayTest extends TestCase
 
         $html = Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])->html();
 
-        $this->assertStringContainsString('1,500.00 <svg class="wakeel-aed"', $html);
+        $this->assertMatchesRegularExpression('~<span class="wakeel-aed"[^>]*>D</span> 1,500.00~', $html);
         $this->assertStringNotContainsString('Amr', $html);
         $this->assertStringNotContainsString('2,500.00', $html);
     }

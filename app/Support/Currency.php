@@ -6,11 +6,11 @@ use Illuminate\Support\HtmlString;
 
 /**
  * The UAE Dirham sign, shown wherever an amount is shown on screen or in
- * print — after the number ("1,234.00 ⃁").
+ * print — before the number ("⃁ 1,234.00").
  *
- * On screen it is an inline SVG at text height in the text's own colour
- * (so it suits dark mode, badges and coloured figures); in PDFs (mPDF) an
- * image of the same SVG. Plain text — Excel exports, notifications, email
+ * On screen it is text in the "AED" font (which draws the sign for "D"),
+ * so it takes the size, weight and colour around it; in PDFs (mPDF) an
+ * image of the same shape — mPDF cannot embed a CFF-outlined OpenType font. Plain text — Excel exports, notifications, email
  * subjects — keeps "AED": the sign's Unicode character (U+20C3) is too new
  * for most fonts and would show as an empty box.
  */
@@ -25,15 +25,22 @@ final class Currency
      */
     public static function symbol(): HtmlString
     {
-        return new HtmlString(
-            '<svg class="wakeel-aed" viewBox="90 100 460 400" role="img" aria-label="'.self::CODE.'" '
-            .'style="display:inline-block;height:0.8em;width:auto;vertical-align:-0.05em;fill:currentColor">'
-            .'<path fill-rule="evenodd" d="'.self::PATH.'"/></svg>'
-        );
+        // The "AED" font (public/fonts/aed.css) draws the sign for "D": real
+        // text, so it takes the size, weight and colour around it.
+        return new HtmlString('<span class="wakeel-aed" role="img" aria-label="'.self::CODE.'">D</span>');
     }
 
     /**
-     * An amount with the sign after it, kept on one line and in that order
+     * The stylesheet that loads the font — in every panel page (a render
+     * hook) and in the print pages that are documents of their own.
+     */
+    public static function fontLink(): HtmlString
+    {
+        return new HtmlString('<link rel="stylesheet" href="'.e(asset('fonts/aed.css')).'">');
+    }
+
+    /**
+     * An amount with the sign before it, kept on one line and in that order
      * in Arabic too. Null for no amount.
      */
     public static function format(float|int|string|null $amount, int $decimals = 2): ?HtmlString
@@ -43,7 +50,7 @@ final class Currency
         }
 
         return new HtmlString(
-            '<span dir="ltr" style="white-space:nowrap">'.e(number_format((float) $amount, $decimals)).' '.self::symbol().'</span>'
+            '<span dir="ltr" style="white-space:nowrap">'.self::symbol().' '.e(number_format((float) $amount, $decimals)).'</span>'
         );
     }
 
@@ -58,11 +65,11 @@ final class Currency
     }
 
     /**
-     * An amount with the sign after it, for a PDF.
+     * An amount with the sign before it, for a PDF.
      */
     public static function pdfFormat(float|int|string|null $amount, int $decimals = 2): HtmlString
     {
-        return new HtmlString(e(number_format((float) $amount, $decimals)).' '.self::pdfSymbol());
+        return new HtmlString(self::pdfSymbol().' '.e(number_format((float) $amount, $decimals)));
     }
 
     /**
@@ -72,14 +79,23 @@ final class Currency
      */
     public static function label(string $label): HtmlString
     {
-        return new HtmlString(preg_replace('~\bAED\b|درهم~u', (string) self::symbol(), e($label)) ?? e($label));
+        $label = e($label);
+        // A placeholder until the end: the sign's own markup says "AED"
+        // (aria-label), which the word replacement must not touch.
+        $mark = "\u{E000}";
+
+        // "5,000.00 AED" in a sentence: the sign moves before the amount.
+        $label = preg_replace('~(\d[\d,]*(?:\.\d+)?)\s*(?:\bAED\b|درهم)~u', '<span dir="ltr" style="white-space:nowrap">'.$mark.' $1</span>', $label) ?? $label;
+        $label = preg_replace('~\bAED\b|درهم~u', $mark, $label) ?? $label;
+
+        return new HtmlString(str_replace($mark, (string) self::symbol(), $label));
     }
 
     /**
-     * For plain text (exports, notifications): "1,234.00 AED".
+     * For plain text (exports, notifications): "AED 1,234.00".
      */
     public static function text(float|int|string|null $amount, int $decimals = 2): string
     {
-        return number_format((float) $amount, $decimals).' '.self::CODE;
+        return self::CODE.' '.number_format((float) $amount, $decimals);
     }
 }

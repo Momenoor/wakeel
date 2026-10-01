@@ -1,0 +1,21 @@
+/*
+ * The UAE Dirham sign — the "AED" font draws it for "D" (and "d"), and
+ * nothing else (App\Support\Currency::symbol() writes <span class="wakeel-aed">D</span>).
+ */
+@font-face {
+    font-family: 'AED';
+    font-style: normal;
+    font-weight: 400;
+    font-display: block;
+    src: url("./AED.otf") format("opentype");
+    unicode-range: U+0044, U+0064;
+}
+
+.wakeel-aed {
+    font-family: 'AED' !important;
+    font-style: normal !important;
+    font-weight: 400 !important;
+    font-synthesis: none;
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+}

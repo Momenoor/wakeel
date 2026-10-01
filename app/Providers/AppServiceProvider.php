@@ -15,8 +15,10 @@ use App\Support\Currency;
 use Carbon\Carbon;
 use Carbon\Translator as CarbonTranslator;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Support\Facades\FilamentView;
 use Filament\Tables\Columns\Summarizers\Summarizer;
 use Filament\Tables\Columns\TextColumn;
+use Filament\View\PanelsRenderHook;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Foundation\Events\LocaleUpdated;
 use Illuminate\Notifications\DatabaseNotification;
@@ -72,7 +74,10 @@ class AppServiceProvider extends ServiceProvider
 
         Setting::applyMailConfig();
 
-        // ->aed(): an amount with the Dirham sign after it, in table columns,
+        // The font that draws the Dirham sign, on every panel page.
+        FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): string => (string) Currency::fontLink());
+
+        // ->aed(): an amount with the Dirham sign before it, in table columns,
         // detail entries and table totals (instead of money('AED')).
         foreach ([TextColumn::class, TextEntry::class, Summarizer::class] as $component) {
             $component::macro('aed', function (int $decimals = 2) {

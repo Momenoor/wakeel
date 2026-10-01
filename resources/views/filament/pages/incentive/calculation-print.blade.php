@@ -20,6 +20,7 @@
             }
         }
     </style>
+    {{ \App\Support\Currency::fontLink() }}
 </head>
 <body class="bg-white text-gray-800 font-sans text-sm p-10">
 
