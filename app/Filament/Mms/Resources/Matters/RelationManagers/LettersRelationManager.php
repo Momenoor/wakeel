@@ -22,7 +22,6 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Repeater;
@@ -390,12 +389,9 @@ class LettersRelationManager extends RelationManager
                 'letterhead_id' => $record->letterhead_id,
                 'attention' => $record->attention,
                 'body' => (string) $record->body,
-                'recipients' => $record->recipients->map(fn ($recipient) => [
-                    'name' => $recipient->name,
-                    'role' => $recipient->role,
-                    'emails' => $recipient->emails ?: array_values(array_filter([$recipient->email])),
-                    'party_id' => $recipient->recipient_id,
-                ])->all(),
+                // Ticked as when issued: the matter's parties it went to,
+                // and anyone typed in under "Other recipients".
+                ...self::recipientsState($record),
             ])
             ->schema(fn (MatterLetter $record): array => [
                 Section::make()
@@ -407,21 +403,7 @@ class LettersRelationManager extends RelationManager
                             ->options(fn () => Letterhead::query()->orderBy('name')->pluck('name', 'id'))
                             ->placeholder(__('The template\'s letterhead')),
                     ]),
-                Section::make(__('Recipients'))
-                    ->schema([
-                        Repeater::make('recipients')
-                            ->hiddenLabel()
-                            ->addActionLabel(__('Add recipient'))
-                            ->minItems(1)
-                            ->columns(3)
-                            ->schema([
-                                TextInput::make('name')->label(__('Name'))->required(),
-                                TextInput::make('role')->label(__('Capacity')),
-                                TagsInput::make('emails')->label(__('Emails'))->nestedRecursiveRules(['email']),
-                                Hidden::make('party_id'),
-                            ]),
-                        self::attentionField(),
-                    ]),
+                self::recipientsSection($record->matter, separately: false),
                 Section::make(__('The letter'))
                     ->description(__('Changes here are for this letter only — the template stays as it is.'))
                     ->collapsible()
@@ -432,12 +414,7 @@ class LettersRelationManager extends RelationManager
             ->action(function (MatterLetter $record, array $data): void {
                 app(LetterIssuer::class)->revise(
                     $record,
-                    array_values(array_map(fn (array $r): array => [
-                        'name' => (string) $r['name'],
-                        'role' => $r['role'] ?? null,
-                        'emails' => array_values($r['emails'] ?? []),
-                        'party_id' => filled($r['party_id'] ?? null) ? (int) $r['party_id'] : null,
-                    ], $data['recipients'] ?? [])),
+                    self::chosenRecipients($record->matter, $data, LetterIssuer::composerFor($record)->isArabic()),
                     Carbon::parse($data['letter_date']),
                     filled($data['letterhead_id'] ?? null) ? Letterhead::find($data['letterhead_id']) : null,
                     $data['attention'] ?? null,
@@ -450,9 +427,10 @@ class LettersRelationManager extends RelationManager
 
     /**
      * Who the letter goes to: the matter's parties ticked, others typed in,
-     * one letter to all or one each, and who it's for the attention of.
+     * one letter to all or one each (when issuing), and who it's for the
+     * attention of.
      */
-    private static function recipientsSection(Matter $matter): Section
+    private static function recipientsSection(Matter $matter, bool $separately = true): Section
     {
         // Listed in the interface's language; the letter gets them in its own (issue()).
         $candidates = LetterComposer::candidates($matter, app()->getLocale() !== 'en');
@@ -484,9 +462,64 @@ class LettersRelationManager extends RelationManager
                     ->label(__('Issue a separate letter to each recipient'))
                     ->helperText(__('Off: one letter addressed to all of them. On: each recipient gets their own letter, with its own reference.'))
                     ->default(false)
-                    ->visible(fn (Get $get): bool => count($get('recipients') ?? []) + count($get('extra_recipients') ?? []) > 1),
+                    ->visible(fn (Get $get): bool => $separately && count($get('recipients') ?? []) + count($get('extra_recipients') ?? []) > 1),
                 self::attentionField(),
             ]);
+    }
+
+    /**
+     * The recipients ticked and typed in, each party's capacity ("المدعي"
+     * / "Plaintiff") in the letter's language.
+     *
+     * @param  array<string, mixed>  $data
+     * @return list<array{name: string, role: ?string, emails: list<string>, party_id?: int|null}>
+     */
+    private static function chosenRecipients(Matter $matter, array $data, bool $arabic): array
+    {
+        $candidates = LetterComposer::candidates($matter, $arabic);
+
+        return [
+            ...collect($data['recipients'] ?? [])->map(fn ($id) => $candidates[$id] ?? null)->filter()->values()->all(),
+            ...collect($data['extra_recipients'] ?? [])->map(fn ($r) => [
+                'name' => (string) $r['name'],
+                'role' => $r['role'] ?? null,
+                'emails' => array_values($r['emails'] ?? []),
+            ])->values()->all(),
+        ];
+    }
+
+    /**
+     * A letter's recipients as the form ticks them: each one who came from
+     * the matter's parties ticked again, the rest as "Other recipients".
+     *
+     * @return array{recipients: list<int>, extra_recipients: list<array{name: string, role: ?string, emails: list<string>}>}
+     */
+    private static function recipientsState(MatterLetter $letter): array
+    {
+        $candidates = LetterComposer::candidates($letter->matter);
+        $ticked = [];
+        $extra = [];
+
+        foreach ($letter->recipients as $recipient) {
+            // The matter party it was: the same party, not ticked already.
+            $id = filled($recipient->recipient_id)
+                ? collect($candidates)->search(fn (array $c, int $id): bool => (int) $c['party_id'] === (int) $recipient->recipient_id && ! in_array($id, $ticked, true))
+                : false;
+
+            if ($id !== false) {
+                $ticked[] = $id;
+
+                continue;
+            }
+
+            $extra[] = [
+                'name' => (string) $recipient->name,
+                'role' => $recipient->role,
+                'emails' => $recipient->emails ?: array_values(array_filter([$recipient->email])),
+            ];
+        }
+
+        return ['recipients' => $ticked, 'extra_recipients' => $extra];
     }
 
     /**
@@ -771,17 +804,7 @@ class LettersRelationManager extends RelationManager
                 'subject' => (string) ($data['subject'] ?? ''),
                 'body' => LetterComposer::normalizeMergeTags((string) ($data['body'] ?? '')),
             ]);
-        // Each recipient's capacity ("المدعي" / "Plaintiff") in the letter's language.
-        $candidates = LetterComposer::candidates($matter, $template->locale !== 'en');
-
-        $recipients = [
-            ...collect($data['recipients'] ?? [])->map(fn ($id) => $candidates[$id] ?? null)->filter()->values()->all(),
-            ...collect($data['extra_recipients'] ?? [])->map(fn ($r) => [
-                'name' => (string) $r['name'],
-                'role' => $r['role'] ?? null,
-                'emails' => array_values($r['emails'] ?? []),
-            ])->all(),
-        ];
+        $recipients = self::chosenRecipients($matter, $data, $template->locale !== 'en');
 
         $inputs = $data['inputs'] ?? [];
         foreach ($data['extra'] ?? [] as $key => $lines) {

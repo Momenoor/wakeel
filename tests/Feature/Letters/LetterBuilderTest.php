@@ -259,14 +259,17 @@ class LetterBuilderTest extends TestCase
         $candidates = array_values(LetterComposer::candidates($this->matter));
         $letter = app(LetterIssuer::class)->issue($this->template, $this->matter, [$candidates[0]], [], now()->setDate(2026, 9, 1));
 
+        $candidateIds = array_keys(LetterComposer::candidates($this->matter));
+
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
             ->callTableAction('editLetter', $letter, [
                 'letter_date' => '2026-10-02',
                 'letterhead_id' => $letter->letterhead_id,
                 'attention' => 'Ahmed Ali',
-                'recipients' => [
-                    ['name' => 'شركة ألفا', 'role' => null, 'emails' => ['a@alpha.ae'], 'party_id' => null],
-                    ['name' => 'Court clerk', 'role' => 'Clerk', 'emails' => [], 'party_id' => null],
+                // The other party ticked instead, and one typed in.
+                'recipients' => [$candidateIds[1]],
+                'extra_recipients' => [
+                    ['name' => 'Court clerk', 'role' => 'Clerk', 'emails' => []],
                 ],
             ])
             ->assertHasNoTableActionErrors();
@@ -274,8 +277,39 @@ class LetterBuilderTest extends TestCase
         $letter->refresh();
         $this->assertSame('JPA/2026/986/1', $letter->reference);
         $this->assertSame('2026-10-02', $letter->letter_date->toDateString());
-        $this->assertSame(['شركة ألفا', 'Court clerk'], $letter->recipients()->pluck('name')->all());
+        $this->assertSame(['مكتب المزروعي', 'Court clerk'], $letter->recipients()->pluck('name')->all());
+        $this->assertSame(['وكيل المدعي', 'Clerk'], $letter->recipients()->pluck('role')->all());
         $this->assertStringContainsString('لعناية السيد/ Ahmed Ali المحترم', LetterIssuer::composerFor($letter)->values()['recipients']);
+    }
+
+    public function test_editing_ticks_the_letters_recipients_as_when_issued(): void
+    {
+        $candidateIds = array_keys(LetterComposer::candidates($this->matter));
+        $candidates = array_values(LetterComposer::candidates($this->matter));
+        $letter = app(LetterIssuer::class)->issue($this->template, $this->matter, [
+            $candidates[1],
+            ['name' => 'Court clerk', 'role' => 'Clerk', 'emails' => ['clerk@court.ae']],
+        ], []);
+
+        $expected = [
+            'recipients' => [$candidateIds[1]],
+            'extra_recipients' => [['name' => 'Court clerk', 'role' => 'Clerk', 'emails' => ['clerk@court.ae']]],
+        ];
+
+        $page = Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class]);
+        $page->mountTableAction('editLetter', $letter)
+            ->assertSet('mountedActions.0.data.recipients', $expected['recipients'])
+            ->assertSet('mountedActions.0.data.extra_recipients', fn ($rows) => array_values($rows) === $expected['extra_recipients'])
+            // The matter's parties to tick, as when issuing; no "separate letters" here.
+            ->assertMountedActionModalSee(['منى أحمد', 'مكتب المزروعي'])
+            ->assertMountedActionModalDontSee('Issue a separate letter to each recipient');
+
+        // The same from the preview's Edit.
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('preview', $letter)
+            ->callAction('editFromPreview')
+            ->assertSet('mountedActions.0.name', 'editLetter')
+            ->assertSet('mountedActions.0.data.recipients', $expected['recipients']);
     }
 
     public function test_a_letters_wording_can_be_changed_for_that_letter_only(): void
