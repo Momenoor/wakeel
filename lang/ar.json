@@ -3261,5 +3261,6 @@
     "Last seen": "آخر ظهور",
     "Last seen :time": "آخر ظهور :time",
     "Never seen": "لم يظهر بعد",
-    "Online now": "متصل الآن"
+    "Online now": "متصل الآن",
+    "Rebuild caches": "إعادة بناء ذاكرة التخزين المؤقت"
 }

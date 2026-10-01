@@ -369,6 +369,37 @@ class LetterBuilderTest extends TestCase
             ->assertTableActionDataSet(['inputs.documents' => [$this->items[1]]]);
     }
 
+    public function test_the_issue_form_has_no_english_left_in_arabic(): void
+    {
+        app()->setLocale('ar');
+
+        // An empty label is no label to Filament: it showed the field's
+        // name, "Recipients", in English.
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('issue')
+            ->assertMountedActionModalDontSee('Recipients')
+            ->assertMountedActionModalSee(__('Recipients'));
+    }
+
+    public function test_recipients_capacities_are_in_the_letters_language(): void
+    {
+        $candidateIds = array_keys(LetterComposer::candidates($this->matter));
+        $english = LetterTemplate::create(['name' => 'Notice', 'slug' => 'notice-en', 'locale' => 'en', 'category' => 'letter', 'subject' => 'Notice', 'body' => '<p>{{recipients}}</p>']);
+
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->callTableAction('issue', data: ['letter_template_id' => $english->id, 'recipients' => $candidateIds])
+            ->assertHasNoTableActionErrors();
+
+        $this->assertSame(['Plaintiff', "Plaintiff's representative"], MatterLetter::sole()->recipients()->pluck('role')->all());
+
+        // And an Arabic letter, in Arabic.
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->callTableAction('issue', data: ['letter_template_id' => $this->template->id, 'recipients' => $candidateIds, 'inputs' => ['documents' => [$this->items[0]]]])
+            ->assertHasNoTableActionErrors();
+
+        $this->assertSame(['المدعي', 'وكيل المدعي'], MatterLetter::query()->latest('id')->first()->recipients()->pluck('role')->all());
+    }
+
     public function test_the_templates_placeholder_menu_follows_its_fields(): void
     {
         $page = Livewire::test(CreateLetterTemplate::class)

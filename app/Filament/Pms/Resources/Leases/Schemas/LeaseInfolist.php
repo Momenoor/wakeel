@@ -64,7 +64,7 @@ class LeaseInfolist
                 Section::make(__('Tenants'))
                     ->schema([
                         RepeatableEntry::make('leaseParties')
-                            ->label('')
+                            ->label(__('Tenants'))->hiddenLabel()
                             ->schema([
                                 TextEntry::make('party.name')
                                     ->label(__('Party')),
@@ -78,7 +78,7 @@ class LeaseInfolist
                 Section::make(__('Units'))
                     ->schema([
                         RepeatableEntry::make('units')
-                            ->label('')
+                            ->label(__('Units'))->hiddenLabel()
                             ->schema([
                                 TextEntry::make('unit_number')
                                     ->label(__('Unit')),

@@ -90,7 +90,7 @@ class LetterTemplateForm
                     ->collapsible()
                     ->schema([
                         Repeater::make('inputs')
-                            ->label('')
+                            ->label(__('Fields'))->hiddenLabel()
                             ->addActionLabel(__('Add field'))
                             ->reorderable()
                             ->collapsible()
@@ -158,7 +158,7 @@ class LetterTemplateForm
                         // renamed or removed above.
                         LiveMergeTags::wrap(
                             RichEditor::make('body')
-                                ->label('')
+                                ->label(__('Letter'))->hiddenLabel()
                                 ->required()
                                 ->toolbarButtons([
                                     ['bold', 'italic', 'underline', 'textColor', 'highlight'],

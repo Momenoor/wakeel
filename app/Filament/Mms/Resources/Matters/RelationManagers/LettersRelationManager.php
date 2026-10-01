@@ -454,12 +454,13 @@ class LettersRelationManager extends RelationManager
      */
     private static function recipientsSection(Matter $matter): Section
     {
-        $candidates = LetterComposer::candidates($matter);
+        // Listed in the interface's language; the letter gets them in its own (issue()).
+        $candidates = LetterComposer::candidates($matter, app()->getLocale() !== 'en');
 
         return Section::make(__('Recipients'))
             ->schema([
                 CheckboxList::make('recipients')
-                    ->label('')
+                    ->label(__('Recipients'))->hiddenLabel()
                     ->options(collect($candidates)->map(fn ($c) => trim($c['name'].($c['role'] ? ' ('.$c['role'].')' : '')))->all())
                     ->descriptions(collect($candidates)->map(fn ($c) => implode(' · ', $c['emails']))->all())
                     ->default([])
@@ -770,7 +771,8 @@ class LettersRelationManager extends RelationManager
                 'subject' => (string) ($data['subject'] ?? ''),
                 'body' => LetterComposer::normalizeMergeTags((string) ($data['body'] ?? '')),
             ]);
-        $candidates = LetterComposer::candidates($matter);
+        // Each recipient's capacity ("المدعي" / "Plaintiff") in the letter's language.
+        $candidates = LetterComposer::candidates($matter, $template->locale !== 'en');
 
         $recipients = [
             ...collect($data['recipients'] ?? [])->map(fn ($id) => $candidates[$id] ?? null)->filter()->values()->all(),

@@ -62,7 +62,7 @@ class QuotationInfolist
                 Section::make(__('Units'))
                     ->schema([
                         RepeatableEntry::make('units')
-                            ->label('')
+                            ->label(__('Units'))->hiddenLabel()
                             ->schema([
                                 TextEntry::make('unit_number')
                                     ->label(__('Unit'))

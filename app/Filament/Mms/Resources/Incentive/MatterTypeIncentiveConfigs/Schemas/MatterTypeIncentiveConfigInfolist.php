@@ -27,7 +27,7 @@ class MatterTypeIncentiveConfigInfolist
                 Section::make(__('Tiers'))
                     ->visible(fn ($record) => in_array($record->calculation_type, ['tiered', 'committee']))
                     ->schema([
-                        RepeatableEntry::make('tiers')->label('')->schema([
+                        RepeatableEntry::make('tiers')->label(__('Tiers'))->hiddenLabel()->schema([
                             TextEntry::make('difficulty')->label(__('Difficulty'))->badge(),
                             TextEntry::make('days_from')->label(__('From Day')),
                             TextEntry::make('days_to')->label(__('To Day'))->placeholder(__('No limit')),

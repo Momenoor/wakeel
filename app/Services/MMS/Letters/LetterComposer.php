@@ -75,7 +75,7 @@ class LetterComposer
             $candidates[$mp->id] = self::candidate($mp, $label);
 
             foreach ($rows->filter(fn (MatterParty $rep) => (int) $rep->parent_id === (int) $mp->id) as $rep) {
-                $candidates[$rep->id] = self::candidate($rep, $label ? ($arabic ? 'وكيل '.$label : $label.' representative') : null);
+                $candidates[$rep->id] = self::candidate($rep, $label ? ($arabic ? 'وكيل '.$label : $label."'s representative") : null);
             }
         }
 

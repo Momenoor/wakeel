@@ -68,7 +68,7 @@ class ViewIncentiveCalculation extends ViewRecord
                         ->live(onBlur: true)
                         ->afterStateUpdated(fn (Set $set, Get $get) => $this->updateQualifyingMatters($set, $get)),
                     Repeater::make('temp_lines')
-                        ->label('')
+                        ->label(__('Matters'))->hiddenLabel()
                         ->schema([
                             // Without this the action's ->pluck('matter_id') returned
                             // an array of nulls and the import silently did nothing:
