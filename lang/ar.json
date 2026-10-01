@@ -3218,5 +3218,7 @@
     "Numbers in “:title”": "الأرقام في «:title»",
     "Tick a number that is not that matter for this event. It will not be linked from the title, and is no longer reported as a missing matter.": "حدّد الرقم الذي لا يخص هذه القضية في هذا الموعد. لن يُربط من العنوان، ولن يُبلَّغ عنه كقضية غير موجودة.",
     "a matter in the system": "قضية موجودة في النظام",
-    "no matter with this number": "لا توجد قضية بهذا الرقم"
+    "no matter with this number": "لا توجد قضية بهذا الرقم",
+    "Turn notification sounds off": "إيقاف أصوات الإشعارات",
+    "Turn notification sounds on": "تشغيل أصوات الإشعارات"
 }

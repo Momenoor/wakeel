@@ -87,4 +87,19 @@ class DesktopNotificationTest extends TestCase
             ->assertSee('wakeel-desktop-notification.window', false)
             ->assertSee('Notification.requestPermission', false);
     }
+
+    public function test_notifications_and_chat_play_a_sound_that_can_be_turned_off(): void
+    {
+        $this->actingAs(User::factory()->create());
+        Filament::setCurrentPanel('mms');
+
+        $this->get(Chat::getUrl())
+            ->assertSuccessful()
+            // Plays on the same event as the desktop notification.
+            ->assertSee("window.addEventListener('wakeel-desktop-notification'", false)
+            ->assertSee("id.startsWith('chat-') ? 'chat' : 'notification'", false)
+            // The on/off button, remembered per browser.
+            ->assertSee('Turn notification sounds off')
+            ->assertSee("localStorage.setItem('wakeel-sound'", false);
+    }
 }

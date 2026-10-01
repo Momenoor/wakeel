@@ -74,6 +74,13 @@ class AppServiceProvider extends ServiceProvider
 
         Setting::applyMailConfig();
 
+        // A sound for each new notification and chat message, with its
+        // on/off button beside the notifications bell.
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::USER_MENU_BEFORE,
+            fn (): string => auth()->check() ? view('filament.partials.notification-sound')->render() : '',
+        );
+
         // The font that draws the Dirham sign, on every panel page.
         FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): string => (string) Currency::fontLink());
 
