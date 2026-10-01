@@ -106,6 +106,10 @@
             </x-filament::section>
 
             @if ($selectedElement)
+                {{-- Keyed by the element, so picking another one rebuilds these
+                     inputs instead of reusing the previous element's — whose
+                     bindings and values otherwise carried over to it. --}}
+                <div wire:key="element-settings-{{ $selected }}-{{ count($elements) }}">
                 <x-filament::section :heading="$types[$selectedElement['type']] ?? ''">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: .6rem;">
                         <label style="grid-column: span 2; font-size: .85rem;">{{ __('Shown on') }}
@@ -171,6 +175,7 @@
                         </div>
                     </div>
                 </x-filament::section>
+                </div>
             @endif
         </div>
     </div>

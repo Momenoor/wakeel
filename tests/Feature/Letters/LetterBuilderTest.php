@@ -275,6 +275,34 @@ class LetterBuilderTest extends TestCase
         $this->get(LetterheadResource::getUrl('design', ['record' => $letterhead]))->assertSuccessful();
     }
 
+    public function test_each_elements_settings_stay_its_own(): void
+    {
+        $letterhead = Letterhead::create(['name' => 'Main', 'elements' => []]);
+
+        $designer = Livewire::test(DesignLetterhead::class, ['record' => $letterhead->getRouteKey()])
+            ->call('addElement', 'text')
+            ->call('addElement', 'text');
+
+        // A new panel for each element picked — never the previous one's inputs.
+        $designer->call('select', 0)
+            ->assertSeeHtml('wire:key="element-settings-0-2"')
+            ->set('elements.0.font_size', 20)
+            ->set('elements.0.bold', true)
+            ->call('select', 1)
+            ->assertSeeHtml('wire:key="element-settings-1-2"')
+            ->assertDontSeeHtml('wire:key="element-settings-0-2"')
+            ->set('elements.1.color', '#dc2626')
+            ->call('save');
+
+        [$first, $second] = $letterhead->fresh()->elements;
+        $this->assertEquals(20, $first['font_size']);
+        $this->assertTrue((bool) $first['bold']);
+        $this->assertSame('#111827', $first['color']);
+        $this->assertEquals(11, $second['font_size']);
+        $this->assertFalse((bool) $second['bold']);
+        $this->assertSame('#dc2626', $second['color']);
+    }
+
     public function test_the_screens_open(): void
     {
         $this->get(LetterheadResource::getUrl('create'))->assertSuccessful();

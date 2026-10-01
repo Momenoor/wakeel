@@ -183,7 +183,9 @@ class DesignLetterhead extends Page
             'subject' => 'نموذج خطاب',
             'body' => '<p>{{recipients}}</p><p>تحية طيبة وبعد،</p><p><strong>الموضوع: {{subject}}</strong></p>'
                 .str_repeat('<p>هذا نص تجريبي لمعاينة ترويسة الخطاب وهوامشه وموضع عناصره على الصفحة، ويتكرر لملء الصفحة ومشاهدة الصفحات التالية.</p>', 18)
-                .'<p>وتفضلوا بقبول وافر الاحترام والتقدير،</p><p>{{signature}}</p>',
+                // No signature or stamp: the preview is of the letterhead; a
+                // letter shows them only where its template has them.
+                .'<p>وتفضلوا بقبول وافر الاحترام والتقدير،</p>',
         ]);
 
         $matter = new Matter(['number' => '123', 'year' => now()->year]);
