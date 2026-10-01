@@ -44,7 +44,7 @@ class MailSenderResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedAtSymbol;
 
-    protected static ?int $navigationSort = 7;
+    protected static ?int $navigationSort = 8;
 
     public static function moduleGateKey(): string
     {

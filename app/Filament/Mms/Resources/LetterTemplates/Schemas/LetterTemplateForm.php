@@ -7,6 +7,7 @@ use App\Filament\Support\LiveMergeTags;
 use App\Filament\Support\RichEditorDirection;
 use App\Models\Letterhead;
 use App\Models\LetterItem;
+use App\Services\MMS\Letters\Blocks\SavedSignatureBlock;
 use App\Services\MMS\Letters\Blocks\SignatureBlock;
 use App\Services\MMS\Letters\LetterComposer;
 use Filament\Forms\Components\Repeater;
@@ -168,7 +169,7 @@ class LetterTemplateForm
                                     ['undo', 'redo'],
                                 ])
                                 ->mergeTags(fn (Get $get) => LetterComposer::catalog(null, $get('inputs') ?? []))
-                                ->customBlocks([SignatureBlock::class])
+                                ->customBlocks([SavedSignatureBlock::class, SignatureBlock::class])
                                 ->tap(RichEditorDirection::apply(...))
                                 ->extraInputAttributes(fn (Get $get) => ['dir' => $get('locale') === 'en' ? 'ltr' : 'rtl', 'style' => 'min-height: 30rem;']),
                             fn (Get $get) => LetterComposer::catalog(null, $get('inputs') ?? []),

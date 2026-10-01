@@ -12,6 +12,7 @@ use App\Models\LetterTemplate;
 use App\Models\Matter;
 use App\Models\MatterLetter;
 use App\Models\MatterParty;
+use App\Services\MMS\Letters\Blocks\SavedSignatureBlock;
 use App\Services\MMS\Letters\Blocks\SignatureBlock;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterIssuer;
@@ -629,7 +630,7 @@ class LettersRelationManager extends RelationManager
                 ['undo', 'redo'],
             ])
             ->mergeTags($mergeTags)
-            ->customBlocks([SignatureBlock::class])
+            ->customBlocks([SavedSignatureBlock::class, SignatureBlock::class])
             ->tap(RichEditorDirection::apply(...))
             ->extraInputAttributes(fn () => ['dir' => $arabic() ? 'rtl' : 'ltr', 'style' => 'min-height: 24rem;']);
     }

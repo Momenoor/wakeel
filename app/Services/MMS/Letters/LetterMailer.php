@@ -201,7 +201,8 @@ class LetterMailer
             $header = '<p style="margin: 0;">'.($arabic ? 'المرجع: ' : 'Ref: ').'<span dir="ltr">'.e($values['reference']).'</span></p>'
                 .'<p style="margin: 0 0 16px 0;">'.($arabic ? 'التاريخ: ' : 'Date: ').e($values['date']).'</p>';
 
-            [$html, $images] = $this->embeddable($header.$composer->bodyHtml());
+            // A signature block: its lines, then its picture — no layering in mail.
+            [$html, $images] = $this->embeddable($header.SignatureLayouts::forEmail($composer->bodyHtml()));
 
             return new LetterEmail(
                 BulkMailPlaceholders::apply(filled($subjectOverride) ? $subjectOverride : self::bodySubject($values), array_map('strip_tags', $values)),

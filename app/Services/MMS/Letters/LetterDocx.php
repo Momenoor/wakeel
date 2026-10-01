@@ -5,15 +5,19 @@ namespace App\Services\MMS\Letters;
 use App\Models\Letterhead;
 use App\Services\MMS\BulkMailPlaceholders;
 use App\Support\Branding;
+use DOMDocument;
 use PhpOffice\PhpWord\Element\AbstractContainer;
 use PhpOffice\PhpWord\Element\Header;
+use PhpOffice\PhpWord\Element\Section;
 use PhpOffice\PhpWord\Element\Text;
 use PhpOffice\PhpWord\IOFactory;
 use PhpOffice\PhpWord\PhpWord;
+use PhpOffice\PhpWord\Settings;
 use PhpOffice\PhpWord\Shared\Converter;
 use PhpOffice\PhpWord\Shared\Html;
 use PhpOffice\PhpWord\Style\Font;
 use PhpOffice\PhpWord\Style\Frame;
+use PhpOffice\PhpWord\Style\Image;
 use PhpOffice\PhpWord\Style\Paragraph;
 
 /**
@@ -89,7 +93,7 @@ class LetterDocx
             );
         }
 
-        Html::addHtml($section, $this->wordHtml(), false, false);
+        $this->addBody($section, $this->wordHtml());
 
         if ($rtl) {
             $this->rightToLeft($section);
@@ -99,9 +103,74 @@ class LetterDocx
             mkdir(dirname($path), 0755, true);
         }
 
-        IOFactory::createWriter($word, 'Word2007')->save($path);
+        // The text written as XML-safe: an "&" in a name ("Ahmed & Co")
+        // would otherwise leave a file Word can't open. Only for this letter
+        // — the setting is global.
+        $escaping = Settings::isOutputEscapingEnabled();
+        Settings::setOutputEscapingEnabled(true);
+
+        try {
+            IOFactory::createWriter($word, 'Word2007')->save($path);
+        } finally {
+            Settings::setOutputEscapingEnabled($escaping);
+        }
 
         return $path;
+    }
+
+    /**
+     * The letter's text, its saved signature blocks (SignatureLayouts) laid
+     * out natively: Word can float a picture behind text, which HTML can't
+     * tell PHPWord.
+     */
+    private function addBody(Section $section, string $html): void
+    {
+        $parts = preg_split('/(<div data-sign-layout="[^"]*"[^>]*>.*?<\/div>)/su', $html, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [$html];
+
+        foreach ($parts as $part) {
+            if (preg_match('/^<div data-sign-layout="([^"]*)"[^>]*>(.*)<\/div>$/su', $part, $m)) {
+                $this->signatureBlock($section, json_decode((string) base64_decode($m[1]), true) ?: [], $m[2]);
+            } elseif (trim($part) !== '') {
+                Html::addHtml($section, $part, false, false);
+            }
+        }
+    }
+
+    /**
+     * A signature block: its layered picture floating behind, at the box's
+     * place on the line, then its lines over it, then room for the rest of
+     * the box.
+     *
+     * @param  array{image?: ?string, width?: float, height?: float, offset?: float}  $box
+     */
+    private function signatureBlock(Section $section, array $box, string $lines): void
+    {
+        $width = (float) ($box['width'] ?? 80);
+        $height = (float) ($box['height'] ?? 40);
+
+        if (filled($box['image'] ?? null) && is_file($box['image'])) {
+            $section->addImage($box['image'], [
+                'width' => Converter::cmToPoint($width / 10),
+                'height' => Converter::cmToPoint($height / 10),
+                'positioning' => Image::POSITION_RELATIVE,
+                'posHorizontal' => Image::POSITION_ABSOLUTE,
+                'posHorizontalRel' => Image::POSITION_RELATIVE_TO_MARGIN,
+                'posVertical' => Image::POSITION_ABSOLUTE,
+                'posVerticalRel' => Image::POSITION_RELATIVE_TO_LINE,
+                'marginLeft' => Converter::cmToPoint((float) ($box['offset'] ?? 0) / 10),
+                'marginTop' => 0,
+                'wrappingStyle' => Image::WRAPPING_STYLE_BEHIND,
+            ]);
+        }
+
+        // The lines, aligned as designed, without the mm offsets meant for the PDF box.
+        Html::addHtml($section, preg_replace('/margin:[^;]*;/', '', $lines) ?? $lines, false, false);
+
+        // The rest of the box's height (a line is about 6 mm).
+        $rest = $height - substr_count($lines, '<p') * 6;
+        if ($rest > 0) {
+            $section->addText('', [], ['spaceBefore' => 0, 'spaceAfter' => (int) Converter::cmToTwip($rest / 10)]);
+        }
     }
 
     /**
@@ -116,18 +185,63 @@ class LetterDocx
             $this->composer->bodyHtml(),
         );
 
-        if (! $this->composer->isArabic()) {
-            return $html;
+        if ($this->composer->isArabic()) {
+            // Each date, time, link or email becomes its own <span> — its own
+            // run in Word — so rightToLeft() can leave it left to right. Only
+            // the text between tags, never attributes or tag names.
+            $html = preg_replace_callback(
+                '/>([^<]+)</u',
+                fn ($m) => '>'.self::ltrRuns($m[1]).'<',
+                $html,
+            );
         }
 
-        // Each date, time, link or email becomes its own <span> — its own
-        // run in Word — so rightToLeft() can leave it left to right. Only
-        // the text between tags, never attributes or tag names.
-        return preg_replace_callback(
-            '/>([^<]+)</u',
-            fn ($m) => '>'.preg_replace(self::LTR_TOKEN, '<span>$1</span>', $m[1]).'<',
-            $html,
-        );
+        return self::xhtml($html);
+    }
+
+    /**
+     * A piece of text with each Latin run in its own <span>. Read as text
+     * first: an entity (&nbsp;, &amp;) is a character, not letters to wrap.
+     */
+    private static function ltrRuns(string $html): string
+    {
+        $text = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $pieces = preg_split(self::LTR_TOKEN, $text, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [$text];
+
+        // Split on the runs: text, run, text, run…
+        return collect($pieces)
+            ->map(fn (string $piece, int $i): string => $i % 2 === 1
+                ? '<span>'.htmlspecialchars($piece, ENT_NOQUOTES | ENT_XML1, 'UTF-8').'</span>'
+                : htmlspecialchars($piece, ENT_NOQUOTES | ENT_XML1, 'UTF-8'))
+            ->implode('');
+    }
+
+    /**
+     * PHPWord reads the HTML as XML: the editor's <hr>, <br> and &nbsp;
+     * aren't, and stop it ("Opening and ending tag mismatch: hr"). Read as
+     * HTML and written back as XML, every tag is closed and every entity a
+     * character.
+     */
+    private static function xhtml(string $html): string
+    {
+        $dom = new DOMDocument;
+        $errors = libxml_use_internal_errors(true);
+
+        try {
+            $dom->loadHTML('<html><head><meta charset="UTF-8"></head><body>'.$html.'</body></html>');
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($errors);
+        }
+
+        $body = $dom->getElementsByTagName('body')->item(0);
+        $xhtml = '';
+
+        foreach ($body?->childNodes ?? [] as $node) {
+            $xhtml .= $dom->saveXML($node);
+        }
+
+        return $xhtml;
     }
 
     /**

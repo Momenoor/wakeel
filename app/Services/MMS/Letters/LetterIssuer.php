@@ -55,7 +55,8 @@ class LetterIssuer
                 'subject' => $composer->subject(),
                 'attention' => filled($attention) ? trim($attention) : null,
                 'locale' => $template->locale ?: 'ar',
-                'body' => (string) $template->body,
+                // Saved signature blocks kept as they are now.
+                'body' => SignatureLayouts::freeze((string) $template->body),
                 'inputs' => $inputs,
                 'rendered_html' => $composer->bodyHtml(),
                 'letter_date' => $date,
@@ -115,7 +116,7 @@ class LetterIssuer
                 'letter_date' => $date,
                 'letterhead_id' => $letterhead?->getKey() ?? $letter->letterhead_id,
                 'attention' => filled($attention) ? trim($attention) : null,
-                ...(filled(strip_tags((string) $body)) ? ['body' => LetterComposer::normalizeMergeTags((string) $body)] : []),
+                ...(filled(strip_tags((string) $body)) || str_contains((string) $body, 'customBlock') ? ['body' => SignatureLayouts::freeze(LetterComposer::normalizeMergeTags((string) $body))] : []),
             ]);
 
             $letter->recipients()->delete();

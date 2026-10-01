@@ -312,6 +312,12 @@ class LetterComposer
         $values = $this->values();
         $html = self::normalizeMergeTags($body ?? (string) $this->template->body);
 
+        // Saved signature blocks, laid out on this letter's letterhead —
+        // before the placeholders, which their lines may hold.
+        $letterhead = $this->letterhead ?? Letterhead::default() ?? Letterhead::fallback();
+        $pageWidth = $letterhead->orientation === 'landscape' ? Letterhead::PAGE_HEIGHT : Letterhead::PAGE_WIDTH;
+        $html = SignatureLayouts::expand($html, $letterhead, $pageWidth - (float) $letterhead->margin_left - (float) $letterhead->margin_right);
+
         $blocks = array_filter($values, fn ($value, $key) => in_array($key, self::BLOCKS, true)
             || (str_starts_with($key, 'input.') && str_contains($value, '<ol>'))
             || (str_starts_with($key, 'input.') && str_contains($value, '<br')), ARRAY_FILTER_USE_BOTH);

@@ -493,6 +493,30 @@ class LetterBuilderTest extends TestCase
             ->assertSet('mountedActions.0.data.name_representatives', [$ids['mona'], $ids['sara'], $ids['company']]);
     }
 
+    public function test_word_takes_lines_breaks_and_spaces_from_the_editor(): void
+    {
+        // As the rich editor writes them: <hr> and <br> unclosed, &nbsp;.
+        $body = '<p>{{recipients}}</p><hr><p>السطر الأول<br>السطر&nbsp;الثاني</p><p>Ahmed &amp; Co</p><hr>';
+
+        foreach (['ar', 'en'] as $locale) {
+            $this->template->update(['locale' => $locale, 'body' => $body]);
+            $letter = app(LetterIssuer::class)->issue($this->template->fresh(), $this->matter, [array_values(LetterComposer::candidates($this->matter))[0]], []);
+
+            $docx = (new LetterDocx(LetterIssuer::composerFor($letter)))->save(storage_path('app/temp/test-word-'.$locale.'.docx'));
+            $zip = new ZipArchive;
+            $zip->open($docx);
+            $document = (string) $zip->getFromName('word/document.xml');
+            $zip->close();
+            @unlink($docx);
+
+            $this->assertStringContainsString('السطر الأول', $document);
+            $this->assertStringContainsString("السطر\u{00A0}الثاني", $document);
+            $this->assertStringContainsString('Ahmed &amp; Co', $document);
+            // A file Word can open: well-formed XML.
+            $this->assertNotFalse(simplexml_load_string($document), 'word/document.xml is not well-formed');
+        }
+    }
+
     public function test_the_issue_form_has_no_english_left_in_arabic(): void
     {
         app()->setLocale('ar');

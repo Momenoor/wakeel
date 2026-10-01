@@ -9,6 +9,7 @@ use App\Filament\Mms\Resources\Letterheads\LetterheadResource;
 use App\Filament\Mms\Resources\LetterItems\LetterItemResource;
 use App\Filament\Mms\Resources\LetterTemplates\LetterTemplateResource;
 use App\Filament\Mms\Resources\MailSenders\MailSenderResource;
+use App\Filament\Mms\Resources\SignatureLayouts\SignatureLayoutResource;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -18,7 +19,7 @@ use Tests\TestCase;
 /**
  * The Communication menu: the daily tools first, then each part next to
  * what it's built from — letter templates with their items and
- * letterheads, then the covering emails and the mailboxes mail goes from.
+ * letterheads and signature blocks, then the covering emails and the mailboxes mail goes from.
  */
 class CommunicationNavigationTest extends TestCase
 {
@@ -39,6 +40,7 @@ class CommunicationNavigationTest extends TestCase
             LetterTemplateResource::getUrl(),
             LetterItemResource::getUrl(),
             LetterheadResource::getUrl(),
+            SignatureLayoutResource::getUrl(),
             EmailTemplateResource::getUrl(),
             MailSenderResource::getUrl(),
         ];
