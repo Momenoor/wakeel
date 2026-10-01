@@ -10,7 +10,7 @@
                     x-data="{ get on() { const ids = $store.chatOnline?.ids; return (ids ?? $wire.onlineUserIds).includes({{ $other->id }}); } }"
                     class="text-xs"
                     :class="on ? 'text-green-600 dark:text-green-400' : 'text-gray-400'"
-                    x-text="on ? @js(__('Online')) : @js(__('Offline'))"
+                    x-text="on ? @js(__('Online')) : @js($other->last_seen_at ? __('Last seen :time', ['time' => $other->last_seen_at->diffForHumans()]) : __('Offline'))"
                 ></span>
             </span>
         @else

@@ -13,6 +13,7 @@ use App\Filament\Shared\Actions\ForceSignOutActions;
 use App\Filament\Shared\ActivityLog\AuditDashboard;
 use App\Filament\Shared\Pages\SystemSettings;
 use App\Filament\Shared\Pages\SystemUpdates;
+use App\Filament\Shared\Users\LastSeen;
 use App\Filament\Shared\Users\TranslateUsersPluginLabels;
 use App\Http\Middleware\CheckSystemOffline;
 use App\Http\Middleware\EnsureLicenseIsValid;
@@ -213,6 +214,8 @@ class MmsPanelProvider extends PanelProvider
         ]);
         // "Sign out" for one user or a selection, on the Users table.
         ForceSignOutActions::register();
+        // When each user was last in Wakeel.
+        LastSeen::register();
         FilamentTimezone::set(config('app.timezone'));
         FileUpload::configureUsing(fn (FileUpload $component) => $component->maxSize(1024 * 1024 * 50));
 

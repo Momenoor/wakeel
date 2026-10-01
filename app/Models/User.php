@@ -90,6 +90,21 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     }
 
     /**
+     * "Online", "Last seen 5 minutes ago" or "Never seen", in the
+     * interface's language.
+     */
+    public function lastSeenText(): string
+    {
+        if ($this->isOnline()) {
+            return __('Online');
+        }
+
+        return $this->last_seen_at
+            ? __('Last seen :time', ['time' => $this->last_seen_at->diffForHumans()])
+            : __('Never seen');
+    }
+
+    /**
      * The Party record this user acts as (assistant, expert, etc.).
      *
      * @return HasOne<Party, $this>

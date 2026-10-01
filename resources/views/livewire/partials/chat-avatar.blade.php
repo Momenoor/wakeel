@@ -18,7 +18,7 @@
             x-data="{ get on() { const ids = $store.chatOnline?.ids; return (ids ?? $wire.onlineUserIds).includes({{ $user->id }}); } }"
             class="absolute bottom-0 end-0 block h-2.5 w-2.5 rounded-full ring-2 ring-white dark:ring-gray-900"
             :class="on ? 'bg-green-500 shadow-[0_0_6px_2px_rgba(34,197,94,0.55)]' : 'bg-red-500 shadow-[0_0_6px_2px_rgba(239,68,68,0.5)]'"
-            :title="on ? @js(__('Online')) : @js(__('Offline'))"
+            :title="on ? @js(__('Online')) : @js($user->last_seen_at ? __('Last seen :time', ['time' => $user->last_seen_at->diffForHumans()]) : __('Offline'))"
         ></span>
     @endif
 </span>
