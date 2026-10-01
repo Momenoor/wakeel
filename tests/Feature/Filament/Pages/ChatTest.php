@@ -35,6 +35,15 @@ class ChatTest extends TestCase
         $this->get(Chat::getUrl())->assertSuccessful();
     }
 
+    public function test_typing_on_a_phone_does_not_zoom_the_page(): void
+    {
+        // The iPhone zooms in on any field under 16px; on phone widths they're 16px.
+        $this->get(Chat::getUrl())
+            ->assertSuccessful()
+            ->assertSee('@media (max-width: 767px) { input:not([type=checkbox])', false)
+            ->assertSee('font-size: 16px !important', false);
+    }
+
     public function test_guest_cannot_access_the_chat_page(): void
     {
         auth()->logout();

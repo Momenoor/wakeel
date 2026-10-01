@@ -84,6 +84,14 @@ class AppServiceProvider extends ServiceProvider
         // The font that draws the Dirham sign, on every panel page.
         FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): string => (string) Currency::fontLink());
 
+        // On a phone, typing in a field smaller than 16px makes the iPhone
+        // zoom the whole page in (and leave it zoomed): the chat box, the
+        // search, every form field. 16px there, as they are elsewhere.
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::HEAD_END,
+            fn (): string => '<style>@media (max-width: 767px) { input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea, select, [contenteditable=true] { font-size: 16px !important; } }</style>',
+        );
+
         // ->aed(): an amount with the Dirham sign before it, in table columns,
         // detail entries and table totals (instead of money('AED')).
         foreach ([TextColumn::class, TextEntry::class, Summarizer::class] as $component) {
