@@ -42,6 +42,8 @@ class LetterComposer
         public ?string $reference = null,
         public ?CarbonInterface $date = null,
         public ?Letterhead $letterhead = null,
+        // Printed under the addressees: "لعناية السيد/ … المحترم".
+        public ?string $attention = null,
     ) {
         $this->date ??= now();
         $this->letterhead ??= $template->letterhead ?? Letterhead::default() ?? Letterhead::fallback();
@@ -116,8 +118,8 @@ class LetterComposer
             'date' => $this->date->format('d/m/Y'),
             'subject' => '',
             'recipients' => $this->recipientsHtml(),
-            'signature' => $this->imageHtml($this->letterhead?->file($this->letterhead?->signature_image), 45),
-            'stamp' => $this->imageHtml($this->letterhead?->file($this->letterhead?->stamp_image), 40),
+            'signature' => $this->imageHtml($this->letterhead?->file($this->letterhead?->signature_image), (float) ($this->letterhead?->signature_height ?: 45)),
+            'stamp' => $this->imageHtml($this->letterhead?->file($this->letterhead?->stamp_image), (float) ($this->letterhead?->stamp_height ?: 40)),
         ];
 
         foreach ($this->template->inputs ?? [] as $input) {
@@ -210,10 +212,23 @@ class LetterComposer
             }
 
             return $html;
-        })->implode('');
+        })->implode('').$this->attentionHtml();
     }
 
-    private function imageHtml(?string $file, int $heightMm): string
+    private function attentionHtml(): string
+    {
+        if (blank($this->attention)) {
+            return '';
+        }
+
+        $line = $this->isArabic()
+            ? 'لعناية السيد/ '.e(trim($this->attention)).' المحترم'
+            : 'Attention: Mr. '.e(trim($this->attention));
+
+        return '<p class="recipient"><strong>'.$line.'</strong></p>';
+    }
+
+    private function imageHtml(?string $file, float $heightMm): string
     {
         return $file ? '<img src="'.e($file).'" style="height: '.$heightMm.'mm;" />' : '';
     }

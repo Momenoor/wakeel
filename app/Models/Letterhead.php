@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Storage;
  * An element: {type, page: first|all|rest, x, y, width (all mm from the
  * page's top-left), content, font_size, bold, align, color}.
  */
-#[Fillable('name', 'is_default', 'orientation', 'margin_top', 'margin_right', 'margin_bottom', 'margin_left', 'other_margin_top', 'other_margin_bottom', 'first_page_background', 'other_pages_background', 'watermark_type', 'watermark_text', 'watermark_image', 'watermark_opacity', 'signature_image', 'stamp_image', 'elements')]
+#[Fillable('name', 'is_default', 'orientation', 'margin_top', 'margin_right', 'margin_bottom', 'margin_left', 'other_margin_top', 'other_margin_bottom', 'first_page_background', 'other_pages_background', 'watermark_type', 'watermark_text', 'watermark_image', 'watermark_opacity', 'signature_image', 'signature_height', 'stamp_image', 'stamp_height', 'elements')]
 class Letterhead extends Model
 {
     public const DISK = 'public';
@@ -42,6 +42,8 @@ class Letterhead extends Model
             'margin_left' => 'float',
             'other_margin_top' => 'float',
             'other_margin_bottom' => 'float',
+            'signature_height' => 'float',
+            'stamp_height' => 'float',
             'watermark_opacity' => 'float',
         ];
     }

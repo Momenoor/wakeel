@@ -150,6 +150,23 @@ class LetterheadResource extends Resource
                 ->schema([
                     $image('signature_image', __('Signature')),
                     $image('stamp_image', __('Stamp')),
+                    // How tall each is drawn; the width follows the image.
+                    TextInput::make('signature_height')
+                        ->label(__('Signature height (mm)'))
+                        ->numeric()
+                        ->minValue(5)
+                        ->maxValue(150)
+                        ->step(0.5)
+                        ->default(45)
+                        ->required(),
+                    TextInput::make('stamp_height')
+                        ->label(__('Stamp height (mm)'))
+                        ->numeric()
+                        ->minValue(5)
+                        ->maxValue(150)
+                        ->step(0.5)
+                        ->default(40)
+                        ->required(),
                 ]),
         ]);
     }

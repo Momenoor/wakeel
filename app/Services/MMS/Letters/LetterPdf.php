@@ -164,15 +164,22 @@ class LetterPdf
             default => nl2br(BulkMailPlaceholders::apply(e((string) ($element['content'] ?? '')), array_map('strip_tags', $values))),
         };
 
+        // Bold: the font has one weight, so — as for bold in the letter — a
+        // thin outline in the element's colour, sized with its text. mPDF
+        // draws it on an inner span only, never on the positioned box itself.
+        if (! empty($element['bold']) && ! in_array($element['type'] ?? null, ['logo', 'image', 'line'], true) && $content !== '') {
+            $outline = round(max(0.08, (float) ($element['font_size'] ?? 11) * 0.0092), 3);
+            $content = '<span style="text-outline-width: '.$outline.'mm; text-outline-color: '.e($element['color'] ?? '#111827').';">'.$content.'</span>';
+        }
+
         $style = sprintf(
-            'position: absolute; left: %smm; top: %smm; width: %smm; font-size: %spt; color: %s; text-align: %s; %s',
+            'position: absolute; left: %smm; top: %smm; width: %smm; font-size: %spt; color: %s; text-align: %s;',
             (float) ($element['x'] ?? 0),
             (float) ($element['y'] ?? 0),
             (float) ($element['width'] ?? 60),
             (float) ($element['font_size'] ?? 11),
             e($element['color'] ?? '#111827'),
             e($element['align'] ?? ($rtl ? 'right' : 'left')),
-            ! empty($element['bold']) ? 'font-weight: bold;' : '',
         );
 
         $dir = in_array($element['type'] ?? null, ['reference', 'date'], true) && ! $arabic ? 'ltr' : ($rtl ? 'rtl' : 'ltr');

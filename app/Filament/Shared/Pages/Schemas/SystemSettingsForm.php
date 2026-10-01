@@ -3,6 +3,7 @@
 namespace App\Filament\Shared\Pages\Schemas;
 
 use App\Filament\Schemas\BrandingSettingsSection;
+use App\Models\MatterLetter;
 use App\Services\MMS\SenderMailer;
 use App\Support\ScreenPermissions;
 use Filament\Forms\Components\Select;
@@ -115,6 +116,17 @@ class SystemSettingsForm
                                         ])
                                         ->required()
                                         ->default(25),
+
+                                    // How each matter letter is numbered.
+                                    TextInput::make('letter_reference_format')
+                                        ->label(__('Letter reference format'))
+                                        ->default(MatterLetter::DEFAULT_REFERENCE_FORMAT)
+                                        ->required()
+                                        ->maxLength(100)
+                                        ->rule('regex:/\{seq\}/')
+                                        ->validationMessages(['regex' => __('The format must include {seq}, so each letter on a matter gets its own reference.')])
+                                        ->helperText(__('{year} and {number}: the matter\'s; {seq}: the letter\'s number on the matter (required); {current_year}: the year it is issued. Letters already issued keep their reference.'))
+                                        ->columnSpanFull(),
                                 ]),
 
                             BrandingSettingsSection::make(),

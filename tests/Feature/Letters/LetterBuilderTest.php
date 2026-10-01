@@ -18,6 +18,7 @@ use App\Models\Matter;
 use App\Models\MatterLetter;
 use App\Models\MatterParty;
 use App\Models\Party;
+use App\Models\Setting;
 use App\Models\Type;
 use App\Models\User;
 use App\Services\MMS\Letters\LetterComposer;
@@ -195,6 +196,86 @@ class LetterBuilderTest extends TestCase
         $this->assertSame(auth()->id(), $letter->sent_by);
     }
 
+    public function test_several_recipients_can_each_get_their_own_letter(): void
+    {
+        $candidateIds = array_keys(LetterComposer::candidates($this->matter));
+
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('issue')
+            ->setTableActionData(['letter_template_id' => $this->template->id])
+            ->setTableActionData([
+                'recipients' => [$candidateIds[0]],
+                'extra_recipients' => [['name' => 'Court clerk', 'role' => null, 'emails' => ['clerk@court.ae']]],
+                'inputs.documents' => [$this->items[2]],
+                'separately' => true,
+            ])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors()
+            ->assertNotified(__(':count letters issued, one for each recipient', ['count' => 2]));
+
+        $letters = MatterLetter::with('recipients')->orderBy('id')->get();
+        $this->assertCount(2, $letters);
+        $this->assertSame(['JPA/2026/986/1', 'JPA/2026/986/2'], $letters->pluck('reference')->all());
+        $this->assertSame([['منى أحمد'], ['Court clerk']], $letters->map(fn ($l) => $l->recipients->pluck('name')->all())->all());
+    }
+
+    public function test_the_reference_follows_the_format_in_settings(): void
+    {
+        $issuer = app(LetterIssuer::class);
+        $this->assertSame('JPA/2026/986/1', $issuer->issue($this->template, $this->matter, [], [])->reference);
+
+        Setting::set('letter_reference_format', 'EXP-{number}/{year}-L{seq}', 'general');
+        $this->assertSame('EXP-986/2026-L2', $issuer->issue($this->template, $this->matter, [], [])->reference);
+
+        // Without {seq} every letter would share a reference: the default is used.
+        Setting::set('letter_reference_format', 'EXP-{number}', 'general');
+        $this->assertSame('JPA/2026/986/3', $issuer->issue($this->template, $this->matter, [], [])->reference);
+    }
+
+    public function test_a_letter_can_be_for_the_attention_of_someone(): void
+    {
+        $candidateIds = array_keys(LetterComposer::candidates($this->matter));
+
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('issue')
+            ->setTableActionData(['letter_template_id' => $this->template->id])
+            ->setTableActionData([
+                'recipients' => [$candidateIds[0]],
+                'inputs.documents' => [$this->items[2]],
+                'attention' => 'خالد محمد',
+            ])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+
+        $letter = MatterLetter::sole();
+        $this->assertSame('خالد محمد', $letter->attention);
+        $this->assertStringContainsString('لعناية السيد/ خالد محمد المحترم', LetterIssuer::composerFor($letter)->values()['recipients']);
+    }
+
+    public function test_an_issued_letter_can_be_edited_and_keeps_its_reference(): void
+    {
+        $candidates = array_values(LetterComposer::candidates($this->matter));
+        $letter = app(LetterIssuer::class)->issue($this->template, $this->matter, [$candidates[0]], [], now()->setDate(2026, 9, 1));
+
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->callTableAction('editLetter', $letter, [
+                'letter_date' => '2026-10-02',
+                'letterhead_id' => $letter->letterhead_id,
+                'attention' => 'Ahmed Ali',
+                'recipients' => [
+                    ['name' => 'شركة ألفا', 'role' => null, 'emails' => ['a@alpha.ae'], 'party_id' => null],
+                    ['name' => 'Court clerk', 'role' => 'Clerk', 'emails' => [], 'party_id' => null],
+                ],
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $letter->refresh();
+        $this->assertSame('JPA/2026/986/1', $letter->reference);
+        $this->assertSame('2026-10-02', $letter->letter_date->toDateString());
+        $this->assertSame(['شركة ألفا', 'Court clerk'], $letter->recipients()->pluck('name')->all());
+        $this->assertStringContainsString('لعناية السيد/ Ahmed Ali المحترم', LetterIssuer::composerFor($letter)->values()['recipients']);
+    }
+
     public function test_templates_are_offered_for_the_matter_types_they_are_linked_to(): void
     {
         $insolvency = Type::factory()->create(['name' => 'إعسار']);
@@ -292,6 +373,41 @@ class LetterBuilderTest extends TestCase
         $this->assertStringContainsString('@page :first { ', $css);
         $this->assertMatchesRegularExpression('~@page :first \{[^}]*margin-top: 45mm; margin-right: 20mm; margin-bottom: 30mm; margin-left: 25mm;~', $css);
         $this->assertMatchesRegularExpression('~@page \{[^}]*margin-top: 15mm; margin-right: 20mm; margin-bottom: 30mm; margin-left: 25mm;~', $css);
+    }
+
+    public function test_the_signature_and_stamp_are_drawn_at_the_set_heights(): void
+    {
+        Storage::fake(Letterhead::DISK);
+        Storage::disk(Letterhead::DISK)->put('letterheads/sign.png', 'png');
+        Storage::disk(Letterhead::DISK)->put('letterheads/stamp.png', 'png');
+
+        $letterhead = Letterhead::create([
+            'name' => 'Main', 'elements' => [],
+            'signature_image' => 'letterheads/sign.png', 'signature_height' => 30,
+            'stamp_image' => 'letterheads/stamp.png', 'stamp_height' => 22.5,
+        ]);
+        $values = (new LetterComposer(new LetterTemplate(['locale' => 'ar', 'subject' => 'S', 'body' => '<p>x</p>']), new Matter(['number' => '1', 'year' => 2026]), [], [], 'REF/1', now(), $letterhead))->values();
+
+        $this->assertStringContainsString('style="height: 30mm;"', $values['signature']);
+        $this->assertStringContainsString('style="height: 22.5mm;"', $values['stamp']);
+
+        // A letterhead saved before the setting: the old sizes.
+        $this->assertSame(45.0, Letterhead::create(['name' => 'Old', 'elements' => []])->fresh()->signature_height);
+    }
+
+    public function test_a_bold_element_is_drawn_bold_in_the_pdf(): void
+    {
+        $letterhead = Letterhead::create(['name' => 'Main', 'elements' => []]);
+        $composer = new LetterComposer(new LetterTemplate(['locale' => 'ar', 'subject' => 'S', 'body' => '<p>x</p>']), new Matter(['number' => '1', 'year' => 2026]), [], [], 'REF/1', now(), $letterhead);
+        $element = fn (array $e): string => (new ReflectionMethod(LetterPdf::class, 'element'))->invoke(new LetterPdf($composer), $e + ['x' => 20, 'y' => 20, 'width' => 80, 'font_size' => 13, 'align' => 'left'], $letterhead, true);
+
+        // One weight in the font: bold is an outline in the element's colour,
+        // on an inner span (mPDF ignores it on the positioned box).
+        $bold = $element(['type' => 'text', 'content' => 'Office', 'bold' => true, 'color' => '#1d4ed8']);
+        $this->assertMatchesRegularExpression('~<span style="text-outline-width: 0\.12mm; text-outline-color: #1d4ed8;">Office</span>~', $bold);
+
+        $this->assertStringNotContainsString('text-outline', $element(['type' => 'text', 'content' => 'Office', 'bold' => false, 'color' => '#111827']));
+        $this->assertStringNotContainsString('text-outline', $element(['type' => 'image', 'content' => null, 'bold' => true, 'color' => '#111827']));
     }
 
     public function test_each_elements_settings_stay_its_own(): void

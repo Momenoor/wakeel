@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * frozen copy of the letter as issued — editing the template afterwards
  * never changes a letter already sent.
  */
-#[Fillable('letter_template_id', 'matter_id', 'reference', 'sequence', 'letterhead_id', 'sent_by', 'sender_key', 'subject', 'body', 'inputs', 'rendered_html', 'letter_date', 'status', 'sent_at')]
+#[Fillable('letter_template_id', 'matter_id', 'reference', 'sequence', 'letterhead_id', 'sent_by', 'sender_key', 'subject', 'attention', 'body', 'inputs', 'rendered_html', 'letter_date', 'status', 'sent_at')]
 class MatterLetter extends Model
 {
     public function casts(): array
@@ -64,8 +64,29 @@ class MatterLetter extends Model
     /**
      * JPA/{matter year}/{matter number}/{sequence}.
      */
+    /** The letter reference format until it is changed in System Settings. */
+    public const DEFAULT_REFERENCE_FORMAT = 'JPA/{year}/{number}/{seq}';
+
+    /**
+     * The reference for a matter's nth letter, from the format in System
+     * Settings: {year} and {number} the matter's, {seq} the letter's number
+     * on the matter, {current_year} the year it is issued.
+     */
     public static function referenceFor(Matter $matter, int $sequence): string
     {
-        return 'JPA/'.$matter->year.'/'.$matter->number.'/'.$sequence;
+        $format = (string) (Setting::get('letter_reference_format') ?: self::DEFAULT_REFERENCE_FORMAT);
+
+        // A format without {seq} would give every letter on a matter the
+        // same reference.
+        if (! str_contains($format, '{seq}')) {
+            $format = self::DEFAULT_REFERENCE_FORMAT;
+        }
+
+        return strtr($format, [
+            '{year}' => (string) $matter->year,
+            '{number}' => (string) $matter->number,
+            '{seq}' => (string) $sequence,
+            '{current_year}' => now()->format('Y'),
+        ]);
     }
 }

@@ -21,6 +21,7 @@ use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -38,6 +39,7 @@ use Filament\Schemas\Components\Utilities\Set;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\HtmlString;
 
 /**
  * A matter's letters, and issuing a new one: pick a template, tick who it
@@ -101,6 +103,7 @@ class LettersRelationManager extends RelationManager
                     ->url(fn (MatterLetter $record) => route('letters.docx', $record)),
                 $this->emailAction(),
                 ActionGroup::make([
+                    $this->editAction(),
                     DeleteAction::make(),
                 ]),
             ]);
@@ -195,6 +198,84 @@ class LettersRelationManager extends RelationManager
             });
     }
 
+    /**
+     * "لعناية السيد/ … المحترم" under the addressees, when filled in.
+     */
+    private static function attentionField(): TextInput
+    {
+        return TextInput::make('attention')
+            ->label(__('For the attention of'))
+            ->placeholder(__('Name'))
+            ->maxLength(255)
+            ->helperText(__('Printed under the addressees as "لعناية السيد/ … المحترم". Leave empty for none.'));
+    }
+
+    /**
+     * Change an issued letter: its date, letterhead, attention line and
+     * recipients. Its reference and wording stay as issued.
+     */
+    private function editAction(): Action
+    {
+        return Action::make('editLetter')
+            ->label(__('Edit'))
+            ->icon('heroicon-o-pencil')
+            ->modalHeading(fn (MatterLetter $record) => __('Edit letter :reference', ['reference' => $record->reference]))
+            ->modalWidth('4xl')
+            ->fillForm(fn (MatterLetter $record): array => [
+                'letter_date' => $record->letter_date?->toDateString(),
+                'letterhead_id' => $record->letterhead_id,
+                'attention' => $record->attention,
+                'recipients' => $record->recipients->map(fn ($recipient) => [
+                    'name' => $recipient->name,
+                    'role' => $recipient->role,
+                    'emails' => $recipient->emails ?: array_values(array_filter([$recipient->email])),
+                    'party_id' => $recipient->recipient_id,
+                ])->all(),
+            ])
+            ->schema([
+                Section::make()
+                    ->columns(2)
+                    ->schema([
+                        DatePicker::make('letter_date')->label(__('Letter date'))->required(),
+                        Select::make('letterhead_id')
+                            ->label(__('Letterhead'))
+                            ->options(fn () => Letterhead::query()->orderBy('name')->pluck('name', 'id'))
+                            ->placeholder(__('The template\'s letterhead')),
+                    ]),
+                Section::make(__('Recipients'))
+                    ->schema([
+                        Repeater::make('recipients')
+                            ->hiddenLabel()
+                            ->addActionLabel(__('Add recipient'))
+                            ->minItems(1)
+                            ->columns(3)
+                            ->schema([
+                                TextInput::make('name')->label(__('Name'))->required(),
+                                TextInput::make('role')->label(__('Capacity')),
+                                TagsInput::make('emails')->label(__('Emails'))->nestedRecursiveRules(['email']),
+                                Hidden::make('party_id'),
+                            ]),
+                        self::attentionField(),
+                    ]),
+            ])
+            ->action(function (MatterLetter $record, array $data): void {
+                app(LetterIssuer::class)->revise(
+                    $record,
+                    array_values(array_map(fn (array $r): array => [
+                        'name' => (string) $r['name'],
+                        'role' => $r['role'] ?? null,
+                        'emails' => array_values($r['emails'] ?? []),
+                        'party_id' => filled($r['party_id'] ?? null) ? (int) $r['party_id'] : null,
+                    ], $data['recipients'] ?? [])),
+                    Carbon::parse($data['letter_date']),
+                    filled($data['letterhead_id'] ?? null) ? Letterhead::find($data['letterhead_id']) : null,
+                    $data['attention'] ?? null,
+                );
+
+                Notification::make()->success()->title(__('Letter :reference updated', ['reference' => $record->reference]))->send();
+            });
+    }
+
     private function issueAction(): Action
     {
         return Action::make('issue')
@@ -204,7 +285,19 @@ class LettersRelationManager extends RelationManager
             ->modalSubmitActionLabel(__('Issue'))
             ->schema(fn () => $this->issueForm($this->getOwnerRecord()))
             ->action(function (array $data) {
-                $letter = $this->issue($this->getOwnerRecord(), $data);
+                $letters = $this->issue($this->getOwnerRecord(), $data);
+
+                if (count($letters) > 1) {
+                    Notification::make()
+                        ->success()
+                        ->title(__(':count letters issued, one for each recipient', ['count' => count($letters)]))
+                        ->body(new HtmlString(collect($letters)->map(fn (MatterLetter $letter) => e($letter->reference.' — '.$letter->recipients->pluck('name')->implode(', ')))->implode('<br>')))
+                        ->send();
+
+                    return;
+                }
+
+                $letter = $letters[0];
 
                 Notification::make()
                     ->success()
@@ -255,17 +348,27 @@ class LettersRelationManager extends RelationManager
                         ->options(collect($candidates)->map(fn ($c) => trim($c['name'].($c['role'] ? ' ('.$c['role'].')' : '')))->all())
                         ->descriptions(collect($candidates)->map(fn ($c) => implode(' · ', $c['emails']))->all())
                         ->bulkToggleable()
+                        ->live()
                         ->columns(2),
                     Repeater::make('extra_recipients')
                         ->label(__('Other recipients'))
                         ->addActionLabel(__('Add recipient'))
                         ->defaultItems(0)
+                        ->live()
                         ->columns(3)
                         ->schema([
                             TextInput::make('name')->label(__('Name'))->required(),
                             TextInput::make('role')->label(__('Capacity')),
                             TagsInput::make('emails')->label(__('Emails'))->nestedRecursiveRules(['email']),
                         ]),
+                    // Several recipients: one letter to all of them, or each
+                    // their own letter (own reference, only them on it).
+                    Toggle::make('separately')
+                        ->label(__('Issue a separate letter to each recipient'))
+                        ->helperText(__('Off: one letter addressed to all of them. On: each recipient gets their own letter, with its own reference.'))
+                        ->default(false)
+                        ->visible(fn (Get $get): bool => count($get('recipients') ?? []) + count($get('extra_recipients') ?? []) > 1),
+                    self::attentionField(),
                 ]),
 
             Section::make(__('Letter details'))
@@ -360,9 +463,12 @@ class LettersRelationManager extends RelationManager
     }
 
     /**
+     * The letter — or, issued separately, one letter per recipient.
+     *
      * @param  array<string, mixed>  $data
+     * @return list<MatterLetter>
      */
-    public function issue(Matter $matter, array $data): MatterLetter
+    public function issue(Matter $matter, array $data): array
     {
         $template = LetterTemplate::findOrFail($data['letter_template_id']);
         $candidates = LetterComposer::candidates($matter);
@@ -382,14 +488,18 @@ class LettersRelationManager extends RelationManager
             $inputs[$key] = [...array_values((array) ($inputs[$key] ?? [])), ...$more];
         }
 
-        return app(LetterIssuer::class)->issue(
-            $template,
-            $matter,
-            $recipients,
-            $inputs,
-            filled($data['letter_date'] ?? null) ? Carbon::parse($data['letter_date']) : now(),
-            filled($data['letterhead_id'] ?? null) ? Letterhead::find($data['letterhead_id']) : null,
-            auth()->id(),
+        $date = filled($data['letter_date'] ?? null) ? Carbon::parse($data['letter_date']) : now();
+        $letterhead = filled($data['letterhead_id'] ?? null) ? Letterhead::find($data['letterhead_id']) : null;
+        $issuer = app(LetterIssuer::class);
+
+        // Separately: the same letter for each recipient alone.
+        $groups = ! empty($data['separately']) && count($recipients) > 1
+            ? array_map(fn (array $recipient): array => [$recipient], $recipients)
+            : [$recipients];
+
+        return array_map(
+            fn (array $group): MatterLetter => $issuer->issue($template, $matter, $group, $inputs, $date, $letterhead, auth()->id(), $data['attention'] ?? null),
+            $groups,
         );
     }
 }

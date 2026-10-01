@@ -32,17 +32,18 @@ class LetterIssuer
         ?CarbonInterface $date = null,
         ?Letterhead $letterhead = null,
         ?int $userId = null,
+        ?string $attention = null,
     ): MatterLetter {
         $inputs = $this->freezeItems($template, $inputs);
         $letterhead ??= $template->letterhead ?? Letterhead::default();
         $date ??= now();
 
-        return DB::transaction(function () use ($template, $matter, $recipients, $inputs, $date, $letterhead, $userId) {
+        return DB::transaction(function () use ($template, $matter, $recipients, $inputs, $date, $letterhead, $userId, $attention) {
             // Locked, so two letters issued at once can't share a number.
             $sequence = (int) MatterLetter::query()->where('matter_id', $matter->getKey())->lockForUpdate()->max('sequence') + 1;
             $reference = MatterLetter::referenceFor($matter, $sequence);
 
-            $composer = new LetterComposer($template, $matter, $inputs, $recipients, $reference, $date, $letterhead);
+            $composer = new LetterComposer($template, $matter, $inputs, $recipients, $reference, $date, $letterhead, $attention);
 
             $letter = MatterLetter::create([
                 'letter_template_id' => $template->getKey(),
@@ -52,6 +53,7 @@ class LetterIssuer
                 'letterhead_id' => $letterhead?->getKey(),
                 'sent_by' => $userId,
                 'subject' => $composer->subject(),
+                'attention' => filled($attention) ? trim($attention) : null,
                 'body' => (string) $template->body,
                 'inputs' => $inputs,
                 'rendered_html' => $composer->bodyHtml(),
@@ -98,7 +100,44 @@ class LetterIssuer
             $letter->reference,
             $letter->letter_date ?? $letter->created_at,
             $letter->letterhead,
+            $letter->attention,
         );
+    }
+
+    /**
+     * Change an issued letter — its date, letterhead, attention line and
+     * recipients — keeping its reference and its wording as issued; the
+     * letter's text is rendered again from them.
+     *
+     * @param  list<array{name: string, role: ?string, emails: list<string>, party_id?: int|null}>  $recipients
+     */
+    public function revise(MatterLetter $letter, array $recipients, CarbonInterface $date, ?Letterhead $letterhead, ?string $attention): MatterLetter
+    {
+        return DB::transaction(function () use ($letter, $recipients, $date, $letterhead, $attention) {
+            $letter->update([
+                'letter_date' => $date,
+                'letterhead_id' => $letterhead?->getKey() ?? $letter->letterhead_id,
+                'attention' => filled($attention) ? trim($attention) : null,
+            ]);
+
+            $letter->recipients()->delete();
+
+            foreach ($recipients as $recipient) {
+                $letter->recipients()->create([
+                    'recipient_id' => $recipient['party_id'] ?? null,
+                    'name' => $recipient['name'],
+                    'role' => $recipient['role'] ?? null,
+                    'email' => $recipient['emails'][0] ?? null,
+                    'emails' => array_values($recipient['emails'] ?? []),
+                    'delivery_status' => LetterStatus::DRAFT,
+                ]);
+            }
+
+            $letter = $letter->fresh(['template', 'matter', 'letterhead', 'recipients']);
+            $letter->update(['rendered_html' => self::composerFor($letter)->bodyHtml()]);
+
+            return $letter;
+        });
     }
 
     /**

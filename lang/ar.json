@@ -3224,5 +3224,17 @@
     "Left the firm": "انتهت خدمته",
     "Margins (mm) — first page": "الهوامش (مم) — الصفحة الأولى",
     "Margins (mm) — other pages": "الهوامش (مم) — الصفحات الأخرى",
-    "Top and bottom from the second page on. Leave one empty to use the first page's. Right and left are the same on every page.": "الأعلى والأسفل من الصفحة الثانية فما بعد. اترك أيًّا منهما فارغًا لاستخدام هامش الصفحة الأولى. هامشا اليمين واليسار متماثلان في جميع الصفحات."
+    "Top and bottom from the second page on. Leave one empty to use the first page's. Right and left are the same on every page.": "الأعلى والأسفل من الصفحة الثانية فما بعد. اترك أيًّا منهما فارغًا لاستخدام هامش الصفحة الأولى. هامشا اليمين واليسار متماثلان في جميع الصفحات.",
+    "Signature height (mm)": "ارتفاع التوقيع (مم)",
+    "Stamp height (mm)": "ارتفاع الختم (مم)",
+    ":count letters issued, one for each recipient": "تم إصدار :count خطابات، خطاب لكل مستلم",
+    "Issue a separate letter to each recipient": "إصدار خطاب منفصل لكل مستلم",
+    "Off: one letter addressed to all of them. On: each recipient gets their own letter, with its own reference.": "عند الإيقاف: خطاب واحد موجّه إليهم جميعًا. عند التشغيل: يحصل كل مستلم على خطاب خاص به برقم مرجع مستقل.",
+    "For the attention of": "لعناية",
+    "Printed under the addressees as \"لعناية السيد/ … المحترم\". Leave empty for none.": "يُطبع تحت المرسل إليهم بصيغة \"لعناية السيد/ … المحترم\". اتركه فارغًا إن لم يلزم.",
+    "Edit letter :reference": "تعديل الخطاب :reference",
+    "Letter :reference updated": "تم تحديث الخطاب :reference",
+    "Letter reference format": "صيغة رقم مرجع الخطاب",
+    "The format must include {seq}, so each letter on a matter gets its own reference.": "يجب أن تتضمن الصيغة {seq} ليحصل كل خطاب في القضية على رقم مرجع مستقل.",
+    "{year} and {number}: the matter's; {seq}: the letter's number on the matter (required); {current_year}: the year it is issued. Letters already issued keep their reference.": "{year} و{number}: سنة القضية ورقمها؛ {seq}: رقم الخطاب في القضية (إلزامي)؛ {current_year}: سنة الإصدار. تحتفظ الخطابات الصادرة سابقًا بأرقامها."
 }

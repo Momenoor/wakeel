@@ -3,6 +3,7 @@
 namespace App\Filament\Shared\Pages;
 
 use App\Filament\Shared\Pages\Schemas\SystemSettingsForm;
+use App\Models\MatterLetter;
 use App\Models\Setting;
 use App\Services\Installer\EnvironmentFileWriter;
 use App\Support\Branding;
@@ -70,6 +71,7 @@ class SystemSettings extends Page
             'app_locale' => Setting::get('app_locale', 'ar'),
             'currency_code' => Setting::get('currency_code', 'AED'),
             'records_per_page' => Setting::get('records_per_page', 25),
+            'letter_reference_format' => Setting::get('letter_reference_format', MatterLetter::DEFAULT_REFERENCE_FORMAT),
             ...collect(Branding::KEYS)->mapWithKeys(fn (string $key): array => [$key => Setting::get($key)])->all(),
 
             'mail_sender_key' => Setting::get('mail_sender_key'),
@@ -163,6 +165,7 @@ class SystemSettings extends Page
             'app_locale' => 'general',
             'currency_code' => 'general',
             'records_per_page' => 'general',
+            'letter_reference_format' => 'general',
 
             'mail_sender_key' => 'mail',
             'mail_mailer' => 'mail',
