@@ -10,6 +10,8 @@ use PhpOffice\PhpWord\Element\AbstractContainer;
 use PhpOffice\PhpWord\Element\Header;
 use PhpOffice\PhpWord\Element\Section;
 use PhpOffice\PhpWord\Element\Text;
+use PhpOffice\PhpWord\Element\TextBox;
+use PhpOffice\PhpWord\Element\TextRun;
 use PhpOffice\PhpWord\IOFactory;
 use PhpOffice\PhpWord\PhpWord;
 use PhpOffice\PhpWord\Settings;
@@ -120,16 +122,14 @@ class LetterDocx
 
     /**
      * The letter's text, its saved signature blocks (SignatureLayouts) laid
-     * out natively: Word can float a picture behind text, which HTML can't
-     * tell PHPWord.
+     * out natively: Word can float a picture and text boxes, which HTML
+     * can't tell PHPWord.
      */
     private function addBody(Section $section, string $html): void
     {
-        $parts = preg_split('/(<div data-sign-layout="[^"]*"[^>]*>.*?<\/div>)/su', $html, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [$html];
-
-        foreach ($parts as $part) {
-            if (preg_match('/^<div data-sign-layout="([^"]*)"[^>]*>(.*)<\/div>$/su', $part, $m)) {
-                $this->signatureBlock($section, json_decode((string) base64_decode($m[1]), true) ?: [], $m[2]);
+        foreach (SignatureLayouts::split($html) as $part) {
+            if (is_array($part)) {
+                $this->signatureBlock($section, $part);
             } elseif (trim($part) !== '') {
                 Html::addHtml($section, $part, false, false);
             }
@@ -137,40 +137,84 @@ class LetterDocx
     }
 
     /**
-     * A signature block: its layered picture floating behind, at the box's
-     * place on the line, then its lines over it, then room for the rest of
-     * the box.
+     * A signature block, as designed: its picture behind and each line in a
+     * text box at its place — all floating from one paragraph, so they are
+     * placed from the same point, and that paragraph keeps the block's
+     * height.
      *
-     * @param  array{image?: ?string, width?: float, height?: float, offset?: float}  $box
+     * @param  array{box: array<string, mixed>, lines: list<array<string, mixed>>}  $block
      */
-    private function signatureBlock(Section $section, array $box, string $lines): void
+    private function signatureBlock(Section $section, array $block): void
     {
-        $width = (float) ($box['width'] ?? 80);
-        $height = (float) ($box['height'] ?? 40);
+        $rtl = $this->composer->isArabic();
+        $width = (float) ($block['box']['width'] ?? 80);
+        $height = (float) ($block['box']['height'] ?? 40);
+        $offset = (float) ($block['box']['offset'] ?? 0);
+        $points = fn (float $mm): float => Converter::cmToPoint($mm / 10);
+        $floating = fn (float $x, float $y): array => [
+            'positioning' => Image::POSITION_RELATIVE,
+            'posHorizontal' => Image::POSITION_ABSOLUTE,
+            'posHorizontalRel' => Image::POSITION_RELATIVE_TO_MARGIN,
+            'posVertical' => Image::POSITION_ABSOLUTE,
+            'posVerticalRel' => Image::POSITION_RELATIVE_TO_LINE,
+            'marginLeft' => $points($offset + $x),
+            'marginTop' => $points($y),
+        ];
 
-        if (filled($box['image'] ?? null) && is_file($box['image'])) {
-            $section->addImage($box['image'], [
-                'width' => Converter::cmToPoint($width / 10),
-                'height' => Converter::cmToPoint($height / 10),
-                'positioning' => Image::POSITION_RELATIVE,
-                'posHorizontal' => Image::POSITION_ABSOLUTE,
-                'posHorizontalRel' => Image::POSITION_RELATIVE_TO_MARGIN,
-                'posVertical' => Image::POSITION_ABSOLUTE,
-                'posVerticalRel' => Image::POSITION_RELATIVE_TO_LINE,
-                'marginLeft' => Converter::cmToPoint((float) ($box['offset'] ?? 0) / 10),
-                'marginTop' => 0,
+        $anchor = $section->addTextRun([
+            'spaceBefore' => (int) Converter::cmToTwip(0.2),
+            // The block's height, less the line this paragraph itself takes.
+            'spaceAfter' => (int) Converter::cmToTwip(max(0, $height - 5) / 10),
+            'keepNext' => true,
+        ]);
+
+        $image = $block['box']['image'] ?? null;
+        if (filled($image) && is_file($image)) {
+            $anchor->addImage($image, [
+                ...$floating(0, 0),
+                'width' => $points($width),
+                'height' => $points($height),
                 'wrappingStyle' => Image::WRAPPING_STYLE_BEHIND,
             ]);
         }
 
-        // The lines, aligned as designed, without the mm offsets meant for the PDF box.
-        Html::addHtml($section, preg_replace('/margin:[^;]*;/', '', $lines) ?? $lines, false, false);
+        foreach ($block['lines'] as $line) {
+            $size = (float) ($line['size'] ?? 12);
+            $box = new TextBox([
+                ...$floating((float) ($line['x'] ?? 0), (float) ($line['y'] ?? 0)),
+                'width' => $points((float) ($line['width'] ?? $width)),
+                'height' => $points($size * 0.3528 * 1.35 * 1.6),
+                'wrappingStyle' => Image::WRAPPING_STYLE_INFRONT,
+                'innerMarginTop' => 0,
+                'innerMarginBottom' => 0,
+                'innerMarginLeft' => 0,
+                'innerMarginRight' => 0,
+            ]);
+            self::attach($anchor, $box);
 
-        // The rest of the box's height (a line is about 6 mm).
-        $rest = $height - substr_count($lines, '<p') * 6;
-        if ($rest > 0) {
-            $section->addText('', [], ['spaceBefore' => 0, 'spaceAfter' => (int) Converter::cmToTwip($rest / 10)]);
+            $box->addText(
+                html_entity_decode(strip_tags((string) ($line['html'] ?? '')), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+                ['size' => $size, 'bold' => ! empty($line['bold']), 'color' => ltrim((string) ($line['color'] ?? '#111827'), '#')],
+                ['alignment' => $this->alignment($line['align'] ?? 'center', $rtl), 'bidi' => $rtl, 'spaceBefore' => 0, 'spaceAfter' => 0],
+            );
         }
+    }
+
+    /**
+     * A text box inside a paragraph, beside the picture. PHPWord only
+     * places text boxes in their own paragraph — each would then float
+     * from a different line — but writes one inside a paragraph as well;
+     * attached the way it attaches any element.
+     */
+    private static function attach(TextRun $paragraph, TextBox $box): void
+    {
+        $box->setParentContainer($paragraph);
+        $box->setElementIndex($paragraph->countElements() + 1);
+        $box->setElementId();
+
+        (function () use ($box): void {
+            $this->elements[] = $box;
+        })->call($paragraph);
     }
 
     /**

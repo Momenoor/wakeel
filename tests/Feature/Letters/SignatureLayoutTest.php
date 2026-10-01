@@ -129,8 +129,15 @@ class SignatureLayoutTest extends TestCase
 
         $html = LetterIssuer::composerFor($letter)->bodyHtml();
         $this->assertStringContainsString('data-sign-layout=', $html);
-        $this->assertStringContainsString('background-image-resize: 6', $html);
         $this->assertStringContainsString('<strong>الخبير المحاسبي</strong>', $html);
+
+        // Each line keeps the place it was designed at.
+        $block = collect(SignatureLayouts::split($html))->first(fn ($part) => is_array($part));
+        $this->assertSame([80.0, 40.0, 0.0], [(float) $block['box']['width'], (float) $block['box']['height'], (float) $block['box']['offset']]);
+        $this->assertFileExists($block['box']['image']);
+        $this->assertSame([0.0, 6.0], array_map(fn ($line) => (float) $line['y'], $block['lines']));
+        $this->assertTrue($block['lines'][0]['bold']);
+        $this->assertSame('center', $block['lines'][1]['align']);
         // Its lines take placeholders.
         $this->assertStringContainsString('رضا حسن', $html);
         $this->assertStringStartsWith('%PDF', (new LetterPdf(LetterIssuer::composerFor($letter)))->render());
@@ -146,7 +153,9 @@ class SignatureLayoutTest extends TestCase
         $layout = $this->layout();
         $template = LetterTemplate::create(['name' => 'T', 'slug' => 't', 'locale' => 'ar', 'category' => 'letter', 'subject' => 'S', 'letterhead_id' => $this->letterhead->id,
             'body' => '<p>نص الخطاب.</p>'.$this->block($layout).'<p>بعد الكتلة</p>']);
-        $letter = app(LetterIssuer::class)->issue($template, Matter::factory()->create(), [], []);
+        $matter = Matter::factory()->create();
+        MatterParty::create(['matter_id' => $matter->id, 'role' => 'expert', 'type' => 'certified', 'party_id' => Party::factory()->create(['name' => 'رضا حسن'])->id]);
+        $letter = app(LetterIssuer::class)->issue($template, $matter, [], []);
 
         $docx = (new LetterDocx(LetterIssuer::composerFor($letter)))->save(storage_path('app/temp/test-sign-layout.docx'));
         $zip = new ZipArchive;
@@ -157,9 +166,19 @@ class SignatureLayoutTest extends TestCase
 
         $this->assertNotFalse(simplexml_load_string($document));
         $this->assertStringContainsString('الخبير المحاسبي', $document);
+        $this->assertStringContainsString('رضا حسن', $document);
         $this->assertStringContainsString('بعد الكتلة', $document);
-        // Floating, behind the text.
+        // The picture behind, each line in a text box at its place — all
+        // floating from the same paragraph.
         $this->assertMatchesRegularExpression('/behindDoc="1"|z-index:-/', $document);
+        $dom = new \DOMDocument;
+        $dom->loadXML($document);
+        $xpath = new \DOMXPath($dom);
+        $xpath->registerNamespace('w', 'http://schemas.openxmlformats.org/wordprocessingml/2006/main');
+        // A body paragraph (not one inside a text box) holding both lines' boxes and the picture.
+        $anchors = $xpath->query('/w:document/w:body/w:p[count(.//w:txbxContent) = 2]');
+        $this->assertSame(1, $anchors->length);
+        $this->assertMatchesRegularExpression('/type="#_x0000_t75"|<w:drawing/', $dom->saveXML($anchors->item(0)));
     }
 
     public function test_an_email_gets_the_lines_then_the_picture(): void
@@ -177,11 +196,13 @@ class SignatureLayoutTest extends TestCase
     {
         $layout = $this->layout();
 
+        $offset = fn () => (float) SignatureLayouts::split(SignatureLayouts::expand($this->block($layout->fresh()), $this->letterhead, 170))[0]['box']['offset'];
+
         $layout->update(['align' => 'right']);
-        $this->assertStringContainsString('margin: 2mm 0 2mm 90mm;', SignatureLayouts::expand($this->block($layout), $this->letterhead, 170));
+        $this->assertSame(90.0, $offset());
 
         $layout->update(['align' => 'center']);
-        $this->assertStringContainsString('margin: 2mm 0 2mm 45mm;', SignatureLayouts::expand($this->block($layout), $this->letterhead, 170));
+        $this->assertSame(45.0, $offset());
     }
 
     public function test_designing_a_block(): void

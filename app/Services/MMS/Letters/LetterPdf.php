@@ -7,6 +7,7 @@ use App\Services\MMS\BulkMailPlaceholders;
 use App\Support\Branding;
 use Mpdf\Config\ConfigVariables;
 use Mpdf\Config\FontVariables;
+use Mpdf\HTMLParserMode;
 use Mpdf\Mpdf;
 use Mpdf\Output\Destination;
 
@@ -85,12 +86,72 @@ class LetterPdf
         $level = error_reporting(error_reporting() & ~E_WARNING & ~E_NOTICE & ~E_DEPRECATED);
 
         try {
-            $mpdf->WriteHTML($this->html($letterhead, $rtl));
+            $this->write($mpdf, $this->html($letterhead, $rtl), $rtl);
 
             return $mpdf->Output('', Destination::STRING_RETURN);
         } finally {
             error_reporting($level);
         }
+    }
+
+    /**
+     * The letter, its saved signature blocks placed exactly as designed:
+     * mPDF can't position inside flowing text, so the text is written up
+     * to each block, the block drawn where the page has got to — its
+     * picture, then each line at its place — and the text goes on below.
+     */
+    private function write(Mpdf $mpdf, string $html, bool $rtl): void
+    {
+        $first = true;
+
+        foreach (SignatureLayouts::split($html) as $part) {
+            if (is_string($part)) {
+                $mpdf->WriteHTML($part, $first ? HTMLParserMode::DEFAULT_MODE : HTMLParserMode::HTML_BODY);
+                $first = false;
+
+                continue;
+            }
+
+            $this->signatureBlock($mpdf, $part, $rtl);
+        }
+    }
+
+    /**
+     * @param  array{box: array<string, mixed>, lines: list<array<string, mixed>>}  $block
+     */
+    private function signatureBlock(Mpdf $mpdf, array $block, bool $rtl): void
+    {
+        $width = (float) ($block['box']['width'] ?? 80);
+        $height = (float) ($block['box']['height'] ?? 40);
+
+        // Whole, on one page.
+        if ($mpdf->y + $height + 4 > $mpdf->h - $mpdf->bMargin) {
+            $mpdf->AddPage();
+        }
+
+        $left = $mpdf->lMargin + (float) ($block['box']['offset'] ?? 0);
+        $top = $mpdf->y + 2;
+        $image = $block['box']['image'] ?? null;
+
+        if (filled($image) && is_file($image)) {
+            $mpdf->Image($image, $left, $top, $width, $height, 'png', '', true, false);
+        }
+
+        // The lines over the picture, each where it was placed.
+        foreach ($block['lines'] as $line) {
+            $size = (float) ($line['size'] ?? 12);
+
+            $mpdf->WriteFixedPosHTML(
+                '<div dir="'.($rtl ? 'rtl' : 'ltr').'" style="font-size: '.$size.'pt; line-height: 1.35; text-align: '.e($line['align'] ?? 'center').'; color: '.e($line['color'] ?? '#111827').';">'.$line['html'].'</div>',
+                $left + (float) ($line['x'] ?? 0),
+                $top + (float) ($line['y'] ?? 0),
+                (float) ($line['width'] ?? $width),
+                $size * 0.3528 * 1.35 * 2,
+                'visible',
+            );
+        }
+
+        $mpdf->y = $top + $height + 2;
     }
 
     public function save(string $path): string

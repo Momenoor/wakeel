@@ -63,7 +63,7 @@ class SignatureLayouts
             '/<div data-sign-layout="([^"]*)"[^>]*>(.*?)<\/div>/su',
             function (array $m): string {
                 $box = json_decode((string) base64_decode($m[1]), true) ?: [];
-                $lines = preg_replace('/ style="[^"]*"/', '', $m[2]);
+                $lines = preg_replace('/ (?:style|data-sign-text)="[^"]*"/', '', $m[2]);
 
                 return $lines.(filled($box['image'] ?? null)
                     ? '<p><img src="'.e($box['image']).'" style="width: '.(float) $box['width'].'mm; max-width: 100%;" /></p>'
@@ -202,34 +202,59 @@ class SignatureLayouts
             'right' => $contentWidth - $width,
             default => 0.0,
         };
-        $picture = self::picture($layout, $letterhead);
 
-        // The lines, top to bottom: each placed by its distance from the
-        // one before (mPDF has no positioning inside the flow).
-        $lines = '';
-        $cursor = 0.0;
+        // Each line where it was placed. Its text stays HTML here so the
+        // letter's placeholders fill it; the PDF and Word writers place it.
+        $lines = collect($layout['elements'])
+            ->where('type', 'text')
+            ->map(function (array $text) use ($width): string {
+                $x = (float) ($text['x'] ?? 0);
+                $at = [
+                    'x' => $x,
+                    'y' => (float) ($text['y'] ?? 0),
+                    'width' => max(5.0, min($width - $x, (float) ($text['width'] ?? $width))),
+                    'size' => (float) ($text['font_size'] ?? 12),
+                    'align' => self::align($text['align'] ?? 'center'),
+                    'color' => (string) ($text['color'] ?? '#111827'),
+                    'bold' => ! empty($text['bold']),
+                ];
+                $content = e((string) ($text['content'] ?? ''));
 
-        foreach (collect($layout['elements'])->where('type', 'text')->sortBy(fn ($e) => (float) ($e['y'] ?? 0)) as $text) {
-            $size = (float) ($text['font_size'] ?? 12);
-            $x = max(0.0, (float) ($text['x'] ?? 0));
-            $lineWidth = min($width - $x, (float) ($text['width'] ?? $width));
-            $top = max(0.0, (float) ($text['y'] ?? 0) - $cursor);
-            $content = e((string) ($text['content'] ?? ''));
+                return '<p data-sign-text="'.base64_encode((string) json_encode($at)).'">'.($at['bold'] ? '<strong>'.$content.'</strong>' : $content).'</p>';
+            })
+            ->implode('');
 
-            $lines .= '<p style="margin: '.round($top, 2).'mm '.round(max(0, $width - $x - $lineWidth), 2).'mm 0 '.round($x, 2).'mm; font-size: '.$size.'pt; line-height: 1.35; text-align: '.e(self::align($text['align'] ?? 'center')).'; color: '.e($text['color'] ?? '#111827').';">'
-                .(! empty($text['bold']) ? '<strong>'.$content.'</strong>' : $content)
-                .'</p>';
+        $box = base64_encode((string) json_encode(['image' => self::picture($layout, $letterhead), 'width' => $width, 'height' => $height, 'offset' => $offset]));
 
-            $cursor = max($cursor, (float) ($text['y'] ?? 0)) + $size * 0.3528 * 1.35;
-        }
+        return '<div data-sign-layout="'.$box.'">'.$lines.'</div>';
+    }
 
-        // Read back by Word and email (the lines are in the box).
-        $box = base64_encode((string) json_encode(['image' => $picture, 'width' => $width, 'height' => $height, 'offset' => $offset]));
-        $background = $picture ? ' background: url(\''.e($picture).'\') no-repeat 0 0; background-image-resize: 6;' : '';
+    /**
+     * A letter's HTML in pieces: text, and signature blocks — each a box
+     * {image, width, height, offset} and its lines {x, y, width, size,
+     * align, color, bold, html}, millimetres from the box's top-left.
+     *
+     * @return list<string|array{box: array<string, mixed>, lines: list<array<string, mixed>>}>
+     */
+    public static function split(string $html): array
+    {
+        $parts = preg_split('/(<div data-sign-layout="[^"]*"[^>]*>.*?<\/div>)/su', $html, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [$html];
 
-        return '<div data-sign-layout="'.$box.'" style="width: '.round($width, 2).'mm; margin: 2mm 0 2mm '.round($offset, 2).'mm; padding: 0 0 '.round(max(0, $height - $cursor), 2).'mm 0; page-break-inside: avoid;'.$background.'">'
-            .($lines !== '' ? $lines : '<p style="margin: 0;">&#160;</p>')
-            .'</div>';
+        return array_values(array_filter(array_map(function (string $part): string|array {
+            if (! preg_match('/^<div data-sign-layout="([^"]*)"[^>]*>(.*)<\/div>$/su', $part, $m)) {
+                return $part;
+            }
+
+            preg_match_all('/<p data-sign-text="([^"]*)"[^>]*>(.*?)<\/p>/su', $m[2], $lines, PREG_SET_ORDER);
+
+            return [
+                'box' => json_decode((string) base64_decode($m[1]), true) ?: [],
+                'lines' => array_map(fn (array $line): array => [
+                    ...(json_decode((string) base64_decode($line[1]), true) ?: []),
+                    'html' => $line[2],
+                ], $lines),
+            ];
+        }, $parts), fn ($part) => $part !== ''));
     }
 
     /**
