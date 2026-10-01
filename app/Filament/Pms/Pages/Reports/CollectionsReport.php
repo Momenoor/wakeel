@@ -73,24 +73,24 @@ class CollectionsReport extends PmsReport
                     ->summarize(Sum::make()->label('')),
                 TextColumn::make('due_amount')
                     ->label(__('Due'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->sortable()
-                    ->summarize(Sum::make()->label('')->money('AED')),
+                    ->summarize(Sum::make()->label('')->aed()),
                 TextColumn::make('collected_amount')
                     ->label(__('Collected'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->color('success')
                     ->sortable()
-                    ->summarize(Sum::make()->label('')->money('AED')),
+                    ->summarize(Sum::make()->label('')->aed()),
                 TextColumn::make('outstanding_amount')
                     ->label(__('Outstanding'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->color(fn ($state) => (float) $state > 0.005 ? 'danger' : null)
                     ->sortable()
-                    ->summarize(Sum::make()->label('')->money('AED')),
+                    ->summarize(Sum::make()->label('')->aed()),
                 TextColumn::make('rate')
                     ->label(__('Collection rate'))
                     ->state(fn (Installment $row) => (float) $row->due_amount > 0
@@ -106,10 +106,10 @@ class CollectionsReport extends PmsReport
                     ->placeholder('—'),
                 TextColumn::make('penalty_amount')
                     ->label(__('Penalties'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->toggleable(isToggledHiddenByDefault: true)
-                    ->summarize(Sum::make()->label('')->money('AED')),
+                    ->summarize(Sum::make()->label('')->aed()),
             ])
             ->filters([
                 // Applied inside getTableQuery(): the rows are months, built

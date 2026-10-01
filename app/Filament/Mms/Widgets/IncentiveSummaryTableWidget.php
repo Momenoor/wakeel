@@ -218,7 +218,7 @@ class IncentiveSummaryTableWidget extends TableWidget
                     ->label(__('Fee'))
                     ->getStateUsing(fn ($record) => $this->matterFeeTotals()->get($record->incentiveLine?->matter_id)?->total_fee_amount
                         ?? $record->incentiveLine?->fee_amount_excl_vat)
-                    ->money('AED')
+                    ->aed()
                     ->searchable(),
                 TextColumn::make('incentiveLine.effective_percentage')
                     ->label(__('Rate %'))
@@ -229,7 +229,7 @@ class IncentiveSummaryTableWidget extends TableWidget
                     ->label(__('Base Amount'))
                     ->getStateUsing(fn ($record) => $this->matterFeeTotals()->get($record->incentiveLine?->matter_id)?->total_base_amount
                         ?? $record->incentiveLine?->base_amount)
-                    ->money('AED')
+                    ->aed()
                     ->searchable(),
                 TextColumn::make('incentiveLine.total_deduction_pct')
                     ->label(__('Deductions'))
@@ -240,11 +240,11 @@ class IncentiveSummaryTableWidget extends TableWidget
                     ->description(fn ($record) => $this->describeDeductions($record)),
                 TextColumn::make('share_amount')
                     ->label(__('Share'))
-                    ->money('AED')
+                    ->aed()
                     ->searchable(),
                 TextColumn::make('extra_amount')
                     ->label(__('Extra'))
-                    ->money('AED')
+                    ->aed()
                     ->placeholder('—')
                     ->color('success')
                     ->description(fn ($record) => app(IncentiveCalculatorService::class)
@@ -252,7 +252,7 @@ class IncentiveSummaryTableWidget extends TableWidget
                     ->searchable(),
                 TextColumn::make('minimum_penalty_amount')
                     ->label(__('Penalty'))
-                    ->money('AED')
+                    ->aed()
                     ->placeholder('—')
                     ->color('danger')
                     ->description(fn ($record) => app(IncentiveCalculatorService::class)
@@ -260,7 +260,7 @@ class IncentiveSummaryTableWidget extends TableWidget
                     ->searchable(),
                 TextColumn::make('total_amount')
                     ->label(__('Total'))
-                    ->money('AED')
+                    ->aed()
                     ->weight('bold')
                     ->searchable(),
             ])

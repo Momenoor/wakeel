@@ -8,6 +8,7 @@ use App\Models\Fee;
 use App\Models\Matter;
 use App\Models\Party;
 use App\Services\MMS\FeeDataRepairService;
+use App\Support\Currency;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Infolists\Components\TextEntry;
@@ -148,26 +149,26 @@ class FeeDataMaintenance extends Page
                         ->state(function () {
                             $p = $this->repairs()->previewAllocationSignAlignment();
 
-                            return $p['rows'].'  ('.number_format($p['value'], 2).' AED)';
+                            return Currency::label($p['rows'].'  ('.number_format($p['value'], 2).' AED)');
                         })
                         ->badge()
                         ->color(fn () => $this->repairs()->previewAllocationSignAlignment()['rows'] > 0 ? 'danger' : 'success'),
 
                     TextEntry::make('duplicates')
                         ->label(__('Duplicate allocation rows'))
-                        ->state($duplicates['rows'].'  ('.number_format($duplicates['value'], 2).' AED)')
+                        ->state(Currency::label($duplicates['rows'].'  ('.number_format($duplicates['value'], 2).' AED)'))
                         ->badge()
                         ->color($duplicates['rows'] > 0 ? 'warning' : 'success'),
 
                     TextEntry::make('over_collected')
                         ->label(__('Over-collected fees'))
-                        ->state($over['fees'].'  ('.number_format($over['excess'], 2).' AED)')
+                        ->state(Currency::label($over['fees'].'  ('.number_format($over['excess'], 2).' AED)'))
                         ->badge()
                         ->color($over['fees'] > 0 ? 'warning' : 'success'),
 
                     TextEntry::make('unsettled')
                         ->label(__('Unsettled fees on non-owner matters'))
-                        ->state($settlement['fees'].'  ('.number_format($settlement['shortfall'], 2).' AED short)')
+                        ->state(Currency::label($settlement['fees'].'  ('.number_format($settlement['shortfall'], 2).' AED short)'))
                         ->badge()
                         ->color($settlement['fees'] > 0 ? 'warning' : 'success'),
 
@@ -179,7 +180,7 @@ class FeeDataMaintenance extends Page
 
                     TextEntry::make('wrong_signed_total')
                         ->label(__('Their combined value'))
-                        ->state(number_format((float) $wrongSigned->sum(fn (Fee $f) => abs((float) $f->amount)), 2).' AED'),
+                        ->state(Currency::label(number_format((float) $wrongSigned->sum(fn (Fee $f) => abs((float) $f->amount)), 2).' AED')),
 
                     TextEntry::make('stale_statuses')
                         ->label(__('Fees whose stored status is out of date'))
@@ -206,11 +207,11 @@ class FeeDataMaintenance extends Page
                         return __('Nothing to align — every payment runs the same way as the fee it pays.');
                     }
 
-                    return __('Flips :rows payment(s) worth :value AED across :fees fee(s) so they run the same way as the fee they pay. A deduction fee settled by a positive payment cancels nothing: the matter is billed less and received more, which is what makes such matters look over-collected. Run this FIRST.', [
+                    return Currency::label(__('Flips :rows payment(s) worth :value AED across :fees fee(s) so they run the same way as the fee they pay. A deduction fee settled by a positive payment cancels nothing: the matter is billed less and received more, which is what makes such matters look over-collected. Run this FIRST.', [
                         'rows' => $p['rows'],
                         'value' => number_format($p['value'], 2),
                         'fees' => $p['fees'],
-                    ]);
+                    ]));
                 })
                 ->modalSubmitActionLabel(__('Align signs'))
                 ->action(function () {
@@ -218,10 +219,10 @@ class FeeDataMaintenance extends Page
 
                     Notification::make()
                         ->title($r['rows'] > 0 ? __('Allocation signs aligned') : __('Nothing to align'))
-                        ->body(__(':rows payment(s) flipped, worth :value AED.', [
+                        ->body(Currency::label(__(':rows payment(s) flipped, worth :value AED.', [
                             'rows' => $r['rows'],
                             'value' => number_format($r['value'], 2),
-                        ]))
+                        ])))
                         ->success()
                         ->send();
                 }),
@@ -239,10 +240,10 @@ class FeeDataMaintenance extends Page
                         return __('Nothing to remove — no allocation repeats the same fee, amount and date.');
                     }
 
-                    return __('Deletes :rows duplicate payment row(s) worth :value AED, keeping the earliest of each set. Run this FIRST: several duplicates are themselves a cause of over-collection, so clearing them shrinks the next step.', [
+                    return Currency::label(__('Deletes :rows duplicate payment row(s) worth :value AED, keeping the earliest of each set. Run this FIRST: several duplicates are themselves a cause of over-collection, so clearing them shrinks the next step.', [
                         'rows' => $p['rows'],
                         'value' => number_format($p['value'], 2),
-                    ]);
+                    ]));
                 })
                 ->modalSubmitActionLabel(__('Remove duplicates'))
                 ->action(function () {
@@ -250,10 +251,10 @@ class FeeDataMaintenance extends Page
 
                     Notification::make()
                         ->title($r['rows'] > 0 ? __('Duplicates removed') : __('Nothing to remove'))
-                        ->body(__(':rows row(s) deleted, worth :value AED.', [
+                        ->body(Currency::label(__(':rows row(s) deleted, worth :value AED.', [
                             'rows' => $r['rows'],
                             'value' => number_format($r['value'], 2),
-                        ]))
+                        ])))
                         ->success()
                         ->send();
                 }),
@@ -271,10 +272,10 @@ class FeeDataMaintenance extends Page
                         return __('Nothing to trim — no fee has collected more than it billed.');
                     }
 
-                    return __('Reduces collections on :fees fee(s) by :excess AED in total, so no fee is collected beyond its own amount. Newest payments are trimmed or removed first, leaving the original recorded payments intact.', [
+                    return Currency::label(__('Reduces collections on :fees fee(s) by :excess AED in total, so no fee is collected beyond its own amount. Newest payments are trimmed or removed first, leaving the original recorded payments intact.', [
                         'fees' => $p['fees'],
                         'excess' => number_format($p['excess'], 2),
-                    ]);
+                    ]));
                 })
                 ->modalSubmitActionLabel(__('Trim over-collection'))
                 ->action(function () {
@@ -282,10 +283,10 @@ class FeeDataMaintenance extends Page
 
                     Notification::make()
                         ->title($r['fees'] > 0 ? __('Over-collection trimmed') : __('Nothing to trim'))
-                        ->body(__(':fees fee(s) adjusted, :excess AED removed.', [
+                        ->body(Currency::label(__(':fees fee(s) adjusted, :excess AED removed.', [
                             'fees' => $r['fees'],
                             'excess' => number_format($r['excess'], 2),
-                        ]))
+                        ])))
                         ->success()
                         ->send();
                 }),
@@ -305,12 +306,12 @@ class FeeDataMaintenance extends Page
                         return __('Nothing to settle — every fee on those matters already matches its collections exactly.');
                     }
 
-                    return __('Adds balancing payments totalling :shortfall AED across :fees fee(s) on :matters matter(s), so every fee is collected in full and closed. Applies to matters whose certified expert is NOT :owner. Over-collected fees are left to step 2 rather than recorded as negative payments.', [
+                    return Currency::label(__('Adds balancing payments totalling :shortfall AED across :fees fee(s) on :matters matter(s), so every fee is collected in full and closed. Applies to matters whose certified expert is NOT :owner. Over-collected fees are left to step 2 rather than recorded as negative payments.', [
                         'shortfall' => number_format($p['shortfall'], 2),
                         'fees' => $p['fees'],
                         'matters' => $p['matters'],
                         'owner' => $owner?->name ?? __('the office owner'),
-                    ]);
+                    ]));
                 })
                 ->modalSubmitActionLabel(__('Settle in full'))
                 ->action(function () {
@@ -318,11 +319,11 @@ class FeeDataMaintenance extends Page
 
                     Notification::make()
                         ->title($r['fees'] > 0 ? __('Matters settled') : __('Nothing to settle'))
-                        ->body(__(':fees fee(s) settled with :added AED. :skipped were over-collected and left for step 2.', [
+                        ->body(Currency::label(__(':fees fee(s) settled with :added AED. :skipped were over-collected and left for step 2.', [
                             'fees' => $r['fees'],
                             'added' => number_format($r['added'], 2),
                             'skipped' => $r['skipped_over'],
-                        ]))
+                        ])))
                         ->success()
                         ->send();
                 }),
@@ -333,7 +334,7 @@ class FeeDataMaintenance extends Page
                 ->color('gray')
                 ->requiresConfirmation()
                 ->modalHeading(__('Correct Deduction Fee Signs'))
-                ->modalDescription(fn () => $this->describeSignCorrection())
+                ->modalDescription(fn () => Currency::label($this->describeSignCorrection()))
                 ->modalSubmitActionLabel(__('Apply correction'))
                 ->action(fn () => $this->correctFeeSigns()),
 

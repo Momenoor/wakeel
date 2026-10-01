@@ -16,7 +16,7 @@
                     <th class="py-2 text-start font-semibold">{{ __('Advance') }}</th>
                     <th class="py-2 text-start font-semibold">{{ __('Instalment') }}</th>
                     <th class="py-2 text-start font-semibold">{{ __('Due Period') }}</th>
-                    <th class="py-2 text-end font-semibold">{{ __('Amount (AED)') }}</th>
+                    <th class="py-2 text-end font-semibold">{{ \App\Support\Currency::label(__('Amount (AED)')) }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -52,7 +52,7 @@
 
     @if ($outstanding > 0)
         <p class="fi-color-gray text-xs">
-            {{ __('Still outstanding after this run: :amount AED', ['amount' => number_format($outstanding, 2)]) }}
+            {{ \App\Support\Currency::label(__('Still outstanding after this run: :amount AED', ['amount' => number_format($outstanding, 2)])) }}
         </p>
     @else
         <p class="fi-color-success text-xs">{{ __('These advances are fully recovered.') }}</p>

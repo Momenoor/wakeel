@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Resources\EmployeeLoans\Schemas;
 use App\Enums\LoanKind;
 use App\Models\Party;
 use App\Services\MMS\LoanScheduleService;
+use App\Support\Currency;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
@@ -13,6 +14,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
+use Illuminate\Support\HtmlString;
 
 class EmployeeLoanForm
 {
@@ -33,7 +35,7 @@ class EmployeeLoanForm
                             ->default(LoanKind::LOAN->value)
                             ->required(),
                         TextInput::make('principal')
-                            ->label(__('Amount (AED)'))
+                            ->label(Currency::label(__('Amount (AED)')))
                             ->numeric()
                             ->minValue(1)
                             ->required()
@@ -60,11 +62,11 @@ class EmployeeLoanForm
                     // the term: 300 over twelve months is not twelve instalments
                     // of 25, it is six of 50. Better to see that here than to
                     // discover it on the first payslip.
-                    ->description(__('Instalments are rounded down to whole 50 AED. The remainder is charged in the first month.'))
+                    ->description(Currency::label(__('Instalments are rounded down to whole 50 AED. The remainder is charged in the first month.')))
                     ->schema([
                         Placeholder::make('schedule_preview')
                             ->hiddenLabel()
-                            ->content(fn (Get $get): string => self::preview(
+                            ->content(fn (Get $get) => self::preview(
                                 (float) $get('principal'),
                                 (int) $get('months'),
                             ))
@@ -74,7 +76,7 @@ class EmployeeLoanForm
             ]);
     }
 
-    private static function preview(float $principal, int $months): string
+    private static function preview(float $principal, int $months): string|HtmlString
     {
         if ($principal <= 0 || $months < 1) {
             return __('Enter an amount and a term to preview the schedule.');
@@ -87,17 +89,17 @@ class EmployeeLoanForm
         $count = count($schedule);
 
         if ($rest === null) {
-            return __(':count instalment of :first AED.', [
+            return Currency::label(__(':count instalment of :first AED.', [
                 'count' => $count,
                 'first' => number_format($first, 2),
-            ]);
+            ]));
         }
 
-        return __('Month 1: :first AED, then :rest AED for :remaining months (:count months total).', [
+        return Currency::label(__('Month 1: :first AED, then :rest AED for :remaining months (:count months total).', [
             'first' => number_format($first, 2),
             'rest' => number_format($rest, 2),
             'remaining' => $count - 1,
             'count' => $count,
-        ]);
+        ]));
     }
 }

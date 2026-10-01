@@ -9,6 +9,7 @@ use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Pms\Actions\KeepsHistory;
 use App\Filament\Pms\Imports\UnitImporter;
 use App\Models\Unit;
+use App\Support\Currency;
 use App\Support\ScreenPermissions;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -88,7 +89,7 @@ class UnitsRelationManager extends RelationManager
                 ->required()
                 ->helperText(__('Drives VAT: residential is exempt, commercial and industrial are taxed at 5%.')),
             TextInput::make('rental_rate')
-                ->label(__('Rental Rate (AED/year)'))
+                ->label(Currency::label(__('Rental Rate (AED/year)')))
                 ->numeric()
                 ->minValue(0)
                 ->step(0.01)

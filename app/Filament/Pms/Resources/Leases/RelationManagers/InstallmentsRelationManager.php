@@ -9,6 +9,7 @@ use App\Models\Installment;
 use App\Models\Lease;
 use App\Services\MMS\PaymentService;
 use App\Services\PMS\InstallmentGenerator;
+use App\Support\Currency;
 use App\Support\ScreenPermissions;
 use App\Support\UaeBanks;
 use Filament\Actions\Action;
@@ -206,7 +207,7 @@ class InstallmentsRelationManager extends RelationManager
             ])
             ->schema([
                 TextInput::make('amount')
-                    ->label(__('Amount (AED)'))
+                    ->label(Currency::label(__('Amount (AED)')))
                     ->numeric()
                     ->minValue(0.01)
                     ->step(0.01)

@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\EmployeeProfiles\Tables;
 
 use App\Models\EmployeeProfile;
+use App\Support\Currency;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
@@ -31,6 +32,8 @@ class EmployeeProfilesTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn (Builder $query) => $query
+                ->withSum('leaveBalanceEntries as leave_balance', 'days'))
             ->columns([
                 TextColumn::make('party.name')
                     ->label(__('Employee'))
@@ -66,6 +69,14 @@ class EmployeeProfilesTable
                     ->date()
                     ->placeholder('—')
                     ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('leave_balance')
+                    ->label(__('Leave Balance'))
+                    ->numeric(decimalPlaces: 1)
+                    ->suffix(' '.__('days'))
+                    ->placeholder('0')
+                    ->sortable()
+                    ->alignEnd()
+                    ->color(fn ($state): ?string => (float) $state <= 0 ? 'danger' : null),
             ])
             ->defaultSort('date_of_joining', 'desc')
             ->filters([
@@ -171,8 +182,8 @@ class EmployeeProfilesTable
                     ->default(true)
                     ->live(),
                 TextInput::make('flight_ticket_amount')
-                    ->label(__('Yearly Ticket Amount (AED)'))
-                    ->suffix('AED')
+                    ->label(Currency::label(__('Yearly Ticket Amount (AED)')))
+                    ->suffix(Currency::symbol())
                     ->numeric()
                     ->minValue(0)
                     ->step(0.01)

@@ -212,7 +212,7 @@
                 <th>#</th>
                 <th>{{ __('Instalment') }}</th>
                 <th>{{ __('Due Date') }}</th>
-                <th class="amount">{{ __('Amount (AED)') }}</th>
+                <th class="amount">{{ \App\Support\Currency::label(__('Amount (AED)')) }}</th>
             </tr>
         </thead>
         <tbody>

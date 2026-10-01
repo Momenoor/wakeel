@@ -20,6 +20,7 @@ use App\Models\Unit;
 use App\Services\PMS\InstallmentGenerator;
 use App\Services\PMS\QuotationService;
 use App\Support\ChequeNumber;
+use App\Support\Currency;
 use App\Support\UaeBanks;
 use Closure;
 use Filament\Actions\Action;
@@ -228,7 +229,7 @@ class LeaseWizardForm
                 Section::make(__('Financials'))
                     ->schema([
                         TextInput::make('total_base_rent')
-                            ->label(__('Total Base Rent (AED)'))
+                            ->label(Currency::label(__('Total Base Rent (AED)')))
                             ->numeric()
                             ->minValue(0)
                             ->step(0.01)
@@ -236,7 +237,7 @@ class LeaseWizardForm
                             ->live(onBlur: true)
                             ->afterStateUpdated(fn (Set $set, Get $get, $state) => self::syncAnnualRent($set, $get('start_date'), $get('end_date'), $state)),
                         TextInput::make('annual_rent')
-                            ->label(__('Annual Rent (AED)'))
+                            ->label(Currency::label(__('Annual Rent (AED)')))
                             ->disabled()
                             ->dehydrated(false)
                             ->helperText(__('Calculated from the contract period and the base rent — a full year equals the base rent.')),
@@ -246,7 +247,7 @@ class LeaseWizardForm
                             ->default(YesNo::NO->value)
                             ->required(),
                         TextInput::make('security_deposit_amount')
-                            ->label(__('Security Deposit (AED)'))
+                            ->label(Currency::label(__('Security Deposit (AED)')))
                             ->numeric()
                             ->minValue(0)
                             ->step(0.01)
@@ -327,7 +328,7 @@ class LeaseWizardForm
                             ->afterStateUpdated(fn (Get $get, Set $set) => self::generateRentRows($get, $set)),
                         Placeholder::make('installments_target')
                             ->label(__('Rent to schedule'))
-                            ->content(fn (Get $get): string => __(':amount AED', ['amount' => number_format((float) ($get('total_base_rent') ?? 0), 2)])),
+                            ->content(fn (Get $get) => Currency::label(__(':amount AED', ['amount' => number_format((float) ($get('total_base_rent') ?? 0), 2)]))),
                         // For all rows at once — each row can still be changed.
                         UaeBanks::select('installment_bank')
                             ->label(__('Bank for all instalments'))
@@ -368,9 +369,9 @@ class LeaseWizardForm
                     ]),
 
                 Section::make(__('VAT instalment'))
-                    ->description(fn (Get $get): string => __('The whole contract\'s VAT, :amount AED, paid as its own instalment.', [
+                    ->description(fn (Get $get) => Currency::label(__('The whole contract\'s VAT, :amount AED, paid as its own instalment.', [
                         'amount' => number_format(self::vatAmount($get), 2),
-                    ]))
+                    ])))
                     ->visible(fn (Get $get): bool => self::vatAmount($get) > 0)
                     ->schema([
                         Group::make(self::paymentFields(withAmount: false))
@@ -379,9 +380,9 @@ class LeaseWizardForm
                     ]),
 
                 Section::make(__('Security deposit instalment'))
-                    ->description(fn (Get $get): string => __('The security deposit, :amount AED, paid as its own instalment.', [
+                    ->description(fn (Get $get) => Currency::label(__('The security deposit, :amount AED, paid as its own instalment.', [
                         'amount' => number_format((float) ($get('security_deposit_amount') ?? 0), 2),
-                    ]))
+                    ])))
                     ->visible(fn (Get $get): bool => (float) ($get('security_deposit_amount') ?? 0) > 0)
                     ->schema([
                         Group::make(self::paymentFields(withAmount: false))
@@ -418,7 +419,7 @@ class LeaseWizardForm
                 ->helperText(fn (Get $get): ?string => self::installmentDateWarning($get, $get('payment_date'))),
             $withAmount
                 ? TextInput::make('amount')
-                    ->label(__('Amount (AED)'))
+                    ->label(Currency::label(__('Amount (AED)')))
                     ->numeric()
                     ->minValue(0.01)
                     ->step(0.01)

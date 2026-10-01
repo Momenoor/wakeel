@@ -74,7 +74,7 @@ class MattersMonthlyReport extends Page implements HasTable
                     ->summarize(Sum::make()->label(__('Total'))),
                 TextColumn::make('total_fees')
                     ->label(__('Total Fees'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->summarize(Sum::make()->label(__('Total'))),
             ])

@@ -7,6 +7,7 @@ use App\Enums\LoanStatus;
 use App\Filament\Mms\Concerns\PayrollRefresh;
 use App\Models\EmployeeLoan;
 use App\Services\MMS\LoanScheduleService;
+use App\Support\Currency;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -32,13 +33,13 @@ class EmployeeLoansTable
                     ->label(__('Type'))
                     ->badge(),
                 TextColumn::make('principal')
-                    ->label(__('Amount (AED)'))
+                    ->label(Currency::label(__('Amount (AED)')))
                     ->numeric(decimalPlaces: 2)
                     ->sortable(),
                 TextColumn::make('months')
                     ->label(__('Months')),
                 TextColumn::make('outstanding')
-                    ->label(__('Outstanding (AED)'))
+                    ->label(Currency::label(__('Outstanding (AED)')))
                     // Summed from instalments no payslip has taken yet, rather
                     // than tracked as a running balance: a figure that is derived
                     // cannot drift out of step with the schedule behind it.

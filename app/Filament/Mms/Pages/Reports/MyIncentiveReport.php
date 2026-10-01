@@ -325,7 +325,7 @@ class MyIncentiveReport extends Page implements HasTable
                 TextColumn::make('fee_amount')
                     ->label(__('Fee'))
                     ->getStateUsing(fn (IncentiveAssistantLine $record) => $this->feeTotalFor($record))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd(),
 
                 TextColumn::make('incentiveLine.effective_percentage')
@@ -346,14 +346,14 @@ class MyIncentiveReport extends Page implements HasTable
 
                 TextColumn::make('share_amount')
                     ->label(__('Share'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->sortable()
-                    ->summarize(Sum::make()->label(__('Total'))->money('AED')),
+                    ->summarize(Sum::make()->label(__('Total'))->aed()),
 
                 TextColumn::make('extra_amount')
                     ->label(__('Extra'))
-                    ->money('AED')
+                    ->aed()
                     ->color('success')
                     ->placeholder('—')
                     ->description(fn (IncentiveAssistantLine $record) => app(IncentiveCalculatorService::class)
@@ -362,7 +362,7 @@ class MyIncentiveReport extends Page implements HasTable
 
                 TextColumn::make('minimum_penalty_amount')
                     ->label(__('Penalty'))
-                    ->money('AED')
+                    ->aed()
                     ->color('danger')
                     ->placeholder('—')
                     ->description(fn (IncentiveAssistantLine $record) => app(IncentiveCalculatorService::class)
@@ -371,33 +371,33 @@ class MyIncentiveReport extends Page implements HasTable
 
                 TextColumn::make('total_amount')
                     ->label(__('Total'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->sortable()
-                    ->summarize(Sum::make()->label(__('Total'))->money('AED')),
+                    ->summarize(Sum::make()->label(__('Total'))->aed()),
 
                 TextColumn::make('fixed_deduction')
                     ->label(__('Fixed Deduction'))
                     ->getStateUsing(fn (IncentiveAssistantLine $record) => $this->fixedDeductionFor($record) ?: null)
-                    ->money('AED')
+                    ->aed()
                     ->color('danger')
                     ->placeholder('—')
                     ->alignEnd()
                     ->summarize(Summarizer::make()
                         ->label(__('Total'))
                         ->using(fn () => (float) ($this->periodTotals()?->fixed_deduction ?? 0))
-                        ->money('AED')),
+                        ->aed()),
 
                 TextColumn::make('net')
                     ->label(__('Net'))
                     ->getStateUsing(fn (IncentiveAssistantLine $record) => $this->netFor($record))
-                    ->money('AED')
+                    ->aed()
                     ->weight('bold')
                     ->alignEnd()
                     ->summarize(Summarizer::make()
                         ->label(__('Net Total'))
                         ->using(fn () => $this->netTotal())
-                        ->money('AED')),
+                        ->aed()),
             ])
             ->filters([
                 SelectFilter::make('calculation')

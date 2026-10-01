@@ -165,14 +165,14 @@ class AssistantMattersReport extends Page implements HasTable
                 // ── Total Fees (excl. VAT) ────────────────────────────────
                 TextColumn::make('total_fees')
                     ->label(fn () => new HtmlString(__('Total Fees <br> (excl. VAT)')))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->width('7%'),
 
                 // ── Total Allocations (excl. VAT) ─────────────────────────
                 TextColumn::make('total_allocations')
                     ->label(fn () => new HtmlString(__('Total Collected <br> (excl. VAT)')))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->width('7%'),
 

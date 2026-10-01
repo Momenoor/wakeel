@@ -11,8 +11,12 @@ use App\Models\Setting;
 use App\Models\User;
 use App\Services\MMS\Calendar\UnmatchedEventReferences;
 use App\Services\Push\WebPushSender;
+use App\Support\Currency;
 use Carbon\Carbon;
 use Carbon\Translator as CarbonTranslator;
+use Filament\Infolists\Components\TextEntry;
+use Filament\Tables\Columns\Summarizers\Summarizer;
+use Filament\Tables\Columns\TextColumn;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Foundation\Events\LocaleUpdated;
 use Illuminate\Notifications\DatabaseNotification;
@@ -67,6 +71,17 @@ class AppServiceProvider extends ServiceProvider
         }
 
         Setting::applyMailConfig();
+
+        // ->aed(): an amount with the Dirham sign after it, in table columns,
+        // detail entries and table totals (instead of money('AED')).
+        foreach ([TextColumn::class, TextEntry::class, Summarizer::class] as $component) {
+            $component::macro('aed', function (int $decimals = 2) {
+                /** @var TextColumn|TextEntry|Summarizer $this */
+                return $this
+                    ->formatStateUsing(fn ($state) => is_numeric($state) ? Currency::format($state, $decimals) : $state)
+                    ->html();
+            });
+        }
 
         // Our Impersonate button on the users table, in place of the
         // package's (config/filament-users.php explains why).

@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\EmployeeProfiles\Schemas;
 
 use App\Models\Party;
+use App\Support\Currency;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -136,16 +137,16 @@ class EmployeeProfileForm
                             ->default(0)
                             ->helperText(__('The starting point of the annual leave balance. After it: 30 days every 1 January, less the annual leave taken.')),
                         TextInput::make('opening_eosg_balance')
-                            ->label(__('Opening EOSG Balance (AED)'))
-                            ->suffix('AED')
+                            ->label(Currency::label(__('Opening EOSG Balance (AED)')))
+                            ->suffix(Currency::symbol())
                             ->numeric()
                             ->minValue(0)
                             ->step(0.01)
                             ->default(0)
                             ->helperText(__('Gratuity earned before this system tracked payroll, entered once and added to whichever closing voucher is generated first for this employee.')),
                         TextInput::make('eosg_paid_amount')
-                            ->label(__('EOSG Paid Amount (AED)'))
-                            ->suffix('AED')
+                            ->label(Currency::label(__('EOSG Paid Amount (AED)')))
+                            ->suffix(Currency::symbol())
                             ->numeric()
                             ->minValue(0)
                             ->step(0.01)
@@ -162,8 +163,8 @@ class EmployeeProfileForm
                             ->live()
                             ->helperText(__('On: a ticket for the amount below is due every 1 January (pro-rated in the joining year), to pay through a payroll run or directly.')),
                         TextInput::make('flight_ticket_amount')
-                            ->label(__('Yearly Ticket Amount (AED)'))
-                            ->suffix('AED')
+                            ->label(Currency::label(__('Yearly Ticket Amount (AED)')))
+                            ->suffix(Currency::symbol())
                             ->numeric()
                             ->minValue(0)
                             ->step(0.01)

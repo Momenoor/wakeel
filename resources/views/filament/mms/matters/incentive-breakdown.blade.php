@@ -41,7 +41,7 @@
                         @endif
                     </td>
                     <td style="{{ $num }} color: rgb(220 38 38);">{{ $row['fixed'] > 0 ? '−'.$money($row['fixed']) : '—' }}</td>
-                    <td style="{{ $num }} font-weight: 700;">{{ $money($row['net']) }} AED</td>
+                    <td style="{{ $num }} font-weight: 700;">{{ $money($row['net']) }} {{ \App\Support\Currency::symbol() }}</td>
                 </tr>
             @endforeach
         </tbody>
@@ -53,7 +53,7 @@
                     <td style="{{ $num }}">{{ $money(array_sum(array_column($rows, 'extra'))) }}</td>
                     <td style="{{ $num }}">{{ $money(array_sum(array_column($rows, 'penalty'))) }}</td>
                     <td style="{{ $num }}">{{ $money(array_sum(array_column($rows, 'fixed'))) }}</td>
-                    <td style="{{ $num }}">{{ $money(array_sum(array_column($rows, 'net'))) }} AED</td>
+                    <td style="{{ $num }}">{{ $money(array_sum(array_column($rows, 'net'))) }} {{ \App\Support\Currency::symbol() }}</td>
                 </tr>
             </tfoot>
         @endif

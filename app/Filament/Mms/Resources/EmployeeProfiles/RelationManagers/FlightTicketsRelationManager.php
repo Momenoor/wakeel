@@ -7,6 +7,7 @@ use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Models\EmployeeProfile;
 use App\Models\FlightTicket;
 use App\Services\MMS\FlightTicketService;
+use App\Support\Currency;
 use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
@@ -94,8 +95,8 @@ class FlightTicketsRelationManager extends RelationManager
                     modifyRuleUsing: fn (Unique $rule) => $rule->where('party_id', $this->profile()->party_id),
                 ),
             TextInput::make('amount')
-                ->label(__('Amount (AED)'))
-                ->suffix('AED')
+                ->label(Currency::label(__('Amount (AED)')))
+                ->suffix(Currency::symbol())
                 ->numeric()
                 ->minValue(0)
                 ->step(0.01)
@@ -116,7 +117,7 @@ class FlightTicketsRelationManager extends RelationManager
                     ->label(__('Year'))
                     ->sortable(),
                 TextColumn::make('amount')
-                    ->label(__('Amount (AED)'))
+                    ->label(Currency::label(__('Amount (AED)')))
                     ->numeric(decimalPlaces: 2)
                     ->description(fn (FlightTicket $record): ?string => $record->is_prorated ? __('pro-rated') : null),
                 TextColumn::make('status')

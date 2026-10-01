@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Resources\PayrollRuns\Schemas;
 
 use App\Models\PayrollRun;
 use App\Services\MMS\PayrollRunService;
+use App\Support\Currency;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -22,17 +23,17 @@ class PayrollRunInfolist
                             ->label(__('Employees'))
                             ->state(fn (PayrollRun $record): int => self::totals($record)['employees']),
                         TextEntry::make('gross')
-                            ->label(__('Gross (AED)'))
+                            ->label(Currency::label(__('Gross (AED)')))
                             ->state(fn (PayrollRun $record): string => number_format(self::totals($record)['gross'], 2)),
                         TextEntry::make('deductions')
-                            ->label(__('Deductions (AED)'))
+                            ->label(Currency::label(__('Deductions (AED)')))
                             ->state(fn (PayrollRun $record): string => number_format(self::totals($record)['deductions'], 2)),
                         TextEntry::make('net')
-                            ->label(__('Net Payable (AED)'))
+                            ->label(Currency::label(__('Net Payable (AED)')))
                             ->weight('bold')
                             ->state(fn (PayrollRun $record): string => number_format(self::totals($record)['net'], 2)),
                         TextEntry::make('eosg')
-                            ->label(__('Gratuity Accrued (AED)'))
+                            ->label(Currency::label(__('Gratuity Accrued (AED)')))
                             // Shown apart from the deductions because it is not
                             // one: the employer owes it, the employee does not
                             // pay it, and it never touches the bank transfer.

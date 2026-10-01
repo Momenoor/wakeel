@@ -65,9 +65,9 @@ class VatReport extends PmsReport
                     ->toggleable(),
                 TextColumn::make('net_amount')
                     ->label(__('Net'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
-                    ->summarize(Sum::make()->label('')->money('AED')),
+                    ->summarize(Sum::make()->label('')->aed()),
                 TextColumn::make('vat_rate')
                     ->label(__('Rate'))
                     // Stored as a fraction (0.05), shown like the lease prints.
@@ -75,15 +75,15 @@ class VatReport extends PmsReport
                     ->alignCenter(),
                 TextColumn::make('vat_amount')
                     ->label(__('VAT'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->weight('bold')
-                    ->summarize(Sum::make()->label('')->money('AED')),
+                    ->summarize(Sum::make()->label('')->aed()),
                 TextColumn::make('total_due_amount')
                     ->label(__('Total'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
-                    ->summarize(Sum::make()->label('')->money('AED')),
+                    ->summarize(Sum::make()->label('')->aed()),
             ])
             ->filters([
                 ...$this->portfolioFilters(fn (Builder $query, ?int $group, ?int $property) => PortfolioScope::installments($query, $group, $property)),

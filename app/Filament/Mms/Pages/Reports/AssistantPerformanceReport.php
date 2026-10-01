@@ -166,19 +166,19 @@ class AssistantPerformanceReport extends Page implements HasTable
 
                 TextColumn::make('fees_handled')
                     ->label(__('Fees Handled'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->sortable()
-                    ->summarize(Sum::make()->label(__('Total'))->money('AED')),
+                    ->summarize(Sum::make()->label(__('Total'))->aed()),
 
                 TextColumn::make('incentive_earned')
                     ->label(__('Incentive Earned'))
                     ->description(__('Finalized calculations only'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->color('success')
                     ->sortable()
-                    ->summarize(Sum::make()->label(__('Total'))->money('AED')),
+                    ->summarize(Sum::make()->label(__('Total'))->aed()),
 
                 TextColumn::make('leave_days')
                     ->label(__('Leave Days'))

@@ -7,6 +7,7 @@ use App\Filament\Mms\Concerns\RefreshesPayrollData;
 use App\Models\LoanInstallment;
 use App\Models\PayrollRun;
 use App\Models\Payslip;
+use App\Support\Currency;
 use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
@@ -152,7 +153,7 @@ class PayslipsRelationManager extends RelationManager
                     ])
                     ->schema([
                         TextInput::make('incentive_amount')
-                            ->label(__('Incentive (AED)'))
+                            ->label(Currency::label(__('Incentive (AED)')))
                             ->numeric()
                             ->minValue(0)
                             ->default(0)
@@ -161,7 +162,7 @@ class PayslipsRelationManager extends RelationManager
                             // payslip so the next Generate keeps your figure.
                             ->helperText(__('Imported from the incentive calculation. A change here survives regeneration.')),
                         TextInput::make('manual_deduction')
-                            ->label(__('Other Deduction (AED)'))
+                            ->label(Currency::label(__('Other Deduction (AED)')))
                             ->numeric()
                             ->minValue(0)
                             ->default(0),

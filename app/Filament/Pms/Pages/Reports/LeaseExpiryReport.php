@@ -72,10 +72,10 @@ class LeaseExpiryReport extends PmsReport
                     }),
                 TextColumn::make('annual_rent')
                     ->label(__('Annual rent'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->sortable()
-                    ->summarize(Sum::make()->label('')->money('AED')),
+                    ->summarize(Sum::make()->label('')->aed()),
                 TextColumn::make('renewal')
                     ->label(__('Renewal'))
                     ->state(fn (Lease $lease) => $lease->renewals_count > 0 ? __('Started') : __('Not started'))

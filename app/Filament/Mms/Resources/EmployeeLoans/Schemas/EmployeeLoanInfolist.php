@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\EmployeeLoans\Schemas;
 
 use App\Models\EmployeeLoan;
+use App\Support\Currency;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -18,7 +19,7 @@ class EmployeeLoanInfolist
                         TextEntry::make('party.name')->label(__('Employee')),
                         TextEntry::make('kind')->label(__('Type'))->badge(),
                         TextEntry::make('principal')
-                            ->label(__('Amount (AED)'))
+                            ->label(Currency::label(__('Amount (AED)')))
                             ->numeric(decimalPlaces: 2),
                         TextEntry::make('months')->label(__('Months')),
                         TextEntry::make('starts_on')->label(__('First Instalment'))->date(),
@@ -28,13 +29,13 @@ class EmployeeLoanInfolist
                 Section::make(__('Recovery'))
                     ->schema([
                         TextEntry::make('recovered')
-                            ->label(__('Recovered (AED)'))
+                            ->label(Currency::label(__('Recovered (AED)')))
                             ->state(fn (EmployeeLoan $record): string => number_format(
                                 (float) $record->installments()->whereNotNull('payslip_id')->sum('amount'),
                                 2,
                             )),
                         TextEntry::make('outstanding')
-                            ->label(__('Outstanding (AED)'))
+                            ->label(Currency::label(__('Outstanding (AED)')))
                             ->weight('bold')
                             ->state(fn (EmployeeLoan $record): string => number_format($record->outstanding(), 2)),
                         TextEntry::make('editable')

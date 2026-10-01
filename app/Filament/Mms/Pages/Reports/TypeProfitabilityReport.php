@@ -114,31 +114,31 @@ class TypeProfitabilityReport extends Page implements HasTable
 
                 TextColumn::make('revenue_billed')
                     ->label(__('Revenue Billed'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->sortable()
-                    ->summarize(Sum::make()->label(__('Total'))->money('AED')),
+                    ->summarize(Sum::make()->label(__('Total'))->aed()),
 
                 TextColumn::make('revenue_collected')
                     ->label(__('Collected'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->sortable()
-                    ->summarize(Sum::make()->label(__('Total'))->money('AED')),
+                    ->summarize(Sum::make()->label(__('Total'))->aed()),
 
                 TextColumn::make('incentive_paid')
                     ->label(__('Incentive Paid'))
                     ->description(__('Finalized calculations only'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->color('warning')
                     ->sortable()
-                    ->summarize(Sum::make()->label(__('Total'))->money('AED')),
+                    ->summarize(Sum::make()->label(__('Total'))->aed()),
 
                 TextColumn::make('net_to_office')
                     ->label(__('Net to Office'))
                     ->getStateUsing(fn ($record) => (float) $record->revenue_billed - (float) $record->incentive_paid)
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->weight('bold'),
 
@@ -174,7 +174,7 @@ class TypeProfitabilityReport extends Page implements HasTable
                     ->getStateUsing(fn ($record) => $record->matters_count > 0
                         ? (float) $record->revenue_billed / $record->matters_count
                         : 0)
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd(),
             ])
             ->filters([

@@ -103,10 +103,10 @@ class OccupancyReport extends PmsReport
                     ->placeholder('—'),
                 TextColumn::make('rent_under_lease')
                     ->label(__('Annual rent under lease'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->sortable()
-                    ->summarize(Sum::make()->label('')->money('AED')),
+                    ->summarize(Sum::make()->label('')->aed()),
             ])
             ->filters($this->portfolioFilters(fn (Builder $query, ?int $group, ?int $property) => $query
                 ->when($group, fn (Builder $q) => $q->where('owner_group_id', $group))

@@ -73,29 +73,29 @@ class ArrearsAgingReport extends PmsReport
                     ->date('d/m/Y')
                     ->description(fn (Lease $lease) => __(':days days', ['days' => (int) $lease->oldest_days]))
                     ->sortable(),
-                TextColumn::make('bucket_30')->label(__('0–30 days'))->money('AED')->alignEnd()->sortable()
-                    ->summarize(Sum::make()->label('')->money('AED')),
-                TextColumn::make('bucket_60')->label(__('31–60 days'))->money('AED')->alignEnd()->sortable()
-                    ->summarize(Sum::make()->label('')->money('AED')),
-                TextColumn::make('bucket_90')->label(__('61–90 days'))->money('AED')->alignEnd()->sortable()
-                    ->summarize(Sum::make()->label('')->money('AED')),
-                TextColumn::make('bucket_over')->label(__('90+ days'))->money('AED')->alignEnd()->sortable()
+                TextColumn::make('bucket_30')->label(__('0–30 days'))->aed()->alignEnd()->sortable()
+                    ->summarize(Sum::make()->label('')->aed()),
+                TextColumn::make('bucket_60')->label(__('31–60 days'))->aed()->alignEnd()->sortable()
+                    ->summarize(Sum::make()->label('')->aed()),
+                TextColumn::make('bucket_90')->label(__('61–90 days'))->aed()->alignEnd()->sortable()
+                    ->summarize(Sum::make()->label('')->aed()),
+                TextColumn::make('bucket_over')->label(__('90+ days'))->aed()->alignEnd()->sortable()
                     ->color(fn ($state) => (float) $state > 0 ? 'danger' : null)
-                    ->summarize(Sum::make()->label('')->money('AED')),
+                    ->summarize(Sum::make()->label('')->aed()),
                 TextColumn::make('total_overdue')
                     ->label(__('Total overdue'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->weight('bold')
                     ->color('danger')
                     ->sortable()
-                    ->summarize(Sum::make()->label('')->money('AED')),
+                    ->summarize(Sum::make()->label('')->aed()),
                 TextColumn::make('penalties')
                     ->label(__('Penalties'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->sortable()
-                    ->summarize(Sum::make()->label('')->money('AED')),
+                    ->summarize(Sum::make()->label('')->aed()),
             ])
             ->filters([
                 ...$this->portfolioFilters(fn (Builder $query, ?int $group, ?int $property) => PortfolioScope::leases($query, $group, $property)),

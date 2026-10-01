@@ -71,32 +71,32 @@
     </div>
     <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
         <p class="text-xs text-gray-500 mb-1">{{ __('Share Total') }}</p>
-        <p class="text-base font-semibold text-gray-800">AED {{ number_format($assistantSummary['share_total'], 2) }}</p>
+        <p class="text-base font-semibold text-gray-800">{{ \App\Support\Currency::format($assistantSummary['share_total']) }}</p>
     </div>
     <div class="bg-green-50 border border-green-200 rounded-lg p-3">
         <p class="text-xs text-gray-500 mb-1">{{ __('Extra Bonus') }}</p>
         <p class="text-base font-semibold text-green-700">
             {{ $assistantSummary['extra_percentage'] > 0 ? '+' . $assistantSummary['extra_percentage'] . '% · ' : '' }}
-            AED {{ number_format($assistantSummary['extra_amount'], 2) }}
+            {{ \App\Support\Currency::format($assistantSummary['extra_amount']) }}
         </p>
     </div>
     <div class="bg-red-50 border border-red-200 rounded-lg p-3">
         <p class="text-xs text-gray-500 mb-1">{{ __('Penalty') }}</p>
         <p class="text-base font-semibold text-red-700">
             {{ $assistantSummary['minimum_penalty_pct'] > 0 ? '-' . $assistantSummary['minimum_penalty_pct'] . '% · ' : '' }}
-            AED {{ number_format($assistantSummary['penalty_amount'], 2) }}
+            {{ \App\Support\Currency::format($assistantSummary['penalty_amount']) }}
         </p>
     </div>
     <div class="bg-red-50 border border-red-200 rounded-lg p-3">
         <p class="text-xs text-gray-500 mb-1">{{ __('Fixed Ded.') }}</p>
-        <p class="text-base font-semibold text-red-700">AED {{ number_format($assistantSummary['fixed_deduction'], 2) }}</p>
+        <p class="text-base font-semibold text-red-700">{{ \App\Support\Currency::format($assistantSummary['fixed_deduction']) }}</p>
         @if($assistantSummary['fixed_deduction'] > 0 && $assistantSummary['fixed_deduction_reason'])
             <p class="text-[10px] text-gray-400 mt-0.5">{{ $assistantSummary['fixed_deduction_reason'] }}</p>
         @endif
     </div>
     <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
         <p class="text-xs text-gray-500 mb-1">{{ __('Total') }}</p>
-        <p class="text-base font-bold text-blue-900">AED {{ number_format($assistantSummary['total'], 2) }}</p>
+        <p class="text-base font-bold text-blue-900">{{ \App\Support\Currency::format($assistantSummary['total']) }}</p>
     </div>
 </div>
 
@@ -195,10 +195,10 @@
         <tfoot>
         <tr class="bg-blue-100 font-bold border-t-2 border-blue-900">
             <td colspan="9" class="px-3 py-2 text-right text-blue-900">{{ __('Grand Total') }}</td>
-            <td class="px-3 py-2 text-right">AED {{ number_format($assistantSummary['share_total'], 2) }}</td>
-            <td class="px-3 py-2 text-right text-green-700">AED {{ number_format($assistantSummary['extra_amount'], 2) }}</td>
-            <td class="px-3 py-2 text-right text-red-600">AED {{ number_format($assistantSummary['penalty_amount'], 2) }}</td>
-            <td class="px-3 py-2 text-right text-blue-900">AED {{ number_format($assistantSummary['total'], 2) }}</td>
+            <td class="px-3 py-2 text-right">{{ \App\Support\Currency::format($assistantSummary['share_total']) }}</td>
+            <td class="px-3 py-2 text-right text-green-700">{{ \App\Support\Currency::format($assistantSummary['extra_amount']) }}</td>
+            <td class="px-3 py-2 text-right text-red-600">{{ \App\Support\Currency::format($assistantSummary['penalty_amount']) }}</td>
+            <td class="px-3 py-2 text-right text-blue-900">{{ \App\Support\Currency::format($assistantSummary['total']) }}</td>
         </tr>
         </tfoot>
     </table>

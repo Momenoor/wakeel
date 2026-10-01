@@ -106,22 +106,22 @@ class VatSummaryReport extends Page implements HasTable
 
                 TextColumn::make('amount')
                     ->label(__('VAT Charged'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->sortable()
-                    ->summarize(Sum::make()->label(__('Total'))->money('AED')),
+                    ->summarize(Sum::make()->label(__('Total'))->aed()),
 
                 TextColumn::make('vat_collected')
                     ->label(__('VAT Collected'))
                     ->getStateUsing(fn (Fee $record) => (float) ($record->vat_collected ?? 0))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
-                    ->summarize(Sum::make()->label(__('Total'))->money('AED')),
+                    ->summarize(Sum::make()->label(__('Total'))->aed()),
 
                 TextColumn::make('vat_outstanding')
                     ->label(__('Not Yet Collected'))
                     ->getStateUsing(fn (Fee $record) => (float) $record->amount - (float) ($record->vat_collected ?? 0))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->color(fn ($state) => (float) $state > 0.005 ? 'warning' : 'success'),
 

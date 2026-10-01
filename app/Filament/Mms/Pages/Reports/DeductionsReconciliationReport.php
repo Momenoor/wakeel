@@ -154,31 +154,31 @@ class DeductionsReconciliationReport extends Page implements HasTable
 
                 TextColumn::make('revenue_billed')
                     ->label(__('Net Billed'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->sortable()
-                    ->summarize(Sum::make()->label(__('Total'))->money('AED')),
+                    ->summarize(Sum::make()->label(__('Total'))->aed()),
 
                 TextColumn::make('deductions_total')
                     ->label(__('Deductions'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->color('warning')
                     ->sortable()
-                    ->summarize(Sum::make()->label(__('Total'))->money('AED')),
+                    ->summarize(Sum::make()->label(__('Total'))->aed()),
 
                 TextColumn::make('cash_received')
                     ->label(__('Net Cash Received'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->sortable()
-                    ->summarize(Sum::make()->label(__('Total'))->money('AED')),
+                    ->summarize(Sum::make()->label(__('Total'))->aed()),
 
                 TextColumn::make('variance')
                     ->label(__('Variance'))
                     ->description(__('Billed minus received'))
                     ->getStateUsing(fn ($record) => (float) $record->revenue_billed - (float) $record->cash_received)
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->weight('bold')
                     ->color(fn ($state) => abs((float) $state) < 0.005 ? 'success' : 'danger'),

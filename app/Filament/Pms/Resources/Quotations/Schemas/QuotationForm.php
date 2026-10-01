@@ -8,6 +8,7 @@ use App\Models\Lease;
 use App\Models\Party;
 use App\Models\Unit;
 use App\Services\PMS\QuotationService;
+use App\Support\Currency;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Repeater;
@@ -65,7 +66,7 @@ class QuotationForm
                                     ->live()
                                     ->afterStateUpdated(fn (Get $get, Set $set) => self::syncSchedule($get, $set, '../../')),
                                 TextInput::make('offered_rent')
-                                    ->label(__('Offered Rent (AED/year)'))
+                                    ->label(Currency::label(__('Offered Rent (AED/year)')))
                                     ->numeric()
                                     ->minValue(0)
                                     ->step(0.01)
@@ -111,7 +112,7 @@ class QuotationForm
                             ->label(__('Contract Type'))
                             ->options(fn (Get $get): array => self::contractTypeOptions($get('units'))),
                         TextInput::make('security_deposit')
-                            ->label(__('Security Deposit (AED)'))
+                            ->label(Currency::label(__('Security Deposit (AED)')))
                             ->numeric()
                             ->minValue(0)
                             ->step(0.01)

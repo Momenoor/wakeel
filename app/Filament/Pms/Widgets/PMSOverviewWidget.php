@@ -8,6 +8,7 @@ use App\Filament\Pms\Support\PortfolioScope;
 use App\Models\Installment;
 use App\Models\Lease;
 use App\Models\Unit;
+use App\Support\Currency;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Support\Colors\Color;
 use Filament\Widgets\Concerns\InteractsWithPageFilters;
@@ -57,7 +58,7 @@ class PMSOverviewWidget extends StatsOverviewWidget
                 ->descriptionIcon('heroicon-m-home')
                 ->color($vacantUnits > 0 ? 'warning' : Color::Green),
             Stat::make(__('Overdue Instalments'), $overdueCount)
-                ->description(__(':amount AED outstanding', ['amount' => number_format($overdueTotal, 2)]))
+                ->description(Currency::label(__(':amount AED outstanding', ['amount' => number_format($overdueTotal, 2)])))
                 ->descriptionIcon('heroicon-m-exclamation-triangle')
                 ->color($overdueCount > 0 ? 'danger' : Color::Green),
             Stat::make(__('Renewals Due (90 Days)'), $renewalsDueSoon)

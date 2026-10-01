@@ -12,6 +12,7 @@ use App\Models\ConditionTemplate;
 use App\Models\Lease;
 use App\Models\Party;
 use App\Models\Unit;
+use App\Support\Currency;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Repeater;
@@ -68,7 +69,7 @@ class LeaseForm
                 Section::make(__('Financials'))
                     ->schema([
                         TextInput::make('total_base_rent')
-                            ->label(__('Total Base Rent (AED)'))
+                            ->label(Currency::label(__('Total Base Rent (AED)')))
                             ->numeric()
                             ->minValue(0)
                             ->step(0.01)
@@ -76,7 +77,7 @@ class LeaseForm
                             ->live(onBlur: true)
                             ->afterStateUpdated(fn (Set $set, Get $get, $state) => self::syncAnnualRent($set, $get('start_date'), $get('end_date'), $state)),
                         TextInput::make('annual_rent')
-                            ->label(__('Annual Rent (AED)'))
+                            ->label(Currency::label(__('Annual Rent (AED)')))
                             ->disabled()
                             ->dehydrated(false)
                             ->helperText(__('Calculated from the contract period and the base rent — a full year equals the base rent.')),
@@ -86,7 +87,7 @@ class LeaseForm
                             ->default(YesNo::NO->value)
                             ->required(),
                         TextInput::make('security_deposit_amount')
-                            ->label(__('Security Deposit (AED)'))
+                            ->label(Currency::label(__('Security Deposit (AED)')))
                             ->numeric()
                             ->minValue(0)
                             ->step(0.01)

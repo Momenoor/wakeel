@@ -20,6 +20,7 @@ use App\Models\Type;
 use App\Services\MMS\Calendar\EventMatterLinker;
 use App\Services\MMS\IncentiveCalculatorService;
 use App\Services\MMS\MatterOneDriveFolders;
+use App\Support\Currency;
 use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
@@ -612,13 +613,13 @@ class MatterInfolist
                     ->schema([
                         TextEntry::make('amount')
                             ->label(__('Fee Amount'))
-                            ->money('AED')
+                            ->aed()
                             ->weight(FontWeight::SemiBold)
                             ->icon('heroicon-o-banknotes')
                             ->color(fn ($state, Get $get) => $get('type')?->isNegative() ? 'danger' : null),
                         TextEntry::make('collected_amount')
                             ->label(__('Collected'))
-                            ->money('AED')
+                            ->aed()
                             ->icon('heroicon-o-check-circle')
                             ->getStateUsing(fn ($record) => $record?->allocations?->sum('amount') ?? 0)
                             ->color(fn ($state, $record) => match (true) {
@@ -645,7 +646,7 @@ class MatterInfolist
                             ->visible(fn ($record) => $record?->allocations?->isNotEmpty())
                             ->schema([
                                 TextEntry::make('amount')->label(__('Amount'))
-                                    ->money('AED')->weight(FontWeight::SemiBold)->color('success'),
+                                    ->aed()->weight(FontWeight::SemiBold)->color('success'),
                                 TextEntry::make('date')->label(__('Date'))->date(),
                                 TextEntry::make('description')->label(__('Notes'))
                                     ->placeholder('—')->columnSpan(2),
@@ -730,7 +731,7 @@ class MatterInfolist
                                 TextEntry::make("incentive_{$calculationId}_net")
                                     ->label(__('Incentive Base'))
                                     ->helperText(__('The fee at this rate, before the assistant rate is applied — not the amount paid out.'))
-                                    ->state(number_format((float) $feeLines->sum('net_amount'), 2).' AED'),
+                                    ->state(Currency::label(number_format((float) $feeLines->sum('net_amount'), 2).' AED')),
                                 TextEntry::make("incentive_{$calculationId}_assistants")
                                     ->label(__('Paid to Assistants'))
                                     ->columnSpanFull()
@@ -977,7 +978,7 @@ class MatterInfolist
             ->modalHeading(__('Edit Fee'))
             ->schema([
                 TextInput::make('amount')->label(__('Fee Amount'))
-                    ->numeric()->required()->prefix('AED'),
+                    ->numeric()->required()->prefix(Currency::symbol()),
                 DatePicker::make('date')->label(__('Date'))->required(),
                 TextInput::make('description')->label(__('Description'))->required(),
             ])
@@ -1020,7 +1021,7 @@ class MatterInfolist
             ->modalHeading(__('Edit Payment'))
             ->schema([
                 TextInput::make('amount')->label(__('Amount'))
-                    ->numeric()->required()->prefix('AED'),
+                    ->numeric()->required()->prefix(Currency::symbol()),
                 DatePicker::make('date')->label(__('Payment Date'))->required(),
                 Textarea::make('description')->label(__('Notes / Reference'))->rows(2),
             ])

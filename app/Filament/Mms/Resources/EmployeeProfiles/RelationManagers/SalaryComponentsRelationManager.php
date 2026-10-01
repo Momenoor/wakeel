@@ -7,6 +7,7 @@ use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Mms\Concerns\RefreshesPayrollData;
 use App\Models\EmployeeProfile;
 use App\Models\EmployeeSalaryComponent;
+use App\Support\Currency;
 use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
@@ -102,7 +103,7 @@ class SalaryComponentsRelationManager extends RelationManager
                 ->options(SalaryComponent::class)
                 ->required(),
             TextInput::make('amount')
-                ->label(__('Monthly Amount (AED)'))
+                ->label(Currency::label(__('Monthly Amount (AED)')))
                 ->numeric()
                 ->minValue(0)
                 ->required(),
@@ -121,7 +122,7 @@ class SalaryComponentsRelationManager extends RelationManager
                     ->label(__('Component'))
                     ->badge(),
                 TextColumn::make('amount')
-                    ->label(__('Monthly Amount (AED)'))
+                    ->label(Currency::label(__('Monthly Amount (AED)')))
                     ->numeric(decimalPlaces: 2)
                     ->summarize(Sum::make()->query(fn ($query) => $query->where('effective_to', null))->label(__('Total'))),
                 TextColumn::make('effective_from')

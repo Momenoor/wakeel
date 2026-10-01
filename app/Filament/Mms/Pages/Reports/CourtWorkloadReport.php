@@ -135,17 +135,17 @@ class CourtWorkloadReport extends Page implements HasTable
 
                 TextColumn::make('revenue_billed')
                     ->label(__('Revenue Billed'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->sortable()
-                    ->summarize(Sum::make()->label(__('Total'))->money('AED')),
+                    ->summarize(Sum::make()->label(__('Total'))->aed()),
 
                 TextColumn::make('average_fee')
                     ->label(__('Average Fee'))
                     ->getStateUsing(fn ($record) => $record->matters_count > 0
                         ? (float) $record->revenue_billed / $record->matters_count
                         : 0)
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd(),
             ])
             ->filters([

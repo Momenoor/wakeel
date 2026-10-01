@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Pages\Schemas;
 
+use App\Support\Currency;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -26,8 +27,8 @@ class PayrollSettingsForm
                 ->columns(2)
                 ->schema([
                     TextInput::make('payroll_loan_rounding_step')
-                        ->label(__('Instalment Rounding Step (AED)'))
-                        ->suffix('AED')
+                        ->label(Currency::label(__('Instalment Rounding Step (AED)')))
+                        ->suffix(Currency::symbol())
                         ->numeric()
                         ->minValue(1)
                         ->step(1)
@@ -42,8 +43,8 @@ class PayrollSettingsForm
                 ->columns(2)
                 ->schema([
                     TextInput::make('payroll_bank_fee_amount')
-                        ->label(__('Bank Transfer Fee (AED)'))
-                        ->suffix('AED')
+                        ->label(Currency::label(__('Bank Transfer Fee (AED)')))
+                        ->suffix(Currency::symbol())
                         ->numeric()
                         ->minValue(0)
                         ->step(0.01)

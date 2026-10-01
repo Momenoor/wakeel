@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Actions\Fee;
 
 use App\Models\Allocation;
+use App\Support\Currency;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Textarea;
@@ -83,7 +84,7 @@ class CollectFeeAction extends Action
                 TextInput::make('amount')
                     ->label(static::amountLabel($record))                        // ✅ Amount to Pay / Amount to Collect
                     ->numeric()
-                    ->prefix('AED')
+                    ->prefix(Currency::symbol())
                     ->minValue(0.01)
                     ->maxValue(abs(static::feeBalance($record)))
                     ->default(abs(static::feeBalance($record)))

@@ -10,6 +10,7 @@ use App\Filament\Pms\Resources\Leases\LeaseResource;
 use App\Models\Lease;
 use App\Services\PMS\LeaseService;
 use App\Services\PMS\RentReviewService;
+use App\Support\Currency;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -17,6 +18,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\HtmlString;
 use LogicException;
 use RuntimeException;
 use Throwable;
@@ -123,7 +125,7 @@ class ViewLease extends ViewRecord
                     ->default(now())
                     ->required(),
                 TextInput::make('market_average_rent')
-                    ->label(__('Market Average Rent (AED)'))
+                    ->label(Currency::label(__('Market Average Rent (AED)')))
                     ->numeric()
                     ->minValue(0)
                     ->step(0.01)
@@ -138,13 +140,13 @@ class ViewLease extends ViewRecord
 
                 $notification = Notification::make()
                     ->title(__('Renewal Proposal'))
-                    ->body(implode("\n", array_filter([
+                    ->body(new HtmlString(nl2br((string) Currency::label(implode("\n", array_filter([
                         __('Current Rent: :amount AED', ['amount' => number_format($evaluation->currentRent, 2)]),
                         __('Below Market: :percent%', ['percent' => $evaluation->percentBelowMarket]),
                         __('RERA Cap: :percent% increase allowed', ['percent' => $evaluation->allowedIncreasePercent]),
                         __('Max Allowable Rent: :amount AED', ['amount' => number_format($evaluation->maxAllowableRent, 2)]),
                         $evaluation->nonComplianceMessage,
-                    ])))
+                    ]))))))
                     ->persistent();
 
                 $evaluation->isWithinNoticeWindow ? $notification->success() : $notification->warning();
@@ -176,7 +178,7 @@ class ViewLease extends ViewRecord
                     ->required()
                     ->afterOrEqual('start_date'),
                 TextInput::make('total_base_rent')
-                    ->label(__('New Total Base Rent (AED)'))
+                    ->label(Currency::label(__('New Total Base Rent (AED)')))
                     ->numeric()
                     ->minValue(0)
                     ->step(0.01)

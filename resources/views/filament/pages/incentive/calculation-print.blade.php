@@ -77,25 +77,25 @@
     </div>
     <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
         <p class="text-xs text-gray-500 mb-1">{{ __('Total Base Amount') }}</p>
-        <p class="text-base font-semibold text-gray-800">AED {{ number_format($lines->sum('base_amount'), 2) }}</p>
+        <p class="text-base font-semibold text-gray-800">{{ \App\Support\Currency::format($lines->sum('base_amount')) }}</p>
     </div>
     <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
         <p class="text-xs text-gray-500 mb-1">{{ __('Total Net Amount') }}</p>
-        <p class="text-base font-semibold text-green-700">AED {{ number_format($lines->sum('net_amount'), 2) }}</p>
+        <p class="text-base font-semibold text-green-700">{{ \App\Support\Currency::format($lines->sum('net_amount')) }}</p>
     </div>
     <div class="bg-green-50 border border-green-200 rounded-lg p-3">
         <p class="text-xs text-gray-500 mb-1">{{ __('Total Assistant Incentive') }}</p>
-        <p class="text-base font-bold text-green-800">AED {{ number_format($assistantSummary->sum('total'), 2) }}</p>
+        <p class="text-base font-bold text-green-800">{{ \App\Support\Currency::format($assistantSummary->sum('total')) }}</p>
     </div>
     <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
         <p class="text-xs text-gray-500 mb-1">{{ __('Total Extra Bonuses') }}</p>
         <p class="text-base font-semibold text-blue-700">
-            AED {{ number_format($assistantSummary->sum('extra_amount'), 2) }}</p>
+            {{ \App\Support\Currency::format($assistantSummary->sum('extra_amount')) }}</p>
     </div>
     <div class="bg-red-50 border border-red-200 rounded-lg p-3">
         <p class="text-xs text-gray-500 mb-1">{{ __('Total Penalties') }}</p>
         <p class="text-base font-semibold text-red-700">
-            AED {{ number_format($assistantSummary->sum('penalty_amount'), 2) }}</p>
+            {{ \App\Support\Currency::format($assistantSummary->sum('penalty_amount')) }}</p>
     </div>
 </div>
 
@@ -158,7 +158,7 @@
                     @endif
                 </td>
                 <td class="px-3 py-2 text-right font-bold text-green-800">
-                    AED {{ number_format($row['total'], 2) }}
+                    {{ \App\Support\Currency::format($row['total']) }}
                 </td>
             </tr>
             <tr class="{{ $loop->even ? 'bg-blue-50' : 'bg-white' }} border-b border-gray-200">
@@ -244,17 +244,17 @@
                  counted, unlike Share Total and the columns below it, which are
                  already split per assistant. --}}
             <td class="px-3 py-2"></td>
-            <td class="px-3 py-2 text-right">AED {{ number_format($assistantSummary->sum('share_total'), 2) }}</td>
+            <td class="px-3 py-2 text-right">{{ \App\Support\Currency::format($assistantSummary->sum('share_total')) }}</td>
             <td class="px-3 py-2"></td>
             <td class="px-3 py-2 text-right text-green-700">
-                AED {{ number_format($assistantSummary->sum('extra_amount'), 2) }}</td>
+                {{ \App\Support\Currency::format($assistantSummary->sum('extra_amount')) }}</td>
             <td class="px-3 py-2"></td>
             <td class="px-3 py-2 text-right text-red-600">
-                AED {{ number_format($assistantSummary->sum('penalty_amount'), 2) }}</td>
+                {{ \App\Support\Currency::format($assistantSummary->sum('penalty_amount')) }}</td>
             <td class="px-3 py-2 text-right text-red-600">
-                AED {{ number_format($assistantSummary->sum('fixed_deduction'), 2) }}</td>
+                {{ \App\Support\Currency::format($assistantSummary->sum('fixed_deduction')) }}</td>
             <td class="px-3 py-2 text-right text-green-800">
-                AED {{ number_format($assistantSummary->sum('total'), 2) }}</td>
+                {{ \App\Support\Currency::format($assistantSummary->sum('total')) }}</td>
         </tr>
         </tfoot>
     </table>
@@ -331,11 +331,11 @@
         <tfoot>
         <tr class="bg-blue-100 font-bold border-t-2 border-blue-900">
             <td colspan="5" class="px-3 py-2 text-right text-blue-900">{{ __('Totals') }}</td>
-            <td class="px-3 py-2 text-right">AED {{ number_format($lines->sum('base_amount'), 2) }}</td>
+            <td class="px-3 py-2 text-right">{{ \App\Support\Currency::format($lines->sum('base_amount')) }}</td>
             <td class="px-3 py-2 text-right text-red-600">
                 −{{ number_format($lines->avg('total_deduction_pct'), 1) }}% avg
             </td>
-            <td class="px-3 py-2 text-right text-green-700">AED {{ number_format($lines->sum('net_amount'), 2) }}</td>
+            <td class="px-3 py-2 text-right text-green-700">{{ \App\Support\Currency::format($lines->sum('net_amount')) }}</td>
             <td></td>
         </tr>
         </tfoot>

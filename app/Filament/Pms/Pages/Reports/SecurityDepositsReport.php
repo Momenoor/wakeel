@@ -73,17 +73,17 @@ class SecurityDepositsReport extends PmsReport
                     ->summarize(Count::make()->label(__('Leases'))),
                 TextColumn::make('security_deposit_amount')
                     ->label(__('Deposit'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->sortable()
-                    ->summarize(Sum::make()->label('')->money('AED')),
+                    ->summarize(Sum::make()->label('')->aed()),
                 TextColumn::make('deposit_collected')
                     ->label(__('Collected'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->placeholder('—')
                     ->color(fn (Lease $lease) => (float) $lease->deposit_collected + 0.005 < (float) $lease->security_deposit_amount ? 'warning' : 'success')
-                    ->summarize(Sum::make()->label('')->money('AED')),
+                    ->summarize(Sum::make()->label('')->aed()),
                 TextColumn::make('refund')
                     ->label(__('Refund'))
                     ->state(fn (Lease $lease) => match (true) {

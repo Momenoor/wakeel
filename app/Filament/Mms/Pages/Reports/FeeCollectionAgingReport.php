@@ -160,26 +160,26 @@ class FeeCollectionAgingReport extends Page implements HasTable
 
                 TextColumn::make('owed_amount')
                     ->label(__('Net Billed'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->sortable()
-                    ->summarize(Sum::make()->label(__('Total'))->money('AED')),
+                    ->summarize(Sum::make()->label(__('Total'))->aed()),
 
                 TextColumn::make('received_amount')
                     ->label(__('Collected'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->sortable()
-                    ->summarize(Sum::make()->label(__('Total'))->money('AED')),
+                    ->summarize(Sum::make()->label(__('Total'))->aed()),
 
                 TextColumn::make('outstanding_amount')
                     ->label(__('Outstanding'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->weight('bold')
                     ->color(fn ($state) => (float) $state > 0.005 ? 'danger' : 'success')
                     ->sortable()
-                    ->summarize(Sum::make()->label(__('Total'))->money('AED')),
+                    ->summarize(Sum::make()->label(__('Total'))->aed()),
             ])
             ->filters([
                 // WHERE, not HAVING. Filament runs a filter's query closure

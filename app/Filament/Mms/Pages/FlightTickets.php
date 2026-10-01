@@ -7,6 +7,7 @@ use App\Filament\Concerns\HasModuleGate;
 use App\Filament\Mms\Resources\EmployeeProfiles\EmployeeProfileResource;
 use App\Models\FlightTicket;
 use App\Services\MMS\FlightTicketService;
+use App\Support\Currency;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
@@ -78,7 +79,7 @@ class FlightTickets extends Page implements HasTable
                     ->label(__('Year'))
                     ->sortable(),
                 TextColumn::make('amount')
-                    ->label(__('Amount (AED)'))
+                    ->label(Currency::label(__('Amount (AED)')))
                     ->numeric(decimalPlaces: 2)
                     ->description(fn (FlightTicket $record): ?string => $record->is_prorated ? __('pro-rated') : null),
                 TextColumn::make('status')

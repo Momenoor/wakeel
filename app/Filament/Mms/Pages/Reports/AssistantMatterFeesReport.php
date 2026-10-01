@@ -78,12 +78,12 @@ class AssistantMatterFeesReport extends Page implements HasTable
                     ->sortable(),
                 TextColumn::make('total_matter_fees')
                     ->label(__('Total Matter Fees'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd(),
                 TextColumn::make('divided_fees')
                     ->label(__('Divided Fees'))
                     ->getStateUsing(fn ($record) => ($record->assistants_count > 0) ? ($record->total_matter_fees / $record->assistants_count) : 0)
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd(),
             ])
             ->filters([

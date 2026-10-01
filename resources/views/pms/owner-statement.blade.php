@@ -68,7 +68,7 @@
         </tr>
         <tr>
             <td class="label">{{ __('Deposits held') }}</td><td class="value">{{ $money($summary['deposits']) }}</td>
-            <td></td><td class="value muted" style="font-size: 8pt; font-weight: normal;">AED</td>
+            <td></td><td class="value muted" style="font-size: 8pt; font-weight: normal;">{{ \App\Support\Currency::pdfSymbol() }}</td>
         </tr>
     </table>
 

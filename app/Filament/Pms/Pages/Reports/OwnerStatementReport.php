@@ -87,17 +87,17 @@ class OwnerStatementReport extends PmsReport
                     ->weight('bold')
                     ->searchable()
                     ->sortable(),
-                TextColumn::make('due_amount')->label(__('Rent due'))->money('AED')->alignEnd()->sortable()
-                    ->summarize(Sum::make()->label('')->money('AED')),
-                TextColumn::make('collected_amount')->label(__('Collected'))->money('AED')->alignEnd()->color('success')->sortable()
-                    ->summarize(Sum::make()->label('')->money('AED')),
-                TextColumn::make('vat_amount')->label(__('VAT'))->money('AED')->alignEnd()->sortable()
-                    ->summarize(Sum::make()->label('')->money('AED')),
-                TextColumn::make('outstanding_amount')->label(__('Outstanding'))->money('AED')->alignEnd()
+                TextColumn::make('due_amount')->label(__('Rent due'))->aed()->alignEnd()->sortable()
+                    ->summarize(Sum::make()->label('')->aed()),
+                TextColumn::make('collected_amount')->label(__('Collected'))->aed()->alignEnd()->color('success')->sortable()
+                    ->summarize(Sum::make()->label('')->aed()),
+                TextColumn::make('vat_amount')->label(__('VAT'))->aed()->alignEnd()->sortable()
+                    ->summarize(Sum::make()->label('')->aed()),
+                TextColumn::make('outstanding_amount')->label(__('Outstanding'))->aed()->alignEnd()
                     ->color(fn ($state) => (float) $state > 0.005 ? 'danger' : null)->sortable()
-                    ->summarize(Sum::make()->label('')->money('AED')),
-                TextColumn::make('deposits_held')->label(__('Deposits held'))->money('AED')->alignEnd()->sortable()
-                    ->summarize(Sum::make()->label('')->money('AED')),
+                    ->summarize(Sum::make()->label('')->aed()),
+                TextColumn::make('deposits_held')->label(__('Deposits held'))->aed()->alignEnd()->sortable()
+                    ->summarize(Sum::make()->label('')->aed()),
             ])
             ->recordActions([
                 Action::make('statementPdf')

@@ -73,6 +73,6 @@ class PMSOverviewWidgetTest extends TestCase
         // than the (locale-dependent) English wording around it.
         Livewire::test(PMSOverviewWidget::class)
             ->assertSee('1 / 2')
-            ->assertSee(__(':amount AED outstanding', ['amount' => '5,000.00']));
+            ->assertSeeHtml('5,000.00 <svg class="wakeel-aed"');
     }
 }

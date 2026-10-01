@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Resources\EmployeeLoans\RelationManagers;
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Mms\Concerns\RefreshesPayrollData;
 use App\Models\LoanInstallment;
+use App\Support\Currency;
 use App\Support\ScreenPermissions;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Columns\Summarizers\Sum;
@@ -57,7 +58,7 @@ class InstallmentsRelationManager extends RelationManager
                     ->label(__('Due Period'))
                     ->sortable(),
                 TextColumn::make('amount')
-                    ->label(__('Amount (AED)'))
+                    ->label(Currency::label(__('Amount (AED)')))
                     ->numeric(decimalPlaces: 2)
                     ->summarize(Sum::make()->label(__('Total'))),
                 TextColumn::make('payslip_id')

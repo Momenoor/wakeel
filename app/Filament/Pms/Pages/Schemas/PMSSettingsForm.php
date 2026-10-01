@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pms\Pages\Schemas;
 
+use App\Support\Currency;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -61,14 +62,14 @@ class PMSSettingsForm
                         ->required()
                         ->default(0),
                     TextInput::make('pms_attestation_fee_dubai')
-                        ->label(__('Dubai — Ejari fee per contract (AED)'))
+                        ->label(Currency::label(__('Dubai — Ejari fee per contract (AED)')))
                         ->numeric()
                         ->minValue(0)
                         ->step(0.01)
                         ->required()
                         ->default(0),
                     TextInput::make('pms_attestation_fee_estimate')
-                        ->label(__('Other emirates — fee per contract (AED)'))
+                        ->label(Currency::label(__('Other emirates — fee per contract (AED)')))
                         ->numeric()
                         ->minValue(0)
                         ->step(0.01)
@@ -81,7 +82,7 @@ class PMSSettingsForm
                 ->columns(2)
                 ->schema([
                     TextInput::make('pms_bounced_cheque_penalty')
-                        ->label(__('Bounced Cheque Penalty (AED)'))
+                        ->label(Currency::label(__('Bounced Cheque Penalty (AED)')))
                         ->helperText(__('Added to the balance due whenever an instalment is marked bounced.'))
                         ->numeric()
                         ->minValue(0)

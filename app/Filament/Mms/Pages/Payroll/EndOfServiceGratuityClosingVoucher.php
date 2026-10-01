@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Pages\Payroll;
 
 use App\Models\EosgClosingVoucher;
 use App\Services\MMS\EndOfServiceGratuityClosingVoucherService;
+use App\Support\Currency;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
@@ -194,10 +195,10 @@ class EndOfServiceGratuityClosingVoucher extends Page
                     Notification::make()
                         ->success()
                         ->title(__('EOSG closing voucher generated'))
-                        ->body(__(':count employee(s) included, total :amount AED.', [
+                        ->body(Currency::label(__(':count employee(s) included, total :amount AED.', [
                             'count' => $voucher->lines()->count(),
                             'amount' => number_format((float) $voucher->total_amount, 2),
-                        ]))
+                        ])))
                         ->send();
                 }),
 

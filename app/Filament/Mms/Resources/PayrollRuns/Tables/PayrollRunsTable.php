@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Resources\PayrollRuns\Tables;
 use App\Enums\PayrollRunStatus;
 use App\Models\PayrollRun;
 use App\Services\MMS\PayrollJournalVoucherService;
+use App\Support\Currency;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -37,11 +38,11 @@ class PayrollRunsTable
                 TextColumn::make('payslips_count')
                     ->label(__('Employees')),
                 TextColumn::make('payslips_sum_gross')
-                    ->label(__('Gross (AED)'))
+                    ->label(Currency::label(__('Gross (AED)')))
                     ->numeric(decimalPlaces: 2)
                     ->placeholder('—'),
                 TextColumn::make('payslips_sum_net_pay')
-                    ->label(__('Net Payable (AED)'))
+                    ->label(Currency::label(__('Net Payable (AED)')))
                     ->numeric(decimalPlaces: 2)
                     ->weight('bold')
                     ->placeholder('—'),

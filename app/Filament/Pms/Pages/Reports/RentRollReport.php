@@ -85,19 +85,19 @@ class RentRollReport extends PmsReport
                 TextColumn::make('annual_rent')
                     ->label(__('Annual rent'))
                     ->state(fn (Unit $unit) => $this->lease($unit)?->annual_rent)
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->placeholder('—'),
                 TextColumn::make('rental_rate')
                     ->label(__('Asking rent'))
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('deposit')
                     ->label(__('Deposit'))
                     ->state(fn (Unit $unit) => $this->lease($unit)?->security_deposit_amount)
-                    ->money('AED')
+                    ->aed()
                     ->alignEnd()
                     ->placeholder('—'),
                 TextColumn::make('days_vacant')

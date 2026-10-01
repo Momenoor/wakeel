@@ -9,7 +9,7 @@
                 <th style="text-align: start; padding: 6px 8px; font-weight: 600;">#</th>
                 <th style="text-align: start; padding: 6px 8px; font-weight: 600;">{{ __('Instalment') }}</th>
                 <th style="text-align: start; padding: 6px 8px; font-weight: 600;">{{ __('Due Date') }}</th>
-                <th style="text-align: end; padding: 6px 8px; font-weight: 600;">{{ __('Amount (AED)') }}</th>
+                <th style="text-align: end; padding: 6px 8px; font-weight: 600;">{{ \App\Support\Currency::label(__('Amount (AED)')) }}</th>
             </tr>
         </thead>
         <tbody>
