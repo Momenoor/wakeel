@@ -20,7 +20,7 @@ class Chat extends Page
 
     protected static string|UnitEnum|null $navigationGroup = 'Communication';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 1;
 
     public function getTitle(): string
     {
