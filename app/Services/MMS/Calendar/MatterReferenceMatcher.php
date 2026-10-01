@@ -94,6 +94,16 @@ class MatterReferenceMatcher
         return array_values(array_unique($refs, SORT_REGULAR));
     }
 
+    /**
+     * A reference as written for people: "639/2025".
+     *
+     * @param  array{number: string, year: int}  $ref
+     */
+    public static function key(array $ref): string
+    {
+        return $ref['number'].'/'.$ref['year'];
+    }
+
     private static function looksLikeYear(string $number): bool
     {
         return (bool) preg_match('~^(?:19|20)\d{2}$~', $number);

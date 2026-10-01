@@ -3,11 +3,13 @@
 namespace Tests\Feature;
 
 use App\Filament\Mms\Pages\AdminDashboard;
+use App\Filament\Mms\Resources\CalendarEvents\Pages\ListCalendarEvents;
 use App\Filament\Mms\Widgets\UnmatchedEventReferencesWidget;
 use App\Mail\UnmatchedEventReferencesMail;
 use App\Models\CalendarEvent;
 use App\Models\Matter;
 use App\Models\User;
+use App\Services\MMS\Calendar\EventMatterLinker;
 use App\Services\MMS\Calendar\UnmatchedEventReferences;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -90,6 +92,46 @@ class UnmatchedEventReferencesTest extends TestCase
         // …and unlinking brings it back.
         $typo->matters()->detach($matter->id);
         $this->assertArrayHasKey($typo->id, UnmatchedEventReferences::missing());
+    }
+
+    public function test_an_ignored_number_is_no_longer_reported_missing(): void
+    {
+        Gate::before(fn () => true);
+        $this->actingAs($this->user('super-admin'));
+        $event = $this->event('Session 6399/2025');
+
+        Livewire::test(UnmatchedEventReferencesWidget::class)
+            ->callTableAction('ignoreReferences', $event, ['ignored' => ['6399/2025']])
+            ->assertHasNoTableActionErrors();
+
+        $this->assertSame(['6399/2025'], $event->fresh()->ignored_references);
+        $this->assertSame([], UnmatchedEventReferences::missing());
+
+        // Unticking brings it back.
+        Livewire::test(ListCalendarEvents::class)
+            ->callTableAction('ignoreReferences', $event, ['ignored' => []]);
+        $this->assertArrayHasKey($event->id, UnmatchedEventReferences::missing());
+    }
+
+    public function test_an_ignored_number_is_unlinked_and_never_linked_again(): void
+    {
+        Gate::before(fn () => true);
+        $this->actingAs($this->user('super-admin'));
+        $wrong = Matter::factory()->create(['number' => 21, 'year' => 2026]);
+        $right = Matter::factory()->create(['number' => 639, 'year' => 2025]);
+        $event = $this->event('639/2025 hearing, see also 21/2026');
+
+        app(EventMatterLinker::class)->link($event);
+        $this->assertEqualsCanonicalizing([$wrong->id, $right->id], $event->matters()->pluck('matters.id')->all());
+
+        Livewire::test(ListCalendarEvents::class)
+            ->callTableAction('ignoreReferences', $event, ['ignored' => ['21/2026']]);
+
+        $this->assertSame([$right->id], $event->matters()->pluck('matters.id')->all());
+
+        // The Outlook sync links titles again — but not the ignored number.
+        app(EventMatterLinker::class)->link($event->fresh());
+        $this->assertSame([$right->id], $event->matters()->pluck('matters.id')->all());
     }
 
     public function test_a_year_first_title_is_not_read_as_a_second_missing_matter(): void

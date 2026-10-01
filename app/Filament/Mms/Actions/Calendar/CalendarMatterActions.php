@@ -10,6 +10,7 @@ use App\Services\MMS\OutlookCalendarService;
 use App\Support\MatterSearch;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
@@ -48,6 +49,58 @@ class CalendarMatterActions
                 app(EventMatterLinker::class)->tidy($record->fresh());
 
                 Notification::make()->title(__('Matters linked'))->success()->send();
+            });
+    }
+
+    /**
+     * Mark numbers in the event's title as not that matter for this event:
+     * never linked from the title again (an existing link to it is taken
+     * off), never reported as a missing matter. Unticking undoes it.
+     */
+    public static function ignoreReferences(): Action
+    {
+        return Action::make('ignoreReferences')
+            ->label(__('Ignore numbers'))
+            ->icon('heroicon-o-no-symbol')
+            ->color('gray')
+            ->iconButton()
+            ->tooltip(__('Ignore numbers'))
+            ->visible(fn (CalendarEvent $record): bool => MatterReferenceMatcher::references($record->title) !== []
+                && (auth()->user()?->can('update', $record) ?? false))
+            ->modalHeading(fn (CalendarEvent $record): string => __('Numbers in “:title”', ['title' => $record->title]))
+            ->modalDescription(__('Tick a number that is not that matter for this event. It will not be linked from the title, and is no longer reported as a missing matter.'))
+            ->fillForm(fn (CalendarEvent $record): array => ['ignored' => $record->ignored_references ?? []])
+            ->schema(fn (CalendarEvent $record): array => [
+                CheckboxList::make('ignored')
+                    ->hiddenLabel()
+                    ->options(collect(MatterReferenceMatcher::references($record->title))
+                        ->mapWithKeys(function (array $ref): array {
+                            $key = MatterReferenceMatcher::key($ref);
+                            $exists = MatterReferenceMatcher::matterFor($ref['number'], $ref['year']) !== null;
+
+                            return [$key => $key.' — '.($exists ? __('a matter in the system') : __('no matter with this number'))];
+                        })
+                        ->all()),
+            ])
+            ->action(function (CalendarEvent $record, array $data): void {
+                $ignored = array_values($data['ignored'] ?? []);
+
+                // A link the title made to a number now ignored comes off.
+                $unlink = collect(MatterReferenceMatcher::references($record->title))
+                    ->filter(fn (array $ref): bool => in_array(MatterReferenceMatcher::key($ref), $ignored, true))
+                    ->map(fn (array $ref): ?int => MatterReferenceMatcher::matterFor($ref['number'], $ref['year']))
+                    ->filter()
+                    ->all();
+
+                $record->update(['ignored_references' => $ignored ?: null]);
+
+                if ($unlink !== []) {
+                    $record->matters()->detach($unlink);
+                }
+
+                app(EventMatterLinker::class)->tidy($record->fresh());
+
+                Notification::make()->title(__('Saved'))->success()->send();
             });
     }
 

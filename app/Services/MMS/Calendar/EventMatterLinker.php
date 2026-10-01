@@ -19,7 +19,14 @@ class EventMatterLinker
      */
     public function link(CalendarEvent $event): int
     {
-        $ids = MatterReferenceMatcher::matterIds($event->title);
+        // Not the numbers marked as not that matter for this event.
+        $ids = [];
+
+        foreach ($event->matterReferences() as $ref) {
+            if (($id = MatterReferenceMatcher::matterFor($ref['number'], $ref['year'])) !== null) {
+                $ids[] = $id;
+            }
+        }
 
         if ($event->matter_id !== null) {
             $ids[] = (int) $event->matter_id;
@@ -49,7 +56,7 @@ class EventMatterLinker
         $events = 0;
         $links = 0;
 
-        $query->select(['id', 'title', 'matter_id', 'type'])->chunkById(200, function ($chunk) use (&$events, &$links) {
+        $query->select(['id', 'title', 'ignored_references', 'matter_id', 'type'])->chunkById(200, function ($chunk) use (&$events, &$links) {
             foreach ($chunk as $event) {
                 $added = $this->link($event);
                 $links += $added;

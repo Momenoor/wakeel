@@ -145,6 +145,7 @@ class CalendarEventsTable
                     ->visible(fn ($record) => $record instanceof CalendarEvent && auth()->user()->can('SyncToOutlook:CalendarEvent') && ! $record->synced_to_outlook),
                 CalendarMatterActions::linkMatters()
                     ->visible(fn ($record) => auth()->user()->can('update', $record)),
+                CalendarMatterActions::ignoreReferences(),
                 ViewAction::make()->schema(fn (Schema $schema, $record) => $record->type == 'single' ? CalendarEventInfolist::configure($schema) : CalendarEventBulkInfolist::configure($schema))->iconButton(),
                 EditAction::make()->iconButton()->schema(fn (Schema $schema) => CalendarEventForm::configure($schema)),
                 DeleteAction::make()->iconButton(),

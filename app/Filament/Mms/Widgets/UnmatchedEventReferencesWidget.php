@@ -78,6 +78,7 @@ class UnmatchedEventReferencesWidget extends TableWidget
             ->recordActions([
                 CalendarMatterActions::linkMatters()
                     ->visible(fn (CalendarEvent $record) => auth()->user()?->can('update', $record)),
+                CalendarMatterActions::ignoreReferences(),
                 Action::make('newMatter')
                     ->label(__('New matter'))
                     ->icon('heroicon-o-plus')

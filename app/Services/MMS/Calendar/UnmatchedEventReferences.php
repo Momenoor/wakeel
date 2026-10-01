@@ -59,10 +59,10 @@ class UnmatchedEventReferences
 
         CalendarEvent::query()
             ->where('start_datetime', '>=', now()->subDays(self::DAYS_BACK)->startOfDay())
-            ->select(['id', 'title'])
+            ->select(['id', 'title', 'ignored_references'])
             ->chunkById(500, function ($events) use (&$refsByEvent) {
                 foreach ($events as $event) {
-                    $refs = MatterReferenceMatcher::references($event->title);
+                    $refs = $event->matterReferences();
 
                     if ($refs !== []) {
                         $refsByEvent[$event->id] = $refs;

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Observers\CalendarEventObserver;
+use App\Services\MMS\Calendar\MatterReferenceMatcher;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -19,6 +20,7 @@ class CalendarEvent extends Model
         'matter_id',
         'outlook_event_id',
         'title',
+        'ignored_references',
         'description',
         'start_datetime',
         'end_datetime',
@@ -41,7 +43,24 @@ class CalendarEvent extends Model
         'imported_from_outlook' => 'boolean',
         'is_teams_meeting' => 'boolean',
         'is_all_day' => 'boolean',
+        'ignored_references' => 'array',
     ];
+
+    /**
+     * The matter numbers its title names, less the ones marked as not that
+     * matter for this event.
+     *
+     * @return list<array{number: string, year: int}>
+     */
+    public function matterReferences(): array
+    {
+        $ignored = $this->ignored_references ?? [];
+
+        return array_values(array_filter(
+            MatterReferenceMatcher::references($this->title),
+            fn (array $ref): bool => ! in_array(MatterReferenceMatcher::key($ref), $ignored, true),
+        ));
+    }
 
     public function matter(): BelongsTo
     {

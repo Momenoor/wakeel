@@ -3213,5 +3213,10 @@
     "Attachment kept for the campaign: :names": "المرفق المحفوظ للحملة: :names",
     "Regenerate PDFs": "إعادة إنشاء ملفات PDF",
     "Deletes every PDF of this campaign and makes them again from the emails as they now read. They are rebuilt in the background; any not ready yet is made when downloaded.": "يحذف جميع ملفات PDF لهذه الحملة وينشئها من جديد من الرسائل بصيغتها الحالية. يُعاد إنشاؤها في الخلفية، وأي ملف لم يجهز بعد يُنشأ عند تنزيله.",
-    ":count PDFs deleted and being made again.": "تم حذف :count ملف PDF وجارٍ إنشاؤها من جديد."
+    ":count PDFs deleted and being made again.": "تم حذف :count ملف PDF وجارٍ إنشاؤها من جديد.",
+    "Ignore numbers": "تجاهل الأرقام",
+    "Numbers in “:title”": "الأرقام في «:title»",
+    "Tick a number that is not that matter for this event. It will not be linked from the title, and is no longer reported as a missing matter.": "حدّد الرقم الذي لا يخص هذه القضية في هذا الموعد. لن يُربط من العنوان، ولن يُبلَّغ عنه كقضية غير موجودة.",
+    "a matter in the system": "قضية موجودة في النظام",
+    "no matter with this number": "لا توجد قضية بهذا الرقم"
 }
