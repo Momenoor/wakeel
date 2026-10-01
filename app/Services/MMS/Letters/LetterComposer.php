@@ -12,6 +12,7 @@ use App\Services\MMS\Letters\Blocks\SignatureBlock;
 use App\Support\TextDirection;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 
 /**
@@ -57,11 +58,12 @@ class LetterComposer
     }
 
     /**
-     * Everyone on the matter a letter can be addressed to: each party, and
-     * each party's representatives ("وكيل المدعي"), with their emails.
-     * Keyed by the matter_party row id.
+     * Everyone on the matter a letter can be addressed to: each party (with
+     * its representatives, who go with it), and each representative on
+     * their own ("وكيل المدعي"), with their emails. Keyed by the
+     * matter_party row id.
      *
-     * @return array<int, array{name: string, role: ?string, emails: list<string>, party_id: int|null}>
+     * @return array<int, array{name: string, role: ?string, emails: list<string>, party_id: int|null, representatives: list<array{name: string, emails: list<string>, party_id: int|null}>, of: int|null}>
      */
     public static function candidates(Matter $matter, bool $arabic = true): array
     {
@@ -72,10 +74,19 @@ class LetterComposer
         $candidates = [];
         foreach ($top as $mp) {
             $label = self::typeLabel($mp->type, $arabic);
-            $candidates[$mp->id] = self::candidate($mp, $label);
+            $representatives = $rows->filter(fn (MatterParty $rep) => (int) $rep->parent_id === (int) $mp->id);
 
-            foreach ($rows->filter(fn (MatterParty $rep) => (int) $rep->parent_id === (int) $mp->id) as $rep) {
-                $candidates[$rep->id] = self::candidate($rep, $label ? ($arabic ? 'وكيل '.$label : $label."'s representative") : null);
+            $candidates[$mp->id] = [
+                ...self::candidate($mp, $label),
+                'representatives' => $representatives->map(fn (MatterParty $rep) => Arr::except(self::candidate($rep, null), ['role', 'representatives', 'of']))->values()->all(),
+            ];
+
+            foreach ($representatives as $rep) {
+                $candidates[$rep->id] = [
+                    ...self::candidate($rep, $label ? ($arabic ? 'وكيل '.$label : $label."'s representative") : null),
+                    // Whose representative: ticked with their party, they're not added twice.
+                    'of' => $mp->id,
+                ];
             }
         }
 
@@ -83,7 +94,7 @@ class LetterComposer
     }
 
     /**
-     * @return array{name: string, role: ?string, emails: list<string>, party_id: int|null}
+     * @return array{name: string, role: ?string, emails: list<string>, party_id: int|null, representatives: list<array<string, mixed>>}
      */
     private static function candidate(MatterParty $mp, ?string $role): array
     {
@@ -94,6 +105,8 @@ class LetterComposer
             'role' => $role,
             'emails' => array_values(array_filter(is_array($emails) ? $emails : [$emails])),
             'party_id' => $mp->party_id,
+            'representatives' => [],
+            'of' => null,
         ];
     }
 
@@ -200,21 +213,75 @@ class LetterComposer
         return $heading.'<ol>'.$lines->map(fn ($line) => '<li>'.e($line).'</li>')->implode('').'</ol>';
     }
 
+    /**
+     * The addressees. A party with representatives goes with them:
+     *
+     *  - by default on one line — "السادة/ منى أحمد (المدعي) ووكيله
+     *    القانوني المحترمين" — their emails under it;
+     *  - with name_representatives, the party on its line and each
+     *    representative on one of their own: "ووكيله السادة/ … المحترمين".
+     *    Parties sharing the same representatives are listed together, the
+     *    representatives once after them: "ووكيلهم السادة/ …".
+     */
     private function recipientsHtml(): string
     {
-        return collect($this->recipients)->map(function (array $recipient, int $i) {
-            $prefix = $this->isArabic() ? ($i === 0 ? 'السادة/ ' : 'والسادة/ ') : ($i === 0 ? 'Messrs. ' : 'And Messrs. ');
+        $arabic = $this->isArabic();
+        $recipients = array_values($this->recipients);
+        $first = true;
+        $done = [];
+        $html = '';
+
+        $emails = fn (array $list): string => collect($list)->map(fn ($email) => '<p class="recipient-email" dir="ltr">'.e($email).'</p>')->implode('');
+        $line = fn (string $text): string => '<p class="recipient"><strong>'.$text.'</strong></p>';
+        $addressee = function (array $recipient, string $after = '') use ($arabic, &$first): string {
+            $prefix = $arabic ? ($first ? 'السادة/ ' : 'والسادة/ ') : ($first ? 'Messrs. ' : 'And Messrs. ');
+            $first = false;
             $role = filled($recipient['role'] ?? null) ? ' ('.e($recipient['role']).')' : '';
-            $suffix = $this->isArabic() ? ' المحترمين' : '';
 
-            $html = '<p class="recipient"><strong>'.$prefix.e($recipient['name']).$role.$suffix.'</strong></p>';
+            return $prefix.e($recipient['name']).$role.$after.($arabic ? ' المحترمين' : '');
+        };
+        // The same representatives: the same people, in any order.
+        $key = fn (array $recipient): string => collect($recipient['representatives'] ?? [])
+            ->map(fn (array $rep) => filled($rep['party_id'] ?? null) ? 'p'.$rep['party_id'] : 'n'.$rep['name'])
+            ->sort()->implode('|');
 
-            foreach ($recipient['emails'] ?? [] as $email) {
-                $html .= '<p class="recipient-email" dir="ltr">'.e($email).'</p>';
+        foreach ($recipients as $i => $recipient) {
+            if (isset($done[$i])) {
+                continue;
             }
 
-            return $html;
-        })->implode('').$this->attentionHtml();
+            $representatives = $recipient['representatives'] ?? [];
+
+            if ($representatives === []) {
+                $html .= $line($addressee($recipient)).$emails($recipient['emails'] ?? []);
+
+                continue;
+            }
+
+            if (empty($recipient['name_representatives'])) {
+                $html .= $line($addressee($recipient, $arabic ? ' ووكيله القانوني' : ' and their legal representative'))
+                    .$emails([...$recipient['emails'] ?? [], ...collect($representatives)->flatMap(fn ($rep) => $rep['emails'] ?? [])->all()]);
+
+                continue;
+            }
+
+            // Named: every party with these same representatives, then them.
+            $group = collect($recipients)
+                ->filter(fn (array $other, int $j) => $j >= $i && ! isset($done[$j]) && ! empty($other['name_representatives']) && $key($other) === $key($recipient));
+
+            foreach ($group as $j => $party) {
+                $done[$j] = true;
+                $html .= $line($addressee($party)).$emails($party['emails'] ?? []);
+            }
+
+            $by = $arabic ? ($group->count() > 1 ? 'ووكيلهم' : 'ووكيله').' السادة/ ' : 'Represented by Messrs. ';
+
+            foreach ($representatives as $rep) {
+                $html .= $line($by.e($rep['name']).($arabic ? ' المحترمين' : '')).$emails($rep['emails'] ?? []);
+            }
+        }
+
+        return $html.$this->attentionHtml();
     }
 
     private function attentionHtml(): string

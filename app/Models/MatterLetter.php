@@ -67,6 +67,23 @@ class MatterLetter extends Model
     /** The letter reference format until it is changed in System Settings. */
     public const DEFAULT_REFERENCE_FORMAT = 'JPA/{year}/{number}/{seq}';
 
+    /** Copied in on a letter's email until System Settings says otherwise: the assistants. */
+    public const DEFAULT_CC_EXPERT_TYPES = ['assistant', 'external-assistant'];
+
+    /**
+     * Which of the matter's experts are copied in on every letter's email
+     * (Party::expertTypeOptions(): certified, assistant, external,
+     * external-assistant) — System Settings; none ticked, no one.
+     *
+     * @return list<string>
+     */
+    public static function ccExpertTypes(): array
+    {
+        $types = Setting::get('letter_cc_expert_types');
+
+        return is_array($types) ? array_values($types) : self::DEFAULT_CC_EXPERT_TYPES;
+    }
+
     /**
      * The reference for a matter's nth letter, from the format in System
      * Settings: {year} and {number} the matter's, {seq} the letter's number

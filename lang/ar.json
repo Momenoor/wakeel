@@ -3263,5 +3263,14 @@
     "Never seen": "لم يظهر بعد",
     "Online now": "متصل الآن",
     "Rebuild caches": "إعادة بناء ذاكرة التخزين المؤقت",
-    "The caches could not be rebuilt; they were cleared instead and the site runs without them.": "تعذّرت إعادة بناء ذاكرة التخزين المؤقت؛ فمُسحت بدلاً من ذلك ويعمل الموقع بدونها."
+    "The caches could not be rebuilt; they were cleared instead and the site runs without them.": "تعذّرت إعادة بناء ذاكرة التخزين المؤقت؛ فمُسحت بدلاً من ذلك ويعمل الموقع بدونها.",
+    "More attachments": "مرفقات إضافية",
+    "Sent with the letter, for this email only.": "تُرسل مع الخطاب، لهذا البريد فقط.",
+    "The matter's assistants are copied in; remove any you don't want.": "يُضاف مساعدو القضية في النسخة؛ احذف من لا تريده.",
+    "Copied in on letter emails": "نسخة إلى عند إرسال الخطابات بالبريد",
+    "The matter's experts of these kinds are put in CC whenever a letter is sent by email; the sender can still remove them. None ticked: no one.": "يُضاف خبراء القضية من هذه الفئات في النسخة كلما أُرسل خطاب بالبريد، ويمكن للمرسل حذفهم. إن لم يُحدَّد شيء فلا أحد.",
+    "The matter's experts chosen in System Settings are copied in; remove any you don't want.": "يُضاف خبراء القضية المحددون في إعدادات النظام في النسخة؛ احذف من لا تريده.",
+    "Name the representatives on their own lines": "ذكر الوكلاء بأسمائهم في أسطر مستقلة",
+    "Otherwise the letter says \"ووكيله القانوني\" with the party. Either way the email goes to the representatives too.": "وإلا يُكتب «ووكيله القانوني» مع الطرف. وفي الحالتين يُرسل البريد إلى الوكلاء أيضاً.",
+    "With :names": "مع: :names"
 }

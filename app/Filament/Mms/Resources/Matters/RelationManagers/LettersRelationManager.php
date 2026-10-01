@@ -11,6 +11,7 @@ use App\Models\LetterItem;
 use App\Models\LetterTemplate;
 use App\Models\Matter;
 use App\Models\MatterLetter;
+use App\Models\MatterParty;
 use App\Services\MMS\Letters\Blocks\SignatureBlock;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterIssuer;
@@ -22,6 +23,7 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Repeater;
@@ -41,7 +43,9 @@ use Filament\Schemas\Components\Utilities\Set;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 /**
  * A matter's letters, and issuing a new one: pick a template, tick who it
@@ -134,6 +138,8 @@ class LettersRelationManager extends RelationManager
                 'formats' => ['pdf'],
                 'recipients' => $record->recipients->pluck('id')->all(),
                 'separate' => false,
+                // The matter's experts of the kinds System Settings names.
+                'cc' => self::ccEmails($record->matter),
                 ...app(LetterMailer::class)->draft($record, LetterMailer::ATTACHMENT, EmailTemplate::default()),
             ])
             ->schema(fn (MatterLetter $record) => [
@@ -166,13 +172,24 @@ class LettersRelationManager extends RelationManager
                 CheckboxList::make('recipients')
                     ->label(__('To'))
                     ->options($record->recipients->mapWithKeys(fn ($r) => [$r->id => trim($r->name.($r->role ? ' ('.$r->role.')' : ''))]))
-                    ->descriptions($record->recipients->mapWithKeys(fn ($r) => [$r->id => implode(' · ', $r->emails ?: array_filter([$r->email])) ?: __('No email')]))
+                    ->descriptions($record->recipients->mapWithKeys(fn ($r) => [$r->id => implode(' · ', $r->allEmails()) ?: __('No email')]))
                     ->bulkToggleable()
                     ->live(),
                 TagsInput::make('cc')
                     ->label(__('CC'))
                     ->placeholder('name@example.com')
+                    ->helperText(__('The matter\'s experts chosen in System Settings are copied in; remove any you don\'t want.'))
                     ->nestedRecursiveRules(['email'])
+                    ->live(),
+                // Files of this send's own, beside the letter — whichever way it goes.
+                FileUpload::make('attachments')
+                    ->label(__('More attachments'))
+                    ->helperText(__('Sent with the letter, for this email only.'))
+                    ->multiple()
+                    ->disk('local')
+                    ->directory('letter-attachments')
+                    ->storeFileNamesIn('attachment_names')
+                    ->maxSize(20480)
                     ->live(),
                 Toggle::make('separate')
                     ->label(__('A separate email to each recipient'))
@@ -226,7 +243,14 @@ class LettersRelationManager extends RelationManager
                     (bool) ($data['separate'] ?? false),
                     $data['subject'] ?? null,
                     ($data['mode'] ?? null) === LetterMailer::ATTACHMENT ? ($data['body'] ?? null) : null,
+                    array_map(fn (string $path): array => [
+                        'path' => Storage::disk('local')->path($path),
+                        'name' => (string) ($data['attachment_names'][$path] ?? basename($path)),
+                    ], array_values((array) ($data['attachments'] ?? []))),
                 );
+
+                // Sent: the uploads were for this email only.
+                Storage::disk('local')->delete(array_values((array) ($data['attachments'] ?? [])));
 
                 $notification = Notification::make()
                     ->title(__('Sent: :sent, failed: :failed, without email: :skipped', [
@@ -260,6 +284,33 @@ class LettersRelationManager extends RelationManager
     }
 
     /**
+     * The emails of the matter's experts copied in on its letters — the
+     * kinds ticked in System Settings (the assistants, unless changed) —
+     * from their party, or the account they sign in with.
+     *
+     * @return list<string>
+     */
+    private static function ccEmails(?Matter $matter): array
+    {
+        $types = MatterLetter::ccExpertTypes();
+
+        if (! $matter || $types === []) {
+            return [];
+        }
+
+        return $matter->matterParties()
+            ->with('party.user')
+            ->where('role', 'expert')
+            ->whereIn('type', $types)
+            ->get()
+            ->flatMap(fn (MatterParty $assistant): array => array_filter((array) ($assistant->party?->email ?: $assistant->party?->user?->email)))
+            ->filter(fn ($email): bool => filter_var($email, FILTER_VALIDATE_EMAIL) !== false)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
      * The email as it will go out — to the first ticked recipient when each
      * gets their own.
      */
@@ -280,15 +331,22 @@ class LettersRelationManager extends RelationManager
             $mode === LetterMailer::ATTACHMENT && is_string($body) ? $body : null,
         );
 
-        $addresses = fn ($recipient) => trim($recipient->name.' <'.implode(', ', $recipient->emails ?: array_filter([$recipient->email])).'>', ' <>');
+        $addresses = fn ($recipient) => trim($recipient->name.' <'.implode(', ', $recipient->allEmails()).'>', ' <>');
         $to = $separate
             ? ($ticked->first() ? $addresses($ticked->first()).($ticked->count() > 1 ? ' — '.__('and a separate email to each of the other :count', ['count' => $ticked->count() - 1]) : '') : '')
             : $ticked->map($addresses)->implode(' · ');
 
         $name = LetterIssuer::fileName($record);
-        $attachments = $mode === LetterMailer::ATTACHMENT
-            ? array_map(fn (string $format) => $name.'.'.$format, array_values(array_intersect(['pdf', 'docx'], $get('formats') ?? [])))
-            : [];
+        $attachments = [
+            ...($mode === LetterMailer::ATTACHMENT
+                ? array_map(fn (string $format) => $name.'.'.$format, array_values(array_intersect(['pdf', 'docx'], $get('formats') ?? [])))
+                : []),
+            // The files added, by the names they were uploaded with.
+            ...array_map(
+                fn ($file): string => $file instanceof TemporaryUploadedFile ? $file->getClientOriginalName() : basename((string) $file),
+                array_values((array) ($get('attachments') ?? [])),
+            ),
+        ];
 
         return new HtmlString(view('filament.mms.letters.email-preview', [
             ...$preview,
@@ -440,10 +498,24 @@ class LettersRelationManager extends RelationManager
                 CheckboxList::make('recipients')
                     ->label(__('Recipients'))->hiddenLabel()
                     ->options(collect($candidates)->map(fn ($c) => trim($c['name'].($c['role'] ? ' ('.$c['role'].')' : '')))->all())
-                    ->descriptions(collect($candidates)->map(fn ($c) => implode(' · ', $c['emails']))->all())
+                    ->descriptions(collect($candidates)->map(fn ($c) => trim(implode(' · ', $c['emails'])
+                        .($c['representatives'] ? ' — '.__('With :names', ['names' => collect($c['representatives'])->pluck('name')->implode('، ')]) : ''), ' —'))->all())
                     ->default([])
                     ->bulkToggleable()
                     ->live()
+                    ->columns(2),
+                // A party goes with its representatives: by default "ووكيله
+                // القانوني" on its line; ticked here, each named on their own.
+                CheckboxList::make('name_representatives')
+                    ->label(__('Name the representatives on their own lines'))
+                    ->helperText(__('Otherwise the letter says "ووكيله القانوني" with the party. Either way the email goes to the representatives too.'))
+                    ->options(fn (Get $get): array => collect($candidates)
+                        ->only(array_map('intval', $get('recipients') ?? []))
+                        ->filter(fn (array $c): bool => $c['representatives'] !== [])
+                        ->map(fn (array $c): string => $c['name'])
+                        ->all())
+                    ->visible(fn (Get $get): bool => collect($candidates)->only(array_map('intval', $get('recipients') ?? []))->contains(fn (array $c): bool => $c['representatives'] !== []))
+                    ->default([])
                     ->columns(2),
                 Repeater::make('extra_recipients')
                     ->label(__('Other recipients'))
@@ -471,15 +543,25 @@ class LettersRelationManager extends RelationManager
      * The recipients ticked and typed in, each party's capacity ("المدعي"
      * / "Plaintiff") in the letter's language.
      *
+     * Each party goes with its representatives ("name_representatives":
+     * named on their own lines); a representative ticked as well as their
+     * party isn't added twice.
+     *
      * @param  array<string, mixed>  $data
-     * @return list<array{name: string, role: ?string, emails: list<string>, party_id?: int|null}>
+     * @return list<array<string, mixed>>
      */
     private static function chosenRecipients(Matter $matter, array $data, bool $arabic): array
     {
         $candidates = LetterComposer::candidates($matter, $arabic);
+        $ticked = collect($data['recipients'] ?? [])->map(fn ($id) => (int) $id)->filter(fn (int $id) => isset($candidates[$id]));
+        $named = array_map('intval', $data['name_representatives'] ?? []);
 
         return [
-            ...collect($data['recipients'] ?? [])->map(fn ($id) => $candidates[$id] ?? null)->filter()->values()->all(),
+            ...$ticked
+                // A representative whose party is ticked already goes with it.
+                ->reject(fn (int $id) => filled($candidates[$id]['of']) && $ticked->contains((int) $candidates[$id]['of']))
+                ->map(fn (int $id) => [...$candidates[$id], 'name_representatives' => in_array($id, $named, true)])
+                ->values()->all(),
             ...collect($data['extra_recipients'] ?? [])->map(fn ($r) => [
                 'name' => (string) $r['name'],
                 'role' => $r['role'] ?? null,
@@ -492,12 +574,13 @@ class LettersRelationManager extends RelationManager
      * A letter's recipients as the form ticks them: each one who came from
      * the matter's parties ticked again, the rest as "Other recipients".
      *
-     * @return array{recipients: list<int>, extra_recipients: list<array{name: string, role: ?string, emails: list<string>}>}
+     * @return array{recipients: list<int>, name_representatives: list<int>, extra_recipients: list<array{name: string, role: ?string, emails: list<string>}>}
      */
     private static function recipientsState(MatterLetter $letter): array
     {
         $candidates = LetterComposer::candidates($letter->matter);
         $ticked = [];
+        $named = [];
         $extra = [];
 
         foreach ($letter->recipients as $recipient) {
@@ -509,6 +592,10 @@ class LettersRelationManager extends RelationManager
             if ($id !== false) {
                 $ticked[] = $id;
 
+                if ($recipient->name_representatives) {
+                    $named[] = $id;
+                }
+
                 continue;
             }
 
@@ -519,7 +606,7 @@ class LettersRelationManager extends RelationManager
             ];
         }
 
-        return ['recipients' => $ticked, 'extra_recipients' => $extra];
+        return ['recipients' => $ticked, 'name_representatives' => $named, 'extra_recipients' => $extra];
     }
 
     /**

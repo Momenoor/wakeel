@@ -11,12 +11,16 @@ use App\Models\Letterhead;
 use App\Models\LetterTemplate;
 use App\Models\Matter;
 use App\Models\MatterLetter;
+use App\Models\MatterParty;
+use App\Models\Party;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterMailer;
 use App\Services\MMS\SentFolder;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
@@ -162,6 +166,70 @@ class LetterEmailTest extends TestCase
         $this->assertSame(['mona@example.com'], array_map(fn ($a) => $a->getAddress(), $this->sent[0]->getTo()));
         // No template chosen: the built-in covering note.
         $this->assertStringContainsString('نرفق لكم طيه الخطاب رقم JPA/2026/986/1', $this->sent[0]->getHtmlBody());
+    }
+
+    public function test_more_files_go_with_the_letter_either_way(): void
+    {
+        Storage::disk('local')->put('letter-attachments/statement.pdf', '%PDF-1.4 statement');
+        $statement = ['path' => Storage::disk('local')->path('letter-attachments/statement.pdf'), 'name' => 'كشف الحساب.pdf'];
+        $mona = [$this->letter->recipients->first()->id];
+
+        // Attached: the letter and the file.
+        app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::ATTACHMENT, null, ['pdf'], $mona, attachments: [$statement]);
+        $names = array_map(fn ($part) => $part->getFilename(), $this->sent[0]->getAttachments());
+        $this->assertCount(2, $names);
+        $this->assertStringEndsWith('.pdf', $names[0]);
+        $this->assertSame('كشف الحساب.pdf', $names[1]);
+
+        // The letter as the email: the file, not the letter (only its
+        // signature, embedded in the text).
+        app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::BODY, recipientIds: $mona, attachments: [$statement]);
+        $this->assertSame(['sig.png', 'كشف الحساب.pdf'], array_map(fn ($part) => $part->getFilename(), $this->sent[1]->getAttachments()));
+    }
+
+    public function test_the_matters_assistants_are_copied_in_and_files_can_be_added(): void
+    {
+        $matter = $this->letter->matter;
+        $expert = fn (string $type, array $party) => MatterParty::create([
+            'matter_id' => $matter->id, 'role' => 'expert', 'type' => $type,
+            'party_id' => Party::factory()->create($party)->id,
+        ]);
+        $expert('assistant', ['name' => 'سارة', 'email' => ['sara@jpa.ae']]);
+        // No email of their own: the account they sign in with.
+        $expert('external-assistant', ['name' => 'Omar', 'email' => [], 'user_id' => User::factory()->create(['email' => 'omar@partner.ae'])->id]);
+        // The expert himself is not an assistant.
+        $expert('certified', ['name' => 'Reda', 'email' => ['reda@jpa.ae']]);
+
+        Storage::fake('local');
+
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('email', $this->letter)
+            ->assertSet('mountedActions.0.data.cc', ['sara@jpa.ae', 'omar@partner.ae'])
+            ->setTableActionData([
+                'sender' => 'iflas',
+                'recipients' => [$this->letter->recipients->first()->id],
+                'attachments' => [UploadedFile::fake()->create('statement.pdf', 12, 'application/pdf')],
+            ])
+            ->assertMountedActionModalSee('statement.pdf')
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+
+        $email = $this->sent[0];
+        $this->assertSame(['sara@jpa.ae', 'omar@partner.ae'], array_map(fn ($a) => $a->getAddress(), $email->getCc()));
+        $this->assertContains('statement.pdf', array_map(fn ($part) => $part->getFilename(), $email->getAttachments()));
+        // The upload was for this email only.
+        $this->assertSame([], Storage::disk('local')->allFiles('letter-attachments'));
+
+        // System Settings chooses who is copied in, for every letter.
+        Setting::set('letter_cc_expert_types', ['certified', 'external-assistant'], 'general');
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('email', $this->letter)
+            ->assertSet('mountedActions.0.data.cc', ['omar@partner.ae', 'reda@jpa.ae']);
+
+        Setting::set('letter_cc_expert_types', [], 'general');
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('email', $this->letter)
+            ->assertSet('mountedActions.0.data.cc', []);
     }
 
     public function test_the_email_is_previewed_and_can_be_changed_for_this_send_only(): void

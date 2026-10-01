@@ -4,8 +4,10 @@ namespace App\Filament\Shared\Pages\Schemas;
 
 use App\Filament\Schemas\BrandingSettingsSection;
 use App\Models\MatterLetter;
+use App\Models\Party;
 use App\Services\MMS\SenderMailer;
 use App\Support\ScreenPermissions;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -126,6 +128,15 @@ class SystemSettingsForm
                                         ->rule('regex:/\{seq\}/')
                                         ->validationMessages(['regex' => __('The format must include {seq}, so each letter on a matter gets its own reference.')])
                                         ->helperText(__('{year} and {number}: the matter\'s; {seq}: the letter\'s number on the matter (required); {current_year}: the year it is issued. Letters already issued keep their reference.'))
+                                        ->columnSpanFull(),
+
+                                    // Who is copied in when a letter is emailed.
+                                    CheckboxList::make('letter_cc_expert_types')
+                                        ->label(__('Copied in on letter emails'))
+                                        ->options(fn () => Party::expertTypeOptions())
+                                        ->default(MatterLetter::DEFAULT_CC_EXPERT_TYPES)
+                                        ->columns(2)
+                                        ->helperText(__('The matter\'s experts of these kinds are put in CC whenever a letter is sent by email; the sender can still remove them. None ticked: no one.'))
                                         ->columnSpanFull(),
                                 ]),
 

@@ -89,7 +89,8 @@ class LetterBuilderTest extends TestCase
             'meeting_date' => '2026-09-30', 'meeting_time' => '11:00', 'meeting_link' => 'https://teams.example/abc',
             'documents' => [$this->items[0], $this->items[2], 'سطر إضافي.'],
             ...$inputs,
-        ], array_values(LetterComposer::candidates($this->matter)), $reference, now());
+            // The plaintiff — with their representative, who goes with them.
+        ], [array_values(LetterComposer::candidates($this->matter))[0]], $reference, now());
     }
 
     public function test_recipients_come_from_the_matter_with_roles_and_emails(): void
@@ -107,8 +108,7 @@ class LetterBuilderTest extends TestCase
     {
         $html = $this->composer()->bodyHtml();
 
-        $this->assertStringContainsString('السادة/ منى أحمد (المدعي) المحترمين', $html);
-        $this->assertStringContainsString('والسادة/ مكتب المزروعي (وكيل المدعي) المحترمين', $html);
+        $this->assertStringContainsString('السادة/ منى أحمد (المدعي) ووكيله القانوني المحترمين', $html);
         $this->assertStringContainsString('b@law.ae', $html);
         $this->assertStringContainsString('الموضوع: الدعوى رقم 986 لسنة 2026', $html);
         // The merge tag from the editor, Arabic weekday, Arabic time.
@@ -403,6 +403,96 @@ class LetterBuilderTest extends TestCase
             ->assertTableActionDataSet(['inputs.documents' => [$this->items[1]]]);
     }
 
+    /**
+     * Two plaintiffs sharing one lawyer, and a defendant with two lawyers.
+     *
+     * @return array{matter: Matter, ids: array<string, int>}
+     */
+    private function representedMatter(): array
+    {
+        $matter = Matter::factory()->create(['number' => '77', 'year' => '2026']);
+        $party = fn (string $name, string $type, ?int $parent = null, array $emails = []) => MatterParty::create([
+            'matter_id' => $matter->id, 'role' => $parent ? 'representative' : 'party', 'type' => $type, 'parent_id' => $parent,
+            'party_id' => Party::factory()->create(['name' => $name, 'email' => $emails])->id,
+        ]);
+
+        $lawyer = Party::factory()->create(['name' => 'مكتب محمد للمحاماة', 'email' => ['office@law.ae']]);
+        $represent = fn (MatterParty $client) => MatterParty::create([
+            'matter_id' => $matter->id, 'role' => 'representative', 'type' => 'lawyer', 'parent_id' => $client->id, 'party_id' => $lawyer->id,
+        ]);
+
+        $mona = $party('منى أحمد', 'plaintiff', null, ['mona@example.com']);
+        $sara = $party('سارة علي', 'plaintiff');
+        $represent($mona);
+        $represent($sara);
+        $company = $party('شركة ألفا', 'defendant');
+        $party('مكتب الأول', 'lawyer', $company->id);
+        $party('مكتب الثاني', 'lawyer', $company->id);
+
+        return ['matter' => $matter, 'ids' => ['mona' => $mona->id, 'sara' => $sara->id, 'company' => $company->id]];
+    }
+
+    public function test_a_party_goes_with_its_representatives_on_one_line_by_default(): void
+    {
+        ['matter' => $matter, 'ids' => $ids] = $this->representedMatter();
+
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $matter, 'pageClass' => ViewMatter::class])
+            ->callTableAction('issue', data: ['letter_template_id' => $this->template->id, 'recipients' => [$ids['mona'], $ids['company']], 'inputs' => ['documents' => [$this->items[0]]]])
+            ->assertHasNoTableActionErrors();
+
+        $letter = MatterLetter::sole();
+        $html = LetterIssuer::composerFor($letter)->values()['recipients'];
+
+        $this->assertStringContainsString('<strong>السادة/ منى أحمد (المدعي) ووكيله القانوني المحترمين</strong>', $html);
+        $this->assertStringContainsString('<strong>والسادة/ شركة ألفا (المدعى عليه) ووكيله القانوني المحترمين</strong>', $html);
+        $this->assertStringNotContainsString('مكتب محمد للمحاماة', $html);
+
+        // The email goes to the representatives too.
+        $this->assertSame(['mona@example.com', 'office@law.ae'], $letter->recipients()->first()->allEmails());
+    }
+
+    public function test_named_representatives_are_on_their_own_lines_grouped_by_lawyer(): void
+    {
+        ['matter' => $matter, 'ids' => $ids] = $this->representedMatter();
+
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('issue')
+            ->setTableActionData(['letter_template_id' => $this->template->id])
+            ->setTableActionData([
+                // A representative ticked as well as their party is not added twice.
+                'recipients' => [$ids['mona'], $ids['sara'], $ids['company'], MatterParty::query()->where('parent_id', $ids['mona'])->value('id')],
+                'name_representatives' => [$ids['mona'], $ids['sara'], $ids['company']],
+                'inputs.documents' => [$this->items[0]],
+            ])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+
+        $letter = MatterLetter::sole();
+        $this->assertSame(['منى أحمد', 'سارة علي', 'شركة ألفا'], $letter->recipients()->pluck('name')->all());
+
+        $lines = collect(explode('</strong></p>', strip_tags(LetterIssuer::composerFor($letter)->values()['recipients'], '<strong><p>')))
+            ->map(fn ($line) => trim(strip_tags($line)))
+            ->filter(fn ($line) => str_contains($line, 'السادة'))
+            ->map(fn ($line) => preg_replace('/^.*?((?:و?ووكيل\S* )?و?السادة\/.*)$/u', '$1', $line))
+            ->values()->all();
+
+        $this->assertSame([
+            'السادة/ منى أحمد (المدعي) المحترمين',
+            'والسادة/ سارة علي (المدعي) المحترمين',
+            // One lawyer for both: once, after them.
+            'ووكيلهم السادة/ مكتب محمد للمحاماة المحترمين',
+            'والسادة/ شركة ألفا (المدعى عليه) المحترمين',
+            // Two lawyers: one line each.
+            'ووكيله السادة/ مكتب الأول المحترمين',
+            'ووكيله السادة/ مكتب الثاني المحترمين',
+        ], $lines);
+
+        // Edit brings the switches back as they were.
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('editLetter', $letter)
+            ->assertSet('mountedActions.0.data.name_representatives', [$ids['mona'], $ids['sara'], $ids['company']]);
+    }
+
     public function test_the_issue_form_has_no_english_left_in_arabic(): void
     {
         app()->setLocale('ar');
@@ -424,14 +514,15 @@ class LetterBuilderTest extends TestCase
             ->callTableAction('issue', data: ['letter_template_id' => $english->id, 'recipients' => $candidateIds])
             ->assertHasNoTableActionErrors();
 
-        $this->assertSame(['Plaintiff', "Plaintiff's representative"], MatterLetter::sole()->recipients()->pluck('role')->all());
+        // The representative ticked too goes with the plaintiff, not on their own.
+        $this->assertSame(['Plaintiff'], MatterLetter::sole()->recipients()->pluck('role')->all());
 
         // And an Arabic letter, in Arabic.
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
             ->callTableAction('issue', data: ['letter_template_id' => $this->template->id, 'recipients' => $candidateIds, 'inputs' => ['documents' => [$this->items[0]]]])
             ->assertHasNoTableActionErrors();
 
-        $this->assertSame(['المدعي', 'وكيل المدعي'], MatterLetter::query()->latest('id')->first()->recipients()->pluck('role')->all());
+        $this->assertSame(['المدعي'], MatterLetter::query()->latest('id')->first()->recipients()->pluck('role')->all());
     }
 
     public function test_the_templates_placeholder_menu_follows_its_fields(): void

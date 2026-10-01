@@ -39,6 +39,7 @@ class LetterMailer
      * @param  list<string>  $cc
      * @param  ?string  $subject  this send's own subject, instead of the template's
      * @param  ?string  $body  this send's own covering email, instead of the template's
+     * @param  list<array{path: string, name: string}>  $attachments  more files to send with the letter, either way it goes
      * @return array{sent: int, failed: int, skipped: int, errors: list<string>}
      */
     public function send(
@@ -52,6 +53,7 @@ class LetterMailer
         bool $separate = false,
         ?string $subject = null,
         ?string $body = null,
+        array $attachments = [],
     ): array {
         $sender = SenderMailer::sender($senderKey);
         $composer = LetterIssuer::composerFor($letter);
@@ -67,7 +69,10 @@ class LetterMailer
             return $result;
         }
 
-        $files = $mode === self::ATTACHMENT ? $this->files($letter, $composer, $formats) : [];
+        $files = [
+            ...($mode === self::ATTACHMENT ? $this->files($letter, $composer, $formats) : []),
+            ...self::attachedFiles($attachments),
+        ];
         $groups = $separate ? $withEmail->map(fn ($r) => collect([$r])) : collect([$withEmail]);
 
         foreach ($groups as $group) {
@@ -111,7 +116,8 @@ class LetterMailer
      */
     private function emails(MatterLetterRecipient $recipient): array
     {
-        return array_values(array_filter($recipient->emails ?: [$recipient->email], fn ($email) => filter_var($email, FILTER_VALIDATE_EMAIL)));
+        // Their own, and their representatives' — who go with them.
+        return $recipient->allEmails();
     }
 
     /**
@@ -156,6 +162,22 @@ class LetterMailer
     }
 
     /**
+     * Files added to this one send, as attachments.
+     *
+     * @param  list<array{path: string, name: string}>  $attachments
+     * @return list<array{name: string, data: string, mime: string}>
+     */
+    private static function attachedFiles(array $attachments): array
+    {
+        return array_values(array_filter(array_map(
+            fn (array $file): ?array => is_file($file['path'])
+                ? ['name' => $file['name'], 'data' => (string) file_get_contents($file['path']), 'mime' => mime_content_type($file['path']) ?: 'application/octet-stream']
+                : null,
+            $attachments,
+        )));
+    }
+
+    /**
      * @param  array<string, string>  $values
      */
     private static function bodySubject(array $values): string
@@ -186,6 +208,8 @@ class LetterMailer
                 $html,
                 $arabic,
                 $images,
+                // Only what was added: the letter is the email itself.
+                $files,
             );
         }
 

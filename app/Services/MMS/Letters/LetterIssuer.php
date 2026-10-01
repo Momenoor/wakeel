@@ -62,16 +62,7 @@ class LetterIssuer
                 'status' => LetterStatus::DRAFT,
             ]);
 
-            foreach ($recipients as $recipient) {
-                $letter->recipients()->create([
-                    'recipient_id' => $recipient['party_id'] ?? null,
-                    'name' => $recipient['name'],
-                    'role' => $recipient['role'] ?? null,
-                    'email' => $recipient['emails'][0] ?? null,
-                    'emails' => array_values($recipient['emails'] ?? []),
-                    'delivery_status' => LetterStatus::DRAFT,
-                ]);
-            }
+            self::addRecipients($letter, $recipients);
 
             return $letter;
         });
@@ -99,6 +90,8 @@ class LetterIssuer
                 'role' => $recipient->role,
                 'emails' => $recipient->emails ?? array_filter([$recipient->email]),
                 'party_id' => $recipient->recipient_id,
+                'representatives' => $recipient->representatives ?? [],
+                'name_representatives' => (bool) $recipient->name_representatives,
             ])->all(),
             $letter->reference,
             $letter->letter_date ?? $letter->created_at,
@@ -127,22 +120,35 @@ class LetterIssuer
 
             $letter->recipients()->delete();
 
-            foreach ($recipients as $recipient) {
-                $letter->recipients()->create([
-                    'recipient_id' => $recipient['party_id'] ?? null,
-                    'name' => $recipient['name'],
-                    'role' => $recipient['role'] ?? null,
-                    'email' => $recipient['emails'][0] ?? null,
-                    'emails' => array_values($recipient['emails'] ?? []),
-                    'delivery_status' => LetterStatus::DRAFT,
-                ]);
-            }
+            self::addRecipients($letter, $recipients);
 
             $letter = $letter->fresh(['template', 'matter', 'letterhead', 'recipients']);
             $letter->update(['rendered_html' => self::composerFor($letter)->bodyHtml()]);
 
             return $letter;
         });
+    }
+
+    /**
+     * The letter's recipients, each with their representatives and whether
+     * the letter names them.
+     *
+     * @param  list<array{name: string, role: ?string, emails: list<string>, party_id?: int|null, representatives?: list<array{name: string, emails: list<string>, party_id?: int|null}>, name_representatives?: bool}>  $recipients
+     */
+    private static function addRecipients(MatterLetter $letter, array $recipients): void
+    {
+        foreach ($recipients as $recipient) {
+            $letter->recipients()->create([
+                'recipient_id' => $recipient['party_id'] ?? null,
+                'name' => $recipient['name'],
+                'role' => $recipient['role'] ?? null,
+                'email' => $recipient['emails'][0] ?? null,
+                'emails' => array_values($recipient['emails'] ?? []),
+                'representatives' => array_values($recipient['representatives'] ?? []) ?: null,
+                'name_representatives' => ! empty($recipient['name_representatives']),
+                'delivery_status' => LetterStatus::DRAFT,
+            ]);
+        }
     }
 
     /**

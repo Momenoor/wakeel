@@ -72,6 +72,7 @@ class SystemSettings extends Page
             'currency_code' => Setting::get('currency_code', 'AED'),
             'records_per_page' => Setting::get('records_per_page', 25),
             'letter_reference_format' => Setting::get('letter_reference_format', MatterLetter::DEFAULT_REFERENCE_FORMAT),
+            'letter_cc_expert_types' => MatterLetter::ccExpertTypes(),
             ...collect(Branding::KEYS)->mapWithKeys(fn (string $key): array => [$key => Setting::get($key)])->all(),
 
             'mail_sender_key' => Setting::get('mail_sender_key'),
@@ -166,6 +167,7 @@ class SystemSettings extends Page
             'currency_code' => 'general',
             'records_per_page' => 'general',
             'letter_reference_format' => 'general',
+            'letter_cc_expert_types' => 'general',
 
             'mail_sender_key' => 'mail',
             'mail_mailer' => 'mail',

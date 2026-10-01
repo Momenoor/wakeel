@@ -78,9 +78,12 @@ class SystemSettingsTest extends TestCase
                 'mail_mailer' => 'log',
                 'mail_from_address' => 'system@test.com',
                 'mail_from_name' => 'System Tester',
+                'letter_cc_expert_types' => ['certified', 'assistant'],
             ])
             ->call('save')
             ->assertHasNoFormErrors();
+
+        $this->assertSame(['certified', 'assistant'], Setting::get('letter_cc_expert_types'));
 
         $this->assertSame('My Custom System', Setting::get('app_name'));
         $this->assertSame('Custom Company', Setting::get('company_name'));
