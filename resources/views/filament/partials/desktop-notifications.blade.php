@@ -8,8 +8,10 @@
       server's keys changed.
     - With a tab open, the poller (NotificationPoller) also sends each new
       notification as a "wakeel-desktop-notification" browser event, shown
-      when Wakeel is in the background — for browsers without push. One tag
-      per notification, so push and tabs never show it twice.
+      when Wakeel is in the background — only for browsers without push
+      (with push the service worker already shows it; a tag does not stop
+      a page's and a service worker's copy from both showing), and by one
+      tab only.
 
     While notifications are off (not asked yet, or blocked) one bell opens a
     window: "Enable" asks the browser — only allowed from a click — or, when
@@ -21,6 +23,9 @@
     x-data="{
         state: ('Notification' in window) ? Notification.permission : 'unsupported',
         pushKey: @js($pushKey),
+        // This browser receives Web Push: the service worker shows each
+        // notification, so the tab must not show it a second time.
+        pushActive: false,
         promptAfterLogin: @js($promptAfterLogin),
         openPrompt() { this.$dispatch('open-modal', { id: 'wakeel-desktop-notifications' }); },
         closePrompt() { this.$dispatch('close-modal', { id: 'wakeel-desktop-notifications' }); },
@@ -60,6 +65,7 @@
                 if (! subscription) {
                     subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
                 }
+                this.pushActive = true;
                 const json = subscription.toJSON();
                 const marker = 'wakeel-push:' + json.endpoint;
                 try { if (! force && sessionStorage.getItem(marker)) { return; } } catch (e) {}
@@ -86,7 +92,13 @@
     "
     x-on:wakeel-desktop-notification.window="
         const n = $event.detail;
-        if (state !== 'granted' || (document.visibilityState === 'visible' && document.hasFocus())) { return; }
+        if (state !== 'granted' || pushActive || (document.visibilityState === 'visible' && document.hasFocus())) { return; }
+        // Without push: one open tab shows it, not every tab.
+        try {
+            const key = 'wakeel-desktop:' + n.id;
+            if (Date.now() - Number(localStorage.getItem(key) || 0) < 10000) { return; }
+            localStorage.setItem(key, String(Date.now()));
+        } catch (e) {}
         const shown = new Notification(n.title, { body: n.body || '', icon: @js($icon), tag: 'wakeel-' + n.id, renotify: String(n.id).startsWith('chat-') });
         shown.onclick = () => { window.focus(); if (n.url) { window.location.href = n.url; } shown.close(); };
     "

@@ -88,6 +88,20 @@ class DesktopNotificationTest extends TestCase
             ->assertSee('Notification.requestPermission', false);
     }
 
+    public function test_a_tab_does_not_repeat_what_web_push_already_shows(): void
+    {
+        $this->actingAs(User::factory()->create());
+        Filament::setCurrentPanel('mms');
+
+        $this->get(Chat::getUrl())
+            ->assertSuccessful()
+            // With Web Push on, the service worker shows it — the tab does not.
+            ->assertSee('this.pushActive = true;', false)
+            ->assertSee("state !== 'granted' || pushActive ||", false)
+            // Without push, only one open tab shows it.
+            ->assertSee("'wakeel-desktop:' + n.id", false);
+    }
+
     public function test_notifications_and_chat_play_a_sound_that_can_be_turned_off(): void
     {
         $this->actingAs(User::factory()->create());
@@ -98,6 +112,9 @@ class DesktopNotificationTest extends TestCase
             // Plays on the same event as the desktop notification.
             ->assertSee("window.addEventListener('wakeel-desktop-notification'", false)
             ->assertSee("id.startsWith('chat-') ? 'chat' : 'notification'", false)
+            // The office's own sound file, for notifications and (with no
+            // chat.mp3) for chat too.
+            ->assertSee('notification.mp3', false)
             // The on/off button, remembered per browser.
             ->assertSee('Turn notification sounds off')
             ->assertSee("localStorage.setItem('wakeel-sound'", false);

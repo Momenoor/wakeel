@@ -4,7 +4,8 @@
     notifications use (NotificationPoller, ChatWidget), whether or not
     Wakeel is in front.
 
-    - Made with the Web Audio API: no sound files.
+    - The sound files in public/sounds (notification.mp3, and chat.mp3 if
+      there is one); a built-in Web Audio tone when there is none.
     - One tab plays it: with Wakeel open in several tabs, the first to claim
       it (localStorage) plays; and a burst of notifications is one sound.
     - The speaker button turns sounds off and on for this browser.
@@ -41,10 +42,22 @@
     />
 </div>
 
+@php
+    // The office's own sounds (public/sounds): notification.mp3, and
+    // chat.mp3 for chat when there is one — else the notification sound.
+    // Without a file, a built-in tone.
+    $notificationSound = is_file(public_path('sounds/notification.mp3')) ? asset('sounds/notification.mp3') : null;
+    $sounds = [
+        'notification' => $notificationSound,
+        'chat' => is_file(public_path('sounds/chat.mp3')) ? asset('sounds/chat.mp3') : $notificationSound,
+    ];
+@endphp
 <script>
     window.wakeelSound ??= (() => {
         let context = null;
         let lastPlayed = 0;
+        const files = @js($sounds);
+        const players = {};
 
         const audio = () => {
             const Context = window.AudioContext || window.webkitAudioContext;
@@ -86,10 +99,21 @@
         return {
             play(kind, force = false) {
                 if (! force && ! enabled()) { return; }
-                const ctx = audio();
-                if (! ctx || ctx.state !== 'running') { return; }
                 // A burst of notifications is one sound.
                 if (! force && Date.now() - lastPlayed < 1500) { return; }
+
+                // The office's sound file, when there is one.
+                if (files[kind]) {
+                    lastPlayed = Date.now();
+                    players[kind] ??= new Audio(files[kind]);
+                    players[kind].currentTime = 0;
+                    players[kind].play().catch(() => {});
+
+                    return;
+                }
+
+                const ctx = audio();
+                if (! ctx || ctx.state !== 'running') { return; }
                 lastPlayed = Date.now();
 
                 const t = ctx.currentTime;
