@@ -11,6 +11,7 @@ use App\Services\MMS\FlightTicketService;
 use App\Services\MMS\PayrollJournalVoucherService;
 use App\Services\MMS\PayrollRunService;
 use App\Services\MMS\PayrollService;
+use App\Support\Currency;
 use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Notifications\Notification;
@@ -140,15 +141,9 @@ class ViewPayrollRun extends ViewRecord
                 CheckboxList::make('tickets')
                     ->hiddenLabel()
                     ->options(fn (): array => app(FlightTicketService::class)->availableFor($this->run())
-                        ->mapWithKeys(fn (FlightTicket $ticket): array => [$ticket->getKey() => sprintf(
-                            '%s — %s %d%s — %s AED',
-                            $ticket->party?->name,
-                            __('Ticket'),
-                            $ticket->year,
-                            $ticket->is_prorated ? ' ('.__('pro-rated').')' : '',
-                            number_format((float) $ticket->amount, 2),
-                        )])
+                        ->mapWithKeys(fn (FlightTicket $ticket): array => [$ticket->getKey() => self::ticketOptionLabel($ticket)])
                         ->all())
+                    ->allowHtml()
                     ->bulkToggleable()
                     ->columns(1),
             ])
@@ -176,6 +171,22 @@ class ViewPayrollRun extends ViewRecord
 
                 $this->dispatchPayrollDataUpdated();
             });
+    }
+
+    /**
+     * A ticket in the list: who, which year, how much — HTML for the Dirham
+     * sign, with the name escaped.
+     */
+    public static function ticketOptionLabel(FlightTicket $ticket): string
+    {
+        return sprintf(
+            '%s — %s %d%s — %s',
+            e((string) $ticket->party?->name),
+            e(__('Ticket')),
+            $ticket->year,
+            $ticket->is_prorated ? ' ('.e(__('pro-rated')).')' : '',
+            Currency::format($ticket->amount),
+        );
     }
 
     private function submitAction(): Action

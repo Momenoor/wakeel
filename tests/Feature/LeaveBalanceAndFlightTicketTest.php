@@ -301,6 +301,12 @@ class LeaveBalanceAndFlightTicketTest extends TestCase
         $ticket = FlightTicket::create(['party_id' => $party->id, 'year' => 2026, 'amount' => 1500]);
         $run = PayrollRun::create(['period' => '2026-10', 'status' => PayrollRunStatus::DRAFT]);
         app(PayrollService::class)->generate($run);
+        $party->update(['name' => 'Ali <b>Hassan</b>']);
+
+        // The options show the Dirham sign; the name stays escaped.
+        $label = ViewPayrollRun::ticketOptionLabel($ticket->fresh('party'));
+        $this->assertStringContainsString('Ali &lt;b&gt;Hassan&lt;/b&gt;', $label);
+        $this->assertMatchesRegularExpression('~class="wakeel-aed"[^>]*>D</span> 1,500\.00~', $label);
 
         Livewire::test(ViewPayrollRun::class, ['record' => $run->getRouteKey()])
             ->callAction('flight_tickets', ['tickets' => [$ticket->id]])

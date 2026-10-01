@@ -31,12 +31,29 @@ final class Currency
     }
 
     /**
+     * A chart's value-axis title: the sign alone, in the AED font (a chart
+     * draws each text in one font, so the sign cannot sit inside a label).
+     *
+     * @return array<string, mixed>
+     */
+    public static function chartAxisTitle(int $size = 16): array
+    {
+        return [
+            'display' => true,
+            'text' => 'D',
+            'font' => ['family' => 'AED', 'size' => $size, 'weight' => 'normal'],
+        ];
+    }
+
+    /**
      * The stylesheet that loads the font — in every panel page (a render
      * hook) and in the print pages that are documents of their own.
      */
     public static function fontLink(): HtmlString
     {
-        return new HtmlString('<link rel="stylesheet" href="'.e(asset('fonts/aed.css')).'">');
+        // Loaded at once, so a chart drawing its axis title early finds it.
+        return new HtmlString('<link rel="stylesheet" href="'.e(asset('fonts/aed.css')).'">'
+            .'<script>document.fonts && document.fonts.load("1em AED", "D");</script>');
     }
 
     /**

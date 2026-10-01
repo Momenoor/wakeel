@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Widgets;
 
+use App\Support\Currency;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Widgets\ChartWidget;
 use Illuminate\Support\Carbon;
@@ -112,6 +113,18 @@ class CollectionsAgingWidget extends ChartWidget
                 __('31-60 days'),
                 __('61-90 days'),
                 __('90+ days'),
+            ],
+        ];
+    }
+
+    /**
+     * The value axis is titled with the Dirham sign.
+     */
+    protected function getOptions(): array
+    {
+        return [
+            'scales' => [
+                'y' => ['title' => Currency::chartAxisTitle()],
             ],
         ];
     }

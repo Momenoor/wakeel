@@ -2,11 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Mms\Widgets\CollectionsAgingWidget;
+use App\Filament\Pms\Widgets\PmsRevenueChartWidget;
 use App\Support\Currency;
 use Filament\Support\Facades\FilamentView;
 use Filament\Tables\Columns\TextColumn;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Support\Facades\File;
+use ReflectionMethod;
 use Tests\TestCase;
 
 /**
@@ -51,6 +54,16 @@ class CurrencyTest extends TestCase
         // The print pages that are documents of their own load it too.
         foreach (['filament/pages/incentive/calculation-print.blade.php', 'filament/pages/incentive/calculation-print-assistant.blade.php', 'filament/pms/quotation-print.blade.php'] as $view) {
             $this->assertStringContainsString('Currency::fontLink()', (string) file_get_contents(resource_path('views/'.$view)), $view);
+        }
+    }
+
+    public function test_the_money_charts_title_their_value_axis_with_the_sign(): void
+    {
+        foreach ([PmsRevenueChartWidget::class, CollectionsAgingWidget::class] as $widget) {
+            $options = (new ReflectionMethod($widget, 'getOptions'))->invoke(new $widget);
+
+            $this->assertSame('D', $options['scales']['y']['title']['text'], $widget);
+            $this->assertSame('AED', $options['scales']['y']['title']['font']['family'], $widget);
         }
     }
 

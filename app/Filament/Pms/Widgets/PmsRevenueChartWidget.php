@@ -5,6 +5,7 @@ namespace App\Filament\Pms\Widgets;
 use App\Enums\PMS\InstallmentPaymentStatus;
 use App\Filament\Pms\Support\PortfolioScope;
 use App\Models\Installment;
+use App\Support\Currency;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Widgets\ChartWidget;
 use Filament\Widgets\Concerns\InteractsWithPageFilters;
@@ -54,6 +55,18 @@ class PmsRevenueChartWidget extends ChartWidget
                 ],
             ],
             'labels' => $months->map(fn ($month) => $month->translatedFormat('M Y'))->all(),
+        ];
+    }
+
+    /**
+     * The value axis is titled with the Dirham sign.
+     */
+    protected function getOptions(): array
+    {
+        return [
+            'scales' => [
+                'y' => ['title' => Currency::chartAxisTitle()],
+            ],
         ];
     }
 

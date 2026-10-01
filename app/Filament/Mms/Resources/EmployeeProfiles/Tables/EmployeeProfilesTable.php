@@ -75,7 +75,6 @@ class EmployeeProfilesTable
                     ->suffix(' '.__('days'))
                     ->placeholder('0')
                     ->sortable()
-                    ->alignEnd()
                     ->color(fn ($state): ?string => (float) $state <= 0 ? 'danger' : null),
             ])
             ->defaultSort('date_of_joining', 'desc')
