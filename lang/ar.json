@@ -3262,5 +3262,6 @@
     "Last seen :time": "آخر ظهور :time",
     "Never seen": "لم يظهر بعد",
     "Online now": "متصل الآن",
-    "Rebuild caches": "إعادة بناء ذاكرة التخزين المؤقت"
+    "Rebuild caches": "إعادة بناء ذاكرة التخزين المؤقت",
+    "The caches could not be rebuilt; they were cleared instead and the site runs without them.": "تعذّرت إعادة بناء ذاكرة التخزين المؤقت؛ فمُسحت بدلاً من ذلك ويعمل الموقع بدونها."
 }

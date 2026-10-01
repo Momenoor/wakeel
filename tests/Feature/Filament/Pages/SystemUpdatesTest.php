@@ -10,10 +10,12 @@ use App\Services\License\LicenseVerifier;
 use App\Services\Updater\Updater;
 use App\Support\AppUpdate;
 use Filament\Facades\Filament;
+use Illuminate\Container\Container;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Artisan;
+use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Process;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -200,12 +202,35 @@ class SystemUpdatesTest extends TestCase
         $this->startAfter($updater, '1.2.0', ['preflight', 'maintenance', 'code', 'dependencies', 'database', 'permissions', 'cleanup']);
 
         // Not for real here: it would cache the tests' own configuration.
-        Artisan::shouldReceive('call')->once()->with('optimize', [])->andReturn(0);
-        Artisan::shouldReceive('output')->andReturn('config ... DONE');
+        Process::fake(['*' => Process::result('config ... DONE')]);
+        $container = Container::getInstance();
 
         $this->assertTrue($updater->runNextStep());
         $this->assertContains('optimize', $updater->state()['completed']);
         $this->assertStringContainsString('== Rebuild caches ==', $updater->state()['log']);
+        $this->assertStringContainsString('config ... DONE', $updater->state()['log']);
+
+        // In a PHP process of its own: run in this request, config:cache
+        // replaced the application under it ("Undefined array key children").
+        Process::assertRan(fn (PendingProcess $process): bool => in_array(base_path('artisan'), (array) $process->command, true)
+            && in_array('optimize', (array) $process->command, true));
+        $this->assertSame($container, Container::getInstance());
+    }
+
+    public function test_caches_that_cannot_be_rebuilt_are_cleared_and_the_update_goes_on(): void
+    {
+        $updater = app(Updater::class);
+        $this->startAfter($updater, '1.2.0', ['preflight', 'maintenance', 'code', 'dependencies', 'database', 'permissions', 'cleanup']);
+
+        Process::fake(['*' => Process::result(errorOutput: 'Unable to prepare route [x] for serialization.', exitCode: 1)]);
+
+        $this->assertTrue($updater->runNextStep());
+
+        $state = $updater->state();
+        $this->assertFalse($state['failed']);
+        $this->assertContains('optimize', $state['completed']);
+        $this->assertStringContainsString('Unable to prepare route', $state['log']);
+        $this->assertStringContainsString('The caches could not be rebuilt', $state['log']);
     }
 
     public function test_the_running_steps_output_is_readable_while_it_runs(): void

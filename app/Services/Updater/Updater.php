@@ -8,6 +8,7 @@ use App\Services\License\LicenseVerifier;
 use App\Support\AppUpdate;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Process as ProcessRunner;
 use RuntimeException;
 use Symfony\Component\Process\ExecutableFinder;
 use Symfony\Component\Process\Process;
@@ -191,9 +192,7 @@ class Updater
             'database' => $this->artisan('migrate', ['--force' => true]),
             'permissions' => $this->refreshPermissions(),
             'cleanup' => $this->artisan('optimize:clear'),
-            // The configuration, routes, events, views and Filament's
-            // components cached for the new version.
-            'optimize' => $this->artisan('optimize'),
+            'optimize' => $this->rebuildCaches(),
             'finish' => $this->finish(),
         };
     }
@@ -365,6 +364,37 @@ class Updater
         }
 
         return $result['output'];
+    }
+
+    /**
+     * The configuration, routes, events, views and Filament's components
+     * cached for the new version — in a PHP process of its own.
+     *
+     * Never in this request: config:cache and route:cache build a fresh
+     * copy of the application to read from, and making it replaces this
+     * request's own (the global container). The rest of the request then
+     * runs on an application Livewire has never seen, and fails — "Undefined
+     * array key children".
+     *
+     * A cache that can't be built only makes the site a little slower, so
+     * a failure clears the caches again and the update goes on.
+     */
+    private function rebuildCaches(): string
+    {
+        $result = ProcessRunner::path(base_path())
+            ->timeout(600)
+            ->run(
+                [...$this->php(), base_path('artisan'), 'optimize', '--no-ansi', '--no-interaction'],
+                fn (string $type, string $buffer) => @file_put_contents($this->liveLogPath(), $buffer, FILE_APPEND),
+            );
+
+        if ($result->successful()) {
+            return $result->output();
+        }
+
+        return $result->output().$result->errorOutput()."\n"
+            .__('The caches could not be rebuilt; they were cleared instead and the site runs without them.')."\n"
+            .$this->artisan('optimize:clear');
     }
 
     private function refreshPermissions(): string
