@@ -28,6 +28,7 @@ use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
+use ReflectionMethod;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 use ZipArchive;
@@ -273,6 +274,24 @@ class LetterBuilderTest extends TestCase
         $this->assertSame(294.0, (float) $element['y']);
 
         $this->get(LetterheadResource::getUrl('design', ['record' => $letterhead]))->assertSuccessful();
+    }
+
+    public function test_the_first_page_and_the_others_have_their_own_top_and_bottom_margins(): void
+    {
+        $letterhead = Letterhead::create([
+            'name' => 'Main', 'elements' => [],
+            'margin_top' => 45, 'margin_bottom' => 30, 'margin_right' => 20, 'margin_left' => 25,
+            'other_margin_top' => 15,
+        ]);
+
+        $this->assertSame(['top' => 15.0, 'right' => 20.0, 'bottom' => 30.0, 'left' => 25.0], $letterhead->otherPagesMargins());
+
+        $composer = new LetterComposer(new LetterTemplate(['locale' => 'ar', 'subject' => 'S', 'body' => '<p>x</p>']), new Matter(['number' => '1', 'year' => 2026]), [], [], 'REF/1', now(), $letterhead);
+        $css = (new ReflectionMethod(LetterPdf::class, 'html'))->invoke(new LetterPdf($composer), $letterhead, true);
+
+        $this->assertStringContainsString('@page :first { ', $css);
+        $this->assertMatchesRegularExpression('~@page :first \{[^}]*margin-top: 45mm; margin-right: 20mm; margin-bottom: 30mm; margin-left: 25mm;~', $css);
+        $this->assertMatchesRegularExpression('~@page \{[^}]*margin-top: 15mm; margin-right: 20mm; margin-bottom: 30mm; margin-left: 25mm;~', $css);
     }
 
     public function test_each_elements_settings_stay_its_own(): void

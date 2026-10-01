@@ -94,7 +94,7 @@ class LetterheadResource extends Resource
                         ->helperText(__('Leave empty to use the first page\'s image on every page.')),
                 ]),
 
-            Section::make(__('Margins (mm)'))
+            Section::make(__('Margins (mm) — first page'))
                 ->description(__('Where the letter text flows — keep it clear of the letterhead\'s header and footer.'))
                 ->columns(4)
                 ->columnSpanFull()
@@ -103,6 +103,17 @@ class LetterheadResource extends Resource
                     TextInput::make('margin_bottom')->label(__('Bottom'))->numeric()->default(30)->required(),
                     TextInput::make('margin_right')->label(__('Right'))->numeric()->default(20)->required(),
                     TextInput::make('margin_left')->label(__('Left'))->numeric()->default(20)->required(),
+                ]),
+
+            // Pages after the first often need less room — no letterhead
+            // header to clear. Empty: the first page's margin.
+            Section::make(__('Margins (mm) — other pages'))
+                ->description(__('Top and bottom from the second page on. Leave one empty to use the first page\'s. Right and left are the same on every page.'))
+                ->columns(4)
+                ->columnSpanFull()
+                ->schema([
+                    TextInput::make('other_margin_top')->label(__('Top'))->numeric()->minValue(0)->placeholder(fn ($get) => $get('margin_top')),
+                    TextInput::make('other_margin_bottom')->label(__('Bottom'))->numeric()->minValue(0)->placeholder(fn ($get) => $get('margin_bottom')),
                 ]),
 
             Section::make(__('Watermark'))

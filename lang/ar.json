@@ -3221,5 +3221,8 @@
     "no matter with this number": "لا توجد قضية بهذا الرقم",
     "Turn notification sounds off": "إيقاف أصوات الإشعارات",
     "Turn notification sounds on": "تشغيل أصوات الإشعارات",
-    "Left the firm": "انتهت خدمته"
+    "Left the firm": "انتهت خدمته",
+    "Margins (mm) — first page": "الهوامش (مم) — الصفحة الأولى",
+    "Margins (mm) — other pages": "الهوامش (مم) — الصفحات الأخرى",
+    "Top and bottom from the second page on. Leave one empty to use the first page's. Right and left are the same on every page.": "الأعلى والأسفل من الصفحة الثانية فما بعد. اترك أيًّا منهما فارغًا لاستخدام هامش الصفحة الأولى. هامشا اليمين واليسار متماثلان في جميع الصفحات."
 }

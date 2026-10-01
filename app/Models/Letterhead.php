@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Storage;
  * An element: {type, page: first|all|rest, x, y, width (all mm from the
  * page's top-left), content, font_size, bold, align, color}.
  */
-#[Fillable('name', 'is_default', 'orientation', 'margin_top', 'margin_right', 'margin_bottom', 'margin_left', 'first_page_background', 'other_pages_background', 'watermark_type', 'watermark_text', 'watermark_image', 'watermark_opacity', 'signature_image', 'stamp_image', 'elements')]
+#[Fillable('name', 'is_default', 'orientation', 'margin_top', 'margin_right', 'margin_bottom', 'margin_left', 'other_margin_top', 'other_margin_bottom', 'first_page_background', 'other_pages_background', 'watermark_type', 'watermark_text', 'watermark_image', 'watermark_opacity', 'signature_image', 'stamp_image', 'elements')]
 class Letterhead extends Model
 {
     public const DISK = 'public';
@@ -40,6 +40,8 @@ class Letterhead extends Model
             'margin_right' => 'float',
             'margin_bottom' => 'float',
             'margin_left' => 'float',
+            'other_margin_top' => 'float',
+            'other_margin_bottom' => 'float',
             'watermark_opacity' => 'float',
         ];
     }
@@ -108,6 +110,23 @@ class Letterhead extends Model
      *
      * @return list<array<string, mixed>>
      */
+    /**
+     * The margins of the pages after the first, in mm. Top and bottom are
+     * their own (the first page's when not set); left and right are always
+     * the first page's — the PDF engine cannot vary them per page.
+     *
+     * @return array{top: float, right: float, bottom: float, left: float}
+     */
+    public function otherPagesMargins(): array
+    {
+        return [
+            'top' => (float) ($this->other_margin_top ?? $this->margin_top),
+            'right' => (float) $this->margin_right,
+            'bottom' => (float) ($this->other_margin_bottom ?? $this->margin_bottom),
+            'left' => (float) $this->margin_left,
+        ];
+    }
+
     public static function defaultElements(): array
     {
         return [

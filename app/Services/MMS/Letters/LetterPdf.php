@@ -114,8 +114,12 @@ class LetterPdf
             ? 'background: url("'.$file.'") no-repeat 0 0; background-image-resize: 6;'
             : '';
 
-        $css = '@page { '.$background($rest).' header: html_letterRest; }'
-            .'@page :first { '.$background($first).' header: html_letterFirst; }'
+        // Each page's own margins: the first page's, and the other pages'.
+        $margins = fn (float $top, float $right, float $bottom, float $left): string => "margin-top: {$top}mm; margin-right: {$right}mm; margin-bottom: {$bottom}mm; margin-left: {$left}mm;";
+        $other = $letterhead->otherPagesMargins();
+
+        $css = '@page { '.$background($rest).' header: html_letterRest; '.$margins($other['top'], $other['right'], $other['bottom'], $other['left']).' }'
+            .'@page :first { '.$background($first).' header: html_letterFirst; '.$margins((float) $letterhead->margin_top, (float) $letterhead->margin_right, (float) $letterhead->margin_bottom, (float) $letterhead->margin_left).' }'
             .'body { font-family: '.self::FONT.'; font-size: 13pt; line-height: 1.55; text-align: justify; }'
             .'p { margin: 0 0 6pt 0; }'
             .'ol, ul { margin: 0 0 6pt 0; padding-'.($rtl ? 'right' : 'left').': 18pt; }'
