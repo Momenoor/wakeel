@@ -83,7 +83,7 @@ class EmployeeProfilesTable
                     ->label(__('Currently Employed'))
                     ->placeholder(__('All'))
                     ->trueLabel(__('Currently Employed'))
-                    ->falseLabel(__('Left'))
+                    ->falseLabel(__('Left the firm'))
                     ->queries(
                         true: fn (Builder $query) => $query->whereNull('date_of_leaving'),
                         false: fn (Builder $query) => $query->whereNotNull('date_of_leaving'),

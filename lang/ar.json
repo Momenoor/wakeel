@@ -1075,7 +1075,7 @@
     "Leave request approved.": "تم اعتماد طلب الإجازة.",
     "Leave request rejected.": "تم رفض طلب الإجازة.",
     "Leaves / Vacations": "الإجازات",
-    "Left": "انتهت خدمته",
+    "Left": "يسار",
     "Legacy ID": "المعرف القديم",
     "Legal Representatives": "الممثلون القانونيون",
     "Length Required": "المدة المطلوبة",
@@ -3220,5 +3220,6 @@
     "a matter in the system": "قضية موجودة في النظام",
     "no matter with this number": "لا توجد قضية بهذا الرقم",
     "Turn notification sounds off": "إيقاف أصوات الإشعارات",
-    "Turn notification sounds on": "تشغيل أصوات الإشعارات"
+    "Turn notification sounds on": "تشغيل أصوات الإشعارات",
+    "Left the firm": "انتهت خدمته"
 }

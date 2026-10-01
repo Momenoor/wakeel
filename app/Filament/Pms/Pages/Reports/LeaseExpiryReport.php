@@ -54,7 +54,7 @@ class LeaseExpiryReport extends PmsReport
                     ->sortable()
                     ->summarize(Count::make()->label(__('Leases'))),
                 TextColumn::make('end_date')
-                    ->label(__('End'))
+                    ->label(__('End Date'))
                     ->date('d/m/Y')
                     ->sortable(),
                 TextColumn::make('days_left')
