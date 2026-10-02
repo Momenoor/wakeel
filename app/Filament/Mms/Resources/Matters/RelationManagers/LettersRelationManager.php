@@ -657,6 +657,7 @@ class LettersRelationManager extends RelationManager
                 'letterhead_id' => Letterhead::default()?->getKey(),
                 'recipients' => [],
                 'body' => self::freeLetterBody(true),
+                ...self::meetingDefaults(),
             ])
             ->schema(fn (): array => [
                 Section::make()
@@ -915,6 +916,16 @@ class LettersRelationManager extends RelationManager
     }
 
     /**
+     * The meeting section's starting values.
+     *
+     * @return array<string, mixed>
+     */
+    private static function meetingDefaults(): array
+    {
+        return ['create_meeting' => false, 'meeting_minutes' => 60, 'invite_recipients' => false, 'meeting_date' => null, 'meeting_time' => null];
+    }
+
+    /**
      * Meeting fields filled from the matter's next calendar event: a field
      * whose key contains "meeting" gets its date, time or Teams link.
      */
@@ -934,14 +945,21 @@ class LettersRelationManager extends RelationManager
             $set('letterhead_id', $template->letterhead_id);
         }
 
+        // The fields that appear with the template start with a value. Left
+        // unset, the browser doesn't reliably send what's then picked —
+        // the meeting switch showed on, and reached the server off.
+        foreach (self::meetingDefaults() as $field => $value) {
+            $set($field, $value);
+        }
+
         foreach ($template->inputs ?? [] as $input) {
             $key = $input['key'] ?? '';
 
-            // A list of items starts as an empty list. Left unset, its
-            // checkboxes share one true/false value, and ticking one ticks
-            // them all.
-            if (($input['type'] ?? null) === 'items' && $key !== '') {
-                $set('inputs.'.$key, []);
+            // A list of items starts as an empty list (unset, its checkboxes
+            // shared one true/false value: ticking one ticked them all);
+            // every other field as empty.
+            if ($key !== '') {
+                $set('inputs.'.$key, ($input['type'] ?? null) === 'items' ? [] : null);
             }
             if (! $event || ! str_contains($key, 'meeting') && ! str_contains($key, 'teams')) {
                 continue;

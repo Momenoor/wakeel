@@ -315,6 +315,26 @@ class LetterMeetingTest extends TestCase
         $this->assertSame(0, CalendarEvent::count());
     }
 
+    public function test_the_fields_that_come_with_a_template_start_with_a_value(): void
+    {
+        // Unset, the browser didn't reliably send what was then picked: the
+        // meeting switch showed on and reached the server off.
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('issue')
+            ->set('mountedActions.0.data.letter_template_id', $this->template->id)
+            ->assertSet('mountedActions.0.data.create_meeting', false)
+            ->assertSet('mountedActions.0.data.meeting_minutes', 60)
+            ->assertSet('mountedActions.0.data.invite_recipients', false)
+            ->assertSet('mountedActions.0.data.inputs', fn ($inputs) => array_key_exists('meeting_date', (array) $inputs)
+                && array_key_exists('meeting_time', (array) $inputs)
+                && array_key_exists('meeting_link', (array) $inputs));
+
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('write')
+            ->assertSet('mountedActions.0.data.create_meeting', false)
+            ->assertSet('mountedActions.0.data.meeting_minutes', 60);
+    }
+
     public function test_recipients_emails_and_phones_are_under_their_name(): void
     {
         $letter = app(LetterIssuer::class)->issue($this->template, $this->matter, [array_values(LetterComposer::candidates($this->matter))[0]], []);
