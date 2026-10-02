@@ -172,6 +172,13 @@ class MinutesTest extends TestCase
         $this->assertStringNotContainsString('<img', $feed->json('html'));
         $this->assertFalse($feed->json('final'));
 
+        // Sizes as written, relative to the text's 12 pt: 18 pt is 1.5 times.
+        $body = $minutes->template->body;
+        $minutes->template->update(['body' => '<p><span data-font-size="18pt" style="font-size: 18pt">كبير</span> عادي</p>']);
+        $this->assertStringContainsString('style="font-size: 1.5em">كبير</span>', MinutesService::liveHtml($minutes->fresh()));
+        $this->assertStringNotContainsString('font-size: 18pt', MinutesService::liveHtml($minutes->fresh()));
+        $minutes->template->update(['body' => $body]);
+
         $this->get(route('minutes.live', $minutes))->assertOk()
             ->assertSee('علاقة توريد عمالة.')
             // It asks for updates (the address JSON-escaped in its script).
@@ -366,6 +373,16 @@ class MinutesTest extends TestCase
         // straight after the text.
         $this->assertStringContainsString('footer: html_letterAfterText; margin-footer: 20mm;', $html);
         $this->assertSame(2, substr_count($html, 'التوقيع: '));
+        // At the element's size (10 pt) — on the table and every cell,
+        // never shrunk to fit.
+        $this->assertStringContainsString('<table autosize="1" style="width: 100%; border-collapse: collapse; font-size: 10pt;">', $html);
+        $this->assertStringContainsString('vertical-align: top; font-size: 10pt;">', $html);
+
+        // In the text: at the size its placeholder was written in.
+        $template->update(['body' => '<p><span data-font-size="9pt" style="font-size: 9pt">{{minutes.signatures}}</span></p>']);
+        $body = MinutesService::composer($minutes->fresh())->bodyHtml();
+        $this->assertStringContainsString('<table autosize="1" style="font-size: 9pt; width: 100%;', $body);
+        $this->assertStringContainsString('<td style="font-size: 9pt; width: 33.3%;', $body);
         $this->assertStringNotContainsString('position: absolute; left: 0mm; top: 0mm', $html);
         $this->assertStringStartsWith('%PDF', $pdf->render());
 

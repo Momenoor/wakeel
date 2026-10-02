@@ -113,7 +113,15 @@ class MinutesService
      */
     public static function liveHtml(MatterMinutes $minutes): string
     {
-        return preg_replace('/<img\b[^>]*>/i', '', self::composer($minutes)->bodyHtml()) ?? '';
+        $html = preg_replace('/<img\b[^>]*>/i', '', self::composer($minutes)->bodyHtml()) ?? '';
+
+        // Sizes as written (pt) relative to the text's 12 pt — so they keep
+        // their proportions on the screen and grow with its A+ / A−.
+        return preg_replace_callback(
+            '/font-size:\s*([\d.]+)pt/i',
+            fn (array $m) => 'font-size: '.round((float) $m[1] / 12, 4).'em',
+            $html,
+        ) ?? $html;
     }
 
     /**

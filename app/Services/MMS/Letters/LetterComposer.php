@@ -528,7 +528,7 @@ class LetterComposer
      * for the foot of every page (a letterhead text box) or the end of the
      * minutes.
      */
-    public function signaturesHtml(): string
+    public function signaturesHtml(?float $size = null): string
     {
         $names = $this->signatureNames();
         if ($names === []) {
@@ -536,9 +536,12 @@ class LetterComposer
         }
 
         $sign = $this->isArabic() ? 'التوقيع: ' : 'Signature: ';
+        // On each cell: a table in the PDF doesn't take the size around it.
+        $font = $size ? ' font-size: '.$size.'pt;' : '';
 
-        return '<table style="width: 100%; border-collapse: collapse;">'
-            .collect($names)->chunk(3)->map(fn ($row) => '<tr>'.$row->map(fn (string $name) => '<td style="width: 33.3%; border: 0; padding: 1mm 2mm; text-align: center; vertical-align: top;">'
+        // autosize: the PDF would otherwise shrink the text to fit the row.
+        return '<table autosize="1" style="width: 100%; border-collapse: collapse;'.$font.'">'
+            .collect($names)->chunk(3)->map(fn ($row) => '<tr>'.$row->map(fn (string $name) => '<td style="width: 33.3%; border: 0; padding: 1mm 2mm; text-align: center; vertical-align: top;'.$font.'">'
                 .'<div><strong>'.e($name).'</strong></div>'
                 .'<div style="margin-top: 5mm;">'.$sign.'....................</div>'
                 .'</td>')->implode('').str_repeat('<td style="width: 33.3%; border: 0;"></td>', 3 - $row->count()).'</tr>')->implode('')
@@ -656,7 +659,7 @@ class LetterComposer
             return '<span style="font-size: '.$size.';">'.$html.'</span>';
         }
 
-        return preg_replace_callback('/<(p|ol|ul|li)\b([^>]*)>/i', function (array $m) use ($size) {
+        return preg_replace_callback('/<(p|ol|ul|li|table|td|th)\b([^>]*)>/i', function (array $m) use ($size) {
             if (preg_match('/font-size\s*:/i', $m[2])) {
                 return $m[0];
             }

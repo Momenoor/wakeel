@@ -293,7 +293,8 @@ class LetterPdf
             'line' => '<div style="border-top: '.max(0.2, (float) ($element['font_size'] ?? 1) / 10).'mm solid '.e($element['color'] ?? '#111827').';"></div>',
             default => collect(preg_split('/\{\{\s*'.preg_quote(LetterComposer::SIGNATURES, '/').'\s*\}\}/u', (string) ($element['content'] ?? '')) ?: [])
                 ->map(fn (string $text) => nl2br(BulkMailPlaceholders::apply(e($text), array_map('strip_tags', $values))))
-                ->implode($values[LetterComposer::SIGNATURES] ?? ''),
+                // The signatures at this element's own size.
+                ->implode($this->composer->signaturesHtml((float) ($element['font_size'] ?? 11))),
         };
 
         // Bold: the font has one weight, so — as for bold in the letter — a

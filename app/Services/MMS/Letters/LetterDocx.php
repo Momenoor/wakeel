@@ -54,16 +54,11 @@ class LetterDocx
 
         $elements = $this->composer->elements();
 
-        // Text placed from the bottom of the page, and "after the text": in
-        // the page's footer — its distance from the page's edge that of the
-        // lowest of them.
-        $footerText = $elements->filter(fn ($e) => self::isText($e) && (($e['page'] ?? 'first') === Letterhead::AFTER_TEXT || Letterhead::anchor($e)[0] === 'bottom'));
-        $footerFrom = $footerText->isEmpty() ? 0 : (float) $footerText
-            ->map(fn ($e) => ($e['page'] ?? 'first') === Letterhead::AFTER_TEXT ? (float) $letterhead->margin_bottom : (float) ($e['y'] ?? 0))
-            ->min();
-
-        $headerText = $elements->filter(fn ($e) => self::isText($e) && ($e['page'] ?? 'first') !== Letterhead::AFTER_TEXT && Letterhead::anchor($e)[0] === 'top');
-        $headerFrom = $headerText->isEmpty() ? 0 : (float) $headerText->map(fn ($e) => (float) ($e['y'] ?? 0))->min();
+        // Every placed element floats in the header at its place (see
+        // header()); only "after the text" — which can't be placed — is in
+        // the footer, right above the bottom margin.
+        $footerText = $elements->filter(fn ($e) => self::isText($e) && ($e['page'] ?? 'first') === Letterhead::AFTER_TEXT);
+        $footerFrom = $footerText->isEmpty() ? 0 : (float) $letterhead->margin_bottom;
 
         $landscape = $letterhead->orientation === 'landscape';
         $section = $word->addSection([
@@ -73,7 +68,7 @@ class LetterDocx
             'marginRight' => Converter::cmToTwip($letterhead->margin_right / 10),
             'marginBottom' => Converter::cmToTwip($letterhead->margin_bottom / 10),
             'marginLeft' => Converter::cmToTwip($letterhead->margin_left / 10),
-            'headerHeight' => Converter::cmToTwip($headerFrom / 10),
+            'headerHeight' => 0,
             'footerHeight' => Converter::cmToTwip($footerFrom / 10),
         ]);
 
@@ -88,17 +83,13 @@ class LetterDocx
             foreach ([Header::FIRST => ['first', 'all', Letterhead::AFTER_TEXT], Header::AUTO => ['rest', 'all', Letterhead::AFTER_TEXT]] as $type => $pages) {
                 $footer = $section->addFooter($type);
 
-                // Placed from the bottom, and "after the text" (Word can't
-                // follow the text): at the foot of the page — the highest
-                // first.
-                $this->textLines(
-                    $footer,
-                    $footerText->filter(fn ($e) => in_array($e['page'] ?? 'first', $pages, true))
-                        ->sortByDesc(fn ($e) => ($e['page'] ?? 'first') === Letterhead::AFTER_TEXT ? PHP_INT_MAX : (float) ($e['y'] ?? 0))
-                        ->values()->all(),
-                    fromTop: false,
-                    rtl: $rtl,
-                );
+                // "After the text" (Word can't follow the text): at the
+                // foot of the page.
+                foreach ($footerText as $element) {
+                    foreach ($this->textParagraphs($element) as $line) {
+                        $this->mixedLine($footer, $line, $this->font($element), ['alignment' => $this->alignment($element['align'] ?? null, $rtl), 'bidi' => $rtl, 'spaceAfter' => 0]);
+                    }
+                }
 
                 // Just the page number: "1 / 1" in a right-to-left
                 // document comes out as "/ 11".
@@ -167,47 +158,6 @@ class LetterDocx
     private static function isText(array $element): bool
     {
         return in_array($element['type'] ?? 'text', ['reference', 'date', 'text'], true);
-    }
-
-    /**
-     * Text elements as the lines of a header or footer, in order down the
-     * page, each spaced from the one above as it is on the letterhead. The
-     * first sits at the header's (footer's) distance from the page edge.
-     *
-
-     * @param  list<array<string, mixed>>  $elements  top to bottom
-     */
-    private function textLines(AbstractContainer $container, array $elements, bool $fromTop, bool $rtl): void
-    {
-        // How tall a text is, roughly: its lines at its size.
-        $height = fn (array $e): float => (substr_count($this->elementText($e), "\n") + 1) * (float) ($e['font_size'] ?? 11) * 0.3528 * 1.25;
-        $previous = null;
-
-        foreach ($elements as $element) {
-            $gap = 0.0;
-            if ($previous !== null) {
-                // From the top: this one's top less the last one's bottom.
-                // From the bottom: the last one's bottom (its distance) less
-                // this one's, less this one's height.
-                $gap = $fromTop
-                    ? (float) ($element['y'] ?? 0) - ((float) ($previous['y'] ?? 0) + $height($previous))
-                    : (($previous['page'] ?? '') === Letterhead::AFTER_TEXT ? 0.0 : (float) ($previous['y'] ?? 0) - (float) ($element['y'] ?? 0) - $height($element));
-            }
-
-            $this->mixedLine(
-                $container,
-                $this->elementText($element),
-                ['size' => (float) ($element['font_size'] ?? 11), 'bold' => ! empty($element['bold']), 'color' => ltrim((string) ($element['color'] ?? '#111827'), '#')],
-                [
-                    'alignment' => $this->alignment($element['align'] ?? null, $rtl),
-                    'bidi' => $rtl,
-                    'spaceBefore' => (int) Converter::cmToTwip(max(0, $gap) / 10),
-                    'spaceAfter' => 0,
-                ],
-            );
-
-            $previous = $element;
-        }
     }
 
     /**
@@ -456,20 +406,76 @@ class LetterDocx
             // footer (Word can't number pages inside a text box).
             if ($file && in_array($type, ['logo', 'image'], true)) {
                 $header->addImage($file, $position);
+
+                continue;
+            }
+
+            // Text in a floating box at its place — from the top or the
+            // bottom, the left or the right — over the page, as designed.
+            if (self::isText($element) && ($element['page'] ?? 'first') !== Letterhead::AFTER_TEXT) {
+                $this->textBox($header, $element, $width, $height, $rtl);
             }
         }
+    }
 
-        // Text placed from the top: the header's lines, from the highest;
-        // text placed from the bottom is in the footer (see save()).
-        $this->textLines(
-            $header,
-            collect($elements)
-                ->filter(fn ($e) => self::isText($e) && ($e['page'] ?? 'first') !== Letterhead::AFTER_TEXT && Letterhead::anchor($e)[0] === 'top')
-                ->sortBy(fn ($e) => (float) ($e['y'] ?? 0))
-                ->values()->all(),
-            fromTop: true,
-            rtl: $rtl,
-        );
+    /**
+     * A text element as a text box floating at its place on the page: its
+     * width, its distance from its corner, no border, no inner margin.
+     *
+     * @param  array<string, mixed>  $element
+     */
+    private function textBox(Header $header, array $element, float $pageWidth, float $pageHeight, bool $rtl): void
+    {
+        $lines = $this->textParagraphs($element);
+        // Its height: its lines at its size (a box placed from the bottom
+        // is placed by it).
+        $boxHeight = max(1, count($lines)) * (float) ($element['font_size'] ?? 11) * 0.3528 * 1.4 + 1;
+        [$left, $top] = Letterhead::topLeft($element, $pageWidth, $pageHeight, $boxHeight);
+        $points = fn (float $mm): float => Converter::cmToPoint($mm / 10);
+
+        $box = $header->addTextBox([
+            'positioning' => Image::POSITION_ABSOLUTE,
+            'posHorizontal' => Image::POSITION_ABSOLUTE,
+            'posHorizontalRel' => Image::POSITION_RELATIVE_TO_PAGE,
+            'posVertical' => Image::POSITION_ABSOLUTE,
+            'posVerticalRel' => Image::POSITION_RELATIVE_TO_PAGE,
+            'marginLeft' => $points(max(0, $left)),
+            'marginTop' => $points(max(0, $top)),
+            'width' => $points((float) ($element['width'] ?? 60)),
+            'height' => $points($boxHeight),
+            'wrappingStyle' => Image::WRAPPING_STYLE_INFRONT,
+            'innerMarginTop' => 0,
+            'innerMarginBottom' => 0,
+            'innerMarginLeft' => 0,
+            'innerMarginRight' => 0,
+        ]);
+
+        foreach ($lines as $line) {
+            $this->mixedLine($box, $line, $this->font($element), [
+                'alignment' => $this->alignment($element['align'] ?? null, $rtl),
+                'bidi' => $rtl,
+                'spaceBefore' => 0,
+                'spaceAfter' => 0,
+            ]);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $element
+     * @return list<string>
+     */
+    private function textParagraphs(array $element): array
+    {
+        return preg_split('/\R/u', $this->elementText($element)) ?: [''];
+    }
+
+    /**
+     * @param  array<string, mixed>  $element
+     * @return array<string, mixed>
+     */
+    private function font(array $element): array
+    {
+        return ['size' => (float) ($element['font_size'] ?? 11), 'bold' => ! empty($element['bold']), 'color' => ltrim((string) ($element['color'] ?? '#111827'), '#')];
     }
 
     private function alignment(?string $align, bool $rtl): string

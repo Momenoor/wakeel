@@ -23,6 +23,8 @@
         .dot.off { background: #ef4444; box-shadow: none; }
         .sheet { max-width: 960px; margin: 1.5rem auto; padding: 2.5rem 3rem; background: #fff; box-shadow: 0 1px 10px rgba(0,0,0,.15); font-size: var(--size); line-height: 1.8; text-align: justify; }
         .sheet h1, .sheet h2, .sheet h3 { line-height: 1.4; }
+        /* As in the PDF (18, 16 and 14 pt on 12): the base size is the text's 12 pt. */
+        .sheet h1 { font-size: 1.5em; } .sheet h2 { font-size: 1.3333em; } .sheet h3 { font-size: 1.1667em; }
         .sheet p { margin: 0 0 .5em; }
         .sheet .changed { animation: flash 2.5s ease-out; }
         @keyframes flash { from { background: rgba(250, 204, 21, .45); } to { background: transparent; } }
