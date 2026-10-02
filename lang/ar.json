@@ -3302,5 +3302,13 @@
     "Duration (minutes)": "المدة (بالدقائق)",
     "Send the Outlook invitation to the recipients too": "إرسال دعوة Outlook إلى المرسل إليهم أيضاً",
     "Off: the meeting is in your calendar only; the letter carries the link.": "عند الإيقاف: يُضاف الاجتماع إلى تقويمك فقط، ويحمل الخطاب الرابط.",
-    "full address": "الرابط كاملاً"
+    "full address": "الرابط كاملاً",
+    "Font size": "حجم الخط",
+    "Default size": "الحجم الافتراضي",
+    "This template is not about a meeting: it has no link field and no meeting date and time.": "هذا القالب ليس لاجتماع: لا يحتوي على حقل رابط ولا على تاريخ ووقت للاجتماع.",
+    "On the meeting date and time above, on this matter's calendar. The link goes where the template has its link field or :placeholder.": "في تاريخ الاجتماع ووقته المحددين أعلاه، وفي تقويم هذه القضية. ويوضع الرابط حيث يوجد حقل الرابط في القالب أو :placeholder.",
+    "The Teams meeting was created, but this letter has no place for its link": "أُنشئ اجتماع Teams، لكن لا يوجد في هذا الخطاب مكان لرابطه",
+    "Add :placeholder to the template's text where the link should go. The meeting is in the calendar: :link": "أضف :placeholder إلى نص القالب حيث يجب أن يظهر الرابط. الاجتماع موجود في التقويم: :link",
+    "Teams meeting link (when made on issue)": "رابط اجتماع Teams (عند إنشائه مع الخطاب)",
+    "Teams meeting link": "رابط اجتماع Teams"
 }

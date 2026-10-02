@@ -36,6 +36,8 @@ class RichEditorDirection
 
         return $editor
             ->tools(self::tools())
+            // And a font size dropdown, in every editor.
+            ->plugins([EditorFontSize::make()])
             ->toolbarButtons(fn (RichEditor $component): array => self::toolbar(
                 $toolbar === null ? $component->getDefaultToolbarButtons() : $component->evaluate($toolbar),
             ));
@@ -43,7 +45,8 @@ class RichEditorDirection
 
     /**
      * Every start/end button as left/right, in the order they sit on the
-     * screen (right first in the Arabic interface), with Justify.
+     * screen (right first in the Arabic interface), with Justify; and the
+     * font size dropdown.
      *
      * @param  array<string | array<string>>  $toolbar
      * @return array<string | array<string>>
@@ -53,7 +56,7 @@ class RichEditorDirection
         [$first, $second] = self::interfaceIsRtl() ? ['alignRight', 'alignLeft'] : ['alignLeft', 'alignRight'];
 
         $swap = function (array $group) use ($first, $second): array {
-            if (! array_intersect(['alignStart', 'alignEnd'], $group)) {
+            if (array_filter($group, fn ($button) => ! is_string($button)) || ! array_intersect(['alignStart', 'alignEnd'], $group)) {
                 return $group;
             }
 
@@ -66,7 +69,12 @@ class RichEditorDirection
             return in_array('alignJustify', $group, true) ? $group : [...$group, 'alignJustify'];
         };
 
-        return array_map(fn ($group) => is_array($group) ? $swap($group) : $group, $toolbar);
+        $toolbar = array_values(array_map(fn ($group) => is_array($group) ? $swap($group) : $group, $toolbar));
+
+        // The font size dropdown after the first group (bold, italic…).
+        array_splice($toolbar, min(1, count($toolbar)), 0, [[EditorFontSize::toolbarGroup()]]);
+
+        return $toolbar;
     }
 
     /**

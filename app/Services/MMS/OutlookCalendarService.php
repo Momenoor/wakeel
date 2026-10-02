@@ -94,6 +94,25 @@ class OutlookCalendarService
         return $response->json();
     }
 
+    /**
+     * One event as Outlook has it now.
+     *
+     * @return array<string, mixed>
+     */
+    public function getEvent(string $outlookEventId): array
+    {
+        $response = Http::withToken($this->getAccessToken())
+            ->get("https://graph.microsoft.com/v1.0/users/{$this->getUserEmail()}/events/{$outlookEventId}", [
+                '$select' => 'id,isOnlineMeeting,onlineMeeting,webLink',
+            ]);
+
+        if ($response->failed()) {
+            throw new \RuntimeException('Failed to read Outlook event: '.$response->body());
+        }
+
+        return $response->json();
+    }
+
     public function updateEvent(string $outlookEventId, array $eventData): array
     {
         $tz = $this->appTimezone();

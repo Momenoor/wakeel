@@ -10,7 +10,7 @@ use App\Models\MatterLetterRecipient;
 use App\Services\MMS\BulkMailPlaceholders;
 use App\Services\MMS\SenderMailer;
 use App\Services\MMS\SentFolder;
-use App\Support\TextDirection;
+use App\Support\RichHtml;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -219,7 +219,7 @@ class LetterMailer
         $rtl = ($template?->locale ?? ($composer->isArabic() ? 'ar' : 'en')) !== 'en';
         $html = BulkMailPlaceholders::apply(LetterComposer::normalizeMergeTags($body), array_map('strip_tags', $values), escape: true);
         // Outlook knows no start or end: the editor's alignment as left/right.
-        [$html, $images] = $this->embeddable(TextDirection::physicalAlignment($html, $rtl));
+        [$html, $images] = $this->embeddable(RichHtml::forOutput($html, $rtl));
 
         return new LetterEmail(
             BulkMailPlaceholders::apply($subject, array_map('strip_tags', $values)),

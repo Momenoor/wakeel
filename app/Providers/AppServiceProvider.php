@@ -15,6 +15,8 @@ use App\Support\Currency;
 use Carbon\Carbon;
 use Carbon\Translator as CarbonTranslator;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Support\Assets\Js;
+use Filament\Support\Facades\FilamentAsset;
 use Filament\Support\Facades\FilamentView;
 use Filament\Tables\Columns\Summarizers\Summarizer;
 use Filament\Tables\Columns\TextColumn;
@@ -80,6 +82,12 @@ class AppServiceProvider extends ServiceProvider
             PanelsRenderHook::USER_MENU_BEFORE,
             fn (): string => auth()->check() ? view('filament.partials.notification-sound')->render() : '',
         );
+
+        // The rich editors' font size (App\Filament\Support\EditorFontSize),
+        // loaded only where an editor is.
+        FilamentAsset::register([
+            Js::make('rich-content-plugins/font-size', resource_path('js/filament/rich-content-plugins/font-size.js'))->loadedOnRequest(),
+        ]);
 
         // The font that draws the Dirham sign, on every panel page.
         FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): string => (string) Currency::fontLink());

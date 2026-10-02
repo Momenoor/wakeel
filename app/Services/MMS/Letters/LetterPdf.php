@@ -181,11 +181,11 @@ class LetterPdf
 
         $css = '@page { '.$background($rest).' header: html_letterRest; '.$margins($other['top'], $other['right'], $other['bottom'], $other['left']).' }'
             .'@page :first { '.$background($first).' header: html_letterFirst; '.$margins((float) $letterhead->margin_top, (float) $letterhead->margin_right, (float) $letterhead->margin_bottom, (float) $letterhead->margin_left).' }'
-            .'body { font-family: '.self::FONT.'; font-size: 13pt; line-height: 1.55; text-align: justify; }'
+            .'body { font-family: '.self::FONT.'; font-size: 14pt; line-height: 1.55; text-align: justify; }'
             .'p { margin: 0 0 6pt 0; }'
             .'ol, ul { margin: 0 0 6pt 0; padding-'.($rtl ? 'right' : 'left').': 18pt; }'
             .'li { margin-bottom: 3pt; }'
-            .'h1 { font-size: 17pt; } h2 { font-size: 15pt; } h3 { font-size: 14pt; }'
+            .'h1 { font-size: 18pt; } h2 { font-size: 16pt; } h3 { font-size: 15pt; }'
             // Bold, drawn: the font has a single weight.
             .'strong, b, h1, h2, h3, th { font-weight: normal; text-outline-width: 0.12mm; text-outline-color: #111827; }'
             .'.recipient { margin: 0; } .recipient-email { margin: 0 0 4pt 0; text-align: left; }'

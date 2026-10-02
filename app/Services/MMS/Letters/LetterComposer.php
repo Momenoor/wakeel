@@ -9,7 +9,7 @@ use App\Models\Matter;
 use App\Models\MatterParty;
 use App\Services\MMS\BulkMailPlaceholders;
 use App\Services\MMS\Letters\Blocks\SignatureBlock;
-use App\Support\TextDirection;
+use App\Support\RichHtml;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Arr;
@@ -34,6 +34,9 @@ class LetterComposer
 {
     /** Placeholders whose value is a block of HTML, not text. */
     private const BLOCKS = ['recipients', 'signature', 'stamp'];
+
+    /** Where a letter keeps the Teams meeting made when it was issued ({{meeting.link}}). */
+    public const MEETING_LINK = '__meeting_link';
 
     public function __construct(
         public LetterTemplate $template,
@@ -146,6 +149,11 @@ class LetterComposer
             foreach ($this->formatInput($input, $value) as $suffix => $formatted) {
                 $values[$key.$suffix] = $formatted;
             }
+        }
+
+        // The Teams meeting made when the letter was issued: in any template.
+        if (filled($meeting = $this->inputs[self::MEETING_LINK] ?? null)) {
+            ['' => $values['meeting.link'], '.url' => $values['meeting.link.url']] = $this->link((string) $meeting);
         }
 
         $values['subject'] = BulkMailPlaceholders::apply((string) $this->template->subject, $values);
@@ -348,7 +356,7 @@ class LetterComposer
         $blocks = array_filter($values, fn ($value, $key) => in_array($key, self::BLOCKS, true)
             || (str_starts_with($key, 'input.') && str_contains($value, '<ol>'))
             || (str_starts_with($key, 'input.') && str_contains($value, '<br'))
-            || (str_starts_with($key, 'input.') && str_starts_with($value, '<a href=')), ARRAY_FILTER_USE_BOTH);
+            || str_starts_with($value, '<a href='), ARRAY_FILTER_USE_BOTH);
 
         foreach ($blocks as $key => $value) {
             $pattern = '/<p[^>]*>\s*\{\{\s*'.preg_quote($key, '/').'\s*\}\}\s*<\/p>/iu';
@@ -368,7 +376,7 @@ class LetterComposer
      */
     private function physicalAlignment(string $html): string
     {
-        return TextDirection::physicalAlignment($html, $this->isArabic());
+        return RichHtml::forOutput($html, $this->isArabic());
     }
 
     public function subject(): string
@@ -400,6 +408,8 @@ class LetterComposer
             'recipients' => __('Recipients block'),
             'signature' => __('Signature'),
             'stamp' => __('Stamp'),
+            'meeting.link' => __('Teams meeting link (when made on issue)'),
+            'meeting.link.url' => __('Teams meeting link').' — '.__('full address'),
             ...BulkMailPlaceholders::matterCatalog(),
         ];
 

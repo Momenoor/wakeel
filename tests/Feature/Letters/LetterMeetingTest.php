@@ -19,6 +19,8 @@ use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
+use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -170,6 +172,86 @@ class LetterMeetingTest extends TestCase
 
         $this->assertSame(0, MatterLetter::count());
         $this->assertSame(0, CalendarEvent::withTrashed()->count());
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $inputs
+     */
+    private function issueWithMeeting(array $inputs, string $body): Testable
+    {
+        $template = LetterTemplate::create(['name' => 'اجتماع', 'slug' => 'meeting-'.uniqid(), 'locale' => 'ar', 'category' => 'letter', 'subject' => 'دعوة', 'inputs' => $inputs, 'body' => $body]);
+
+        return Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->callTableAction('issue', data: [
+                'letter_template_id' => $template->id,
+                'recipients' => array_keys(LetterComposer::candidates($this->matter)),
+                'inputs' => ['meeting_date' => '2026-10-05', 'meeting_time' => '10:30'],
+                'create_meeting' => true,
+            ])
+            ->assertHasNoTableActionErrors();
+    }
+
+    private const DATE_AND_TIME = [
+        ['key' => 'meeting_date', 'label' => 'التاريخ', 'type' => 'date'],
+        ['key' => 'meeting_time', 'label' => 'الوقت', 'type' => 'time'],
+    ];
+
+    public function test_the_link_fills_every_link_field_text_ones_too(): void
+    {
+        $this->fakeGraph();
+
+        // The template's text uses a plain text field for the link.
+        $this->issueWithMeeting([...self::DATE_AND_TIME,
+            ['key' => 'other_url', 'label' => 'Other', 'type' => 'url'],
+            ['key' => 'teams_link', 'label' => 'رابط Teams', 'type' => 'text'],
+        ], '<p>{{recipients}}</p><p>الرابط: {{input.teams_link}}</p>')
+            ->assertNotNotified(__('The Teams meeting was created, but this letter has no place for its link'));
+
+        $letter = MatterLetter::sole();
+        $this->assertSame(self::JOIN_URL, $letter->inputs['teams_link']);
+        $this->assertSame(self::JOIN_URL, $letter->inputs['other_url']);
+        $this->assertStringContainsString(e(self::JOIN_URL), $letter->rendered_html);
+    }
+
+    public function test_any_meeting_template_takes_the_link_as_meeting_link(): void
+    {
+        $this->fakeGraph();
+
+        // No link field: the meeting's date and time, and {{meeting.link}}.
+        $this->issueWithMeeting(self::DATE_AND_TIME, '<p>{{recipients}}</p><p>انضموا عبر {{meeting.link}}</p>');
+
+        $this->assertStringContainsString('<a href="'.e(self::JOIN_URL).'">انقر هنا للانضمام إلى الاجتماع</a>', MatterLetter::sole()->rendered_html);
+        $this->assertArrayHasKey('meeting.link', LetterComposer::catalog());
+    }
+
+    public function test_a_letter_with_no_place_for_the_link_says_so(): void
+    {
+        $this->fakeGraph();
+
+        $this->issueWithMeeting(self::DATE_AND_TIME, '<p>{{recipients}}</p><p>نص بلا رابط.</p>')
+            ->assertNotified(__('The Teams meeting was created, but this letter has no place for its link'));
+
+        $this->assertSame(1, MatterLetter::count());
+        $this->assertSame(self::JOIN_URL, CalendarEvent::sole()->online_meeting_url);
+    }
+
+    public function test_a_teams_link_given_late_is_waited_for(): void
+    {
+        Sleep::fake();
+        Http::fake([
+            'login.microsoftonline.com/*' => Http::response(['access_token' => 'token']),
+            // Made without its link yet; it's there when asked again.
+            'graph.microsoft.com/*' => Http::sequence()
+                ->push(['id' => 'outlook-1', 'onlineMeeting' => null], 201)
+                ->push(['id' => 'outlook-1', 'onlineMeeting' => null])
+                ->push(['id' => 'outlook-1', 'onlineMeeting' => ['joinUrl' => self::JOIN_URL]]),
+        ]);
+
+        $this->issueWithMeeting(self::DATE_AND_TIME, '<p>{{recipients}}</p><p>{{meeting.link}}</p>');
+
+        $this->assertSame(self::JOIN_URL, CalendarEvent::sole()->online_meeting_url);
+        $this->assertStringContainsString(e(self::JOIN_URL), MatterLetter::sole()->rendered_html);
+        Sleep::assertSleptTimes(2);
     }
 
     public function test_recipients_emails_and_phones_are_under_their_name(): void

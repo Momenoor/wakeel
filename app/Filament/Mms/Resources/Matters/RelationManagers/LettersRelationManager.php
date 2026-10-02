@@ -807,6 +807,8 @@ class LettersRelationManager extends RelationManager
     private function inputFields(Matter $matter, ?LetterTemplate $template): array
     {
         $fields = [];
+        // Filled by the meeting made on issue, when it is.
+        $meetingLinks = LetterMeeting::fields($template)['links'] ?? [];
 
         foreach ($template?->inputs ?? [] as $input) {
             $key = $input['key'] ?? null;
@@ -838,13 +840,12 @@ class LettersRelationManager extends RelationManager
                 'textarea' => Textarea::make($name)->rows(3)->columnSpanFull(),
                 'date' => DatePicker::make($name),
                 'time' => TimePicker::make($name)->seconds(false),
-                // Filled by the meeting made below, when it is.
-                'url' => TextInput::make($name)->url()->columnSpanFull()
-                    ->hidden(fn (Get $get): bool => (bool) $get('create_meeting')),
+                'url' => TextInput::make($name)->url()->columnSpanFull(),
                 'number' => TextInput::make($name)->numeric(),
                 'select' => Select::make($name)->options(array_combine($input['options'] ?? [], $input['options'] ?? []) ?: []),
                 default => TextInput::make($name),
-            })->label($label)->required($required);
+            })->label($label)->required($required)
+                ->hidden(fn (Get $get): bool => in_array($key, $meetingLinks, true) && (bool) $get('create_meeting'));
         }
 
         return [...$fields, ...$this->meetingFields($template)];
@@ -872,7 +873,7 @@ class LettersRelationManager extends RelationManager
                 ->schema([
                     Toggle::make('create_meeting')
                         ->label(__('Create a Teams meeting in Outlook and put its link in the letter'))
-                        ->helperText(__('On the meeting date and time above, on this matter\'s calendar.'))
+                        ->helperText(__('On the meeting date and time above, on this matter\'s calendar. The link goes where the template has its link field or :placeholder.', ['placeholder' => '{'.'{meeting.link}'.'}']))
                         ->live()
                         ->columnSpanFull(),
                     TextInput::make('meeting_minutes')
@@ -964,7 +965,13 @@ class LettersRelationManager extends RelationManager
                 : [];
 
             $event = app(LetterMeeting::class)->create($matter, $template, $inputs, (int) ($data['meeting_minutes'] ?? 60), $attendees, auth()->id());
-            $inputs[$fields['url']] = $event->online_meeting_url;
+            $meetingLink = (string) $event->online_meeting_url;
+
+            // Every place the template has for it, and {{meeting.link}}.
+            foreach ($fields['links'] as $key) {
+                $inputs[$key] = $meetingLink;
+            }
+            $inputs[LetterComposer::MEETING_LINK] = $meetingLink;
         }
 
         $date = filled($data['letter_date'] ?? null) ? Carbon::parse($data['letter_date']) : now();
@@ -976,9 +983,24 @@ class LettersRelationManager extends RelationManager
             ? array_map(fn (array $recipient): array => [$recipient], $recipients)
             : [$recipients];
 
-        return array_map(
+        $letters = array_map(
             fn (array $group): MatterLetter => $issuer->issue($template, $matter, $group, $inputs, $date, $letterhead, auth()->id(), $data['attention'] ?? null),
             $groups,
         );
+
+        // Made, but with nowhere in the letter to show: say so, and how.
+        if (isset($meetingLink) && ! str_contains((string) $letters[0]->rendered_html, e($meetingLink))) {
+            Notification::make()
+                ->warning()
+                ->title(__('The Teams meeting was created, but this letter has no place for its link'))
+                ->body(__('Add :placeholder to the template\'s text where the link should go. The meeting is in the calendar: :link', [
+                    'placeholder' => '{'.'{meeting.link}'.'}',
+                    'link' => $meetingLink,
+                ]))
+                ->persistent()
+                ->send();
+        }
+
+        return $letters;
     }
 }
