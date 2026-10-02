@@ -1,0 +1,141 @@
+<?php
+
+namespace App\Services\MMS\Letters;
+
+use App\Models\Letterhead;
+use App\Models\LetterTemplate;
+use App\Models\MatterMinutes;
+use App\Models\Party;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+
+/**
+ * A meeting's minutes, as a document: its template filled with the matter,
+ * the meeting (its date, day, time and link), who attended and the
+ * questions and answers — on the letterhead, as PDF or Word, like a
+ * letter. Finalised, its wording is kept and its PDF filed with the
+ * matter's attachments.
+ */
+class MinutesService
+{
+    public static function composer(MatterMinutes $minutes): LetterComposer
+    {
+        $minutes->loadMissing(['template', 'matter', 'letterhead']);
+
+        // The wording kept when it was finalised; until then, the template's.
+        $template = ($minutes->template ?? new LetterTemplate(['locale' => 'ar']))->replicate();
+        if ($minutes->isFinal() && filled($minutes->body)) {
+            $template->body = (string) $minutes->body;
+        }
+
+        $arabic = ($template->locale ?: 'ar') !== 'en';
+
+        return new LetterComposer(
+            $template,
+            $minutes->matter,
+            [
+                ...($minutes->inputs ?? []),
+                LetterComposer::MEETING_START => $minutes->meeting_at?->format('Y-m-d H:i'),
+                LetterComposer::MEETING_LINK => $minutes->meeting_link,
+                LetterComposer::MINUTES => [
+                    'number' => $minutes->number,
+                    'attendees' => $minutes->attendees ?? [],
+                    'items' => $minutes->items ?? [],
+                ],
+            ],
+            [],
+            $arabic ? 'محضر رقم ('.$minutes->number.')' : 'Minutes No. '.$minutes->number,
+            $minutes->meeting_at ?? $minutes->created_at ?? now(),
+            $minutes->letterhead ?? $template->letterhead ?? Letterhead::default(),
+        );
+    }
+
+    /**
+     * Who may attend: the matter's parties and their representatives, each
+     * not yet marked present, with the phone and ID number known for them.
+     *
+     * @return list<array{present: bool, title: string, name: string, capacity: ?string, id_number: ?string, phone: ?string, party_id: ?int}>
+     */
+    public static function attendeeCandidates(MatterMinutes $minutes): array
+    {
+        $arabic = (($minutes->template?->locale) ?: 'ar') !== 'en';
+        $parties = Party::query()->whereIn('id', collect(LetterComposer::candidates($minutes->matter, $arabic))->pluck('party_id')->filter())->get()->keyBy('id');
+
+        return collect(LetterComposer::candidates($minutes->matter, $arabic))
+            ->map(fn (array $c): array => [
+                'present' => false,
+                'title' => $arabic ? 'الأستاذ/' : 'Mr.',
+                'name' => $c['name'],
+                'capacity' => $c['role'],
+                'id_number' => $parties->get($c['party_id'])?->extra['id_number'] ?? null,
+                'phone' => $c['phones'][0] ?? null,
+                'party_id' => $c['party_id'],
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * ID numbers typed at the meeting, kept on the parties for next time.
+     */
+    public static function rememberIdNumbers(MatterMinutes $minutes): void
+    {
+        foreach ($minutes->attendees ?? [] as $attendee) {
+            if (blank($attendee['party_id'] ?? null) || blank($attendee['id_number'] ?? null)) {
+                continue;
+            }
+
+            $party = Party::find($attendee['party_id']);
+            if ($party && ($party->extra['id_number'] ?? null) !== $attendee['id_number']) {
+                $party->update(['extra' => [...((array) ($party->extra ?? [])), 'id_number' => trim((string) $attendee['id_number'])]]);
+            }
+        }
+    }
+
+    /**
+     * Final: its wording kept as it is now, and its PDF among the matter's
+     * attachments (replacing the one of an earlier finalising).
+     */
+    public function finalise(MatterMinutes $minutes, ?int $userId = null): MatterMinutes
+    {
+        return DB::transaction(function () use ($minutes, $userId) {
+            $minutes->loadMissing(['template', 'matter']);
+            $minutes->update([
+                'body' => SignatureLayouts::freeze(LetterComposer::normalizeMergeTags((string) ($minutes->body ?: $minutes->template?->body))),
+                'status' => MatterMinutes::FINAL,
+                'finalized_at' => now(),
+            ]);
+
+            $pdf = (new LetterPdf(self::composer($minutes->fresh())))->render();
+            $path = 'attachments/minutes/'.$minutes->matter_id.'/'.$minutes->number.'-'.Str::random(6).'.pdf';
+            Storage::disk('public')->put($path, $pdf);
+
+            $minutes->attachment?->delete();
+
+            $attachment = $minutes->matter->attachments()->create([
+                'user_id' => $userId,
+                'type' => 'minutes',
+                'path' => $path,
+                'name' => self::fileName($minutes).'.pdf',
+                'size' => strlen($pdf),
+                'extension' => 'pdf',
+            ]);
+
+            $minutes->update(['attachment_id' => $attachment->getKey()]);
+
+            return $minutes->fresh();
+        });
+    }
+
+    /**
+     * "محضر 1 — 3153-2026 — 30-09-2026", safe as a file name.
+     */
+    public static function fileName(MatterMinutes $minutes): string
+    {
+        $name = trim(__('Minutes').' '.$minutes->number.' — '.str_replace('/', '-', (string) $minutes->matter?->reference)
+            .($minutes->meeting_at ? ' — '.$minutes->meeting_at->format('d-m-Y') : ''));
+
+        return trim(preg_replace(['/[\\\\\/:"*?<>|\x00-\x1F]+/u', '/\s+/u'], ' ', $name));
+    }
+}

@@ -17,8 +17,8 @@ use Tiptap\Core\Mark;
  */
 class EditorFontSize implements RichContentPlugin
 {
-    /** In points; the letters' own text is 14 pt ("Default size"). */
-    public const SIZES = [9, 10, 11, 12, 13, 16, 18, 20, 24];
+    /** In points; the letters' own text is 12 pt ("Default size"), as in the editor. */
+    public const SIZES = [9, 10, 11, 13, 14, 16, 18, 20, 24];
 
     public static function make(): static
     {
@@ -66,7 +66,7 @@ class EditorFontSize implements RichContentPlugin
                 ->activeJsExpression('! $getEditor()?.isActive(\'fontSize\')'),
             ...array_map(fn (int $size): RichEditorTool => RichEditorTool::make('fontSize'.$size)
                 ->label($size.' pt')
-                ->icon($size < 14 ? 'fi-o-small' : 'fi-o-lead')
+                ->icon($size < 12 ? 'fi-o-small' : 'fi-o-lead')
                 ->jsHandler("\$getEditor()?.chain().focus().setFontSize('{$size}pt').run()")
                 ->activeJsExpression("\$getEditor()?.isActive('fontSize', { 'data-font-size': '{$size}pt' })"), self::SIZES),
         ];

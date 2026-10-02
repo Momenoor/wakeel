@@ -12,10 +12,12 @@ use App\Http\Controllers\SalaryAuthorizationFormPrintController;
 use App\Models\Attachment;
 use App\Models\BulkMailRecipient;
 use App\Models\MatterLetter;
+use App\Models\MatterMinutes;
 use App\Services\MMS\BulkMailService;
 use App\Services\MMS\Letters\LetterDocx;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterPdf;
+use App\Services\MMS\Letters\MinutesService;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\HeaderUtils;
@@ -51,6 +53,26 @@ Route::middleware('auth')->group(function () {
 
         return response()->download($path, LetterIssuer::fileName($letter).'.docx')->deleteFileAfterSend();
     })->name('letters.docx');
+
+    // A meeting's minutes, as letters are: its PDF (opened in the browser) and Word.
+    Route::get('minutes/{minutes}/pdf', function (MatterMinutes $minutes) {
+        abort_unless(auth()->user()->can('view', $minutes->matter), 403);
+
+        $pdf = (new LetterPdf(MinutesService::composer($minutes)))->render();
+
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => HeaderUtils::makeDisposition('inline', MinutesService::fileName($minutes).'.pdf', 'minutes-'.$minutes->getKey().'.pdf'),
+        ]);
+    })->name('minutes.pdf');
+
+    Route::get('minutes/{minutes}/docx', function (MatterMinutes $minutes) {
+        abort_unless(auth()->user()->can('view', $minutes->matter), 403);
+
+        $path = (new LetterDocx(MinutesService::composer($minutes)))->save(storage_path('app/temp/minutes-'.$minutes->getKey().'-'.uniqid().'.docx'));
+
+        return response()->download($path, MinutesService::fileName($minutes).'.docx')->deleteFileAfterSend();
+    })->name('minutes.docx');
 
     Route::get('bulk-mail/pdf/{recipient}', function (BulkMailRecipient $recipient) {
         abort_unless(auth()->user()->can('view', $recipient->campaign), 403);

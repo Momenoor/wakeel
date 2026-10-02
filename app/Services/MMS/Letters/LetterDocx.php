@@ -44,7 +44,7 @@ class LetterDocx
 
         $word = new PhpWord;
         $word->setDefaultFontName(self::FONT);
-        $word->setDefaultFontSize(14);
+        $word->setDefaultFontSize(12);
         $word->setDefaultParagraphStyle([
             'bidi' => $rtl,
             'alignment' => 'both',

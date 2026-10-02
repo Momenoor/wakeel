@@ -61,7 +61,10 @@ class RichEditorFontSizeTest extends TestCase
         $this->get(LetterTemplateResource::getUrl('create'))
             ->assertSuccessful()
             ->assertSee('.fi-fo-rich-editor span[data-type=mergeTag] { white-space: normal;', false)
-            ->assertSee('.fi-fo-rich-editor-merge-tags-list { max-height: 24rem; overflow-y: auto;', false);
+            ->assertSee('.fi-fo-rich-editor-merge-tags-list { max-height: 24rem; overflow-y: auto;', false)
+            // Written at 12 pt whatever the interface's size; a placeholder at the size around it.
+            ->assertSee('.tiptap.ProseMirror { font-size: 12pt;', false)
+            ->assertSee('span[data-type=mergeTag] { font-size: inherit; }', false);
     }
 
     public function test_a_size_is_kept_when_saved_and_nothing_else_gets_in(): void
@@ -74,14 +77,14 @@ class RichEditorFontSizeTest extends TestCase
             ->call('create')
             ->assertHasNoFormErrors();
 
-        $body = LetterTemplate::sole()->body;
+        $body = LetterTemplate::where('slug', 'sizes')->sole()->body;
         $this->assertMatchesRegularExpression('/<span data-font-size="18pt" style="font-size: 18pt;?">كبير<\/span>/u', $body);
         // Not a size in points: dropped, the text kept.
         $this->assertStringNotContainsString('background', $body);
         $this->assertStringContainsString('سيئ', $body);
     }
 
-    public function test_an_empty_line_keeps_its_place_and_the_text_is_14pt(): void
+    public function test_an_empty_line_keeps_its_place_and_the_text_is_12pt(): void
     {
         // As the editor saves an empty line typed between two paragraphs.
         $template = new LetterTemplate(['locale' => 'ar', 'subject' => 'S', 'body' => '<p>الأول</p><p></p><p style="text-align: start"><br></p><p>الثاني</p>']);
@@ -100,8 +103,8 @@ class RichEditorFontSizeTest extends TestCase
         // Four paragraphs in Word too: the two empty lines kept.
         $this->assertMatchesRegularExpression('/الأول.*(<w:p\b.*){2}.*الثاني/su', $document);
         $this->assertSame(2, substr_count($document, "\u{00A0}</w:t>"));
-        // 14 pt: Word counts half points.
-        $this->assertStringContainsString('<w:sz w:val="28"/>', $styles);
+        // 12 pt, as in the editor: Word counts half points.
+        $this->assertStringContainsString('<w:sz w:val="24"/>', $styles);
     }
 
     public function test_sizes_and_colours_reach_the_pdf_word_and_email(): void

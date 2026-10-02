@@ -12,6 +12,7 @@ use App\Filament\Mms\Resources\CalendarEvents\CalendarEventResource;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
+use App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager;
 use App\Helpers\FileUploadHelper;
 use App\Models\CalendarEvent;
 use App\Models\IncentiveAssistantLine;
@@ -164,6 +165,19 @@ class MatterInfolist
                                     'ownerRecord' => $record,
                                     'pageClass' => ViewMatter::class,
                                 ])->key('matter-letters'),
+                            ]),
+                        // Meeting minutes (محاضر): prepared, filled in at the
+                        // meeting, finalised.
+                        Tab::make(__('Meeting minutes'))
+                            ->icon('heroicon-o-clipboard-document-list')
+                            ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_MINUTES_TAB)
+                                && ScreenPermissions::can(ScreenPermissions::MATTER_MINUTES))
+                            ->badge(fn ($record) => $record ? ($record->minutes()->count() ?: null) : null)
+                            ->schema([
+                                Livewire::make(MinutesRelationManager::class, fn ($record) => [
+                                    'ownerRecord' => $record,
+                                    'pageClass' => ViewMatter::class,
+                                ])->key('matter-minutes'),
                             ]),
                     ]),
             ]);

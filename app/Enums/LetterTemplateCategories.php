@@ -13,6 +13,7 @@ enum LetterTemplateCategories: string implements HasColor, HasLabel
     case MEETING_NOTICES = 'meeting_notices';
     case APPOINTMENTS = 'appointments';
     case REPORTS = 'reports';
+    case MINUTES = 'minutes';
     case OTHERS = 'others';
 
     public function getColor(): string|array|null
@@ -23,6 +24,7 @@ enum LetterTemplateCategories: string implements HasColor, HasLabel
             self::MEETING_NOTICES => 'info',
             self::APPOINTMENTS => 'primary',
             self::REPORTS => 'danger',
+            self::MINUTES => 'info',
             self::OTHERS => 'gray',
         };
     }
@@ -35,6 +37,7 @@ enum LetterTemplateCategories: string implements HasColor, HasLabel
             self::MEETING_NOTICES => __('Meeting Notices'),
             self::APPOINTMENTS => __('Appointments'),
             self::REPORTS => __('Reports'),
+            self::MINUTES => __('Meeting minutes'),
             self::OTHERS => __('Others'),
         };
     }

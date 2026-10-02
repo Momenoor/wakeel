@@ -636,7 +636,7 @@ class LetterBuilderTest extends TestCase
         $forLiquidation->types()->sync([$liquidation->id]);
         $inactive = LetterTemplate::create(['name' => 'قديم', 'slug' => 'old', 'locale' => 'ar', 'category' => 'letter', 'subject' => 's', 'body' => 'b', 'is_active' => false]);
 
-        $offered = fn (?int $typeId) => LetterTemplate::query()->forMatterType($typeId)->pluck('slug')->sort()->values()->all();
+        $offered = fn (?int $typeId) => LetterTemplate::query()->forMatterType($typeId)->where('category', '!=', 'minutes')->pluck('slug')->sort()->values()->all();
 
         // $this->template has no types: offered for every type.
         $this->assertSame(['both', 'notice'], $offered($insolvency->id));

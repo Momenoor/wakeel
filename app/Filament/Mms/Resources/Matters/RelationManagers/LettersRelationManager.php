@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 
+use App\Enums\LetterTemplateCategories;
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Support\RichEditorDirection;
 use App\Models\CalendarEvent;
@@ -781,7 +782,7 @@ class LettersRelationManager extends RelationManager
                     Select::make('letter_template_id')
                         ->label(__('Template'))
                         // Only the templates for this matter's type (and those for every type).
-                        ->options(fn () => LetterTemplate::query()->forMatterType($matter->type_id)->orderBy('name')->pluck('name', 'id'))
+                        ->options(fn () => LetterTemplate::query()->forMatterType($matter->type_id)->where('category', '!=', LetterTemplateCategories::MINUTES->value)->orderBy('name')->pluck('name', 'id'))
                         ->searchable()
                         ->required()
                         ->live()

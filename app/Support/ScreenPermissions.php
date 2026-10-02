@@ -30,6 +30,8 @@ final class ScreenPermissions
 
     public const MATTER_LETTERS = 'View:MatterLettersRelation';
 
+    public const MATTER_MINUTES = 'View:MatterMinutesRelation';
+
     public const PARTY_MATTERS = 'View:PartyMattersRelation';
 
     public const PAYROLL_PAYSLIPS = 'View:PayrollRunPayslipsRelation';
@@ -58,6 +60,8 @@ final class ScreenPermissions
     public const MATTER_FILES_TAB = 'View:MatterFilesTab';
 
     public const MATTER_LETTERS_TAB = 'View:MatterLettersTab';
+
+    public const MATTER_MINUTES_TAB = 'View:MatterMinutesTab';
 
     // ── Matters list tabs ────────────────────────────────────────────────
     public const MATTERS_ALL_TAB = 'View:MattersAllTab';
@@ -122,6 +126,7 @@ final class ScreenPermissions
             self::EMPLOYEE_LEAVE_BALANCE => ['View:PayrollRun'],
             self::EMPLOYEE_FLIGHT_TICKETS => ['View:PayrollRun'],
             self::MATTER_LETTERS => $matterViewers,
+            self::MATTER_MINUTES => $matterViewers,
             self::PARTY_MATTERS => ['View:Party'],
             self::PAYROLL_PAYSLIPS => ['View:PayrollRun'],
             self::TYPE_FIELD_DEFINITIONS => ['View:Type'],
@@ -137,6 +142,7 @@ final class ScreenPermissions
             self::MATTER_REQUESTS_TAB => $matterViewers,
             self::MATTER_FILES_TAB => $matterViewers,
             self::MATTER_LETTERS_TAB => $matterViewers,
+            self::MATTER_MINUTES_TAB => $matterViewers,
 
             self::MATTERS_ALL_TAB => $matterListers,
             self::MATTERS_IN_PROGRESS_TAB => $matterListers,

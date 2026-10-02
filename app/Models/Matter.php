@@ -409,6 +409,14 @@ class Matter extends Model
         return $this->hasMany(MatterLetter::class)->latest('id');
     }
 
+    /**
+     * Meetings' minutes on this matter, newest first.
+     */
+    public function minutes(): HasMany
+    {
+        return $this->hasMany(MatterMinutes::class)->latest('number');
+    }
+
     public function requests(): HasMany
     {
         return $this->hasMany(MatterRequest::class);

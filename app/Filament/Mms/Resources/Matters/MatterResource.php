@@ -68,6 +68,7 @@ class MatterResource extends Resource
     {
         return [
             RelationManagers\LettersRelationManager::class,
+            RelationManagers\MinutesRelationManager::class,
         ];
     }
 

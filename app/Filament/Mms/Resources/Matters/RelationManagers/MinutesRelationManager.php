@@ -1,0 +1,388 @@
+<?php
+
+namespace App\Filament\Mms\Resources\Matters\RelationManagers;
+
+use App\Enums\LetterTemplateCategories;
+use App\Filament\Concerns\HasRelationManagerPermission;
+use App\Models\CalendarEvent;
+use App\Models\Letterhead;
+use App\Models\LetterTemplate;
+use App\Models\MatterMinutes;
+use App\Services\MMS\Letters\MinutesService;
+use App\Support\ScreenPermissions;
+use Carbon\Carbon;
+use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\TimePicker;
+use Filament\Forms\Components\Toggle;
+use Filament\Notifications\Notification;
+use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
+
+/**
+ * A matter's meeting minutes (محاضر): prepared with the questions to ask —
+ * on the matter's calendar meeting, its date, time and Teams link — then
+ * filled in at the meeting: who attended (their ID numbers and phones),
+ * the answers, the template's own fields (deadlines…). Numbered per
+ * matter, previewed and downloaded like letters; finalised, its PDF is
+ * filed with the matter's attachments.
+ */
+class MinutesRelationManager extends RelationManager
+{
+    use HasRelationManagerPermission;
+
+    protected static string $relationship = 'minutes';
+
+    public static function viewPermission(): string
+    {
+        return ScreenPermissions::MATTER_MINUTES;
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('Minutes');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('Meeting minutes');
+    }
+
+    public static function getTitle(Model $ownerRecord, string $pageClass): string
+    {
+        return __('Meeting minutes');
+    }
+
+    public function table(Table $table): Table
+    {
+        return $table
+            ->recordTitleAttribute('number')
+            ->defaultSort('number', 'desc')
+            ->columns([
+                TextColumn::make('number')->label(__('No.'))->formatStateUsing(fn ($state) => '('.$state.')')->weight('bold')->sortable(),
+                TextColumn::make('meeting_at')->label(__('Meeting'))->dateTime('d/m/Y H:i')->sortable(),
+                TextColumn::make('template.name')->label(__('Template'))->wrap(),
+                TextColumn::make('answered')
+                    ->label(__('Answered'))
+                    ->state(fn (MatterMinutes $record) => $record->progress()['answered'].' / '.$record->progress()['total']),
+                TextColumn::make('present')
+                    ->label(__('Attended'))
+                    ->state(fn (MatterMinutes $record) => collect($record->attendees ?? [])->where('present', true)->count()),
+                TextColumn::make('status')
+                    ->label(__('Status'))
+                    ->badge()
+                    ->formatStateUsing(fn (string $state) => $state === MatterMinutes::FINAL ? __('Final') : __('Draft'))
+                    ->color(fn (string $state) => $state === MatterMinutes::FINAL ? 'success' : 'warning'),
+            ])
+            ->headerActions([$this->newAction()])
+            ->recordActions([
+                $this->recordAction(),
+                $this->previewAction(),
+                Action::make('pdf')
+                    ->label('PDF')
+                    ->icon('heroicon-o-document-arrow-down')
+                    ->url(fn (MatterMinutes $record) => route('minutes.pdf', $record), shouldOpenInNewTab: true),
+                ActionGroup::make([
+                    Action::make('word')
+                        ->label('Word')
+                        ->icon('heroicon-o-document-text')
+                        ->url(fn (MatterMinutes $record) => route('minutes.docx', $record)),
+                    $this->finaliseAction(),
+                    $this->reopenAction(),
+                    $this->deleteAction(),
+                ]),
+            ]);
+    }
+
+    private function canChange(): bool
+    {
+        return auth()->user()?->can('update', $this->getOwnerRecord()) ?? false;
+    }
+
+    /**
+     * New minutes: the template, the meeting (from the matter's calendar,
+     * or a date and time), and the questions to ask.
+     */
+    private function newAction(): Action
+    {
+        $matter = $this->getOwnerRecord();
+
+        return Action::make('newMinutes')
+            ->label(__('New minutes'))
+            ->icon('heroicon-o-clipboard-document-list')
+            ->modalWidth('4xl')
+            ->visible(fn (): bool => $this->canChange())
+            ->fillForm(function () use ($matter): array {
+                // The matter's next meeting, else its latest.
+                $event = CalendarEvent::query()->where('matter_id', $matter->getKey())->where('start_datetime', '>=', now()->startOfDay())->orderBy('start_datetime')->first()
+                    ?? CalendarEvent::query()->where('matter_id', $matter->getKey())->latest('start_datetime')->first();
+
+                return [
+                    'letter_template_id' => LetterTemplate::query()->where('category', LetterTemplateCategories::MINUTES->value)->where('is_active', true)->value('id'),
+                    'calendar_event_id' => $event?->getKey(),
+                    'meeting_at' => $event?->start_datetime?->format('Y-m-d H:i:s'),
+                    'questions' => [],
+                ];
+            })
+            ->schema([
+                Section::make()
+                    ->columns(2)
+                    ->schema([
+                        Select::make('letter_template_id')
+                            ->label(__('Template'))
+                            ->options(fn () => LetterTemplate::query()->where('category', LetterTemplateCategories::MINUTES->value)->where('is_active', true)->orderBy('name')->pluck('name', 'id'))
+                            ->required()
+                            ->columnSpanFull(),
+                        Select::make('calendar_event_id')
+                            ->label(__('The meeting'))
+                            ->options(fn () => CalendarEvent::query()->where('matter_id', $matter->getKey())->latest('start_datetime')->limit(50)->get()
+                                ->mapWithKeys(fn (CalendarEvent $event) => [$event->getKey() => $event->start_datetime?->format('d/m/Y H:i').' — '.$event->title]))
+                            ->placeholder(__('Not on the calendar'))
+                            ->live()
+                            ->afterStateUpdated(fn ($state, Set $set) => $set('meeting_at', CalendarEvent::find($state)?->start_datetime?->format('Y-m-d H:i:s'))),
+                        DateTimePicker::make('meeting_at')
+                            ->label(__('Meeting date and time'))
+                            ->seconds(false)
+                            ->required(),
+                        Select::make('letterhead_id')
+                            ->label(__('Letterhead'))
+                            ->options(fn () => Letterhead::query()->orderBy('name')->pluck('name', 'id'))
+                            ->placeholder(__('The template\'s letterhead')),
+                    ]),
+                Section::make(__('Questions to ask'))
+                    ->description(__('Prepared now; at the meeting each gets its answer, and more can be added.'))
+                    ->schema([
+                        Repeater::make('questions')
+                            ->hiddenLabel()
+                            ->schema([Textarea::make('text')->hiddenLabel()->rows(2)->required()])
+                            ->addActionLabel(__('Add question'))
+                            ->reorderable(),
+                    ]),
+            ])
+            ->action(function (array $data) use ($matter): void {
+                $event = filled($data['calendar_event_id'] ?? null) ? CalendarEvent::find($data['calendar_event_id']) : null;
+
+                $minutes = $matter->minutes()->create([
+                    'letter_template_id' => $data['letter_template_id'],
+                    'letterhead_id' => $data['letterhead_id'] ?? null,
+                    'calendar_event_id' => $event?->getKey(),
+                    'number' => MatterMinutes::nextNumber($matter),
+                    'meeting_at' => Carbon::parse($data['meeting_at']),
+                    'meeting_link' => $event?->online_meeting_url,
+                    'items' => collect($data['questions'] ?? [])->pluck('text')->filter(fn ($text) => filled($text))
+                        ->map(fn ($text) => ['type' => 'question', 'text' => trim((string) $text), 'answer' => null])->values()->all(),
+                    'status' => MatterMinutes::DRAFT,
+                    'created_by' => auth()->id(),
+                ]);
+
+                Notification::make()->success()->title(__('Minutes (:number) prepared', ['number' => $minutes->number]))->send();
+            });
+    }
+
+    /**
+     * At the meeting: who attended, the answers, the template's own fields.
+     */
+    private function recordAction(): Action
+    {
+        return Action::make('recordMeeting')
+            ->label(__('Record the meeting'))
+            ->icon('heroicon-o-pencil-square')
+            ->modalWidth('7xl')
+            ->modalHeading(fn (MatterMinutes $record) => __('Minutes (:number)', ['number' => $record->number]))
+            ->visible(fn (MatterMinutes $record): bool => ! $record->isFinal() && $this->canChange())
+            ->fillForm(fn (MatterMinutes $record): array => [
+                'meeting_at' => $record->meeting_at?->format('Y-m-d H:i:s'),
+                'meeting_link' => $record->meeting_link,
+                'attendees' => $record->attendees ?: MinutesService::attendeeCandidates($record),
+                'items' => $record->items ?? [],
+                'inputs' => self::inputDefaults($record),
+            ])
+            ->schema(fn (MatterMinutes $record): array => [
+                Section::make()
+                    ->columns(2)
+                    ->schema([
+                        DateTimePicker::make('meeting_at')->label(__('Meeting date and time'))->seconds(false)->required(),
+                        TextInput::make('meeting_link')->label(__('Meeting link'))->url(),
+                    ]),
+                Section::make(__('Attendance'))
+                    ->description(__('Tick who attended. ID numbers typed here are remembered for next time.'))
+                    ->schema([
+                        Repeater::make('attendees')
+                            ->hiddenLabel()
+                            ->columns(12)
+                            ->addActionLabel(__('Add attendee'))
+                            ->reorderable()
+                            ->schema([
+                                Toggle::make('present')->label(__('Attended'))->inline(false)->columnSpan(1),
+                                Select::make('title')
+                                    ->label(__('Title'))
+                                    ->options(['الأستاذ/' => 'الأستاذ/', 'الأستاذة/' => 'الأستاذة/', 'السيد/' => 'السيد/', 'السيدة/' => 'السيدة/', 'Mr.' => 'Mr.', 'Ms.' => 'Ms.'])
+                                    ->placeholder('—')
+                                    ->columnSpan(2),
+                                TextInput::make('name')->label(__('Name'))->required()->columnSpan(3),
+                                TextInput::make('capacity')->label(__('Capacity'))->columnSpan(2),
+                                TextInput::make('id_number')->label(__('ID number'))->columnSpan(2),
+                                TextInput::make('phone')->label(__('Phone'))->columnSpan(2),
+                                Hidden::make('party_id'),
+                            ]),
+                    ]),
+                Section::make(__('Questions and answers'))
+                    ->schema([
+                        Repeater::make('items')
+                            ->hiddenLabel()
+                            ->addActionLabel(__('Add question or comment'))
+                            ->reorderable()
+                            ->columns(4)
+                            ->schema([
+                                Select::make('type')
+                                    ->label(__('Kind'))
+                                    ->options(['question' => __('Question'), 'comment' => __('Comment')])
+                                    ->default('question')
+                                    ->required()
+                                    ->live(),
+                                Textarea::make('text')
+                                    ->label(fn (Get $get) => $get('type') === 'comment' ? __('Comment') : __('Question'))
+                                    ->rows(2)
+                                    ->required()
+                                    ->columnSpan(3),
+                                Textarea::make('answer')
+                                    ->label(__('Answer'))
+                                    ->rows(4)
+                                    ->visible(fn (Get $get) => $get('type') !== 'comment')
+                                    ->columnSpanFull(),
+                            ]),
+                    ]),
+                ...$this->templateFields($record->template),
+            ])
+            ->action(function (MatterMinutes $record, array $data): void {
+                $record->update([
+                    'meeting_at' => Carbon::parse($data['meeting_at']),
+                    'meeting_link' => $data['meeting_link'] ?? null,
+                    'attendees' => array_values(array_map(fn (array $a): array => [
+                        'present' => (bool) ($a['present'] ?? false),
+                        'title' => $a['title'] ?? null,
+                        'name' => (string) ($a['name'] ?? ''),
+                        'capacity' => $a['capacity'] ?? null,
+                        'id_number' => $a['id_number'] ?? null,
+                        'phone' => $a['phone'] ?? null,
+                        'party_id' => filled($a['party_id'] ?? null) ? (int) $a['party_id'] : null,
+                    ], $data['attendees'] ?? [])),
+                    'items' => array_values(array_map(fn (array $item): array => [
+                        'type' => ($item['type'] ?? 'question') === 'comment' ? 'comment' : 'question',
+                        'text' => trim((string) ($item['text'] ?? '')),
+                        'answer' => ($item['type'] ?? 'question') === 'comment' ? null : (filled($item['answer'] ?? null) ? trim((string) $item['answer']) : null),
+                    ], $data['items'] ?? [])),
+                    'inputs' => $data['inputs'] ?? [],
+                ]);
+
+                MinutesService::rememberIdNumbers($record);
+
+                Notification::make()->success()->title(__('Minutes (:number) saved', ['number' => $record->number]))->send();
+            });
+    }
+
+    /**
+     * The template's own fields (deadlines…), as the letters fill theirs.
+     *
+     * @return list<mixed>
+     */
+    private function templateFields(?LetterTemplate $template): array
+    {
+        $fields = collect($template?->inputs ?? [])
+            ->filter(fn (array $input) => filled($input['key'] ?? null) && ($input['type'] ?? 'text') !== 'items')
+            ->map(fn (array $input) => (match ($input['type'] ?? 'text') {
+                'date' => DatePicker::make('inputs.'.$input['key']),
+                'time' => TimePicker::make('inputs.'.$input['key'])->seconds(false),
+                'textarea' => Textarea::make('inputs.'.$input['key'])->rows(3)->columnSpanFull(),
+                'number' => TextInput::make('inputs.'.$input['key'])->numeric(),
+                'url' => TextInput::make('inputs.'.$input['key'])->url()->columnSpanFull(),
+                'select' => Select::make('inputs.'.$input['key'])->options(array_combine($input['options'] ?? [], $input['options'] ?? []) ?: []),
+                default => TextInput::make('inputs.'.$input['key']),
+            })->label($input['label'] ?? $input['key'])->required(! empty($input['required'])))
+            ->values()
+            ->all();
+
+        return $fields === [] ? [] : [Section::make(__('Details'))->columns(2)->schema($fields)];
+    }
+
+    /**
+     * Every template field with a value to start from (unset, a field the
+     * browser fills isn't reliably sent back).
+     *
+     * @return array<string, mixed>
+     */
+    private static function inputDefaults(MatterMinutes $record): array
+    {
+        return collect($record->template?->inputs ?? [])
+            ->filter(fn (array $input) => filled($input['key'] ?? null) && ($input['type'] ?? 'text') !== 'items')
+            ->mapWithKeys(fn (array $input) => [$input['key'] => $record->inputs[$input['key']] ?? null])
+            ->all();
+    }
+
+    private function previewAction(): Action
+    {
+        return Action::make('preview')
+            ->label(__('Preview'))
+            ->icon('heroicon-o-eye')
+            ->color('gray')
+            ->modalHeading(fn (MatterMinutes $record) => __('Minutes (:number)', ['number' => $record->number]))
+            ->modalWidth('6xl')
+            ->modalContent(fn (MatterMinutes $record) => view('filament.mms.letters.preview', [
+                'url' => route('minutes.pdf', $record).'?v='.$record->updated_at?->timestamp,
+                'title' => MinutesService::fileName($record),
+            ]))
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel(__('Close'));
+    }
+
+    private function finaliseAction(): Action
+    {
+        return Action::make('finalise')
+            ->label(__('Finalise'))
+            ->icon('heroicon-o-lock-closed')
+            ->color('success')
+            ->requiresConfirmation()
+            ->modalDescription(__('Its wording is kept as it is now and its PDF filed with the matter\'s attachments. It can be reopened to correct it.'))
+            ->visible(fn (MatterMinutes $record): bool => ! $record->isFinal() && $this->canChange())
+            ->action(function (MatterMinutes $record): void {
+                app(MinutesService::class)->finalise($record, auth()->id());
+
+                Notification::make()->success()->title(__('Minutes (:number) finalised and filed with the attachments', ['number' => $record->number]))->send();
+            });
+    }
+
+    private function reopenAction(): Action
+    {
+        return Action::make('reopen')
+            ->label(__('Reopen'))
+            ->icon('heroicon-o-lock-open')
+            ->color('warning')
+            ->requiresConfirmation()
+            ->visible(fn (MatterMinutes $record): bool => $record->isFinal() && $this->canChange())
+            ->action(fn (MatterMinutes $record) => $record->update(['status' => MatterMinutes::DRAFT]));
+    }
+
+    private function deleteAction(): Action
+    {
+        return Action::make('deleteMinutes')
+            ->label(__('Delete'))
+            ->icon('heroicon-o-trash')
+            ->color('danger')
+            ->requiresConfirmation()
+            ->modalDescription(__('The PDF already filed with the attachments stays there.'))
+            ->visible(fn (): bool => $this->canChange())
+            ->action(fn (MatterMinutes $record) => $record->delete());
+    }
+}

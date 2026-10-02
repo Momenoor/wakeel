@@ -104,6 +104,12 @@ class AppServiceProvider extends ServiceProvider
                 .'.fi-fo-rich-editor-merge-tags-list { max-height: 24rem; overflow-y: auto; overscroll-behavior: contain; }'
                 .'.fi-fo-rich-editor-merge-tag-btn { max-width: 100%; }'
                 .'.fi-fo-rich-editor span[data-type=mergeTag] { white-space: normal; overflow-wrap: anywhere; max-width: 100%; }'
+                // The text written in an editor at 12 pt — not the interface's
+                // size, which each user can change — and a placeholder at the
+                // size of the text around it, until a size is picked for it.
+                .'.fi-fo-rich-editor .fi-fo-rich-editor-content .fi-prose, .fi-fo-rich-editor .tiptap.ProseMirror { font-size: 12pt; line-height: 1.6; }'
+                .'.fi-fo-rich-editor .tiptap.ProseMirror h1 { font-size: 18pt; } .fi-fo-rich-editor .tiptap.ProseMirror h2 { font-size: 16pt; } .fi-fo-rich-editor .tiptap.ProseMirror h3 { font-size: 14pt; }'
+                .'.fi-fo-rich-editor .tiptap.ProseMirror span[data-type=mergeTag] { font-size: inherit; }'
                 .'</style>',
         );
 

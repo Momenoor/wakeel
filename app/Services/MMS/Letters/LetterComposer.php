@@ -33,13 +33,16 @@ use Illuminate\Support\Collection;
 class LetterComposer
 {
     /** Placeholders whose value is a block of HTML, not text. */
-    private const BLOCKS = ['recipients', 'signature', 'stamp'];
+    private const BLOCKS = ['recipients', 'signature', 'stamp', 'minutes.attendees', 'minutes.qa'];
 
     /** Where a letter keeps the Teams meeting made when it was issued ({{meeting.link}}). */
     public const MEETING_LINK = '__meeting_link';
 
     /** …and when it is ({{meeting.date}}, {{meeting.day}}, {{meeting.time}}). */
     public const MEETING_START = '__meeting_start';
+
+    /** A meeting's minutes ({{minutes.number}}, {{minutes.attendees}}, {{minutes.qa}}): {number, attendees, items}. */
+    public const MINUTES = '__minutes';
 
     public function __construct(
         public LetterTemplate $template,
@@ -167,6 +170,12 @@ class LetterComposer
         $values['meeting.date'] = $start ? $start->format('d/m/Y') : '';
         $values['meeting.day'] = $start ? $start->copy()->locale($this->isArabic() ? 'ar' : 'en')->translatedFormat('l') : '';
         $values['meeting.time'] = $start ? $this->time($start->format('H:i')) : '';
+
+        // A meeting's minutes: its number, who attended, the questions and answers.
+        $minutes = (array) ($this->inputs[self::MINUTES] ?? []);
+        $values['minutes.number'] = (string) ($minutes['number'] ?? '');
+        $values['minutes.attendees'] = $this->attendeesHtml((array) ($minutes['attendees'] ?? []));
+        $values['minutes.qa'] = $this->questionsHtml((array) ($minutes['items'] ?? []));
 
         $values['subject'] = BulkMailPlaceholders::apply((string) $this->template->subject, $values);
 
@@ -331,6 +340,56 @@ class LetterComposer
         return $html.$this->attentionHtml();
     }
 
+    /**
+     * Who attended, under their capacity ("وكيل المتنازعة:"), each on a line:
+     * "الأستاذ/ … – رقم الهوية: … – رقم الهاتف: …".
+     *
+     * @param  list<array<string, mixed>>  $attendees
+     */
+    private function attendeesHtml(array $attendees): string
+    {
+        $arabic = $this->isArabic();
+
+        return collect($attendees)
+            ->filter(fn ($a) => is_array($a) && ! empty($a['present']) && filled($a['name'] ?? null))
+            ->groupBy(fn (array $a) => trim((string) ($a['capacity'] ?? '')))
+            ->map(function ($group, string $capacity) use ($arabic): string {
+                $lines = $group->map(function (array $a) use ($arabic): string {
+                    $parts = [trim(trim((string) ($a['title'] ?? '')).' '.trim((string) $a['name']))];
+                    if (filled($a['id_number'] ?? null)) {
+                        $parts[] = ($arabic ? 'رقم الهوية: ' : 'ID No.: ').trim((string) $a['id_number']);
+                    }
+                    if (filled($a['phone'] ?? null)) {
+                        $parts[] = ($arabic ? 'رقم الهاتف: ' : 'Phone: ').trim((string) $a['phone']);
+                    }
+
+                    return '<p>'.e(implode(' – ', $parts)).'</p>';
+                })->implode('');
+
+                return ($capacity !== '' ? '<p><strong>'.e($capacity).':</strong></p>' : '').$lines;
+            })
+            ->implode('');
+    }
+
+    /**
+     * The questions asked (س:) each with its answer (ج:), and the comments
+     * made between them, in their order.
+     *
+     * @param  list<array<string, mixed>>  $items
+     */
+    private function questionsHtml(array $items): string
+    {
+        [$q, $a] = $this->isArabic() ? ['س:', 'ج:'] : ['Q:', 'A:'];
+        $text = fn ($value): string => nl2br(e(trim((string) $value)), false);
+
+        return collect($items)
+            ->filter(fn ($item) => is_array($item) && filled($item['text'] ?? null))
+            ->map(fn (array $item): string => ($item['type'] ?? 'question') === 'comment'
+                ? '<p>'.$text($item['text']).'</p>'
+                : '<p><strong>'.$q.'</strong> '.$text($item['text']).'</p><p><strong>'.$a.'</strong> '.$text($item['answer'] ?? '').'</p>')
+            ->implode('');
+    }
+
     private function attentionHtml(): string
     {
         if (blank($this->attention)) {
@@ -422,6 +481,9 @@ class LetterComposer
             'stamp' => __('Stamp'),
             'meeting.link' => __('Teams meeting link (when made on issue)'),
             'meeting.link.url' => __('Teams meeting link').' — '.__('full address'),
+            'minutes.number' => __('Minutes').' — '.__('number'),
+            'minutes.attendees' => __('Minutes').' — '.__('attendees'),
+            'minutes.qa' => __('Minutes').' — '.__('questions and answers'),
             'meeting.date' => __('Meeting date'),
             'meeting.day' => __('Meeting date').' — '.__('weekday'),
             'meeting.time' => __('Meeting time'),
