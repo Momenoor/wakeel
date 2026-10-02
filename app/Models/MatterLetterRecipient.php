@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable('matter_letter_id', 'recipient_id', 'email', 'emails', 'representatives', 'name_representatives', 'name', 'role', 'delivery_status', 'delivered_at', 'failure_reason')]
+#[Fillable('matter_letter_id', 'recipient_id', 'email', 'emails', 'phones', 'representatives', 'name_representatives', 'name', 'role', 'delivery_status', 'delivered_at', 'failure_reason')]
 class MatterLetterRecipient extends Model
 {
     public function casts(): array
@@ -16,6 +16,7 @@ class MatterLetterRecipient extends Model
         return [
             'delivered_at' => 'datetime',
             'emails' => 'array',
+            'phones' => 'array',
             'representatives' => 'array',
             'name_representatives' => 'boolean',
             'delivery_status' => LetterStatus::class,

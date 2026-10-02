@@ -99,11 +99,13 @@ class LetterComposer
     private static function candidate(MatterParty $mp, ?string $role): array
     {
         $emails = $mp->party?->email ?? [];
+        $phones = $mp->party?->phone ?? [];
 
         return [
             'name' => (string) $mp->party?->name,
             'role' => $role,
             'emails' => array_values(array_filter(is_array($emails) ? $emails : [$emails])),
+            'phones' => array_values(array_filter(is_array($phones) ? $phones : [$phones], 'filled')),
             'party_id' => $mp->party_id,
             'representatives' => [],
             'of' => null,
@@ -173,8 +175,29 @@ class LetterComposer
             // Line breaks kept (as HTML); a single line stays plain text.
             'textarea' => ['' => str_contains((string) $value, "\n") ? nl2br(e(trim((string) $value))) : (string) $value],
             'items' => ['' => $this->itemsHtml($input, (array) ($value ?? []))],
+            'url' => $this->link(trim((string) $value)),
             default => ['' => (string) $value],
         };
+    }
+
+    /**
+     * A link as a short clickable label: a Teams link is one 300-character
+     * word that breaks anywhere — and in Arabic its pieces are reordered.
+     * The address itself stays at {{input.KEY.url}}.
+     *
+     * @return array{'': string, '.url': string}
+     */
+    private function link(string $url): array
+    {
+        $meeting = (bool) preg_match('~(teams\.microsoft\.com|teams\.live\.com|zoom\.us|meet\.google\.com|webex\.com)~i', $url);
+        $label = match (true) {
+            $meeting && $this->isArabic() => 'انقر هنا للانضمام إلى الاجتماع',
+            $meeting => 'Click here to join the meeting',
+            $this->isArabic() => 'انقر هنا لفتح الرابط',
+            default => 'Click here to open the link',
+        };
+
+        return ['' => '<a href="'.e($url).'">'.e($label).'</a>', '.url' => $url];
     }
 
     private function time(string $value): string
@@ -231,7 +254,8 @@ class LetterComposer
         $done = [];
         $html = '';
 
-        $emails = fn (array $list): string => collect($list)->map(fn ($email) => '<p class="recipient-email" dir="ltr">'.e($email).'</p>')->implode('');
+        // Under each name, its emails then its phone numbers, left to right.
+        $emails = fn (array $list, array $phones = []): string => collect([...$list, ...$phones])->filter(fn ($line) => filled($line))->map(fn ($line) => '<p class="recipient-email" dir="ltr">'.e((string) $line).'</p>')->implode('');
         $line = fn (string $text): string => '<p class="recipient"><strong>'.$text.'</strong></p>';
         $addressee = function (array $recipient, string $after = '') use ($arabic, &$first): string {
             $prefix = $arabic ? ($first ? 'السادة/ ' : 'والسادة/ ') : ($first ? 'Messrs. ' : 'And Messrs. ');
@@ -253,14 +277,17 @@ class LetterComposer
             $representatives = $recipient['representatives'] ?? [];
 
             if ($representatives === []) {
-                $html .= $line($addressee($recipient)).$emails($recipient['emails'] ?? []);
+                $html .= $line($addressee($recipient)).$emails($recipient['emails'] ?? [], $recipient['phones'] ?? []);
 
                 continue;
             }
 
             if (empty($recipient['name_representatives'])) {
                 $html .= $line($addressee($recipient, $arabic ? ' ووكيله القانوني' : ' and their legal representative'))
-                    .$emails([...$recipient['emails'] ?? [], ...collect($representatives)->flatMap(fn ($rep) => $rep['emails'] ?? [])->all()]);
+                    .$emails(
+                        [...$recipient['emails'] ?? [], ...collect($representatives)->flatMap(fn ($rep) => $rep['emails'] ?? [])->all()],
+                        [...$recipient['phones'] ?? [], ...collect($representatives)->flatMap(fn ($rep) => $rep['phones'] ?? [])->all()],
+                    );
 
                 continue;
             }
@@ -271,13 +298,13 @@ class LetterComposer
 
             foreach ($group as $j => $party) {
                 $done[$j] = true;
-                $html .= $line($addressee($party)).$emails($party['emails'] ?? []);
+                $html .= $line($addressee($party)).$emails($party['emails'] ?? [], $party['phones'] ?? []);
             }
 
             $by = $arabic ? ($group->count() > 1 ? 'ووكيلهم' : 'ووكيله').' السادة/ ' : 'Represented by Messrs. ';
 
             foreach ($representatives as $rep) {
-                $html .= $line($by.e($rep['name']).($arabic ? ' المحترمين' : '')).$emails($rep['emails'] ?? []);
+                $html .= $line($by.e($rep['name']).($arabic ? ' المحترمين' : '')).$emails($rep['emails'] ?? [], $rep['phones'] ?? []);
             }
         }
 
@@ -320,7 +347,8 @@ class LetterComposer
 
         $blocks = array_filter($values, fn ($value, $key) => in_array($key, self::BLOCKS, true)
             || (str_starts_with($key, 'input.') && str_contains($value, '<ol>'))
-            || (str_starts_with($key, 'input.') && str_contains($value, '<br')), ARRAY_FILTER_USE_BOTH);
+            || (str_starts_with($key, 'input.') && str_contains($value, '<br'))
+            || (str_starts_with($key, 'input.') && str_starts_with($value, '<a href=')), ARRAY_FILTER_USE_BOTH);
 
         foreach ($blocks as $key => $value) {
             $pattern = '/<p[^>]*>\s*\{\{\s*'.preg_quote($key, '/').'\s*\}\}\s*<\/p>/iu';
@@ -384,6 +412,10 @@ class LetterComposer
 
             if (($input['type'] ?? null) === 'date') {
                 $catalog['input.'.$input['key'].'.day'] = ($input['label'] ?? $input['key']).' — '.__('weekday');
+            }
+
+            if (($input['type'] ?? null) === 'url') {
+                $catalog['input.'.$input['key'].'.url'] = ($input['label'] ?? $input['key']).' — '.__('full address');
             }
         }
 

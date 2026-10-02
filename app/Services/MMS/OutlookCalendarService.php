@@ -76,6 +76,14 @@ class OutlookCalendarService
             $payload['onlineMeetingProvider'] = 'teamsForBusiness';
         }
 
+        // Invited: Outlook emails each of them the invitation.
+        if (! empty($eventData['attendees'])) {
+            $payload['attendees'] = array_map(fn (array $attendee): array => [
+                'emailAddress' => ['address' => $attendee['email'], 'name' => $attendee['name'] ?? $attendee['email']],
+                'type' => 'required',
+            ], $eventData['attendees']);
+        }
+
         $response = Http::withToken($this->getAccessToken())
             ->post("https://graph.microsoft.com/v1.0/users/{$this->getUserEmail()}/events", $payload);
 

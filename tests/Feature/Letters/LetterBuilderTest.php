@@ -293,7 +293,7 @@ class LetterBuilderTest extends TestCase
 
         $expected = [
             'recipients' => [$candidateIds[1]],
-            'extra_recipients' => [['name' => 'Court clerk', 'role' => 'Clerk', 'emails' => ['clerk@court.ae']]],
+            'extra_recipients' => [['name' => 'Court clerk', 'role' => 'Clerk', 'emails' => ['clerk@court.ae'], 'phones' => []]],
         ];
 
         $page = Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class]);

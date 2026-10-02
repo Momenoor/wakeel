@@ -3291,5 +3291,16 @@
     "Shown here only: in a letter they come from its own letterhead.": "للعرض هنا فقط: في الخطاب يُؤخذان من ترويسته.",
     "Send back": "إرسال للخلف",
     "Bring forward": "إحضار للأمام",
-    "Lower in the list is drawn on top.": "الأدنى في القائمة يظهر في الأعلى."
+    "Lower in the list is drawn on top.": "الأدنى في القائمة يظهر في الأعلى.",
+    "This template has no link field for the meeting.": "لا يحتوي هذا القالب على حقل لرابط الاجتماع.",
+    "Fill in the meeting date and time first.": "أدخل تاريخ الاجتماع ووقته أولاً.",
+    "Outlook made the event but gave no Teams link: is Teams enabled for this mailbox?": "أنشأ Outlook الموعد لكنه لم يُعطِ رابط Teams: هل خدمة Teams مفعّلة لهذا البريد؟",
+    "Phones": "الهواتف",
+    "The Teams meeting could not be created": "تعذّر إنشاء اجتماع Teams",
+    "Create a Teams meeting in Outlook and put its link in the letter": "إنشاء اجتماع Teams في Outlook ووضع رابطه في الخطاب",
+    "On the meeting date and time above, on this matter's calendar.": "في تاريخ الاجتماع ووقته المحددين أعلاه، وفي تقويم هذه القضية.",
+    "Duration (minutes)": "المدة (بالدقائق)",
+    "Send the Outlook invitation to the recipients too": "إرسال دعوة Outlook إلى المرسل إليهم أيضاً",
+    "Off: the meeting is in your calendar only; the letter carries the link.": "عند الإيقاف: يُضاف الاجتماع إلى تقويمك فقط، ويحمل الخطاب الرابط.",
+    "full address": "الرابط كاملاً"
 }

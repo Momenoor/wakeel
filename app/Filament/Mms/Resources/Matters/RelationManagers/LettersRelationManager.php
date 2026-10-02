@@ -17,6 +17,7 @@ use App\Services\MMS\Letters\Blocks\SignatureBlock;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterMailer;
+use App\Services\MMS\Letters\LetterMeeting;
 use App\Services\MMS\SenderMailer;
 use App\Support\ScreenPermissions;
 use Carbon\Carbon;
@@ -499,7 +500,7 @@ class LettersRelationManager extends RelationManager
                 CheckboxList::make('recipients')
                     ->label(__('Recipients'))->hiddenLabel()
                     ->options(collect($candidates)->map(fn ($c) => trim($c['name'].($c['role'] ? ' ('.$c['role'].')' : '')))->all())
-                    ->descriptions(collect($candidates)->map(fn ($c) => trim(implode(' · ', $c['emails'])
+                    ->descriptions(collect($candidates)->map(fn ($c) => trim(implode(' · ', [...$c['emails'], ...$c['phones']])
                         .($c['representatives'] ? ' — '.__('With :names', ['names' => collect($c['representatives'])->pluck('name')->implode('، ')]) : ''), ' —'))->all())
                     ->default([])
                     ->bulkToggleable()
@@ -528,6 +529,7 @@ class LettersRelationManager extends RelationManager
                         TextInput::make('name')->label(__('Name'))->required(),
                         TextInput::make('role')->label(__('Capacity')),
                         TagsInput::make('emails')->label(__('Emails'))->nestedRecursiveRules(['email']),
+                        TagsInput::make('phones')->label(__('Phones')),
                     ]),
                 // Several recipients: one letter to all of them, or each
                 // their own letter (own reference, only them on it).
@@ -567,6 +569,7 @@ class LettersRelationManager extends RelationManager
                 'name' => (string) $r['name'],
                 'role' => $r['role'] ?? null,
                 'emails' => array_values($r['emails'] ?? []),
+                'phones' => array_values($r['phones'] ?? []),
             ])->values()->all(),
         ];
     }
@@ -604,6 +607,7 @@ class LettersRelationManager extends RelationManager
                 'name' => (string) $recipient->name,
                 'role' => $recipient->role,
                 'emails' => $recipient->emails ?: array_values(array_filter([$recipient->email])),
+                'phones' => $recipient->phones ?? [],
             ];
         }
 
@@ -715,8 +719,18 @@ class LettersRelationManager extends RelationManager
             ->modalWidth('5xl')
             ->modalSubmitActionLabel(__('Issue'))
             ->schema(fn () => $this->issueForm($this->getOwnerRecord()))
-            ->action(function (array $data) {
-                $this->notifyIssued($this->issue($this->getOwnerRecord(), $data));
+            ->action(function (array $data, Action $action) {
+                try {
+                    $this->notifyIssued($this->issue($this->getOwnerRecord(), $data));
+                } catch (\RuntimeException $e) {
+                    if (empty($data['create_meeting'])) {
+                        throw $e;
+                    }
+
+                    // No meeting, no letter: it would go out without its link.
+                    Notification::make()->danger()->title(__('The Teams meeting could not be created'))->body($e->getMessage())->persistent()->send();
+                    $action->halt();
+                }
             });
     }
 
@@ -824,14 +838,55 @@ class LettersRelationManager extends RelationManager
                 'textarea' => Textarea::make($name)->rows(3)->columnSpanFull(),
                 'date' => DatePicker::make($name),
                 'time' => TimePicker::make($name)->seconds(false),
-                'url' => TextInput::make($name)->url()->columnSpanFull(),
+                // Filled by the meeting made below, when it is.
+                'url' => TextInput::make($name)->url()->columnSpanFull()
+                    ->hidden(fn (Get $get): bool => (bool) $get('create_meeting')),
                 'number' => TextInput::make($name)->numeric(),
                 'select' => Select::make($name)->options(array_combine($input['options'] ?? [], $input['options'] ?? []) ?: []),
                 default => TextInput::make($name),
             })->label($label)->required($required);
         }
 
-        return $fields;
+        return [...$fields, ...$this->meetingFields($template)];
+    }
+
+    /**
+     * For a template with a meeting link: make the meeting now — on the
+     * matter's calendar and in Outlook, with Teams — and put its link in
+     * the letter.
+     *
+     * @return list<mixed>
+     */
+    private function meetingFields(?LetterTemplate $template): array
+    {
+        $fields = LetterMeeting::fields($template);
+
+        if (! $fields || ! app(LetterMeeting::class)->available()) {
+            return [];
+        }
+
+        return [
+            Section::make()
+                ->columnSpanFull()
+                ->columns(2)
+                ->schema([
+                    Toggle::make('create_meeting')
+                        ->label(__('Create a Teams meeting in Outlook and put its link in the letter'))
+                        ->helperText(__('On the meeting date and time above, on this matter\'s calendar.'))
+                        ->live()
+                        ->columnSpanFull(),
+                    TextInput::make('meeting_minutes')
+                        ->label(__('Duration (minutes)'))
+                        ->numeric()->minValue(15)->maxValue(480)
+                        ->default(60)
+                        ->visible(fn (Get $get): bool => (bool) $get('create_meeting')),
+                    Toggle::make('invite_recipients')
+                        ->label(__('Send the Outlook invitation to the recipients too'))
+                        ->helperText(__('Off: the meeting is in your calendar only; the letter carries the link.'))
+                        ->inline(false)
+                        ->visible(fn (Get $get): bool => (bool) $get('create_meeting')),
+                ]),
+        ];
     }
 
     /**
@@ -898,6 +953,18 @@ class LettersRelationManager extends RelationManager
         foreach ($data['extra'] ?? [] as $key => $lines) {
             $more = array_values(array_filter(array_map('trim', preg_split('/\R/', (string) $lines))));
             $inputs[$key] = [...array_values((array) ($inputs[$key] ?? [])), ...$more];
+        }
+
+        // The meeting it invites to, made first: its link goes in the letter.
+        if (! empty($data['create_meeting']) && ($fields = LetterMeeting::fields($template))) {
+            $attendees = ! empty($data['invite_recipients'])
+                ? collect($recipients)->flatMap(fn (array $r) => collect([...($r['emails'] ?? []), ...collect($r['representatives'] ?? [])->flatMap(fn ($rep) => $rep['emails'] ?? [])->all()])
+                    ->map(fn (string $email) => ['email' => $email, 'name' => $r['name']]))
+                    ->unique('email')->values()->all()
+                : [];
+
+            $event = app(LetterMeeting::class)->create($matter, $template, $inputs, (int) ($data['meeting_minutes'] ?? 60), $attendees, auth()->id());
+            $inputs[$fields['url']] = $event->online_meeting_url;
         }
 
         $date = filled($data['letter_date'] ?? null) ? Carbon::parse($data['letter_date']) : now();
