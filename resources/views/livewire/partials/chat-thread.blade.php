@@ -74,12 +74,31 @@
                     'rounded-br-md bg-gradient-to-br from-primary-600 to-primary-500 text-white' => $isMine,
                     'rounded-bl-md bg-gray-100 text-gray-950 dark:bg-white/10 dark:text-white' => ! $isMine,
                 ])>
-                    <p class="whitespace-pre-wrap break-words leading-relaxed">{{ $message->body }}</p>
+                    {{-- Escaped, with its links (and emails) clickable. --}}
+                    <p class="whitespace-pre-wrap break-words leading-relaxed">{!! \App\Support\Linkify::html($message->body) !!}</p>
                     <p @class([
                         'mt-1 text-end text-[10px] tracking-wide',
                         'text-white/70' => $isMine,
                         'text-gray-400' => ! $isMine,
-                    ])>{{ $message->created_at->translatedFormat('g:i A') }}</p>
+                    ]) style="display: flex; align-items: center; justify-content: flex-end; gap: 3px;">
+                        <span>{{ $message->created_at->translatedFormat('g:i A') }}</span>
+                        {{-- Mine: one tick sent, two delivered, two coloured read. --}}
+                        @if ($isMine)
+                            @php($status = $this->messageStatus($message))
+                            <span
+                                data-status="{{ $status }}"
+                                title="{{ ['sent' => __('Sent'), 'delivered' => __('Delivered'), 'read' => __('Read')][$status] }}"
+                                style="display: inline-flex; color: {{ $status === 'read' ? '#7dd3fc' : 'rgba(255,255,255,.75)' }};"
+                            >
+                                <svg viewBox="0 0 18 12" width="16" height="11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M1 6.5 4.5 10 11 2" />
+                                    @if ($status !== 'sent')
+                                        <path d="M7.5 9 8.5 10 15 2" />
+                                    @endif
+                                </svg>
+                            </span>
+                        @endif
+                    </p>
                 </div>
             </div>
         @endforeach

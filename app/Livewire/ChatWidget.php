@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Events\ChatMessageSent;
+use App\Events\ChatMessagesStatusChanged;
 use App\Filament\Mms\Pages\Chat;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
@@ -12,6 +13,7 @@ use App\Services\Push\WebPushSender;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
@@ -68,6 +70,7 @@ class ChatWidget extends Component
 
         $this->mode = $mode;
         $this->lastSeenMessageId = (int) $this->incomingMessages()->max('id');
+        $this->markIncomingDelivered();
 
         // The popup comes back as it was left — open, on the same
         // conversation — after a refresh or on the next page.
@@ -116,6 +119,8 @@ class ChatWidget extends Component
      */
     public function checkForNewMessages(): void
     {
+        $this->markIncomingDelivered();
+
         $latest = $this->incomingMessages()
             ->where('id', '>', $this->lastSeenMessageId)
             ->latest('id')
@@ -271,6 +276,8 @@ class ChatWidget extends Component
         // never arrives — messages then only showed at the next slow poll.
         return [
             'echo-private:App.Models.User.'.Auth::id().',.chat.message.sent' => 'onMessageReceived',
+            // Messages of mine delivered or read: the redraw shows the ticks.
+            'echo-private:App.Models.User.'.Auth::id().',.chat.status' => '$refresh',
         ];
     }
 
@@ -378,11 +385,89 @@ class ChatWidget extends Component
             return;
         }
 
+        $readBefore = $conversation->participants->firstWhere('id', Auth::id())?->pivot?->last_read_at;
         $conversation->participants()->updateExistingPivot(Auth::id(), ['last_read_at' => now()]);
+
+        // Their messages now read: their ticks turn.
+        $senders = ChatMessage::query()
+            ->where('chat_conversation_id', $conversation->id)
+            ->where('user_id', '!=', Auth::id())
+            ->when($readBefore, fn ($q) => $q->where('created_at', '>', $readBefore))
+            ->distinct()
+            ->pluck('user_id');
+        $this->tellSenders($senders->all(), $conversation->id);
 
         // The list is cached for the request; reload it so the badge and
         // the back-arrow dot count this conversation as read.
         unset($this->conversations);
+    }
+
+    /**
+     * Messages sent to this user arrived — their Wakeel is open: the
+     * second tick, the senders told.
+     */
+    private function markIncomingDelivered(): void
+    {
+        $pending = $this->incomingMessages()->whereNull('delivered_at');
+        $senders = (clone $pending)->select(['user_id', 'chat_conversation_id'])->distinct()->get();
+
+        if ($senders->isEmpty()) {
+            return;
+        }
+
+        $pending->update(['delivered_at' => now()]);
+
+        foreach ($senders->groupBy('chat_conversation_id') as $conversationId => $rows) {
+            $this->tellSenders($rows->pluck('user_id')->all(), (int) $conversationId);
+        }
+    }
+
+    /**
+     * @param  list<int|string>  $userIds
+     */
+    private function tellSenders(array $userIds, int $conversationId): void
+    {
+        $userIds = array_values(array_unique(array_map('intval', $userIds)));
+        if ($userIds === []) {
+            return;
+        }
+
+        defer(function () use ($userIds, $conversationId) {
+            try {
+                broadcast(new ChatMessagesStatusChanged($userIds, $conversationId));
+            } catch (Throwable $e) {
+                report($e);
+            }
+        });
+    }
+
+    /**
+     * When the others in the conversation on screen last read it — all of
+     * them, for a message of mine to count as read.
+     */
+    public function getReadByAllAtProperty(): ?Carbon
+    {
+        $others = $this->activeConversation?->participants->reject(fn (User $u) => $u->id === Auth::id());
+
+        if (! $others || $others->isEmpty() || $others->contains(fn (User $u) => ! $u->pivot?->last_read_at)) {
+            return null;
+        }
+
+        return $others->map(fn (User $u) => $u->pivot->last_read_at)->min();
+    }
+
+    /**
+     * A message of mine: 'read', 'delivered' or 'sent'.
+     */
+    public function messageStatus(ChatMessage $message): string
+    {
+        $read = $this->readByAllAt;
+
+        return match (true) {
+            $read !== null && $read->gte($message->created_at) => 'read',
+            $message->delivered_at !== null => 'delivered',
+            default => 'sent',
+        };
     }
 
     public function isConversationUnread(ChatConversation $conversation): bool

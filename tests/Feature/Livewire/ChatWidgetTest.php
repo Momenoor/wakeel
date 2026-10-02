@@ -3,6 +3,7 @@
 namespace Tests\Feature\Livewire;
 
 use App\Events\ChatMessageSent;
+use App\Events\ChatMessagesStatusChanged;
 use App\Http\Middleware\TrackUserLastSeen;
 use App\Livewire\ChatWidget;
 use App\Models\ChatConversation;
@@ -93,6 +94,60 @@ class ChatWidgetTest extends TestCase
             ->call('sendMessage', '  Sent at once  ');
 
         $this->assertSame('Sent at once', ChatMessage::sole()->body);
+    }
+
+    public function test_links_in_a_message_are_clickable_and_nothing_else_is_html(): void
+    {
+        $conversation = ChatConversation::betweenUsers($this->me, $this->colleague);
+        ChatMessage::create([
+            'chat_conversation_id' => $conversation->id,
+            'user_id' => $this->colleague->id,
+            'body' => "الرابط: https://teams.microsoft.com/l/meetup-join/19%3a?context=%7b%22Tid%22%7d.\nأو www.jpa.ae و info@jpa.ae <script>alert(1)</script>",
+        ]);
+
+        Livewire::test(ChatWidget::class)
+            ->call('startConversationWith', $this->colleague->id)
+            ->assertSeeHtml('<a href="https://teams.microsoft.com/l/meetup-join/19%3a?context=%7b%22Tid%22%7d" target="_blank" rel="noopener noreferrer"')
+            ->assertSeeHtml('%7b%22Tid%22%7d</a>.')
+            ->assertSeeHtml('<a href="https://www.jpa.ae"')
+            ->assertSeeHtml('<a href="mailto:info@jpa.ae"')
+            ->assertSeeHtml('&lt;script&gt;alert(1)&lt;/script&gt;')
+            ->assertDontSeeHtml('<script>alert(1)</script>');
+    }
+
+    public function test_my_messages_show_sent_then_delivered_then_read(): void
+    {
+        $this->withoutDefer();
+        Event::fake([ChatMessageSent::class, ChatMessagesStatusChanged::class]);
+
+        $mine = Livewire::test(ChatWidget::class)
+            ->call('startConversationWith', $this->colleague->id)
+            ->call('sendMessage', 'هل وصل؟');
+        $message = ChatMessage::sole();
+
+        // Not yet on their screen: one tick.
+        $mine->call('$refresh')->assertSeeHtml('data-status="sent"');
+
+        // Their Wakeel open, the chat on another conversation: delivered.
+        $this->actingAs($this->colleague);
+        Livewire::test(ChatWidget::class, ['mode' => 'popup']);
+        $this->assertNotNull($message->fresh()->delivered_at);
+        Event::assertDispatched(ChatMessagesStatusChanged::class, fn ($e) => $e->userIds === [$this->me->id]);
+
+        $this->actingAs($this->me);
+        $mine->call('$refresh')->assertSeeHtml('data-status="delivered"');
+
+        // They open the conversation: read.
+        $this->travel(1)->minutes();
+        $this->actingAs($this->colleague);
+        Livewire::test(ChatWidget::class)->call('selectConversation', $message->chat_conversation_id);
+        Event::assertDispatchedTimes(ChatMessagesStatusChanged::class, 2);
+
+        $this->actingAs($this->me);
+        $mine->call('$refresh')->assertSeeHtml('data-status="read"');
+
+        // Their own messages carry no ticks.
+        $this->assertSame(1, substr_count($mine->html(), 'data-status='));
     }
 
     public function test_the_broadcast_goes_to_every_participants_personal_channel(): void

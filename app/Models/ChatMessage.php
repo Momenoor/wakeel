@@ -11,6 +11,11 @@ class ChatMessage extends Model
         'chat_conversation_id',
         'user_id',
         'body',
+        'delivered_at',
+    ];
+
+    protected $casts = [
+        'delivered_at' => 'datetime',
     ];
 
     /**
