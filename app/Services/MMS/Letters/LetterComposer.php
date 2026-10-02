@@ -38,6 +38,9 @@ class LetterComposer
     /** Where a letter keeps the Teams meeting made when it was issued ({{meeting.link}}). */
     public const MEETING_LINK = '__meeting_link';
 
+    /** …and when it is ({{meeting.date}}, {{meeting.day}}, {{meeting.time}}). */
+    public const MEETING_START = '__meeting_start';
+
     public function __construct(
         public LetterTemplate $template,
         public Matter $matter,
@@ -152,9 +155,18 @@ class LetterComposer
         }
 
         // The Teams meeting made when the letter was issued: in any template.
+        // None made: nothing there, not "{{meeting.link}}" (the issuer says so).
         if (filled($meeting = $this->inputs[self::MEETING_LINK] ?? null)) {
             ['' => $values['meeting.link'], '.url' => $values['meeting.link.url']] = $this->link((string) $meeting);
+        } else {
+            $values['meeting.link'] = $values['meeting.link.url'] = '';
         }
+
+        // When it is, as the template's own date and time fields show them.
+        $start = filled($this->inputs[self::MEETING_START] ?? null) ? Carbon::parse($this->inputs[self::MEETING_START]) : null;
+        $values['meeting.date'] = $start ? $start->format('d/m/Y') : '';
+        $values['meeting.day'] = $start ? $start->copy()->locale($this->isArabic() ? 'ar' : 'en')->translatedFormat('l') : '';
+        $values['meeting.time'] = $start ? $this->time($start->format('H:i')) : '';
 
         $values['subject'] = BulkMailPlaceholders::apply((string) $this->template->subject, $values);
 
@@ -170,7 +182,7 @@ class LetterComposer
         $type = $input['type'] ?? 'text';
 
         if (blank($value) && $type !== 'items') {
-            return ['' => ''];
+            return $type === 'url' ? ['' => '', '.url' => ''] : ['' => ''];
         }
 
         return match ($type) {
@@ -410,6 +422,9 @@ class LetterComposer
             'stamp' => __('Stamp'),
             'meeting.link' => __('Teams meeting link (when made on issue)'),
             'meeting.link.url' => __('Teams meeting link').' — '.__('full address'),
+            'meeting.date' => __('Meeting date'),
+            'meeting.day' => __('Meeting date').' — '.__('weekday'),
+            'meeting.time' => __('Meeting time'),
             ...BulkMailPlaceholders::matterCatalog(),
         ];
 

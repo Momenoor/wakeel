@@ -6,9 +6,7 @@ use App\Models\BulkMailCampaign;
 use App\Models\BulkMailRecipient;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Storage;
-use Mpdf\Mpdf;
 use Mpdf\MpdfException;
-use Mpdf\Output\Destination;
 use ZipArchive;
 
 class BulkMailService
@@ -31,56 +29,17 @@ class BulkMailService
         $bcc = $campaign->bcc_emails ?? [];
         $attachments = $campaign->attachmentsFor($recipient);
 
-        // Detect if content is Arabic/RTL
-        $isRtl = self::containsArabic($subject.$html);
-
-        $mpdf = new Mpdf([
-            'mode' => 'utf-8',
-            'format' => 'A4',
-            'margin_top' => 25,
-            'margin_bottom' => 20,
-            'margin_left' => 15,
-            'margin_right' => 15,
-            'direction' => $isRtl ? 'rtl' : 'ltr',
-            'autoScriptToLang' => true,
-            'autoLangToFont' => true,
-            'autoArabic' => true,
-            'tempDir' => storage_path('app/mpdf-tmp'),
-        ]);
-
-        // Allow remote images (for logo/signature images from storage)
-        $mpdf->imageVars = [];
-
-        // Set document metadata
-        $mpdf->SetTitle($subject);
-        $mpdf->SetAuthor($sender['name']);
-
-        // Header (printed on every page like Outlook)
-        $mpdf->SetHTMLHeader('
-            <table dir="ltr" width="100%" style="font-size:8pt;color:#555;border-bottom:1px solid #ccc;padding-bottom:4px;">
-                <tr>
-                    <td>'.Carbon::parse($sentAt)->format('d/m/Y, H:i').'</td>
-                    <td align="right">Sent – '.htmlspecialchars($sender['name']).' – Outlook</td>
-                </tr>
-            </table>
-        ');
-
-        // Footer
-        $mpdf->SetHTMLFooter('
-            <table width="100%" style="font-size:7.5pt;color:#888;border-top:1px solid #ddd;padding-top:3px;">
-                <tr>
-                    <td>'.request()->url().'</td>
-                    <td align="right">{PAGENO} / {nbpg}</td>
-                </tr>
-            </table>
-        ');
-
-        $renderedHtml = view('mails.bulk-mail-pdf', compact(
-            'html', 'subject', 'sender', 'recipient',
-            'sentAt', 'cc', 'bcc', 'attachments', 'campaign', 'isRtl'
-        ))->render();
-
-        $mpdf->WriteHTML($renderedHtml);
+        $pdf = EmailPdf::render(
+            $subject,
+            $html,
+            $sender,
+            (string) $recipient->name,
+            array_values((array) $recipient->email),
+            $cc,
+            $bcc,
+            $attachments,
+            Carbon::parse($sentAt),
+        );
 
         // By id, not name: two recipients called the same overwrote each
         // other's PDF. The readable name is given on download instead.
@@ -91,7 +50,7 @@ class BulkMailService
             mkdir(dirname($fullPath), 0755, true);
         }
 
-        $mpdf->Output($fullPath, Destination::FILE);
+        file_put_contents($fullPath, $pdf);
 
         return $storagePath;
     }

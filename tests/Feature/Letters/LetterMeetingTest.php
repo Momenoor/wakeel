@@ -254,6 +254,67 @@ class LetterMeetingTest extends TestCase
         Sleep::assertSleptTimes(2);
     }
 
+    public function test_a_template_with_only_meeting_link_asks_for_the_date_and_time(): void
+    {
+        $this->fakeGraph();
+        // No link field, no date or time fields: {{meeting.link}}, as picked from the menu.
+        $template = LetterTemplate::create(['name' => 'دعوة', 'slug' => 'invite', 'locale' => 'ar', 'category' => 'letter', 'subject' => 'دعوة', 'inputs' => [],
+            'body' => '<p>{{recipients}}</p><p>يوم {{meeting.day}} الموافق {{meeting.date}} الساعة {{meeting.time}}</p><p>للانضمام: <span data-type="mergeTag" data-id="meeting.link">meeting.link</span></p>']);
+
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('issue')
+            ->setTableActionData(['letter_template_id' => $template->id])
+            ->assertMountedActionModalSee('Create a Teams meeting in Outlook and put its link in the letter')
+            ->setTableActionData([
+                'recipients' => array_keys(LetterComposer::candidates($this->matter)),
+                'create_meeting' => true,
+                'meeting_date' => '2026-10-07',
+                'meeting_time' => '13:00',
+            ])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+
+        $this->assertSame('2026-10-07 13:00', CalendarEvent::sole()->start_datetime->format('Y-m-d H:i'));
+        $html = MatterLetter::sole()->rendered_html;
+        // When it is, as the meeting was set.
+        $this->assertStringContainsString('يوم الأربعاء الموافق 07/10/2026 الساعة 1:00 مساءً', $html);
+        $this->assertStringContainsString('<a href="'.e(self::JOIN_URL).'">انقر هنا للانضمام إلى الاجتماع</a>', $html);
+        $this->assertStringNotContainsString('meeting.link', $html);
+    }
+
+    public function test_a_written_letter_can_make_its_meeting_too(): void
+    {
+        $this->fakeGraph();
+
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->callTableAction('write', data: [
+                'subject' => 'اجتماع',
+                'recipients' => array_keys(LetterComposer::candidates($this->matter)),
+                'body' => '<p>{{recipients}}</p><p>الرابط: {{meeting.link}}</p>',
+                'create_meeting' => true,
+                'meeting_date' => '2026-10-08',
+                'meeting_time' => '09:30',
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $this->assertSame('2026-10-08 09:30', CalendarEvent::sole()->start_datetime->format('Y-m-d H:i'));
+        $this->assertStringContainsString(e(self::JOIN_URL), MatterLetter::sole()->rendered_html);
+    }
+
+    public function test_meeting_link_without_a_meeting_is_said_and_not_printed(): void
+    {
+        $template = LetterTemplate::create(['name' => 'دعوة', 'slug' => 'invite', 'locale' => 'ar', 'category' => 'letter', 'subject' => 'دعوة', 'inputs' => [],
+            'body' => '<p>{{recipients}}</p><p>للانضمام: {{meeting.link}}</p>']);
+
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->callTableAction('issue', data: ['letter_template_id' => $template->id, 'recipients' => array_keys(LetterComposer::candidates($this->matter))])
+            ->assertHasNoTableActionErrors()
+            ->assertNotified(__('This letter has :placeholder, but no Teams meeting was created', ['placeholder' => '{'.'{meeting.link}'.'}']));
+
+        $this->assertStringNotContainsString('meeting.link', MatterLetter::sole()->rendered_html);
+        $this->assertSame(0, CalendarEvent::count());
+    }
+
     public function test_recipients_emails_and_phones_are_under_their_name(): void
     {
         $letter = app(LetterIssuer::class)->issue($this->template, $this->matter, [array_values(LetterComposer::candidates($this->matter))[0]], []);

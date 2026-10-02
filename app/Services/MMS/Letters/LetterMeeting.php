@@ -7,6 +7,7 @@ use App\Models\LetterTemplate;
 use App\Models\Matter;
 use App\Services\MMS\OutlookCalendarService;
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Sleep;
 use RuntimeException;
 use Throwable;
@@ -25,7 +26,8 @@ class LetterMeeting
      * whose key says "meeting", else the first of each) and every field
      * the link goes in — each Link field, and any text field whose key or
      * label says link / url / رابط / Teams. Null for a template that isn't
-     * about a meeting: no link field, and no meeting date and time.
+     * about a meeting: no link field, no {{meeting.link}} in its text, and
+     * no meeting date and time.
      *
      * @return array{url: ?string, links: list<string>, date: ?string, time: ?string}|null
      */
@@ -43,9 +45,21 @@ class LetterMeeting
 
         $date = $pick('date');
         $time = $pick('time');
-        $aboutAMeeting = $links !== [] || ($date && $time && preg_match($meeting, $date.' '.$time));
+        $aboutAMeeting = $links !== []
+            || self::usesMeetingLink((string) $template?->body)
+            || ($date && $time && preg_match($meeting, $date.' '.$time));
 
         return $aboutAMeeting ? ['url' => $links[0] ?? null, 'links' => $links, 'date' => $date, 'time' => $time] : null;
+    }
+
+    /**
+     * Whether a letter's text has the meeting's placeholders —
+     * {{meeting.link}}, {{meeting.date}}, {{meeting.day}}, {{meeting.time}}
+     * — typed, or picked from the editor's menu.
+     */
+    public static function usesMeetingLink(string $body): bool
+    {
+        return (bool) preg_match('/\{\{\s*meeting\.(link|date|day|time)[\w.]*\s*\}\}|data-id="meeting\.(link|date|day|time)/i', $body);
     }
 
     public function available(): bool
@@ -58,22 +72,27 @@ class LetterMeeting
      *
      * @param  array<string, mixed>  $inputs  the letter's inputs (its meeting date and time)
      * @param  list<array{email: string, name?: string}>  $attendees  invited by Outlook; none: the event alone
+     * @param  ?CarbonInterface  $start  when, if not from the template's own date and time fields
      *
      * @throws RuntimeException when it can't be made — nothing is left behind
      */
-    public function create(Matter $matter, LetterTemplate $template, array $inputs, int $minutes, array $attendees = [], ?int $userId = null): CalendarEvent
+    public function create(Matter $matter, LetterTemplate $template, array $inputs, int $minutes, array $attendees = [], ?int $userId = null, ?CarbonInterface $start = null): CalendarEvent
     {
-        $fields = self::fields($template) ?? throw new RuntimeException(__('This template is not about a meeting: it has no link field and no meeting date and time.'));
-        $date = $fields['date'] ? ($inputs[$fields['date']] ?? null) : null;
-        $time = $fields['time'] ? ($inputs[$fields['time']] ?? null) : null;
+        if (! $start) {
+            $fields = self::fields($template);
+            $date = $fields['date'] ?? null ? ($inputs[$fields['date']] ?? null) : null;
+            $time = $fields['time'] ?? null ? ($inputs[$fields['time']] ?? null) : null;
 
-        if (blank($date) || blank($time)) {
-            throw new RuntimeException(__('Fill in the meeting date and time first.'));
+            if (blank($date) || blank($time)) {
+                throw new RuntimeException(__('Fill in the meeting date and time first.'));
+            }
+
+            $start = Carbon::parse($date.' '.$time, config('app.timezone'));
         }
 
-        $start = Carbon::parse($date.' '.$time, config('app.timezone'));
+        $start = Carbon::instance($start);
         $end = $start->copy()->addMinutes(max(15, $minutes));
-        $title = $template->name.' — '.$matter->reference;
+        $title = trim(($template->name ?: $template->subject).' — '.$matter->reference, ' —');
 
         $event = CalendarEvent::create([
             'matter_id' => $matter->getKey(),

@@ -48,6 +48,9 @@ class LetterEmailTest extends TestCase
 
         Storage::fake('public');
 
+        // The sent email's PDF is kept after the response: at once here.
+        $this->withoutDefer();
+
         config([
             // The mailbox's smtp mailer delivers into memory here.
             'mail.mailers.smtp.transport' => 'array',
@@ -286,6 +289,25 @@ class LetterEmailTest extends TestCase
             ->assertMountedActionModalSee('نص الخطاب.')
             // The signature, inline in the preview.
             ->assertMountedActionModalSeeHtml('data:image/png;base64,');
+    }
+
+    public function test_the_sent_email_is_kept_on_the_matter_as_a_pdf(): void
+    {
+        app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::ATTACHMENT, null, ['pdf'], [$this->letter->recipients->first()->id], ['boss@jpa.ae']);
+
+        $attachment = $this->letter->matter->attachments()->sole();
+        $this->assertSame('correspondence', $attachment->type);
+        $this->assertSame('pdf', $attachment->extension);
+        $this->assertStringContainsString('JPA/2026/986/1', $attachment->name);
+        $this->assertStringContainsString('منى أحمد', $attachment->name);
+
+        $pdf = Storage::disk('public')->get($attachment->path);
+        $this->assertStringStartsWith('%PDF', $pdf);
+        $this->assertSame(strlen($pdf), (int) $attachment->size);
+
+        // Each email sent separately: one each.
+        app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::BODY, separate: true);
+        $this->assertSame(3, $this->letter->matter->attachments()->count());
     }
 
     public function test_the_email_templates_screen(): void

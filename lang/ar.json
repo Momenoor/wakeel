@@ -3310,5 +3310,10 @@
     "The Teams meeting was created, but this letter has no place for its link": "أُنشئ اجتماع Teams، لكن لا يوجد في هذا الخطاب مكان لرابطه",
     "Add :placeholder to the template's text where the link should go. The meeting is in the calendar: :link": "أضف :placeholder إلى نص القالب حيث يجب أن يظهر الرابط. الاجتماع موجود في التقويم: :link",
     "Teams meeting link (when made on issue)": "رابط اجتماع Teams (عند إنشائه مع الخطاب)",
-    "Teams meeting link": "رابط اجتماع Teams"
+    "Teams meeting link": "رابط اجتماع Teams",
+    "On this matter's calendar. The link goes where the letter has :placeholder.": "في تقويم هذه القضية. ويوضع الرابط حيث يوجد :placeholder في الخطاب.",
+    "Meeting date": "تاريخ الاجتماع",
+    "Meeting time": "وقت الاجتماع",
+    "This letter has :placeholder, but no Teams meeting was created": "يحتوي هذا الخطاب على :placeholder، لكن لم يُنشأ اجتماع Teams",
+    "Switch on \"Create a Teams meeting\" when issuing it, or take the placeholder out of the text.": "فعّل «إنشاء اجتماع Teams» عند إصداره، أو احذف هذا المتغير من النص."
 }

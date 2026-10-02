@@ -8,13 +8,17 @@ use App\Models\EmailTemplate;
 use App\Models\MatterLetter;
 use App\Models\MatterLetterRecipient;
 use App\Services\MMS\BulkMailPlaceholders;
+use App\Services\MMS\EmailPdf;
 use App\Services\MMS\SenderMailer;
 use App\Services\MMS\SentFolder;
 use App\Support\RichHtml;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+
+use function Illuminate\Support\defer;
 
 /**
  * Emails an issued letter through one of the department mailboxes:
@@ -90,6 +94,13 @@ class LetterMailer
                 $result['sent'] += max(1, $group->count());
 
                 $this->copyToSentFolder($senderKey, $sent?->toString());
+
+                // Kept with the matter, as it went — once the page has
+                // answered: a PDF takes a moment, and an email each adds up.
+                $keepTo = $to ?: $cc;
+                $keepCc = $to ? $cc : [];
+                $userId = auth()->id();
+                defer(fn () => $this->keepOnMatter($letter, $email, $sender, $group, $keepTo, $keepCc, $userId));
             } catch (\Throwable $e) {
                 $group->each(fn (MatterLetterRecipient $r) => $r->update([
                     'delivery_status' => LetterStatus::FAILED,
@@ -109,6 +120,59 @@ class LetterMailer
         }
 
         return $result;
+    }
+
+    /**
+     * The email as sent — sender, recipients, date, subject, its text and
+     * the names of what was attached — as a PDF among the matter's
+     * attachments. Sending never fails for it: a PDF that can't be made is
+     * logged, the email is still sent.
+     *
+     * @param  array<string, mixed>  $sender
+     * @param  Collection<int, MatterLetterRecipient>  $group
+     * @param  list<string>  $to
+     * @param  list<string>  $cc
+     */
+    private function keepOnMatter(MatterLetter $letter, LetterEmail $email, array $sender, Collection $group, array $to, array $cc, ?int $userId): void
+    {
+        if (! $letter->matter_id) {
+            return;
+        }
+
+        try {
+            // Its images from their files (in the email, they're embedded).
+            $html = $email->letterHtml;
+            foreach ($email->images as $token => $path) {
+                $html = str_replace($token, $path, $html);
+            }
+
+            $names = $group->pluck('name')->filter()->implode('، ');
+            $pdf = EmailPdf::render(
+                $email->emailSubject,
+                $html,
+                ['name' => (string) ($sender['name'] ?? ''), 'address' => (string) ($sender['address'] ?? '')],
+                $names,
+                $to,
+                $cc,
+                [],
+                array_column($email->files, 'name'),
+                now(),
+            );
+
+            $path = 'attachments/letter-emails/'.$letter->getKey().'/'.now()->format('Ymd-His').'-'.Str::random(6).'.pdf';
+            Storage::disk('public')->put($path, $pdf);
+
+            $letter->matter->attachments()->create([
+                'user_id' => $userId,
+                'type' => 'correspondence',
+                'path' => $path,
+                'name' => Str::limit(trim(__('Email').' — '.$letter->reference.($names !== '' ? ' — '.$names : '')), 200, '').'.pdf',
+                'size' => strlen($pdf),
+                'extension' => 'pdf',
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Letter email not kept on its matter', ['letter' => $letter->getKey(), 'error' => $e->getMessage()]);
+        }
     }
 
     /**

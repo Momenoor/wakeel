@@ -694,10 +694,9 @@ class LettersRelationManager extends RelationManager
                     ->schema([
                         self::bodyEditor(fn () => LetterComposer::catalog(), fn (): bool => true),
                     ]),
+                ...$this->meetingFields(null, ownDateAndTime: true),
             ])
-            ->action(function (array $data) {
-                $this->notifyIssued($this->issue($this->getOwnerRecord(), $data));
-            });
+            ->action(fn (array $data, Action $action) => $this->issueOrStop($data, $action));
     }
 
     /**
@@ -719,19 +718,27 @@ class LettersRelationManager extends RelationManager
             ->modalWidth('5xl')
             ->modalSubmitActionLabel(__('Issue'))
             ->schema(fn () => $this->issueForm($this->getOwnerRecord()))
-            ->action(function (array $data, Action $action) {
-                try {
-                    $this->notifyIssued($this->issue($this->getOwnerRecord(), $data));
-                } catch (\RuntimeException $e) {
-                    if (empty($data['create_meeting'])) {
-                        throw $e;
-                    }
+            ->action(fn (array $data, Action $action) => $this->issueOrStop($data, $action));
+    }
 
-                    // No meeting, no letter: it would go out without its link.
-                    Notification::make()->danger()->title(__('The Teams meeting could not be created'))->body($e->getMessage())->persistent()->send();
-                    $action->halt();
-                }
-            });
+    /**
+     * Issued — or, when its Teams meeting can't be made, not: it would go
+     * out without its link.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function issueOrStop(array $data, Action $action): void
+    {
+        try {
+            $this->notifyIssued($this->issue($this->getOwnerRecord(), $data));
+        } catch (\RuntimeException $e) {
+            if (empty($data['create_meeting'])) {
+                throw $e;
+            }
+
+            Notification::make()->danger()->title(__('The Teams meeting could not be created'))->body($e->getMessage())->persistent()->send();
+            $action->halt();
+        }
     }
 
     /**
@@ -858,13 +865,17 @@ class LettersRelationManager extends RelationManager
      *
      * @return list<mixed>
      */
-    private function meetingFields(?LetterTemplate $template): array
+    private function meetingFields(?LetterTemplate $template, bool $ownDateAndTime = false): array
     {
         $fields = LetterMeeting::fields($template);
 
-        if (! $fields || ! app(LetterMeeting::class)->available()) {
+        if ((! $fields && ! $ownDateAndTime) || ! app(LetterMeeting::class)->available()) {
             return [];
         }
+
+        // The template has no date and time for it: asked here.
+        $askWhen = $ownDateAndTime || blank($fields['date'] ?? null) || blank($fields['time'] ?? null);
+        $creating = fn (Get $get): bool => (bool) $get('create_meeting');
 
         return [
             Section::make()
@@ -873,9 +884,22 @@ class LettersRelationManager extends RelationManager
                 ->schema([
                     Toggle::make('create_meeting')
                         ->label(__('Create a Teams meeting in Outlook and put its link in the letter'))
-                        ->helperText(__('On the meeting date and time above, on this matter\'s calendar. The link goes where the template has its link field or :placeholder.', ['placeholder' => '{'.'{meeting.link}'.'}']))
+                        ->helperText($askWhen
+                            ? __('On this matter\'s calendar. The link goes where the letter has :placeholder.', ['placeholder' => '{'.'{meeting.link}'.'}'])
+                            : __('On the meeting date and time above, on this matter\'s calendar. The link goes where the template has its link field or :placeholder.', ['placeholder' => '{'.'{meeting.link}'.'}']))
                         ->live()
                         ->columnSpanFull(),
+                    ...($askWhen ? [
+                        DatePicker::make('meeting_date')
+                            ->label(__('Meeting date'))
+                            ->required($creating)
+                            ->visible($creating),
+                        TimePicker::make('meeting_time')
+                            ->label(__('Meeting time'))
+                            ->seconds(false)
+                            ->required($creating)
+                            ->visible($creating),
+                    ] : []),
                     TextInput::make('meeting_minutes')
                         ->label(__('Duration (minutes)'))
                         ->numeric()->minValue(15)->maxValue(480)
@@ -957,14 +981,19 @@ class LettersRelationManager extends RelationManager
         }
 
         // The meeting it invites to, made first: its link goes in the letter.
-        if (! empty($data['create_meeting']) && ($fields = LetterMeeting::fields($template))) {
+        if (! empty($data['create_meeting'])) {
+            $fields = LetterMeeting::fields($template) ?? ['links' => []];
+            $start = filled($data['meeting_date'] ?? null) && filled($data['meeting_time'] ?? null)
+                ? Carbon::parse($data['meeting_date'].' '.$data['meeting_time'], config('app.timezone'))
+                : null;
+
             $attendees = ! empty($data['invite_recipients'])
                 ? collect($recipients)->flatMap(fn (array $r) => collect([...($r['emails'] ?? []), ...collect($r['representatives'] ?? [])->flatMap(fn ($rep) => $rep['emails'] ?? [])->all()])
                     ->map(fn (string $email) => ['email' => $email, 'name' => $r['name']]))
                     ->unique('email')->values()->all()
                 : [];
 
-            $event = app(LetterMeeting::class)->create($matter, $template, $inputs, (int) ($data['meeting_minutes'] ?? 60), $attendees, auth()->id());
+            $event = app(LetterMeeting::class)->create($matter, $template, $inputs, (int) ($data['meeting_minutes'] ?? 60), $attendees, auth()->id(), $start);
             $meetingLink = (string) $event->online_meeting_url;
 
             // Every place the template has for it, and {{meeting.link}}.
@@ -972,6 +1001,7 @@ class LettersRelationManager extends RelationManager
                 $inputs[$key] = $meetingLink;
             }
             $inputs[LetterComposer::MEETING_LINK] = $meetingLink;
+            $inputs[LetterComposer::MEETING_START] = $event->start_datetime->format('Y-m-d H:i');
         }
 
         $date = filled($data['letter_date'] ?? null) ? Carbon::parse($data['letter_date']) : now();
@@ -987,6 +1017,16 @@ class LettersRelationManager extends RelationManager
             fn (array $group): MatterLetter => $issuer->issue($template, $matter, $group, $inputs, $date, $letterhead, auth()->id(), $data['attention'] ?? null),
             $groups,
         );
+
+        // Uses the meeting's link, but no meeting was made: say so.
+        if (! isset($meetingLink) && LetterMeeting::usesMeetingLink((string) $template->body)) {
+            Notification::make()
+                ->warning()
+                ->title(__('This letter has :placeholder, but no Teams meeting was created', ['placeholder' => '{'.'{meeting.link}'.'}']))
+                ->body(__('Switch on "Create a Teams meeting" when issuing it, or take the placeholder out of the text.'))
+                ->persistent()
+                ->send();
+        }
 
         // Made, but with nowhere in the letter to show: say so, and how.
         if (isset($meetingLink) && ! str_contains((string) $letters[0]->rendered_html, e($meetingLink))) {
