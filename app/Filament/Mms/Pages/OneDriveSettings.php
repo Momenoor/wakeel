@@ -71,6 +71,7 @@ class OneDriveSettings extends Page
         $this->form->fill([
             'enabled' => MatterOneDriveFolders::enabled(),
             'subfolders' => Setting::get(MatterOneDriveFolders::SUBFOLDERS, ''),
+            'signed_minutes' => MatterOneDriveFolders::signedMinutesFolder(),
         ]);
     }
 
@@ -93,6 +94,11 @@ class OneDriveSettings extends Page
                             ->label(__('Standard subfolders'))
                             ->helperText(__('One per line, in order. Use "/" for a folder inside another, e.g. "02 المستندات/من المدعي". Changes apply to folders made from now on; existing folders stay as they are.'))
                             ->rows(10)
+                            ->extraInputAttributes(['dir' => 'auto']),
+                        TextInput::make('signed_minutes')
+                            ->label(__('Signed minutes subfolder'))
+                            ->helperText(__('Signed minutes sent back on WhatsApp are saved here, inside the matter\'s folder (made when missing). Use "/" for a folder inside another.'))
+                            ->required()
                             ->extraInputAttributes(['dir' => 'auto']),
                     ]),
 
@@ -174,6 +180,7 @@ class OneDriveSettings extends Page
 
         Setting::set(MatterOneDriveFolders::ENABLED, $enable, 'onedrive');
         Setting::set(MatterOneDriveFolders::SUBFOLDERS, trim((string) ($state['subfolders'] ?? '')), 'onedrive');
+        Setting::set(MatterOneDriveFolders::SIGNED_MINUTES, trim((string) ($state['signed_minutes'] ?? '')), 'onedrive');
 
         Notification::make()->title(__('Settings saved successfully'))->success()->send();
     }

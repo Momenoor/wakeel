@@ -235,6 +235,25 @@ class LetterEmailTest extends TestCase
             ->assertSet('mountedActions.0.data.cc', []);
     }
 
+    public function test_a_letter_starts_with_its_templates_own_covering_email(): void
+    {
+        $default = EmailTemplate::create(['name' => 'Default', 'is_default' => true, 'subject' => 'عام', 'body' => '<p>عام</p>']);
+        $own = EmailTemplate::create(['name' => 'Own', 'subject' => 'خاص {{reference}}', 'body' => '<p>خاص</p>']);
+        $page = fn () => Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->letter->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('email', $this->letter);
+
+        $page()->assertTableActionDataSet(['email_template_id' => $default->id, 'subject' => 'عام']);
+
+        $this->letter->template->update(['email_template_id' => $own->id]);
+        $this->letter->refresh();
+        $page()->assertTableActionDataSet(['email_template_id' => $own->id, 'subject' => 'خاص JPA/2026/986/1']);
+
+        // Switched off: back to the default.
+        $own->update(['is_active' => false]);
+        $this->letter->refresh();
+        $page()->assertTableActionDataSet(['email_template_id' => $default->id]);
+    }
+
     public function test_the_email_is_previewed_and_can_be_changed_for_this_send_only(): void
     {
         $template = EmailTemplate::create([

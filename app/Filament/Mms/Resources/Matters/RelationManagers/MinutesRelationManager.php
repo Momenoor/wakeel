@@ -4,11 +4,19 @@ namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 
 use App\Enums\LetterTemplateCategories;
 use App\Filament\Concerns\HasRelationManagerPermission;
+use App\Filament\Support\RichEditorDirection;
+use App\Models\Attachment;
 use App\Models\CalendarEvent;
 use App\Models\Letterhead;
 use App\Models\LetterTemplate;
 use App\Models\MatterMinutes;
+use App\Models\MinutesDelivery;
+use App\Models\WhatsAppTemplate;
+use App\Services\MMS\Letters\LetterComposer;
+use App\Services\MMS\Letters\MinutesSender;
 use App\Services\MMS\Letters\MinutesService;
+use App\Services\MMS\SenderMailer;
+use App\Services\WhatsAppCloud;
 use App\Support\ScreenPermissions;
 use Carbon\Carbon;
 use Filament\Actions\Action;
@@ -16,7 +24,9 @@ use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -31,6 +41,7 @@ use Filament\Schemas\Components\View;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\HtmlString;
 
 /**
  * A matter's meeting minutes (محاضر): prepared with the questions to ask —
@@ -86,6 +97,10 @@ class MinutesRelationManager extends RelationManager
                     ->badge()
                     ->formatStateUsing(fn (string $state) => $state === MatterMinutes::FINAL ? __('Final') : __('Draft'))
                     ->color(fn (string $state) => $state === MatterMinutes::FINAL ? 'success' : 'warning'),
+                TextColumn::make('signed')
+                    ->label(__('Signed'))
+                    ->state(fn (MatterMinutes $record) => self::signedCount($record))
+                    ->placeholder('—'),
             ])
             ->headerActions([$this->newAction()])
             ->recordActions([
@@ -97,6 +112,7 @@ class MinutesRelationManager extends RelationManager
                     ->visible(fn (MatterMinutes $record): bool => ! $record->isFinal())
                     ->url(fn (MatterMinutes $record) => route('minutes.live', $record), shouldOpenInNewTab: true),
                 $this->previewAction(),
+                $this->sendAction(),
                 Action::make('pdf')
                     ->label('PDF')
                     ->icon('heroicon-o-document-arrow-down')
@@ -106,6 +122,7 @@ class MinutesRelationManager extends RelationManager
                         ->label('Word')
                         ->icon('heroicon-o-document-text')
                         ->url(fn (MatterMinutes $record) => route('minutes.docx', $record)),
+                    $this->signaturesAction(),
                     $this->finaliseAction(),
                     $this->reopenAction(),
                     $this->deleteAction(),
@@ -237,6 +254,8 @@ class MinutesRelationManager extends RelationManager
                 'attendees' => $record->attendees ?: MinutesService::attendeeCandidates($record),
                 'items' => $record->items ?? [],
                 'inputs' => self::inputDefaults($record),
+                'opening' => MinutesService::opening($record),
+                'closing' => MinutesService::closing($record),
             ])
             ->schema(fn (MatterMinutes $record): array => [
                 // Saved as it's typed, for the live view the attendees watch.
@@ -246,6 +265,12 @@ class MinutesRelationManager extends RelationManager
                     ->schema([
                         DateTimePicker::make('meeting_at')->label(__('Meeting date and time'))->seconds(false)->required(),
                         TextInput::make('meeting_link')->label(__('Meeting link'))->url(),
+                        Textarea::make('opening')
+                            ->label(__('Opening paragraph'))
+                            ->helperText(__('Where the template has {{minutes.opening}}. Placeholders and <<…>> parts work here.'))
+                            ->rows(3)
+                            ->visible(fn () => self::uses($record, 'minutes.opening'))
+                            ->columnSpanFull(),
                     ]),
                 Section::make(__('Attendance'))
                     ->description(__('Tick who attended. ID numbers typed here are remembered for next time.'))
@@ -296,6 +321,14 @@ class MinutesRelationManager extends RelationManager
                             ]),
                     ]),
                 ...$this->templateFields($record->template),
+                Section::make(__('Closing'))
+                    ->visible(fn () => self::uses($record, 'minutes.closing'))
+                    ->schema([
+                        Textarea::make('closing')
+                            ->label(__('Closing paragraph'))
+                            ->helperText(__('Where the template has {{minutes.closing}}. Placeholders and <<…>> parts work here — e.g. << at {{minutes.end_time}}>>, filled with the time it is finalised.'))
+                            ->rows(4),
+                    ]),
             ])
             ->action(function (MatterMinutes $record, array $data): void {
                 MinutesService::saveRecorded($record, $data);
@@ -304,6 +337,16 @@ class MinutesRelationManager extends RelationManager
 
                 Notification::make()->success()->title(__('Minutes (:number) saved', ['number' => $record->number]))->send();
             });
+    }
+
+    /**
+     * Whether the minutes' wording has this placeholder.
+     */
+    private static function uses(MatterMinutes $record, string $key): bool
+    {
+        $body = LetterComposer::normalizeMergeTags((string) ($record->body ?: $record->template?->body));
+
+        return (bool) preg_match('/\{\{\s*'.preg_quote($key, '/').'\s*\}\}/u', $body);
     }
 
     /**
@@ -369,11 +412,148 @@ class MinutesRelationManager extends RelationManager
             ->requiresConfirmation()
             ->modalDescription(__('Its wording is kept as it is now and its PDF filed with the matter\'s attachments. It can be reopened to correct it.'))
             ->visible(fn (MatterMinutes $record): bool => ! $record->isFinal() && $this->canChange())
-            ->action(function (MatterMinutes $record): void {
-                app(MinutesService::class)->finalise($record, auth()->id());
+            ->fillForm(fn (): array => ['ended_at' => now()->format('Y-m-d H:i:s')])
+            ->schema([
+                DateTimePicker::make('ended_at')
+                    ->label(__('Meeting ended at'))
+                    ->helperText(__('Fills {{minutes.end_time}} and {{minutes.end_date}}.'))
+                    ->seconds(false)
+                    ->required(),
+            ])
+            ->action(function (MatterMinutes $record, array $data): void {
+                app(MinutesService::class)->finalise($record, auth()->id(), Carbon::parse($data['ended_at']));
 
                 Notification::make()->success()->title(__('Minutes (:number) finalised and filed with the attachments', ['number' => $record->number]))->send();
             });
+    }
+
+    /**
+     * "2 / 3": of the attendees sent the minutes, how many sent them back
+     * signed. Nothing when none was sent.
+     */
+    private static function signedCount(MatterMinutes $record): ?string
+    {
+        $sent = $record->deliveries->where('status', '!=', MinutesDelivery::FAILED);
+
+        return $sent->isEmpty() ? null
+            : $sent->where('status', MinutesDelivery::SIGNED)->pluck('name')->unique()->count().' / '.$sent->pluck('name')->unique()->count();
+    }
+
+    /**
+     * Finalised minutes to the attendees, to sign and send back: by email
+     * and/or WhatsApp, each as ticked.
+     */
+    private function sendAction(): Action
+    {
+        return Action::make('sendForSignature')
+            ->label(__('Send to attendees'))
+            ->icon('heroicon-o-paper-airplane')
+            ->color('success')
+            ->modalWidth('5xl')
+            ->modalSubmitActionLabel(__('Send'))
+            ->visible(fn (MatterMinutes $record): bool => $record->isFinal() && $this->canChange())
+            ->fillForm(function (MatterMinutes $record): array {
+                $arabic = MinutesService::composer($record)->isArabic();
+
+                return [
+                    'recipients' => MinutesSender::recipients($record),
+                    'sender' => array_key_first(SenderMailer::options()),
+                    'subject' => MinutesSender::defaultSubject($arabic),
+                    'body' => MinutesSender::defaultBody($arabic),
+                    'whatsapp_template_id' => WhatsAppTemplate::default(WhatsAppTemplate::MINUTES_SIGNATURE)?->getKey(),
+                ];
+            })
+            ->schema(fn (MatterMinutes $record): array => [
+                Repeater::make('recipients')
+                    ->label(__('Attendees'))
+                    ->addActionLabel(__('Add recipient'))
+                    ->columns(12)
+                    ->schema([
+                        TextInput::make('name')->label(__('Name'))->required()->columnSpan(3),
+                        TextInput::make('email')->label(__('Email'))->email()->columnSpan(3),
+                        TextInput::make('phone')->label('WhatsApp')->tel()->columnSpan(2),
+                        Toggle::make('by_email')->label(__('By email'))->inline(false)->columnSpan(2),
+                        Toggle::make('by_whatsapp')->label(__('By WhatsApp'))->inline(false)->columnSpan(2),
+                        Hidden::make('party_id'),
+                    ]),
+                Section::make(__('Email'))
+                    ->collapsible()
+                    ->schema([
+                        Select::make('sender')->label(__('Send from'))->options(SenderMailer::options()),
+                        TextInput::make('subject')->label(__('Subject'))->required()->maxLength(255),
+                        RichEditor::make('body')
+                            ->label(__('Email'))
+                            ->helperText(__(':placeholder greets each by name; the minutes PDF is attached.', ['placeholder' => '{{recipient.name}}']))
+                            ->toolbarButtons([['bold', 'italic', 'underline', 'link'], ['bulletList', 'orderedList'], ['undo', 'redo']])
+                            ->tap(RichEditorDirection::apply(...))
+                            ->extraInputAttributes(['dir' => MinutesService::composer($record)->isArabic() ? 'rtl' : 'ltr']),
+                    ]),
+                Section::make('WhatsApp')
+                    ->collapsible()
+                    ->description(WhatsAppCloud::configured() ? null : __('WhatsApp is not set up (WHATSAPP_PHONE_ID and WHATSAPP_TOKEN in .env).'))
+                    ->schema([
+                        Select::make('whatsapp_template_id')
+                            ->label(__('WhatsApp template'))
+                            ->options(fn () => WhatsAppTemplate::query()->where('is_active', true)->where('purpose', WhatsAppTemplate::MINUTES_SIGNATURE)->pluck('name', 'id'))
+                            ->live(),
+                        Placeholder::make('whatsapp_preview')
+                            ->label(__('Preview'))
+                            ->content(function (Get $get) use ($record) {
+                                $template = WhatsAppTemplate::find($get('whatsapp_template_id'));
+                                $first = collect($get('recipients') ?? [])->first();
+
+                                return $template
+                                    ? new HtmlString('<div dir="auto" style="white-space: pre-line;">'.e($template->preview($template->parameterValues([
+                                        ...MinutesService::composer($record)->values(),
+                                        'recipient.name' => (string) ($first['name'] ?? ''),
+                                    ]))).'</div>')
+                                    : '—';
+                            }),
+                    ]),
+            ])
+            ->action(function (MatterMinutes $record, array $data): void {
+                $result = app(MinutesSender::class)->send(
+                    $record,
+                    array_values((array) ($data['recipients'] ?? [])),
+                    $data['sender'] ?? null,
+                    $data['subject'] ?? null,
+                    $data['body'] ?? null,
+                    filled($data['whatsapp_template_id'] ?? null) ? WhatsAppTemplate::find($data['whatsapp_template_id']) : null,
+                    auth()->id(),
+                );
+
+                $notification = Notification::make()
+                    ->title(__('Sent: :sent, failed: :failed', ['sent' => $result['sent'], 'failed' => $result['failed']]))
+                    ->body($result['errors'] ? implode("\n", $result['errors']) : null);
+
+                match (true) {
+                    $result['sent'] === 0 => $notification->danger(),
+                    $result['failed'] > 0 => $notification->warning(),
+                    default => $notification->success(),
+                };
+
+                $notification->send();
+            });
+    }
+
+    /**
+     * Who the minutes went to, how, and who sent them back signed — with
+     * the signed copies and their OneDrive place.
+     */
+    private function signaturesAction(): Action
+    {
+        return Action::make('signatures')
+            ->label(__('Signatures'))
+            ->icon('heroicon-o-check-badge')
+            ->visible(fn (MatterMinutes $record): bool => $record->deliveries->isNotEmpty())
+            ->modalHeading(fn (MatterMinutes $record) => __('Minutes (:number)', ['number' => $record->number]).' — '.__('Signatures'))
+            ->modalWidth('4xl')
+            ->modalContent(fn (MatterMinutes $record) => view('filament.mms.minutes.signatures', [
+                'deliveries' => $record->deliveries()->latest('id')->get(),
+                'attachments' => Attachment::query()->whereIn('id', $record->deliveries->flatMap(fn ($d) => $d->signed_attachments ?? []))->get()->keyBy('id'),
+            ]))
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel(__('Close'));
     }
 
     private function reopenAction(): Action

@@ -54,4 +54,10 @@ class Type extends Model
     {
         return $this->belongsToMany(MatterFieldDefinition::class, 'matter_field_definition_type');
     }
+
+    /** The letter templates offered for this type's matters. */
+    public function letterTemplates(): BelongsToMany
+    {
+        return $this->belongsToMany(LetterTemplate::class, 'letter_template_type');
+    }
 }

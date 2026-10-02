@@ -31,6 +31,43 @@ class Letterhead extends Model
 
     public const ELEMENT_TYPES = ['reference', 'date', 'text', 'image', 'logo', 'line', 'page_number'];
 
+    /** The page corner an element's x and y are measured from. */
+    public const ANCHORS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+
+    /**
+     * An element's corner: its x is from the left or the right edge of the
+     * page, its y from the top or the bottom.
+     *
+     * @param  array<string, mixed>  $element
+     * @return array{0: 'top'|'bottom', 1: 'left'|'right'}
+     */
+    public static function anchor(array $element): array
+    {
+        $anchor = in_array($element['anchor'] ?? null, self::ANCHORS, true) ? $element['anchor'] : 'top-left';
+
+        return explode('-', $anchor);
+    }
+
+    /**
+     * An element's top-left corner in mm from the page's, whatever corner
+     * it is placed from — its height as given (images: their height at
+     * their width).
+     *
+     * @param  array<string, mixed>  $element
+     * @return array{0: float, 1: float}
+     */
+    public static function topLeft(array $element, float $pageWidth, float $pageHeight, float $height = 0): array
+    {
+        [$vertical, $horizontal] = self::anchor($element);
+        $x = (float) ($element['x'] ?? 0);
+        $y = (float) ($element['y'] ?? 0);
+
+        return [
+            $horizontal === 'right' ? $pageWidth - $x - (float) ($element['width'] ?? 60) : $x,
+            $vertical === 'bottom' ? $pageHeight - $y - $height : $y,
+        ];
+    }
+
     public function casts(): array
     {
         return [

@@ -137,13 +137,13 @@ class LettersRelationManager extends RelationManager
                 'sender' => MatterLetter::query()->where('matter_id', $record->matter_id)->whereNotNull('sender_key')->latest('sent_at')->value('sender_key')
                     ?? array_key_first(SenderMailer::options()),
                 'mode' => LetterMailer::ATTACHMENT,
-                'email_template_id' => EmailTemplate::default()?->getKey(),
+                'email_template_id' => self::coverEmail($record)?->getKey(),
                 'formats' => ['pdf'],
                 'recipients' => $record->recipients->pluck('id')->all(),
                 'separate' => false,
                 // The matter's experts of the kinds System Settings names.
                 'cc' => self::ccEmails($record->matter),
-                ...app(LetterMailer::class)->draft($record, LetterMailer::ATTACHMENT, EmailTemplate::default()),
+                ...app(LetterMailer::class)->draft($record, LetterMailer::ATTACHMENT, self::coverEmail($record)),
             ])
             ->schema(fn (MatterLetter $record) => [
                 Select::make('sender')
@@ -271,6 +271,17 @@ class LettersRelationManager extends RelationManager
 
                 $notification->send();
             });
+    }
+
+    /**
+     * The covering email a letter goes with: its template's, otherwise the
+     * default one.
+     */
+    private static function coverEmail(MatterLetter $record): ?EmailTemplate
+    {
+        $own = $record->template?->emailTemplate;
+
+        return $own?->is_active ? $own : EmailTemplate::default();
     }
 
     /**

@@ -96,12 +96,19 @@ class AppServiceProvider extends ServiceProvider
         // Filament keeps each on one line, so a long name — an Arabic label,
         // "رابط اجتماع Teams (عند إنشائه مع الخطاب)" — ran past its narrow side
         // panel and out of the frame, and forty of them made the panel
-        // taller than the editor. They wrap, and the list scrolls.
+        // taller than the editor. They wrap, and the list scrolls. Beside
+        // the text (a wide editor), the panel runs the editor's full height —
+        // no taller, no shorter — and the list scrolls within it.
         FilamentView::registerRenderHook(
             PanelsRenderHook::HEAD_END,
             fn (): string => '<style>'
                 .'.fi-fo-rich-editor-panels { min-width: 0; }'
                 .'.fi-fo-rich-editor-merge-tags-list { max-height: 24rem; overflow-y: auto; overscroll-behavior: contain; }'
+                .'@container (min-width: 42rem) {'
+                .'.fi-fo-rich-editor .fi-fo-rich-editor-panels { position: relative; flex-shrink: 0; }'
+                .'.fi-fo-rich-editor .fi-fo-rich-editor-panels > .fi-fo-rich-editor-panel { position: absolute; inset: 0; display: flex; flex-direction: column; }'
+                .'.fi-fo-rich-editor .fi-fo-rich-editor-panels > .fi-fo-rich-editor-panel > :not(.fi-fo-rich-editor-panel-header) { flex: 1 1 0; min-height: 0; max-height: none; overflow-y: auto; overscroll-behavior: contain; align-content: flex-start; }'
+                .'}'
                 .'.fi-fo-rich-editor-merge-tag-btn { max-width: 100%; }'
                 .'.fi-fo-rich-editor span[data-type=mergeTag] { white-space: normal; overflow-wrap: anywhere; max-width: 100%; }'
                 // The text written in an editor at 12 pt — not the interface's

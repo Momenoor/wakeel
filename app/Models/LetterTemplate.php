@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * heading}] — type is text | textarea | date | time | url | number |
  * select | items (a numbered list ticked from the item library's group).
  */
-#[Fillable('name', 'slug', 'subject', 'body', 'placeholders', 'locale', 'is_active', 'is_default', 'category', 'letterhead_id', 'inputs')]
+#[Fillable('name', 'slug', 'subject', 'body', 'placeholders', 'locale', 'is_active', 'is_default', 'category', 'letterhead_id', 'inputs', 'minutes_opening', 'minutes_closing', 'email_template_id')]
 class LetterTemplate extends Model implements HasRichContent
 {
     use InteractsWithRichContent;
@@ -51,6 +51,12 @@ class LetterTemplate extends Model implements HasRichContent
     /**
      * The matter types this template is for — none means every type.
      */
+    /** The covering email it is sent with, unless another is chosen. */
+    public function emailTemplate(): BelongsTo
+    {
+        return $this->belongsTo(EmailTemplate::class);
+    }
+
     public function types(): BelongsToMany
     {
         return $this->belongsToMany(Type::class, 'letter_template_type');

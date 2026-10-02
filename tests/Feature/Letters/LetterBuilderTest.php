@@ -11,6 +11,7 @@ use App\Filament\Mms\Resources\LetterTemplates\Pages\CreateLetterTemplate;
 use App\Filament\Mms\Resources\LetterTemplates\Pages\ViewLetterTemplate;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
+use App\Filament\Mms\Resources\Types\Pages\ListTypes;
 use App\Models\CalendarEvent;
 use App\Models\Letterhead;
 use App\Models\LetterItem;
@@ -784,6 +785,77 @@ class LetterBuilderTest extends TestCase
         $this->assertEquals(11, $second['font_size']);
         $this->assertFalse((bool) $second['bold']);
         $this->assertSame('#dc2626', $second['color']);
+    }
+
+    public function test_elements_are_placed_from_any_corner_and_moved_with_the_keys(): void
+    {
+        $letterhead = Letterhead::create(['name' => 'Main', 'elements' => []]);
+
+        $designer = Livewire::test(DesignLetterhead::class, ['record' => $letterhead->getRouteKey()])
+            ->call('addElement', 'text')                  // 80 mm wide, at 20, 20 from the top left
+            ->call('nudge', 0, 0.5, 5)
+            ->assertSet('elements.0.x', 20.5)
+            ->assertSet('elements.0.y', 25.0)
+            // From the bottom right, staying where it is (10 mm high).
+            ->call('setAnchor', 0, 'bottom-right', 10)
+            ->assertSet('elements.0.anchor', 'bottom-right')
+            ->assertSet('elements.0.x', 109.5)              // 210 − 20.5 − 80
+            ->assertSet('elements.0.y', 262.0)              // 297 − 25 − 10
+            // Right and down on the page: nearer the right and bottom edges.
+            ->call('nudge', 0, 5, 0.5)
+            ->assertSet('elements.0.x', 104.5)
+            ->assertSet('elements.0.y', 261.5)
+            // Dropped with its top left 30 mm from the page's bottom.
+            ->call('moveElement', 0, 100, 257, 10)
+            ->assertSet('elements.0.x', 30.0)
+            ->assertSet('elements.0.y', 30.0)
+            ->assertSeeHtml('right: '.(30 / 210 * 100).'%; bottom: '.(30 / 297 * 100).'%;');
+
+        $designer->call('save');
+        $this->assertSame('bottom-right', $letterhead->fresh()->elements[0]['anchor']);
+
+        // The PDF places it from the same corner.
+        $composer = new LetterComposer(new LetterTemplate(['locale' => 'ar', 'subject' => 'S', 'body' => '<p>x</p>']), new Matter(['number' => '1', 'year' => 2026]), [], [], 'REF/1', now(), $letterhead);
+        $element = fn (array $e): string => (new ReflectionMethod(LetterPdf::class, 'element'))->invoke(new LetterPdf($composer), $e + ['type' => 'text', 'content' => 'x', 'x' => 12, 'y' => 8, 'width' => 80], $letterhead, true);
+        $this->assertStringContainsString('position: absolute; right: 12mm; bottom: 8mm;', $element(['anchor' => 'bottom-right']));
+        $this->assertStringContainsString('position: absolute; left: 12mm; top: 8mm;', $element([]));
+
+        // Word places from the top left: worked out from the page.
+        $this->assertSame([118.0, 279.0], Letterhead::topLeft(['anchor' => 'bottom-right', 'x' => 12, 'y' => 8, 'width' => 80], 210, 297, 10));
+    }
+
+    public function test_a_list_of_items_takes_the_size_its_placeholder_was_written_in(): void
+    {
+        $template = $this->template->replicate();
+        $template->body = '<p><span data-font-size="16pt" style="font-size: 16pt">{{input.documents}}</span></p><p>{{input.documents}}</p>';
+
+        $html = (new LetterComposer($template, $this->matter, ['documents' => [$this->items[0]]], [], 'REF/1', now()))->bodyHtml();
+
+        [$sized, $plain] = explode('</ol>', $html, 2);
+        $this->assertStringContainsString('<ol style="font-size: 16pt;"><li style="font-size: 16pt;">بيان موطن المدين.</li>', $sized);
+        $this->assertStringContainsString('<p style="font-size: 16pt;"><strong>من المدين:</strong></p>', $sized);
+        $this->assertStringNotContainsString('span', $sized);
+        $this->assertStringContainsString('<ol><li>بيان موطن المدين.</li></ol>', $plain.'</ol>');
+    }
+
+    public function test_letter_templates_are_assigned_to_matter_types_in_bulk(): void
+    {
+        [$first, $second] = Type::factory()->count(2)->create();
+        $other = LetterTemplate::create(['name' => 'آخر', 'slug' => 'other', 'locale' => 'ar', 'category' => 'letter', 'subject' => 's', 'body' => 'b']);
+        $other->types()->sync([$first->id]);
+
+        $table = Livewire::test(ListTypes::class);
+        $table->callTableBulkAction('assignLetters', [$first, $second], ['templates' => [$this->template->id], 'mode' => 'add'])
+            ->assertHasNoTableBulkActionErrors();
+
+        $this->assertEqualsCanonicalizing([$other->id, $this->template->id], $first->letterTemplates()->pluck('letter_templates.id')->all());
+        $this->assertSame([$this->template->id], $second->letterTemplates()->pluck('letter_templates.id')->all());
+
+        $table->callTableBulkAction('assignLetters', [$first], ['templates' => [$this->template->id], 'mode' => 'replace']);
+        $this->assertSame([$this->template->id], $first->letterTemplates()->pluck('letter_templates.id')->all());
+
+        $table->callTableBulkAction('assignLetters', [$first, $second], ['templates' => [$this->template->id], 'mode' => 'remove']);
+        $this->assertSame(0, $this->template->types()->count());
     }
 
     public function test_the_screens_open(): void

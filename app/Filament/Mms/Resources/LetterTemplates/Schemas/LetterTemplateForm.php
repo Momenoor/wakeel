@@ -14,6 +14,7 @@ use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Infolists\Components\TextEntry;
@@ -53,6 +54,7 @@ class LetterTemplateForm
                             ->label(__('Category'))
                             ->options(LetterTemplateCategories::class)
                             ->default(LetterTemplateCategories::LETTER)
+                            ->live()
                             ->required(),
                         Select::make('locale')
                             ->label(__('Language'))
@@ -64,6 +66,12 @@ class LetterTemplateForm
                             ->label(__('Letterhead'))
                             ->relationship('letterhead', 'name')
                             ->placeholder(__('The default letterhead'))
+                            ->preload(),
+                        Select::make('email_template_id')
+                            ->label(__('Covering email'))
+                            ->relationship('emailTemplate', 'name', fn ($query) => $query->where('is_active', true))
+                            ->placeholder(__('The default covering email'))
+                            ->helperText(__('Chosen when a letter from this template is sent by email; can be changed when sending.'))
                             ->preload(),
                         Toggle::make('is_active')
                             ->label(__('Active'))
@@ -152,6 +160,21 @@ class LetterTemplateForm
                             ]),
                     ]),
 
+                // Minutes: the wording their opening and closing start from,
+                // completed while recording the meeting.
+                Section::make(__('Opening and closing'))
+                    ->description(__('Put {{minutes.opening}} and {{minutes.closing}} where they belong in the wording below; this is the text they start from when the meeting is recorded, where it can be changed. Placeholders and <<…>> parts work here — e.g. << at {{minutes.end_time}}>>, the time the minutes are finalised.'))
+                    ->columnSpanFull()
+                    ->visible(fn (Get $get) => self::isMinutes($get('category')))
+                    ->schema([
+                        Textarea::make('minutes_opening')
+                            ->label(__('Opening paragraph'))
+                            ->rows(3),
+                        Textarea::make('minutes_closing')
+                            ->label(__('Closing paragraph'))
+                            ->rows(4),
+                    ]),
+
                 Section::make(__('Letter'))
                     ->columnSpanFull()
                     ->schema([
@@ -180,5 +203,10 @@ class LetterTemplateForm
                             ->state(new HtmlString(e(__('Insert placeholders from the { } menu, or type them: {{recipients}} puts the addressee block (put it alone on its own line), {{input.KEY}} what was filled in, {{input.KEY.day}} a date\'s weekday, {{signature}} and {{stamp}} the letterhead\'s images. The blocks menu has a ready signature block: the expert\'s name with the signature and stamp, placed where you drop it. Write a part between << and >> (or [[ and ]]) to print it only when its placeholders are filled — e.g. <<The meeting is at {{meeting.time}}.>>')))),
                     ]),
             ]);
+    }
+
+    private static function isMinutes(mixed $category): bool
+    {
+        return ($category instanceof LetterTemplateCategories ? $category->value : $category) === LetterTemplateCategories::MINUTES->value;
     }
 }

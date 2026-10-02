@@ -7,6 +7,7 @@ use App\Models\LetterTemplate;
 use App\Models\MatterMinutes;
 use App\Models\Party;
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -43,6 +44,9 @@ class MinutesService
                     'number' => $minutes->number,
                     'attendees' => $minutes->attendees ?? [],
                     'items' => $minutes->items ?? [],
+                    'opening' => self::opening($minutes),
+                    'closing' => self::closing($minutes),
+                    'ended_at' => $minutes->ended_at?->format('Y-m-d H:i'),
                 ],
             ],
             [],
@@ -50,6 +54,24 @@ class MinutesService
             $minutes->meeting_at ?? $minutes->created_at ?? now(),
             $minutes->letterhead ?? $template->letterhead ?? Letterhead::default(),
         );
+    }
+
+    /**
+     * The opening paragraph as written while recording — until then, the
+     * template's.
+     */
+    public static function opening(MatterMinutes $minutes): string
+    {
+        return (string) ($minutes->opening ?? $minutes->template?->minutes_opening);
+    }
+
+    /**
+     * The closing paragraph as written while recording — until then, the
+     * template's.
+     */
+    public static function closing(MatterMinutes $minutes): string
+    {
+        return (string) ($minutes->closing ?? $minutes->template?->minutes_closing);
     }
 
     /**
@@ -79,6 +101,8 @@ class MinutesService
                 'answer' => ($item['type'] ?? 'question') === 'comment' ? null : (filled($item['answer'] ?? null) ? trim((string) $item['answer']) : null),
             ], array_filter((array) ($data['items'] ?? []), 'is_array'))),
             'inputs' => (array) ($data['inputs'] ?? $minutes->inputs ?? []),
+            'opening' => array_key_exists('opening', $data) ? (string) $data['opening'] : $minutes->opening,
+            'closing' => array_key_exists('closing', $data) ? (string) $data['closing'] : $minutes->closing,
         ]);
     }
 
@@ -135,14 +159,19 @@ class MinutesService
     }
 
     /**
-     * Final: its wording kept as it is now, and its PDF among the matter's
-     * attachments (replacing the one of an earlier finalising).
+     * Final: its wording kept as it is now, the time the meeting ended
+     * ({{minutes.end_time}}; now, unless given), and its PDF among the
+     * matter's attachments (replacing the one of an earlier finalising).
      */
-    public function finalise(MatterMinutes $minutes, ?int $userId = null): MatterMinutes
+    public function finalise(MatterMinutes $minutes, ?int $userId = null, ?CarbonInterface $endedAt = null): MatterMinutes
     {
-        return DB::transaction(function () use ($minutes, $userId) {
+        return DB::transaction(function () use ($minutes, $userId, $endedAt) {
             $minutes->loadMissing(['template', 'matter']);
             $minutes->update([
+                'ended_at' => $endedAt ?? now(),
+                // Kept as they read now, as the wording is.
+                'opening' => self::opening($minutes),
+                'closing' => self::closing($minutes),
                 'body' => SignatureLayouts::freeze(LetterComposer::normalizeMergeTags((string) ($minutes->body ?: $minutes->template?->body))),
                 'status' => MatterMinutes::FINAL,
                 'finalized_at' => now(),

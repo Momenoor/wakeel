@@ -2,12 +2,16 @@
 
 namespace App\Filament\Mms\Resources\Types\Tables;
 
+use App\Models\LetterTemplate;
+use App\Models\Type;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -87,6 +91,38 @@ class TypesTable
                                     'incentive_config_id' => $data['incentive_config_id'],
                                 ]);
                             });
+                        })
+                        ->deselectRecordsAfterCompletion(),
+                    BulkAction::make('assignLetters')
+                        ->label(__('Assign letter templates'))
+                        ->icon('heroicon-o-envelope')
+                        ->schema([
+                            Select::make('templates')
+                                ->label(__('Letter templates'))
+                                ->options(fn () => LetterTemplate::query()->orderBy('name')->pluck('name', 'id'))
+                                ->multiple()
+                                ->searchable()
+                                ->required(),
+                            Radio::make('mode')
+                                ->label(__('Action'))
+                                ->options([
+                                    'add' => __('Add to the types\' letters'),
+                                    'replace' => __('Replace the types\' letters with these'),
+                                    'remove' => __('Remove from the types'),
+                                ])
+                                ->default('add')
+                                ->required(),
+                        ])
+                        ->action(function (Collection $records, array $data): void {
+                            $ids = array_map('intval', (array) $data['templates']);
+
+                            $records->each(fn (Type $type) => match ($data['mode'] ?? 'add') {
+                                'replace' => $type->letterTemplates()->sync($ids),
+                                'remove' => $type->letterTemplates()->detach($ids),
+                                default => $type->letterTemplates()->syncWithoutDetaching($ids),
+                            });
+
+                            Notification::make()->success()->title(__('Saved'))->send();
                         })
                         ->deselectRecordsAfterCompletion(),
                     DeleteBulkAction::make(),

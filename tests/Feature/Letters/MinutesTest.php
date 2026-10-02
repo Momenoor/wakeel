@@ -231,6 +231,43 @@ class MinutesTest extends TestCase
         $this->assertStringContainsString('نضال قرشي', $headers);
     }
 
+    public function test_the_opening_and_closing_are_written_while_recording_and_the_end_time_taken_when_finalised(): void
+    {
+        $template = LetterTemplate::query()->where('category', 'minutes')->sole();
+        // The ready-made template: its opening and closing are placeholders, their wording the start.
+        $this->assertStringContainsString('<p>{{minutes.opening}}</p>', $template->body);
+        $this->assertStringContainsString('<p>{{minutes.closing}}</p>', $template->body);
+        $this->assertStringContainsString('بتاريخه<< في تمام الساعة {{minutes.end_time}}>>.', $template->minutes_closing);
+
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => $template->id, 'number' => 1,
+            'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
+
+        $page = $this->minutesPage()->mountTableAction('recordMeeting', $minutes)
+            ->assertSet('mountedActions.0.data.opening', $template->minutes_opening)
+            ->assertSet('mountedActions.0.data.closing', $template->minutes_closing);
+
+        $page->setTableActionData([
+            'opening' => "افتتح الاجتماع الساعة {{meeting.time}}<< عبر الرابط {{meeting.link}}>>.\nبحضور كل من:",
+            'closing' => 'وأقفل المحضر<< في تمام الساعة {{minutes.end_time}}>>.',
+        ])->callMountedTableAction()->assertHasNoTableActionErrors();
+
+        // Not finalised: no link, no end time — those parts are left out.
+        $html = MinutesService::composer($minutes->fresh())->bodyHtml();
+        $this->assertStringContainsString('<p>افتتح الاجتماع الساعة 4:00 مساءً.</p><p>بحضور كل من:</p>', $html);
+        $this->assertStringContainsString('<p>وأقفل المحضر.</p>', $html);
+
+        $this->minutesPage()
+            ->mountTableAction('finalise', $minutes)
+            ->assertSet('mountedActions.0.data.ended_at', fn ($value) => filled($value))
+            ->setTableActionData(['ended_at' => '2026-09-30 17:30:00'])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+
+        $minutes->refresh();
+        $this->assertSame('2026-09-30 17:30', $minutes->ended_at->format('Y-m-d H:i'));
+        $this->assertStringContainsString('<p>وأقفل المحضر في تمام الساعة 5:30 مساءً.</p>', MinutesService::composer($minutes)->bodyHtml());
+    }
+
     public function test_finalised_minutes_are_filed_and_keep_their_wording(): void
     {
         $template = LetterTemplate::query()->where('category', 'minutes')->sole();

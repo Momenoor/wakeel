@@ -86,7 +86,7 @@ class LetterDocx
         // First-page text elements (reference, date, text boxes) open the
         // letter as plain lines: positioned text boxes aren't reliable in
         // Word, and plain lines are easier to edit.
-        foreach ($elements->filter(fn ($e) => ($e['page'] ?? 'first') === 'first' && in_array($e['type'] ?? 'text', ['reference', 'date', 'text'], true))->sortBy('y') as $element) {
+        foreach ($elements->filter(fn ($e) => ($e['page'] ?? 'first') === 'first' && in_array($e['type'] ?? 'text', ['reference', 'date', 'text'], true))->sortBy(fn ($e) => Letterhead::topLeft($e, 0, Letterhead::PAGE_HEIGHT)[1]) as $element) {
             $this->mixedLine(
                 $section,
                 $this->elementText($element),
@@ -355,18 +355,29 @@ class LetterDocx
         foreach ($elements as $element) {
             $type = $element['type'] ?? 'text';
             $mm = fn ($value) => Converter::cmToPoint(((float) $value) / 10);
+            $file = match ($type) {
+                'logo' => Branding::logoFile(),
+                'image' => $letterhead->file($element['content'] ?? null),
+                default => null,
+            };
+
+            // Word places from the top-left corner: one placed from the
+            // bottom needs its height — an image's, at its width.
+            $size = $file ? @getimagesize($file) : false;
+            $imageHeight = $size && $size[0] > 0 ? (float) ($element['width'] ?? 60) * $size[1] / $size[0] : 0;
+            [$left, $top] = Letterhead::topLeft($element, $width, $height, $imageHeight);
+
             $position = [
                 'positioning' => Frame::POS_ABSOLUTE,
                 'posHorizontalRel' => Frame::POS_RELTO_PAGE,
                 'posVerticalRel' => Frame::POS_RELTO_PAGE,
-                'marginLeft' => $mm($element['x'] ?? 0),
-                'marginTop' => $mm($element['y'] ?? 0),
+                'marginLeft' => $mm(max(0, $left)),
+                'marginTop' => $mm(max(0, $top)),
                 'width' => $mm($element['width'] ?? 60),
                 'wrappingStyle' => Frame::WRAP_INFRONT,
             ];
 
             if (in_array($type, ['logo', 'image'], true)) {
-                $file = $type === 'logo' ? Branding::logoFile() : $letterhead->file($element['content'] ?? null);
                 if ($file) {
                     $header->addImage($file, $position);
                 }

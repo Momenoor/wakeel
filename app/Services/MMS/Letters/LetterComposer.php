@@ -33,7 +33,7 @@ use Illuminate\Support\Collection;
 class LetterComposer
 {
     /** Placeholders whose value is a block of HTML, not text. */
-    private const BLOCKS = ['recipients', 'signature', 'stamp', 'minutes.attendees', 'minutes.qa', 'minutes.signatures'];
+    private const BLOCKS = ['recipients', 'signature', 'stamp', 'minutes.attendees', 'minutes.qa', 'minutes.signatures', 'minutes.opening', 'minutes.closing'];
 
     /** {{minutes.signatures}}: in a letterhead text box (every page), drawn as its table. */
     public const SIGNATURES = 'minutes.signatures';
@@ -180,6 +180,12 @@ class LetterComposer
         $values['minutes.attendees'] = $this->attendeesHtml((array) ($minutes['attendees'] ?? []));
         $values['minutes.qa'] = $this->questionsHtml((array) ($minutes['items'] ?? []));
         $values[self::SIGNATURES] = $this->signaturesHtml();
+        $ended = filled($minutes['ended_at'] ?? null) ? Carbon::parse($minutes['ended_at']) : null;
+        $values['minutes.end_time'] = $ended ? $this->time($ended->format('H:i')) : '';
+        $values['minutes.end_date'] = $ended ? $ended->format('d/m/Y') : '';
+        // Last: their wording may hold any of the above.
+        $values['minutes.opening'] = $this->paragraphsHtml((string) ($minutes['opening'] ?? ''), $values);
+        $values['minutes.closing'] = $this->paragraphsHtml((string) ($minutes['closing'] ?? ''), $values);
 
         $values['subject'] = BulkMailPlaceholders::apply((string) $this->template->subject, $values);
 
@@ -431,6 +437,27 @@ class LetterComposer
             ->implode('');
     }
 
+    /**
+     * Text typed as plain lines (a minutes' opening or closing), each line
+     * a paragraph — its placeholders filled, its <<…>> parts in only when
+     * theirs are.
+     *
+     * @param  array<string, string>  $values
+     */
+    private function paragraphsHtml(string $text, array $values): string
+    {
+        if (blank($text)) {
+            return '';
+        }
+
+        // In paragraphs first: a line that was only a part left out goes.
+        $html = collect(preg_split('/\R/u', e(trim($text))) ?: [])
+            ->map(fn (string $line) => '<p>'.trim($line).'</p>')
+            ->implode('');
+
+        return BulkMailPlaceholders::apply($html, array_map('strip_tags', $values), escape: true);
+    }
+
     private function attentionHtml(): string
     {
         if (blank($this->attention)) {
@@ -473,9 +500,14 @@ class LetterComposer
             || (str_starts_with($key, 'input.') && str_contains($value, '<br'))
             || str_starts_with($value, '<a href='), ARRAY_FILTER_USE_BOTH);
 
+        // The paragraph may wrap the placeholder in its formatting (a font
+        // size, bold); the block takes the paragraph's place — and its size.
+        $inline = '(?:span|strong|b|em|i|u)';
         foreach ($blocks as $key => $value) {
-            $pattern = '/<p[^>]*>\s*\{\{\s*'.preg_quote($key, '/').'\s*\}\}\s*<\/p>/iu';
-            $html = preg_replace($pattern, str_replace(['\\', '$'], ['\\\\', '\$'], $value), $html);
+            $pattern = '/<p([^>]*)>((?:\s*<'.$inline.'\b[^>]*>)*)\s*\{\{\s*'.preg_quote($key, '/').'\s*\}\}\s*(?:<\/'.$inline.'>\s*)*<\/p>/iu';
+            $html = preg_replace_callback($pattern, fn (array $m) => preg_match_all('/font-size:\s*([\d.]+pt)/i', $m[1].$m[2], $sizes)
+                ? self::sized($value, end($sizes[1]))
+                : $value, $html) ?? $html;
         }
 
         // What's left: text placeholders (escaped) and inline blocks.
@@ -483,6 +515,29 @@ class LetterComposer
         $html = BulkMailPlaceholders::apply($html, $text, escape: true);
 
         return $this->physicalAlignment(BulkMailPlaceholders::apply($html, $blocks));
+    }
+
+    /**
+     * A block's paragraphs, lists and list items at the size its
+     * placeholder was written in — set on each, as neither mPDF nor Word
+     * reliably passes a size down to a list.
+     */
+    private static function sized(string $html, string $size): string
+    {
+        // Inline only (a link): in a span of that size.
+        if (! preg_match('/<(p|ol|ul|li|table|div)\b/i', $html)) {
+            return '<span style="font-size: '.$size.';">'.$html.'</span>';
+        }
+
+        return preg_replace_callback('/<(p|ol|ul|li)\b([^>]*)>/i', function (array $m) use ($size) {
+            if (preg_match('/font-size\s*:/i', $m[2])) {
+                return $m[0];
+            }
+
+            return preg_match('/\sstyle="/i', $m[2])
+                ? '<'.$m[1].preg_replace('/\sstyle="/i', ' style="font-size: '.$size.'; ', $m[2], 1).'>'
+                : '<'.$m[1].$m[2].' style="font-size: '.$size.';">';
+        }, $html) ?? $html;
     }
 
     /**
@@ -529,6 +584,10 @@ class LetterComposer
             'minutes.attendees' => __('Minutes').' — '.__('attendees'),
             'minutes.qa' => __('Minutes').' — '.__('questions and answers'),
             'minutes.signatures' => __('Minutes').' — '.__('attendees\' signatures'),
+            'minutes.opening' => __('Minutes').' — '.__('opening paragraph'),
+            'minutes.closing' => __('Minutes').' — '.__('closing paragraph'),
+            'minutes.end_time' => __('Minutes').' — '.__('time it ended'),
+            'minutes.end_date' => __('Minutes').' — '.__('date it ended'),
             'meeting.date' => __('Meeting date'),
             'meeting.day' => __('Meeting date').' — '.__('weekday'),
             'meeting.time' => __('Meeting time'),

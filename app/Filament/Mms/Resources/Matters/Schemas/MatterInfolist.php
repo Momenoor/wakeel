@@ -1102,6 +1102,7 @@ class MatterInfolist
                                 'final_report' => __('Final Report'),
                                 'supporting_document' => __('Supporting Document'),
                                 'correspondence' => __('Correspondence'),
+                                'minutes_signed' => __('Minutes signed'),
                                 'other' => __('Other'),
                             ])
                             ->required(),

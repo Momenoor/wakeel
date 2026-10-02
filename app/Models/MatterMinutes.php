@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * A meeting's minutes (محضر) on a matter, numbered per matter: prepared
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * attendees: [{present, title, name, capacity, id_number, phone, party_id}]
  * items: [{type: question|comment, text, answer}]
  */
-#[Fillable('matter_id', 'letter_template_id', 'letterhead_id', 'calendar_event_id', 'number', 'meeting_at', 'meeting_link', 'attendees', 'items', 'inputs', 'body', 'status', 'attachment_id', 'created_by', 'finalized_at')]
+#[Fillable('matter_id', 'letter_template_id', 'letterhead_id', 'calendar_event_id', 'number', 'meeting_at', 'meeting_link', 'attendees', 'items', 'inputs', 'body', 'status', 'attachment_id', 'created_by', 'finalized_at', 'opening', 'closing', 'ended_at')]
 class MatterMinutes extends Model
 {
     public const DRAFT = 'draft';
@@ -28,6 +29,7 @@ class MatterMinutes extends Model
     {
         return [
             'meeting_at' => 'datetime',
+            'ended_at' => 'datetime',
             'finalized_at' => 'datetime',
             'attendees' => 'array',
             'items' => 'array',
@@ -58,6 +60,12 @@ class MatterMinutes extends Model
     public function attachment(): BelongsTo
     {
         return $this->belongsTo(Attachment::class);
+    }
+
+    /** Sent to the attendees to sign, and what came back. */
+    public function deliveries(): HasMany
+    {
+        return $this->hasMany(MinutesDelivery::class, 'matter_minutes_id');
     }
 
     public function isFinal(): bool

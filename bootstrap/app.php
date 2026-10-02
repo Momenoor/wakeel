@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CronWebhookController;
+use App\Http\Controllers\WhatsAppWebhookController;
 use App\Http\Middleware\EnsureLicenseIsValid;
 use App\Http\Middleware\RedirectIfInstalled;
 use App\Http\Middleware\RedirectToInstaller;
@@ -22,6 +23,10 @@ return Application::configure(basePath: dirname(__DIR__))
             Route::get('cron/run', CronWebhookController::class)
                 ->middleware('throttle:10,1')
                 ->name('cron.run');
+
+            // Meta's WhatsApp webhook: signed by Meta, not a signed-in user.
+            Route::get('webhooks/whatsapp', [WhatsAppWebhookController::class, 'verify'])->name('webhooks.whatsapp');
+            Route::post('webhooks/whatsapp', [WhatsAppWebhookController::class, 'receive'])->middleware('throttle:120,1');
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {

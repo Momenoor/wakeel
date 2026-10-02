@@ -29,6 +29,9 @@ class MatterOneDriveFolders
 
     public const SUBFOLDERS = 'onedrive_subfolders';
 
+    /** The subfolder of a matter's folder signed minutes go to. */
+    public const SIGNED_MINUTES = 'onedrive_signed_minutes_folder';
+
     public function __construct(private readonly OneDriveClient $client) {}
 
     public static function enabled(): bool
@@ -168,6 +171,38 @@ class MatterOneDriveFolders
         }
 
         return $item;
+    }
+
+    public static function signedMinutesFolder(): string
+    {
+        return trim((string) Setting::get(self::SIGNED_MINUTES, '')) ?: 'محاضر موقعة';
+    }
+
+    /**
+     * A signed copy of minutes, into the matter's folder in its assistant's
+     * OneDrive — in the signed-minutes subfolder (made when missing). Null
+     * when the matter has no folder.
+     */
+    public function uploadSignedMinutes(Matter $matter, string $name, string $contents, string $mime): ?string
+    {
+        $folder = MatterOneDriveFolder::query()
+            ->where('matter_id', $matter->getKey())
+            ->where('status', MatterOneDriveFolder::CREATED)
+            ->whereNotNull('drive_item_id')
+            ->with('party')
+            ->oldest('id')
+            ->get()
+            ->first(fn (MatterOneDriveFolder $f) => filled($f->party?->onedrive_email));
+
+        if (! $folder) {
+            return null;
+        }
+
+        $user = (string) $folder->party->onedrive_email;
+        $path = implode('/', array_map([self::class, 'clean'], OneDriveClient::segments(self::signedMinutesFolder())));
+        $target = $path !== '' ? $this->client->ensureFolder($user, $path, $folder->drive_item_id)['id'] : $folder->drive_item_id;
+
+        return $this->client->upload($user, $target, self::clean(pathinfo($name, PATHINFO_FILENAME)).'.'.pathinfo($name, PATHINFO_EXTENSION), $contents, $mime)['webUrl'];
     }
 
     /** The test folder's name — fixed, so the test can find it to remove it. */

@@ -205,8 +205,8 @@ class LetterPdf
     }
 
     /**
-     * One placed element, positioned in millimetres from the page's
-     * top-left corner.
+     * One placed element, positioned in millimetres from the page corner
+     * it is placed from.
      *
      * @param  array<string, mixed>  $element
      */
@@ -235,9 +235,14 @@ class LetterPdf
             $content = '<span style="text-outline-width: '.$outline.'mm; text-outline-color: '.e($element['color'] ?? '#111827').';">'.$content.'</span>';
         }
 
+        // From the corner it is placed from: top or bottom, left or right.
+        [$vertical, $horizontal] = Letterhead::anchor($element);
+
         $style = sprintf(
-            'position: absolute; left: %smm; top: %smm; width: %smm; font-size: %spt; color: %s; text-align: %s;',
+            'position: absolute; %s: %smm; %s: %smm; width: %smm; font-size: %spt; color: %s; text-align: %s;',
+            $horizontal,
             (float) ($element['x'] ?? 0),
+            $vertical,
             (float) ($element['y'] ?? 0),
             (float) ($element['width'] ?? 60),
             (float) ($element['font_size'] ?? 11),

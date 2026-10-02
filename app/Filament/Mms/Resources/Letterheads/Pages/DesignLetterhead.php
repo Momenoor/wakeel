@@ -18,8 +18,9 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 /**
  * Drag-and-drop placement of a letterhead's elements on its first page:
  * pick an element, drag it where it belongs, fine-tune it in the side
- * panel. Positions are millimetres from the page's top-left corner — the
- * same numbers the PDF and Word output use.
+ * panel, or nudge it with the arrow keys. Positions are millimetres from
+ * the page corner the element is placed from (top or bottom, left or
+ * right) — the same numbers the PDF and Word output use.
  *
  * @property Letterhead $record
  */
@@ -60,6 +61,7 @@ class DesignLetterhead extends Page
         $this->elements[] = [
             'type' => $type,
             'page' => $type === 'page_number' ? 'all' : 'first',
+            'anchor' => 'top-left',
             'x' => 20,
             'y' => 20,
             'width' => match ($type) {
@@ -84,16 +86,67 @@ class DesignLetterhead extends Page
         $this->imageUpload = null;
     }
 
-    public function moveElement(int $index, float $x, float $y): void
+    /**
+     * Dropped with its top-left corner at $left, $top (mm from the page's
+     * top-left): kept as the distances from its own corner — for that, the
+     * height it is drawn at.
+     */
+    public function moveElement(int $index, float $left, float $top, float $height = 0): void
     {
         if (! isset($this->elements[$index])) {
             return;
         }
 
-        [$width, $height] = $this->pageSize();
-        $this->elements[$index]['x'] = round(max(0, min($width - 5, $x)), 1);
-        $this->elements[$index]['y'] = round(max(0, min($height - 3, $y)), 1);
+        [$pageWidth, $pageHeight] = $this->pageSize();
+        [$vertical, $horizontal] = Letterhead::anchor($this->elements[$index]);
+        $width = (float) ($this->elements[$index]['width'] ?? 60);
+
+        $this->place($index,
+            $horizontal === 'right' ? $pageWidth - $left - $width : $left,
+            $vertical === 'bottom' ? $pageHeight - $top - $height : $top,
+        );
         $this->selected = $index;
+    }
+
+    /**
+     * The arrow keys: $right mm to the right and $down mm down on the page,
+     * whichever corner the element is placed from.
+     */
+    public function nudge(int $index, float $right, float $down): void
+    {
+        if (! isset($this->elements[$index])) {
+            return;
+        }
+
+        [$vertical, $horizontal] = Letterhead::anchor($this->elements[$index]);
+
+        $this->place($index,
+            (float) ($this->elements[$index]['x'] ?? 0) + ($horizontal === 'right' ? -$right : $right),
+            (float) ($this->elements[$index]['y'] ?? 0) + ($vertical === 'bottom' ? -$down : $down),
+        );
+    }
+
+    /**
+     * Placed from another corner, staying where it is on the page.
+     */
+    public function setAnchor(int $index, string $anchor, float $height = 0): void
+    {
+        if (! isset($this->elements[$index]) || ! in_array($anchor, Letterhead::ANCHORS, true)) {
+            return;
+        }
+
+        [$pageWidth, $pageHeight] = $this->pageSize();
+        [$left, $top] = Letterhead::topLeft($this->elements[$index], $pageWidth, $pageHeight, $height);
+
+        $this->elements[$index]['anchor'] = $anchor;
+        $this->moveElement($index, $left, $top, $height);
+    }
+
+    private function place(int $index, float $x, float $y): void
+    {
+        [$width, $height] = $this->pageSize();
+        $this->elements[$index]['x'] = round(max(0, min($width - 3, $x)), 1);
+        $this->elements[$index]['y'] = round(max(0, min($height - 3, $y)), 1);
     }
 
     public function removeElement(int $index): void
