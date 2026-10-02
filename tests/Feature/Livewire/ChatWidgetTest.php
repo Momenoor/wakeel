@@ -209,14 +209,24 @@ class ChatWidgetTest extends TestCase
         $this->actingAs($this->colleague)->get(route('chat.attachment', [$message, 0]))->assertOk();
         $this->actingAs(User::factory()->create())->get(route('chat.attachment', [$message, 0]))->assertForbidden();
 
-        // Too big: refused.
+        // Up to the limit: taken (Livewire's own upload limit allows it).
         $this->actingAs($this->me);
         Livewire::test(ChatWidget::class)
             ->call('startConversationWith', $this->colleague->id)
+            ->set('uploads', [UploadedFile::fake()->create('big.zip', ChatWidget::MAX_KB)])
+            ->assertHasNoErrors()
+            ->call('sendMessage', '')
+            ->assertHasNoErrors();
+        $this->assertSame('big.zip', ChatMessage::latest('id')->first()->files()[0]['name']);
+
+        // Too big: refused as it's picked, and nothing goes.
+        Livewire::test(ChatWidget::class)
+            ->call('startConversationWith', $this->colleague->id)
             ->set('uploads', [UploadedFile::fake()->create('huge.zip', ChatWidget::MAX_KB + 1)])
-            ->call('sendMessage', 'كبير')
-            ->assertHasErrors('uploads.0');
-        $this->assertSame(1, ChatMessage::count());
+            ->assertHasErrors('uploads.0')
+            ->assertSet('uploads', [])
+            ->call('sendMessage', '');
+        $this->assertSame(2, ChatMessage::count());
     }
 
     public function test_the_broadcast_goes_to_every_participants_personal_channel(): void

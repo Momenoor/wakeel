@@ -177,7 +177,7 @@ class LetterComposer
         // A meeting's minutes: its number, who attended, the questions and answers.
         $minutes = (array) ($this->inputs[self::MINUTES] ?? []);
         $values['minutes.number'] = (string) ($minutes['number'] ?? '');
-        $values['minutes.attendees'] = $this->attendeesHtml((array) ($minutes['attendees'] ?? []));
+        $values['minutes.attendees'] = self::attendeesHtml((array) ($minutes['attendees'] ?? []), (array) ($this->template->minutes_attendees ?? []), $this->isArabic());
         $values['minutes.qa'] = $this->questionsHtml((array) ($minutes['items'] ?? []));
         $values[self::SIGNATURES] = $this->signaturesHtml();
         $ended = filled($minutes['ended_at'] ?? null) ? Carbon::parse($minutes['ended_at']) : null;
@@ -356,29 +356,117 @@ class LetterComposer
      *
      * @param  list<array<string, mixed>>  $attendees
      */
-    private function attendeesHtml(array $attendees): string
+    public static function attendeesHtml(array $attendees, array $settings = [], bool $arabic = true): string
     {
-        $arabic = $this->isArabic();
-
-        return collect($attendees)
+        $settings = self::attendeeSettings($settings, $arabic);
+        $present = collect($attendees)
             ->filter(fn ($a) => is_array($a) && ! empty($a['present']) && filled($a['name'] ?? null))
+            ->values();
+
+        if ($present->isEmpty()) {
+            return '';
+        }
+
+        if ($settings['layout'] === 'table') {
+            return self::attendeesTable($present->all(), $settings['columns'], $arabic);
+        }
+
+        $line = fn (array $a, int $number) => self::attendeeText($settings['line'], $a, $number);
+
+        if ($settings['layout'] === 'list') {
+            return '<ol>'.$present->map(fn (array $a, int $i) => '<li>'.$line($a, $i + 1).'</li>')->implode('').'</ol>';
+        }
+
+        // Grouped: each capacity's heading, its attendees under it.
+        $number = 0;
+
+        return $present
             ->groupBy(fn (array $a) => trim((string) ($a['capacity'] ?? '')))
-            ->map(function ($group, string $capacity) use ($arabic): string {
-                $lines = $group->map(function (array $a) use ($arabic): string {
-                    $parts = [trim(trim((string) ($a['title'] ?? '')).' '.trim((string) $a['name']))];
-                    if (filled($a['id_number'] ?? null)) {
-                        $parts[] = ($arabic ? 'رقم الهوية: ' : 'ID No.: ').trim((string) $a['id_number']);
-                    }
-                    if (filled($a['phone'] ?? null)) {
-                        $parts[] = ($arabic ? 'رقم الهاتف: ' : 'Phone: ').trim((string) $a['phone']);
-                    }
+            ->map(function ($group, string $capacity) use ($settings, $line, &$number): string {
+                $heading = $capacity !== '' ? self::attendeeText($settings['heading'], ['capacity' => $capacity], 0) : '';
 
-                    return '<p>'.e(implode(' – ', $parts)).'</p>';
-                })->implode('');
-
-                return ($capacity !== '' ? '<p><strong>'.e($capacity).':</strong></p>' : '').$lines;
+                return ($heading !== '' ? '<p><strong>'.$heading.'</strong></p>' : '')
+                    .$group->map(function (array $a) use ($line, &$number) {
+                        return '<p>'.$line($a, ++$number).'</p>';
+                    })->implode('');
             })
             ->implode('');
+    }
+
+    /** What {{minutes.attendees}} shows — the template's choices over these. */
+    public static function attendeeSettings(array $settings, bool $arabic): array
+    {
+        $defaults = [
+            'layout' => 'grouped',
+            'line' => $arabic
+                ? '{{attendee.title}} {{attendee.name}}<< – رقم الهوية: {{attendee.id_number}}>><< – رقم الهاتف: {{attendee.phone}}>>'
+                : '{{attendee.title}} {{attendee.name}}<< – ID No.: {{attendee.id_number}}>><< – Phone: {{attendee.phone}}>>',
+            'heading' => '{{attendee.capacity}}:',
+            'columns' => ['number', 'name', 'capacity', 'id_number', 'signature'],
+        ];
+
+        $settings = array_filter($settings, fn ($value) => filled($value));
+
+        return [
+            ...$defaults,
+            ...$settings,
+            'layout' => in_array($settings['layout'] ?? null, ['grouped', 'list', 'table'], true) ? $settings['layout'] : 'grouped',
+            'columns' => array_values(array_intersect(array_keys(self::attendeeColumns($arabic)), (array) ($settings['columns'] ?? $defaults['columns']))) ?: $defaults['columns'],
+        ];
+    }
+
+    /**
+     * The columns a table of attendees can have, as headed in the
+     * template's language.
+     *
+     * @return array<string, string>
+     */
+    public static function attendeeColumns(bool $arabic): array
+    {
+        return $arabic
+            ? ['number' => 'م', 'name' => 'الاسم', 'capacity' => 'الصفة', 'id_number' => 'رقم الهوية', 'phone' => 'رقم الهاتف', 'signature' => 'التوقيع']
+            : ['number' => 'No.', 'name' => 'Name', 'capacity' => 'Capacity', 'id_number' => 'ID No.', 'phone' => 'Phone', 'signature' => 'Signature'];
+    }
+
+    /**
+     * One attendee's line: its {{attendee.*}} filled, its <<…>> parts in only
+     * when theirs are — escaped.
+     */
+    private static function attendeeText(string $format, array $a, int $number): string
+    {
+        $values = [
+            'attendee.number' => $number > 0 ? (string) $number : '',
+            'attendee.title' => trim((string) ($a['title'] ?? '')),
+            'attendee.name' => trim((string) ($a['name'] ?? '')),
+            'attendee.capacity' => trim((string) ($a['capacity'] ?? '')),
+            'attendee.id_number' => trim((string) ($a['id_number'] ?? '')),
+            'attendee.phone' => trim((string) ($a['phone'] ?? '')),
+        ];
+
+        $text = BulkMailPlaceholders::apply(e($format), $values, escape: true);
+
+        return trim(preg_replace('/[ \x{00A0}]{2,}/u', ' ', $text) ?? $text);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $attendees
+     * @param  list<string>  $columns
+     */
+    private static function attendeesTable(array $attendees, array $columns, bool $arabic): string
+    {
+        $labels = self::attendeeColumns($arabic);
+        $cell = 'border: 1px solid #444; padding: 4px 6px;';
+
+        $rows = collect($attendees)->map(fn (array $a, int $i) => '<tr>'.collect($columns)->map(fn (string $column) => '<td style="'.$cell.($column === 'number' ? ' text-align: center;' : '').'">'.match ($column) {
+            'number' => (string) ($i + 1),
+            'name' => e(trim(trim((string) ($a['title'] ?? '')).' '.trim((string) $a['name']))),
+            'signature' => '&#160;',
+            default => e(trim((string) ($a[$column] ?? ''))),
+        }.'</td>')->implode('').'</tr>')->implode('');
+
+        return '<table style="width: 100%; border-collapse: collapse;"><tr>'
+            .collect($columns)->map(fn (string $column) => '<th style="'.$cell.' background: #f3f4f6;'.($column === 'signature' ? ' width: 25%;' : '').($column === 'number' ? ' width: 6%;' : '').'">'.e($labels[$column]).'</th>')->implode('')
+            .'</tr>'.$rows.'</table>';
     }
 
     /**

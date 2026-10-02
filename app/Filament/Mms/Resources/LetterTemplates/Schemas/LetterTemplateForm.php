@@ -10,6 +10,9 @@ use App\Models\LetterItem;
 use App\Services\MMS\Letters\Blocks\SavedSignatureBlock;
 use App\Services\MMS\Letters\Blocks\SignatureBlock;
 use App\Services\MMS\Letters\LetterComposer;
+use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
@@ -175,6 +178,51 @@ class LetterTemplateForm
                             ->rows(4),
                     ]),
 
+                // Minutes: how {{minutes.attendees}} lays out who attended.
+                Section::make(__('Attendees list'))
+                    ->description(__('How {{minutes.attendees}} shows those who attended.'))
+                    ->columnSpanFull()
+                    ->columns(2)
+                    ->visible(fn (Get $get) => self::isMinutes($get('category')))
+                    ->schema([
+                        Radio::make('minutes_attendees.layout')
+                            ->label(__('Layout'))
+                            ->options([
+                                'grouped' => __('Grouped under each capacity'),
+                                'list' => __('One numbered list'),
+                                'table' => __('A table'),
+                            ])
+                            ->default('grouped')
+                            ->live(),
+                        Textarea::make('minutes_attendees.line')
+                            ->label(__('Each attendee'))
+                            ->placeholder(fn (Get $get) => LetterComposer::attendeeSettings([], $get('locale') !== 'en')['line'])
+                            ->helperText(__('Leave empty for the standard line. Placeholders: :list. A part between << >> shows only when its placeholder is filled.', ['list' => '{{attendee.title}} {{attendee.name}} {{attendee.capacity}} {{attendee.id_number}} {{attendee.phone}} {{attendee.number}}']))
+                            ->rows(2)
+                            ->live(onBlur: true)
+                            ->extraInputAttributes(['dir' => 'auto'])
+                            ->visible(fn (Get $get) => ($get('minutes_attendees.layout') ?? 'grouped') !== 'table'),
+                        TextInput::make('minutes_attendees.heading')
+                            ->label(__('Capacity heading'))
+                            ->placeholder('{{attendee.capacity}}:')
+                            ->live(onBlur: true)
+                            ->extraInputAttributes(['dir' => 'auto'])
+                            ->visible(fn (Get $get) => ($get('minutes_attendees.layout') ?? 'grouped') === 'grouped'),
+                        CheckboxList::make('minutes_attendees.columns')
+                            ->label(__('Columns'))
+                            ->options(fn (Get $get) => LetterComposer::attendeeColumns($get('locale') !== 'en'))
+                            ->default(['number', 'name', 'capacity', 'id_number', 'signature'])
+                            ->columns(3)
+                            ->live()
+                            ->visible(fn (Get $get) => $get('minutes_attendees.layout') === 'table'),
+                        Placeholder::make('attendees_preview')
+                            ->label(__('Preview'))
+                            ->columnSpanFull()
+                            ->content(fn (Get $get) => new HtmlString('<div dir="'.($get('locale') === 'en' ? 'ltr' : 'rtl').'" style="font-size: .9rem;">'
+                                .LetterComposer::attendeesHtml(self::sampleAttendees($get('locale') !== 'en'), (array) ($get('minutes_attendees') ?? []), $get('locale') !== 'en')
+                                .'</div>')),
+                    ]),
+
                 Section::make(__('Letter'))
                     ->columnSpanFull()
                     ->schema([
@@ -203,6 +251,26 @@ class LetterTemplateForm
                             ->state(new HtmlString(e(__('Insert placeholders from the { } menu, or type them: {{recipients}} puts the addressee block (put it alone on its own line), {{input.KEY}} what was filled in, {{input.KEY.day}} a date\'s weekday, {{signature}} and {{stamp}} the letterhead\'s images. The blocks menu has a ready signature block: the expert\'s name with the signature and stamp, placed where you drop it. Write a part between << and >> (or [[ and ]]) to print it only when its placeholders are filled — e.g. <<The meeting is at {{meeting.time}}.>>')))),
                     ]),
             ]);
+    }
+
+    /**
+     * Who attended, made up — for the attendees list's preview.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function sampleAttendees(bool $arabic): array
+    {
+        return $arabic
+            ? [
+                ['present' => true, 'title' => 'السيد/', 'name' => 'أحمد علي', 'capacity' => 'المدعي', 'id_number' => '784-1990-1234567-1', 'phone' => '0501234567'],
+                ['present' => true, 'title' => 'الأستاذ/', 'name' => 'محمد حسن', 'capacity' => 'وكيل المدعي', 'id_number' => '', 'phone' => '0559876543'],
+                ['present' => true, 'title' => '', 'name' => 'شركة المثال', 'capacity' => 'المدعى عليها', 'id_number' => '', 'phone' => ''],
+            ]
+            : [
+                ['present' => true, 'title' => 'Mr.', 'name' => 'Ahmed Ali', 'capacity' => 'Plaintiff', 'id_number' => '784-1990-1234567-1', 'phone' => '0501234567'],
+                ['present' => true, 'title' => 'Mr.', 'name' => 'Mohamed Hassan', 'capacity' => 'Plaintiff\'s lawyer', 'id_number' => '', 'phone' => '0559876543'],
+                ['present' => true, 'title' => '', 'name' => 'Example LLC', 'capacity' => 'Defendant', 'id_number' => '', 'phone' => ''],
+            ];
     }
 
     private static function isMinutes(mixed $category): bool

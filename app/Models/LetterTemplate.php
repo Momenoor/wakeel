@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * heading}] — type is text | textarea | date | time | url | number |
  * select | items (a numbered list ticked from the item library's group).
  */
-#[Fillable('name', 'slug', 'subject', 'body', 'placeholders', 'locale', 'is_active', 'is_default', 'category', 'letterhead_id', 'inputs', 'minutes_opening', 'minutes_closing', 'email_template_id')]
+#[Fillable('name', 'slug', 'subject', 'body', 'placeholders', 'locale', 'is_active', 'is_default', 'category', 'letterhead_id', 'inputs', 'minutes_opening', 'minutes_closing', 'email_template_id', 'minutes_attendees')]
 class LetterTemplate extends Model implements HasRichContent
 {
     use InteractsWithRichContent;
@@ -34,6 +34,7 @@ class LetterTemplate extends Model implements HasRichContent
             'is_default' => 'boolean',
             'placeholders' => 'array',
             'inputs' => 'array',
+            'minutes_attendees' => 'array',
             'category' => LetterTemplateCategories::class,
         ];
     }

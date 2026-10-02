@@ -3,6 +3,7 @@
 namespace Tests\Feature\Letters;
 
 use App\Enums\LetterTemplateCategories;
+use App\Filament\Mms\Resources\LetterTemplates\Pages\EditLetterTemplate;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager;
 use App\Models\CalendarEvent;
@@ -13,6 +14,7 @@ use App\Models\MatterMinutes;
 use App\Models\MatterParty;
 use App\Models\Party;
 use App\Models\User;
+use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterDocx;
 use App\Services\MMS\Letters\LetterPdf;
 use App\Services\MMS\Letters\MinutesService;
@@ -266,6 +268,49 @@ class MinutesTest extends TestCase
         $minutes->refresh();
         $this->assertSame('2026-09-30 17:30', $minutes->ended_at->format('Y-m-d H:i'));
         $this->assertStringContainsString('<p>وأقفل المحضر في تمام الساعة 5:30 مساءً.</p>', MinutesService::composer($minutes)->bodyHtml());
+    }
+
+    public function test_the_attendees_list_is_laid_out_as_the_template_says(): void
+    {
+        $attendees = [
+            ['present' => true, 'title' => 'السيد/', 'name' => 'أحمد علي', 'capacity' => 'المدعي', 'id_number' => '784-1', 'phone' => ''],
+            ['present' => true, 'title' => '', 'name' => 'شركة المثال', 'capacity' => 'المدعى عليها', 'id_number' => '', 'phone' => '050'],
+            ['present' => false, 'name' => 'غائب', 'capacity' => 'المدعي'],
+        ];
+        $html = fn (array $settings) => LetterComposer::attendeesHtml($attendees, $settings, true);
+
+        // Standard: grouped, ID and phone only when known.
+        $this->assertSame('<p><strong>المدعي:</strong></p><p>السيد/ أحمد علي – رقم الهوية: 784-1</p><p><strong>المدعى عليها:</strong></p><p>شركة المثال – رقم الهاتف: 050</p>', $html([]));
+
+        // Its own wording and heading.
+        $this->assertSame(
+            '<p><strong>بصفته المدعي</strong></p><p>1) أحمد علي (هوية 784-1)</p><p><strong>بصفته المدعى عليها</strong></p><p>2) شركة المثال</p>',
+            $html(['line' => '{{attendee.number}}) {{attendee.name}}<< (هوية {{attendee.id_number}})>>', 'heading' => 'بصفته {{attendee.capacity}}']),
+        );
+
+        // A numbered list, with the capacity on each line.
+        $this->assertSame('<ol><li>أحمد علي – المدعي</li><li>شركة المثال – المدعى عليها</li></ol>', $html(['layout' => 'list', 'line' => '{{attendee.name}} – {{attendee.capacity}}']));
+
+        // A table of the columns chosen, a blank one to sign in.
+        $table = $html(['layout' => 'table', 'columns' => ['number', 'name', 'signature']]);
+        $this->assertStringContainsString('>م</th>', $table);
+        $this->assertStringContainsString('>التوقيع</th>', $table);
+        $this->assertStringNotContainsString('الصفة', $table);
+        $this->assertStringContainsString('>2</td><td style="border: 1px solid #444; padding: 4px 6px;">شركة المثال</td><td style="border: 1px solid #444; padding: 4px 6px;">&#160;</td>', $table);
+        $this->assertSame(2, substr_count($table, '</tr>') - 1);
+
+        // Set on the template, used by its minutes; previewed while editing it.
+        $template = LetterTemplate::query()->where('category', 'minutes')->sole();
+        Livewire::test(EditLetterTemplate::class, ['record' => $template->getRouteKey()])
+            ->fillForm(['minutes_attendees' => ['layout' => 'table', 'columns' => ['number', 'name', 'signature']]])
+            ->assertSee('شركة المثال')
+            ->call('save')
+            ->assertHasNoFormErrors();
+        $this->assertSame('table', $template->fresh()->minutes_attendees['layout']);
+
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => $template->id, 'number' => 1,
+            'meeting_at' => '2026-09-30 16:00:00', 'attendees' => $attendees, 'status' => MatterMinutes::DRAFT]);
+        $this->assertStringContainsString('>التوقيع</th>', MinutesService::composer($minutes)->bodyHtml());
     }
 
     public function test_finalised_minutes_are_filed_and_keep_their_wording(): void

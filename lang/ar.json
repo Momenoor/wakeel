@@ -3446,5 +3446,14 @@
     "Replying to :name": "الرد على :name",
     "yourself": "نفسك",
     "Attach files": "إرفاق ملفات",
-    "file": "الملف"
+    "file": "الملف",
+    "Attendees list": "قائمة الحضور",
+    "How {{minutes.attendees}} shows those who attended.": "طريقة عرض {{minutes.attendees}} لمن حضروا.",
+    "Layout": "الشكل",
+    "Grouped under each capacity": "مجمّعون تحت كل صفة",
+    "One numbered list": "قائمة واحدة مرقّمة",
+    "A table": "جدول",
+    "Each attendee": "سطر كل حاضر",
+    "Leave empty for the standard line. Placeholders: :list. A part between << >> shows only when its placeholder is filled.": "اتركه فارغاً للسطر المعتاد. المتغيرات: :list. الجزء بين << >> يظهر فقط إذا كان متغيره معبأً.",
+    "Capacity heading": "عنوان الصفة"
 }
