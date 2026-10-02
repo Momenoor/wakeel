@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ChatAttachmentController;
 use App\Http\Controllers\LicenseController;
 use App\Http\Controllers\PushSubscriptionController;
 use App\Livewire\Installer\InstallWizard;
@@ -62,6 +63,9 @@ Route::get('/login', fn () => redirect()->to(Filament::getDefaultPanel()->getLog
 Route::middleware('auth')->group(function () {
     Route::post('/push/subscriptions', [PushSubscriptionController::class, 'store'])->name('push.subscribe');
     Route::delete('/push/subscriptions', [PushSubscriptionController::class, 'destroy'])->name('push.unsubscribe');
+
+    // A file sent in a chat message, to those in the conversation.
+    Route::get('/chat/files/{message}/{index}', ChatAttachmentController::class)->whereNumber('index')->name('chat.attachment');
 });
 
 // Lets phones add Wakeel to the home screen — which iPhone requires

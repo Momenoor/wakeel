@@ -12,8 +12,10 @@ use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -148,6 +150,73 @@ class ChatWidgetTest extends TestCase
 
         // Their own messages carry no ticks.
         $this->assertSame(1, substr_count($mine->html(), 'data-status='));
+    }
+
+    public function test_a_message_can_answer_one_of_the_conversation(): void
+    {
+        $this->withoutDefer();
+        Event::fake([ChatMessageSent::class, ChatMessagesStatusChanged::class]);
+
+        $conversation = ChatConversation::betweenUsers($this->me, $this->colleague);
+        $question = ChatMessage::create(['chat_conversation_id' => $conversation->id, 'user_id' => $this->colleague->id, 'body' => 'متى الاجتماع؟']);
+        $elsewhere = ChatMessage::create([
+            'chat_conversation_id' => ChatConversation::betweenUsers($this->colleague, User::factory()->create())->id,
+            'user_id' => $this->colleague->id, 'body' => 'سر',
+        ]);
+
+        $chat = Livewire::test(ChatWidget::class)
+            ->call('selectConversation', $conversation->id)
+            // Not of this conversation: nothing to answer.
+            ->call('replyTo', $elsewhere->id)
+            ->assertSet('replyToId', null)
+            ->call('replyTo', $question->id)
+            ->assertSet('replyToId', $question->id)
+            ->assertSee('متى الاجتماع؟')
+            ->call('sendMessage', 'الساعة العاشرة')
+            ->assertSet('replyToId', null);
+
+        $answer = ChatMessage::latest('id')->first();
+        $this->assertSame($question->id, $answer->reply_to_id);
+
+        // Quoted above the answer, a tap away from the question.
+        $chat->assertSeeHtml("getElementById('chat-msg-{$question->id}')")
+            ->assertSeeHtml('id="chat-msg-'.$question->id.'"');
+    }
+
+    public function test_files_are_sent_with_a_message_and_open_only_for_the_conversation(): void
+    {
+        $this->withoutDefer();
+        Event::fake([ChatMessageSent::class, ChatMessagesStatusChanged::class]);
+        Storage::fake(ChatMessage::DISK);
+
+        $chat = Livewire::test(ChatWidget::class)
+            ->call('startConversationWith', $this->colleague->id)
+            ->set('uploads', [UploadedFile::fake()->image('photo.jpg'), UploadedFile::fake()->create('report.pdf', 100, 'application/pdf')])
+            ->call('sendMessage', '')
+            ->assertHasNoErrors()
+            ->assertSet('uploads', []);
+
+        $message = ChatMessage::sole();
+        $this->assertSame(['photo.jpg', 'report.pdf'], array_column($message->files(), 'name'));
+        $this->assertSame('📎 photo.jpg +1', $message->preview());
+        Storage::disk(ChatMessage::DISK)->assertExists($message->files()[1]['path']);
+
+        // The picture shown, the PDF to download.
+        $chat->assertSeeHtml('src="'.route('chat.attachment', [$message, 0]).'"')
+            ->assertSeeHtml('href="'.route('chat.attachment', [$message, 1]).'?download=1"');
+
+        $this->get(route('chat.attachment', [$message, 1]).'?download=1')->assertOk()->assertDownload('report.pdf');
+        $this->actingAs($this->colleague)->get(route('chat.attachment', [$message, 0]))->assertOk();
+        $this->actingAs(User::factory()->create())->get(route('chat.attachment', [$message, 0]))->assertForbidden();
+
+        // Too big: refused.
+        $this->actingAs($this->me);
+        Livewire::test(ChatWidget::class)
+            ->call('startConversationWith', $this->colleague->id)
+            ->set('uploads', [UploadedFile::fake()->create('huge.zip', ChatWidget::MAX_KB + 1)])
+            ->call('sendMessage', 'كبير')
+            ->assertHasErrors('uploads.0');
+        $this->assertSame(1, ChatMessage::count());
     }
 
     public function test_the_broadcast_goes_to_every_participants_personal_channel(): void

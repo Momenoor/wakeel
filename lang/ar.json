@@ -3440,5 +3440,11 @@
     ":name sent back minutes (:number) of :matter signed.": "أعاد :name المحضر (:number) في الدعوى :matter موقّعاً.",
     "The matter has no OneDrive folder.": "لا يوجد مجلد OneDrive للدعوى.",
     "Signed minutes subfolder": "مجلد المحاضر الموقعة",
-    "Signed minutes sent back on WhatsApp are saved here, inside the matter's folder (made when missing). Use \"/\" for a folder inside another.": "تُحفظ هنا المحاضر الموقعة الواردة عبر واتساب، داخل مجلد الدعوى (يُنشأ إن لم يوجد). استخدم \"/\" لمجلد داخل آخر."
+    "Signed minutes sent back on WhatsApp are saved here, inside the matter's folder (made when missing). Use \"/\" for a folder inside another.": "تُحفظ هنا المحاضر الموقعة الواردة عبر واتساب، داخل مجلد الدعوى (يُنشأ إن لم يوجد). استخدم \"/\" لمجلد داخل آخر.",
+    "Reply": "رد",
+    "You": "أنت",
+    "Replying to :name": "الرد على :name",
+    "yourself": "نفسك",
+    "Attach files": "إرفاق ملفات",
+    "file": "الملف"
 }

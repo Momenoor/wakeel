@@ -68,14 +68,57 @@
                     </span>
                 </div>
             @endif
-            <div @class(['flex', 'justify-end' => $isMine])>
+            {{-- The reply button shows beside the bubble on hover (always, faintly, on touch screens). --}}
+            <div
+                id="chat-msg-{{ $message->id }}"
+                wire:key="chat-msg-{{ $message->id }}"
+                x-data="{ hover: false }"
+                x-on:mouseenter="hover = true"
+                x-on:mouseleave="hover = false"
+                @class(['flex', 'justify-end' => $isMine])
+                style="align-items: center; gap: 4px; transition: background-color .6s; border-radius: 1rem;"
+            >
+                @php($replyButton = '<button type="button" wire:click="replyTo('.$message->id.')" title="'.e(__('Reply')).'" aria-label="'.e(__('Reply')).'" x-bind:style="\'opacity: \' + (hover ? 1 : (window.matchMedia(\'(hover: none)\').matches ? .45 : 0)) + \'; transition: opacity .15s; padding: 4px; border-radius: 9999px; color: rgb(107 114 128); flex-shrink: 0;\'"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform: '.(__('filament-panels::layout.direction') === 'rtl' ? 'scaleX(-1)' : 'none').';"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>')
+                @if ($isMine) {!! $replyButton !!} @endif
                 <div @class([
                     'max-w-[80%] rounded-2xl px-4 py-2 text-sm shadow-sm',
                     'rounded-br-md bg-gradient-to-br from-primary-600 to-primary-500 text-white' => $isMine,
                     'rounded-bl-md bg-gray-100 text-gray-950 dark:bg-white/10 dark:text-white' => ! $isMine,
-                ])>
+                ]) style="min-width: 0;">
+                    {{-- The message answered: tap to go to it. --}}
+                    @if ($message->replyTo)
+                        <button
+                            type="button"
+                            x-on:click="const el = document.getElementById('chat-msg-{{ $message->reply_to_id }}'); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.style.backgroundColor = 'rgba(250, 204, 21, .25)'; setTimeout(() => el.style.backgroundColor = '', 1200); }"
+                            style="display: block; width: 100%; text-align: start; margin-bottom: 6px; padding: 4px 8px; border-radius: 8px; border-inline-start: 3px solid {{ $isMine ? 'rgba(255,255,255,.8)' : 'rgb(37 99 235)' }}; background: {{ $isMine ? 'rgba(255,255,255,.18)' : 'rgba(0,0,0,.06)' }}; font-size: .75rem; line-height: 1.3;"
+                        >
+                            <span style="display: block; font-weight: 600;">{{ $message->replyTo->user_id === auth()->id() ? __('You') : ($message->replyTo->sender?->display_name ?: $message->replyTo->sender?->name) }}</span>
+                            <span style="display: block; opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ $message->replyTo->preview(90) }}</span>
+                        </button>
+                    @endif
+
+                    {{-- Files: pictures shown, the rest as a link to download. --}}
+                    @foreach ($message->files() as $index => $file)
+                        @php($url = route('chat.attachment', [$message, $index]))
+                        @if (\App\Models\ChatMessage::isImage($file) && $file['mime'] !== 'image/svg+xml')
+                            <a href="{{ $url }}" target="_blank" rel="noopener" style="display: block; margin-bottom: 6px;">
+                                <img src="{{ $url }}" alt="{{ $file['name'] }}" loading="lazy" style="display: block; max-width: 100%; max-height: 240px; border-radius: 10px; object-fit: cover;">
+                            </a>
+                        @else
+                            <a href="{{ $url }}?download=1" style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; padding: 6px 8px; border-radius: 8px; background: {{ $isMine ? 'rgba(255,255,255,.18)' : 'rgba(0,0,0,.06)' }}; color: inherit; text-decoration: none;">
+                                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0;"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+                                <span style="min-width: 0;">
+                                    <span dir="auto" style="display: block; font-size: .8rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ $file['name'] }}</span>
+                                    <span style="display: block; font-size: .7rem; opacity: .75;">{{ \Illuminate\Support\Number::fileSize((int) $file['size']) }}</span>
+                                </span>
+                            </a>
+                        @endif
+                    @endforeach
+
                     {{-- Escaped, with its links (and emails) clickable. --}}
-                    <p class="whitespace-pre-wrap break-words leading-relaxed">{!! \App\Support\Linkify::html($message->body) !!}</p>
+                    @if (trim((string) $message->body) !== '')
+                        <p class="whitespace-pre-wrap break-words leading-relaxed">{!! \App\Support\Linkify::html($message->body) !!}</p>
+                    @endif
                     <p @class([
                         'mt-1 text-end text-[10px] tracking-wide',
                         'text-white/70' => $isMine,
@@ -100,6 +143,7 @@
                         @endif
                     </p>
                 </div>
+                @unless ($isMine) {!! $replyButton !!} @endunless
             </div>
         @endforeach
     </div>
@@ -110,16 +154,41 @@
         one. Waiting on the round trip first made every send feel seconds
         slow on shared hosting.
     --}}
+    {{-- The message being answered, and the files picked: until sent. --}}
+    @if ($this->replyingTo)
+        <div style="display: flex; align-items: center; gap: 8px; margin: 8px 12px 0; padding: 6px 10px; border-radius: 10px; border-inline-start: 3px solid rgb(37 99 235); background: rgba(37, 99, 235, .08); font-size: .75rem;">
+            <span style="min-width: 0; flex: 1;">
+                <span style="display: block; font-weight: 600; color: rgb(37 99 235);">{{ __('Replying to :name', ['name' => $this->replyingTo->user_id === auth()->id() ? __('yourself') : ($this->replyingTo->sender?->display_name ?: $this->replyingTo->sender?->name)]) }}</span>
+                <span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .8;">{{ $this->replyingTo->preview(90) }}</span>
+            </span>
+            <button type="button" wire:click="cancelReply" aria-label="{{ __('Cancel') }}" style="padding: 2px 6px; font-size: 1rem; line-height: 1; opacity: .6;">×</button>
+        </div>
+    @endif
+    @if ($uploads !== [])
+        <div style="display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 12px 0;">
+            @foreach ($uploads as $index => $upload)
+                <span wire:key="chat-upload-{{ $index }}" style="display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 3px 4px 3px 10px; border-radius: 9999px; background: rgba(107, 114, 128, .12); font-size: .75rem;">
+                    <span dir="auto" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 12rem;">📎 {{ method_exists($upload, 'getClientOriginalName') ? $upload->getClientOriginalName() : '' }}</span>
+                    <button type="button" wire:click="removeUpload({{ $index }})" aria-label="{{ __('Remove') }}" style="padding: 0 6px; font-size: .9rem; line-height: 1; opacity: .6;">×</button>
+                </span>
+            @endforeach
+        </div>
+    @endif
+    @error('uploads') <p style="margin: 6px 12px 0; font-size: .75rem; color: rgb(220 38 38);">{{ $message }}</p> @enderror
+    @error('uploads.*') <p style="margin: 6px 12px 0; font-size: .75rem; color: rgb(220 38 38);">{{ $message }}</p> @enderror
+    <div wire:loading.flex wire:target="uploads" style="margin: 6px 12px 0; font-size: .75rem; opacity: .7;">{{ __('Uploading…') }}</div>
+
     <form
         x-data="{
             send() {
                 const input = this.$refs.input;
                 const text = input.value.trim();
-                if (text === '') { return; }
+                const files = (this.$wire.uploads || []).length;
+                if (text === '' && files === 0) { return; }
                 input.value = '';
                 this.$wire.body = '';
                 const bubble = this.$refs.pending.content.firstElementChild.cloneNode(true);
-                bubble.querySelector('[data-text]').textContent = text;
+                bubble.querySelector('[data-text]').textContent = text || ('📎 ' + files);
                 this.$el.closest('.fi-chat-widget').querySelector('[data-chat-messages]')?.appendChild(bubble);
                 window.dispatchEvent(new CustomEvent('message-sent'));
                 this.$wire.sendMessage(text);
@@ -136,6 +205,14 @@
                 </div>
             </div>
         </template>
+        {{-- Files to send with the message (each up to 20 MB, five at a time). --}}
+        <label
+            title="{{ __('Attach files') }}"
+            style="display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex-shrink: 0; border-radius: 9999px; cursor: pointer; color: rgb(107 114 128);"
+        >
+            <input type="file" multiple wire:model="uploads" style="display: none;">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        </label>
         <input
             type="text"
             x-ref="input"
@@ -146,6 +223,8 @@
         />
         <button
             type="submit"
+            wire:loading.attr="disabled"
+            wire:target="uploads"
             class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-primary-600 text-white shadow-sm transition hover:bg-primary-500 disabled:opacity-60"
             aria-label="{{ __('Send') }}"
         >

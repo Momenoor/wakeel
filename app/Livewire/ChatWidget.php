@@ -18,6 +18,8 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Livewire\Component;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
+use Livewire\WithFileUploads;
 use Throwable;
 
 /**
@@ -37,6 +39,13 @@ use Throwable;
  */
 class ChatWidget extends Component
 {
+    use WithFileUploads;
+
+    /** Files one message may carry, and the size of each (KB). */
+    public const MAX_FILES = 5;
+
+    public const MAX_KB = 20480;
+
     /** Session key holding the popup's open state and conversation. */
     private const POPUP_STATE = 'chat.popup';
 
@@ -47,6 +56,12 @@ class ChatWidget extends Component
     public ?int $activeConversationId = null;
 
     public string $body = '';
+
+    /** @var array<int, TemporaryUploadedFile> files picked for the next message */
+    public array $uploads = [];
+
+    /** The message the next one answers. */
+    public ?int $replyToId = null;
 
     public string $userSearch = '';
 
@@ -139,7 +154,7 @@ class ChatWidget extends Component
             'wakeel-desktop-notification',
             id: 'chat-'.$latest->chat_conversation_id,
             title: (string) ($latest->sender?->display_name ?: $latest->sender?->name ?: __('Chat')),
-            body: Str::limit(trim((string) $latest->body), 150),
+            body: $latest->preview(),
             url: self::chatUrl(),
         );
 
@@ -222,7 +237,7 @@ class ChatWidget extends Component
 
         return ChatMessage::query()
             ->where('chat_conversation_id', $this->activeConversation->id)
-            ->with('sender')
+            ->with(['sender', 'replyTo.sender'])
             ->orderBy('created_at')
             ->get();
     }
@@ -297,12 +312,14 @@ class ChatWidget extends Component
     public function backToList(): void
     {
         $this->activeConversationId = null;
+        $this->replyToId = null;
         $this->rememberState();
     }
 
     public function selectConversation(int $conversationId): void
     {
         $this->activeConversationId = $conversationId;
+        $this->replyToId = null;
         $this->markActiveConversationRead();
         $this->rememberState();
     }
@@ -328,7 +345,7 @@ class ChatWidget extends Component
     {
         $body = trim($text ?? $this->body);
 
-        if ($body === '' || ! $this->activeConversationId) {
+        if (($body === '' && $this->uploads === []) || ! $this->activeConversationId) {
             return;
         }
 
@@ -338,10 +355,22 @@ class ChatWidget extends Component
             return;
         }
 
+        $this->validate([
+            'uploads' => ['array', 'max:'.self::MAX_FILES],
+            'uploads.*' => ['file', 'max:'.self::MAX_KB],
+        ], [], ['uploads.*' => __('file')]);
+
+        // Only a message of this conversation can be answered.
+        $replyTo = $this->replyToId
+            ? ChatMessage::query()->where('chat_conversation_id', $conversation->id)->whereKey($this->replyToId)->value('id')
+            : null;
+
         $message = ChatMessage::create([
             'chat_conversation_id' => $conversation->id,
             'user_id' => Auth::id(),
+            'reply_to_id' => $replyTo,
             'body' => Str::limit($body, 5000, ''),
+            'attachments' => $this->storeUploads($conversation->id) ?: null,
         ]);
 
         $conversation->update(['last_message_at' => $message->created_at]);
@@ -359,7 +388,7 @@ class ChatWidget extends Component
             $payload = WebPushSender::chatPayload(
                 $conversation->id,
                 (string) ($message->sender?->display_name ?: $message->sender?->name ?: __('Chat')),
-                $message->body,
+                $message->preview(),
                 self::chatUrl(),
             );
 
@@ -375,6 +404,49 @@ class ChatWidget extends Component
         }
 
         $this->body = '';
+        $this->uploads = [];
+        $this->replyToId = null;
+    }
+
+    /**
+     * The files picked, kept privately under the conversation.
+     *
+     * @return list<array{path: string, name: string, size: int, mime: string}>
+     */
+    private function storeUploads(int $conversationId): array
+    {
+        return array_values(array_map(fn (TemporaryUploadedFile $file): array => [
+            'path' => $file->store('chat-attachments/'.$conversationId, ChatMessage::DISK),
+            'name' => Str::limit($file->getClientOriginalName(), 200, ''),
+            'size' => (int) $file->getSize(),
+            'mime' => (string) ($file->getMimeType() ?: 'application/octet-stream'),
+        ], array_filter($this->uploads, fn ($file) => $file instanceof TemporaryUploadedFile)));
+    }
+
+    public function removeUpload(int $index): void
+    {
+        unset($this->uploads[$index]);
+        $this->uploads = array_values($this->uploads);
+    }
+
+    /**
+     * Answer this message: it shows quoted above the input until sent.
+     */
+    public function replyTo(int $messageId): void
+    {
+        $this->replyToId = $this->activeConversation
+            ? ChatMessage::query()->where('chat_conversation_id', $this->activeConversation->id)->whereKey($messageId)->value('id')
+            : null;
+    }
+
+    public function cancelReply(): void
+    {
+        $this->replyToId = null;
+    }
+
+    public function getReplyingToProperty(): ?ChatMessage
+    {
+        return $this->replyToId ? $this->messages->firstWhere('id', $this->replyToId) : null;
     }
 
     protected function markActiveConversationRead(): void

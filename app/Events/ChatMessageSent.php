@@ -57,7 +57,7 @@ class ChatMessageSent implements ShouldBroadcastNow
         return [
             'id' => $this->message->id,
             'conversation_id' => $this->message->chat_conversation_id,
-            'body' => $this->message->body,
+            'body' => $this->message->preview(),
             'sender_id' => $sender->id,
             'sender_name' => $sender->display_name ?: $sender->name,
             'sender_avatar' => $sender->getFilamentAvatarUrl(),
