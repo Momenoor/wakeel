@@ -57,12 +57,16 @@ class EditorFontSize implements RichContentPlugin
     public function getEditorTools(): array
     {
         return [
+            // Each with an icon: the dropdown shows the active one's — small,
+            // normal or large text — and showed nothing while they had none.
             RichEditorTool::make('fontSizeDefault')
                 ->label(__('Default size'))
+                ->icon('fi-o-paragraph')
                 ->jsHandler('$getEditor()?.chain().focus().unsetFontSize().run()')
                 ->activeJsExpression('! $getEditor()?.isActive(\'fontSize\')'),
             ...array_map(fn (int $size): RichEditorTool => RichEditorTool::make('fontSize'.$size)
                 ->label($size.' pt')
+                ->icon($size < 14 ? 'fi-o-small' : 'fi-o-lead')
                 ->jsHandler("\$getEditor()?.chain().focus().setFontSize('{$size}pt').run()")
                 ->activeJsExpression("\$getEditor()?.isActive('fontSize', { 'data-font-size': '{$size}pt' })"), self::SIZES),
         ];

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\BulkMailCampaignStatus;
 use App\Filament\Mms\Resources\BulkMailCampaigns\Pages\CreateBulkMailCampaign;
+use App\Filament\Mms\Resources\LetterTemplates\LetterTemplateResource;
 use App\Filament\Mms\Resources\LetterTemplates\Pages\CreateLetterTemplate;
 use App\Models\BulkMailCampaign;
 use App\Models\BulkMailRecipient;
@@ -48,7 +49,19 @@ class RichEditorFontSizeTest extends TestCase
             $this->assertStringContainsString('Font size', $html, $page);
             $this->assertStringContainsString("setFontSize('16pt')", $html, $page);
             $this->assertStringContainsString('unsetFontSize()', $html, $page);
+            // The dropdown's button always has an icon: none of its options
+            // turns it into an empty one.
+            $this->assertStringNotContainsString(') return &#039;&#039;;', $html, $page);
         }
+    }
+
+    public function test_placeholders_stay_inside_the_editor(): void
+    {
+        // Long names wrap, and the list scrolls instead of outgrowing the editor.
+        $this->get(LetterTemplateResource::getUrl('create'))
+            ->assertSuccessful()
+            ->assertSee('.fi-fo-rich-editor span[data-type=mergeTag] { white-space: normal;', false)
+            ->assertSee('.fi-fo-rich-editor-merge-tags-list { max-height: 24rem; overflow-y: auto;', false);
     }
 
     public function test_a_size_is_kept_when_saved_and_nothing_else_gets_in(): void

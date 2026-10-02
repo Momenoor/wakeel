@@ -92,6 +92,21 @@ class AppServiceProvider extends ServiceProvider
         // The font that draws the Dirham sign, on every panel page.
         FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): string => (string) Currency::fontLink());
 
+        // The rich editors' placeholders (merge tags) stay inside the editor.
+        // Filament keeps each on one line, so a long name — an Arabic label,
+        // "رابط اجتماع Teams (عند إنشائه مع الخطاب)" — ran past its narrow side
+        // panel and out of the frame, and forty of them made the panel
+        // taller than the editor. They wrap, and the list scrolls.
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::HEAD_END,
+            fn (): string => '<style>'
+                .'.fi-fo-rich-editor-panels { min-width: 0; }'
+                .'.fi-fo-rich-editor-merge-tags-list { max-height: 24rem; overflow-y: auto; overscroll-behavior: contain; }'
+                .'.fi-fo-rich-editor-merge-tag-btn { max-width: 100%; }'
+                .'.fi-fo-rich-editor span[data-type=mergeTag] { white-space: normal; overflow-wrap: anywhere; max-width: 100%; }'
+                .'</style>',
+        );
+
         // On a phone, typing in a field smaller than 16px makes the iPhone
         // zoom the whole page in (and leave it zoomed): the chat box, the
         // search, every form field. 16px there, as they are elsewhere.
