@@ -159,6 +159,8 @@ class LetterBuilderTest extends TestCase
         $zip = new ZipArchive;
         $zip->open($docx);
         $xml = $zip->getFromName('word/document.xml');
+        $headers = collect(range(0, $zip->numFiles - 1))->map(fn ($i) => $zip->getNameIndex($i))
+            ->filter(fn ($name) => str_starts_with($name, 'word/header'))->map(fn ($name) => $zip->getFromName($name))->implode('');
         $zip->close();
         @unlink($docx);
 
@@ -166,7 +168,10 @@ class LetterBuilderTest extends TestCase
         // Dates stay left to right: in their own run, without w:rtl.
         $this->assertMatchesRegularExpression('~<w:r>(?:<w:rPr/>|<w:rPr>(?:(?!</w:rPr>|<w:rtl/>).)*</w:rPr>)<w:t[^>]*>30/09/2026</w:t>~s', $xml);
         $this->assertDoesNotMatchRegularExpression('~<w:rtl/></w:rPr><w:t[^>]*>30/09/2026</w:t>~', $xml);
-        $this->assertStringContainsString('JPA/2026/986/1', $xml);
+        // The reference and date: in the first page's header, as placed on
+        // the letterhead — not opening the text.
+        $this->assertStringContainsString('JPA/2026/986/1', $headers);
+        $this->assertStringNotContainsString('JPA/2026/986/1', $xml);
     }
 
     public function test_issuing_from_the_matter_page(): void

@@ -26,7 +26,8 @@ class ConditionalPartsTest extends TestCase
         $text = 'Dear client. <<The meeting is at {{time}}.>> Regards.';
 
         $this->assertSame('Dear client. The meeting is at 10:00. Regards.', BulkMailPlaceholders::apply($text, ['time' => '10:00']));
-        $this->assertSame('Dear client.  Regards.', BulkMailPlaceholders::apply($text, ['time' => '']));
+        // One space left where the part went, not two.
+        $this->assertSame('Dear client. Regards.', BulkMailPlaceholders::apply($text, ['time' => '']));
         // [[…]] the same; a part without placeholders is simply kept.
         $this->assertSame('A B', BulkMailPlaceholders::apply('A [[{{x}}]]B', ['x' => '']));
         $this->assertSame('A note.', BulkMailPlaceholders::apply('A <<note>>.', []));

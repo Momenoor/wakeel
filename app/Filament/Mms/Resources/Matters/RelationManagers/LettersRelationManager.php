@@ -863,8 +863,9 @@ class LettersRelationManager extends RelationManager
                 'url' => TextInput::make($name)->url()->columnSpanFull(),
                 'number' => TextInput::make($name)->numeric(),
                 'select' => Select::make($name)->options(array_combine($input['options'] ?? [], $input['options'] ?? []) ?: []),
+                'toggle' => Toggle::make($name)->inline(false),
                 default => TextInput::make($name),
-            })->label($label)->required($required)
+            })->label($label)->required($required && ($input['type'] ?? null) !== 'toggle')
                 ->hidden(fn (Get $get): bool => in_array($key, $meetingLinks, true) && (bool) $get('create_meeting'));
         }
 
@@ -971,7 +972,11 @@ class LettersRelationManager extends RelationManager
             // shared one true/false value: ticking one ticked them all);
             // every other field as empty.
             if ($key !== '') {
-                $set('inputs.'.$key, ($input['type'] ?? null) === 'items' ? [] : null);
+                $set('inputs.'.$key, match ($input['type'] ?? null) {
+                    'items' => [],
+                    'toggle' => false,
+                    default => null,
+                });
             }
             if (! $event || ! str_contains($key, 'meeting') && ! str_contains($key, 'teams')) {
                 continue;

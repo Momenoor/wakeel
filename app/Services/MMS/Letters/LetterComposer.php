@@ -209,8 +209,18 @@ class LetterComposer
     {
         $type = $input['type'] ?? 'text';
 
+        if ($type === 'toggle') {
+            return ['' => filter_var($value, FILTER_VALIDATE_BOOLEAN) ? BulkMailPlaceholders::ON : ''];
+        }
+
+        // Empty, with every form it has (a date's .day too): a <<…>> part
+        // holding any of them then goes, instead of waiting for a value.
         if (blank($value) && $type !== 'items') {
-            return $type === 'url' ? ['' => '', '.url' => ''] : ['' => ''];
+            return match ($type) {
+                'url' => ['' => '', '.url' => ''],
+                'date' => ['' => '', '.day' => ''],
+                default => ['' => ''],
+            };
         }
 
         return match ($type) {
@@ -452,9 +462,28 @@ class LetterComposer
             'attendee.phone' => trim((string) ($a['phone'] ?? '')),
         ];
 
-        $text = BulkMailPlaceholders::apply(e($format), $values, escape: true);
+        // The ID and phone written left to right — in an Arabic line
+        // "784-1990-1234567-1" otherwise comes out in reversed pieces.
+        $ltr = [];
+        foreach (['attendee.id_number', 'attendee.phone'] as $key) {
+            if ($values[$key] !== '') {
+                $token = "\u{E000}".count($ltr)."\u{E001}";
+                $ltr[$token] = self::ltr($values[$key]);
+                $values[$key] = $token;
+            }
+        }
+
+        $text = strtr(BulkMailPlaceholders::apply(e($format), $values, escape: true), $ltr);
 
         return trim(preg_replace('/[ \x{00A0}]{2,}/u', ' ', $text) ?? $text);
+    }
+
+    /**
+     * Numbers and codes kept left to right inside right-to-left text.
+     */
+    public static function ltr(string $text): string
+    {
+        return '<bdo dir="ltr">'.e($text).'</bdo>';
     }
 
     /**
@@ -470,6 +499,7 @@ class LetterComposer
             'number' => (string) ($i + 1),
             'name' => e(trim(trim((string) ($a['title'] ?? '')).' '.trim((string) $a['name']))),
             'signature' => '&#160;',
+            'id_number', 'phone' => filled($a[$column] ?? null) ? self::ltr(trim((string) $a[$column])) : '',
             default => e(trim((string) ($a[$column] ?? ''))),
         }.'</td>')->implode('').'</tr>')->implode('');
 

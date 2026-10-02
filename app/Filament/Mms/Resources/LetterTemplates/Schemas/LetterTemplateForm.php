@@ -136,6 +136,7 @@ class LetterTemplateForm
                                         'url' => __('Link'),
                                         'number' => __('Number'),
                                         'select' => __('Choice'),
+                                        'toggle' => __('On / off switch'),
                                         'items' => __('Items from the library'),
                                     ])
                                     ->default('text')

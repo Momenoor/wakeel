@@ -14,6 +14,7 @@ use App\Models\MatterMinutes;
 use App\Models\MatterParty;
 use App\Models\Party;
 use App\Models\User;
+use App\Services\MMS\BulkMailPlaceholders;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterDocx;
 use App\Services\MMS\Letters\LetterPdf;
@@ -132,8 +133,8 @@ class MinutesTest extends TestCase
         $this->assertStringContainsString('في الدعوى رقم 3153/2026', $html);
         $this->assertStringContainsString('اليوم الأربعاء الموافق 30/09/2026 الساعة 4:00 مساءً', $html);
         // Under their capacity, each on a line.
-        $this->assertStringContainsString('<p><strong>المدعي:</strong></p><p>السيد/ المهاد لخدمات صيانة السفن – رقم الهوية: 784-1998-6110217-8</p>', $html);
-        $this->assertStringContainsString('<p><strong>وكيل المدعي:</strong></p><p>الأستاذ/ محمد عبد المقصود – رقم الهوية: 784-1987-8792411-1 – رقم الهاتف: 0501132801</p>', $html);
+        $this->assertStringContainsString('<p><strong>المدعي:</strong></p><p>السيد/ المهاد لخدمات صيانة السفن – رقم الهوية: <bdo dir="ltr">784-1998-6110217-8</bdo></p>', $html);
+        $this->assertStringContainsString('<p><strong>وكيل المدعي:</strong></p><p>الأستاذ/ محمد عبد المقصود – رقم الهوية: <bdo dir="ltr">784-1987-8792411-1</bdo> – رقم الهاتف: <bdo dir="ltr">0501132801</bdo></p>', $html);
         $this->assertStringContainsString('<p><strong>س:</strong> عن طبيعة العلاقة بين الطرفين؟</p><p><strong>ج:</strong> علاقة توريد عمالة.</p><p>عقب الحاضر بأن الرسالة مختلقة.</p>', $html);
         $this->assertStringContainsString('ينتهي يوم الاثنين الموافق 05/10/2026', $html);
         $this->assertStringStartsWith('%PDF', (new LetterPdf(MinutesService::composer($minutes->fresh())))->render());
@@ -280,11 +281,11 @@ class MinutesTest extends TestCase
         $html = fn (array $settings) => LetterComposer::attendeesHtml($attendees, $settings, true);
 
         // Standard: grouped, ID and phone only when known.
-        $this->assertSame('<p><strong>المدعي:</strong></p><p>السيد/ أحمد علي – رقم الهوية: 784-1</p><p><strong>المدعى عليها:</strong></p><p>شركة المثال – رقم الهاتف: 050</p>', $html([]));
+        $this->assertSame('<p><strong>المدعي:</strong></p><p>السيد/ أحمد علي – رقم الهوية: <bdo dir="ltr">784-1</bdo></p><p><strong>المدعى عليها:</strong></p><p>شركة المثال – رقم الهاتف: <bdo dir="ltr">050</bdo></p>', $html([]));
 
         // Its own wording and heading.
         $this->assertSame(
-            '<p><strong>بصفته المدعي</strong></p><p>1) أحمد علي (هوية 784-1)</p><p><strong>بصفته المدعى عليها</strong></p><p>2) شركة المثال</p>',
+            '<p><strong>بصفته المدعي</strong></p><p>1) أحمد علي (هوية <bdo dir="ltr">784-1</bdo>)</p><p><strong>بصفته المدعى عليها</strong></p><p>2) شركة المثال</p>',
             $html(['line' => '{{attendee.number}}) {{attendee.name}}<< (هوية {{attendee.id_number}})>>', 'heading' => 'بصفته {{attendee.capacity}}']),
         );
 
@@ -311,6 +312,72 @@ class MinutesTest extends TestCase
         $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => $template->id, 'number' => 1,
             'meeting_at' => '2026-09-30 16:00:00', 'attendees' => $attendees, 'status' => MatterMinutes::DRAFT]);
         $this->assertStringContainsString('>التوقيع</th>', MinutesService::composer($minutes)->bodyHtml());
+    }
+
+    public function test_companies_are_addressed_as_messrs(): void
+    {
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
+
+        $titles = collect(MinutesService::attendeeCandidates($minutes))->pluck('title', 'name')->all();
+        $this->assertSame('السادة/', $titles['المهاد لخدمات صيانة السفن']);
+        $this->assertSame('الأستاذ/', $titles['محمد عبد المقصود']);
+
+        foreach (['شركة ألفا للتجارة', 'مكتب الأول للمحاماة', 'Alpha Trading LLC', 'Beta FZE', 'مؤسسة النور', 'الفا ذ.م.م'] as $company) {
+            $this->assertTrue(MinutesService::isCompany($company), $company);
+        }
+        foreach (['محمد شركاوي', 'Ahmed Banker', 'سارة علي'] as $person) {
+            $this->assertFalse(MinutesService::isCompany($person), $person);
+        }
+    }
+
+    public function test_an_empty_date_and_an_on_off_field_decide_their_parts(): void
+    {
+        $template = new LetterTemplate(['locale' => 'ar', 'subject' => 'S', 'inputs' => [
+            ['key' => 'documents_deadline', 'label' => 'م', 'type' => 'date'],
+            ['key' => 'extension', 'label' => 'تمديد', 'type' => 'toggle'],
+        ], 'body' => '<p>وعليه قد تقرر، [[ مع منح الأطراف أجلاً ينتهي يوم {{input.documents_deadline.day}} الموافق {{input.documents_deadline}}، ]][[ وقد مُدد الأجل بناءً على طلب الأطراف{{input.extension}}، ]] وأقفل المحضر.</p>']);
+        $body = fn (array $inputs) => (new LetterComposer($template, $this->matter, $inputs, [], 'REF/1', now()))->bodyHtml();
+
+        // Nothing filled: both parts go, no brackets left.
+        $this->assertSame('<p>وعليه قد تقرر، وأقفل المحضر.</p>', $body([]));
+        $this->assertSame('<p>وعليه قد تقرر، وأقفل المحضر.</p>', $body(['documents_deadline' => null, 'extension' => false]));
+
+        // The date given and the switch on: both in — and no "true" printed.
+        $html = $body(['documents_deadline' => '2026-10-05', 'extension' => true]);
+        $this->assertSame('<p>وعليه قد تقرر، مع منح الأطراف أجلاً ينتهي يوم الاثنين الموافق 05/10/2026، وقد مُدد الأجل بناءً على طلب الأطراف، وأقفل المحضر.</p>', $html);
+        $this->assertStringNotContainsString(BulkMailPlaceholders::ON, $html);
+    }
+
+    public function test_the_signatures_can_follow_the_text_on_every_page(): void
+    {
+        $letterhead = Letterhead::create(['name' => 'Minutes', 'margin_bottom' => 20, 'elements' => [
+            ['type' => 'text', 'page' => Letterhead::AFTER_TEXT, 'x' => 0, 'y' => 0, 'width' => 170, 'content' => '{{minutes.signatures}}', 'font_size' => 10, 'align' => 'center', 'color' => '#111827'],
+        ]]);
+        $template = LetterTemplate::query()->where('category', 'minutes')->sole();
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => $template->id, 'letterhead_id' => $letterhead->id,
+            'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT,
+            'attendees' => [['present' => true, 'title' => 'الأستاذ/', 'name' => 'محمد عبد المقصود']]]);
+
+        $pdf = new LetterPdf(MinutesService::composer($minutes));
+        $html = (new \ReflectionMethod(LetterPdf::class, 'html'))->invoke($pdf, $letterhead, true);
+
+        // The page's footer, on the bottom margin — and, on the last page,
+        // straight after the text.
+        $this->assertStringContainsString('footer: html_letterAfterText; margin-footer: 20mm;', $html);
+        $this->assertSame(2, substr_count($html, 'التوقيع: '));
+        $this->assertStringNotContainsString('position: absolute; left: 0mm; top: 0mm', $html);
+        $this->assertStringStartsWith('%PDF', $pdf->render());
+
+        // Word: at the foot of each page.
+        $path = (new LetterDocx(MinutesService::composer($minutes)))->save(storage_path('app/test-minutes-after-text.docx'));
+        $zip = new \ZipArchive;
+        $zip->open($path);
+        $footers = collect(range(0, $zip->numFiles - 1))->map(fn ($i) => $zip->getNameIndex($i))->filter(fn ($n) => str_starts_with($n, 'word/footer'))
+            ->map(fn ($n) => $zip->getFromName($n))->implode('');
+        $zip->close();
+        @unlink($path);
+        $this->assertStringContainsString('محمد عبد المقصود', $footers);
     }
 
     public function test_finalised_minutes_are_filed_and_keep_their_wording(): void

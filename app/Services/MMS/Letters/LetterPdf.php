@@ -86,7 +86,21 @@ class LetterPdf
         $level = error_reporting(error_reporting() & ~E_WARNING & ~E_NOTICE & ~E_DEPRECATED);
 
         try {
+            // Elements "after the text": a footer that takes the room it
+            // needs just above the bottom margin, so each full page's text
+            // ends right on it.
+            $flowing = $this->composer->elements()->contains(fn ($e) => ($e['page'] ?? 'first') === Letterhead::AFTER_TEXT);
+            if ($flowing) {
+                $mpdf->setAutoBottomMargin = 'stretch';
+            }
+
             $this->write($mpdf, $this->html($letterhead, $rtl), $rtl);
+
+            // The last page: written right after its text instead (see
+            // html()), so not at its foot as well.
+            if ($flowing) {
+                $mpdf->SetHTMLFooter('');
+            }
 
             return $mpdf->Output('', Destination::STRING_RETURN);
         } finally {
@@ -179,8 +193,13 @@ class LetterPdf
         $margins = fn (float $top, float $right, float $bottom, float $left): string => "margin-top: {$top}mm; margin-right: {$right}mm; margin-bottom: {$bottom}mm; margin-left: {$left}mm;";
         $other = $letterhead->otherPagesMargins();
 
-        $css = '@page { '.$background($rest).' header: html_letterRest; '.$margins($other['top'], $other['right'], $other['bottom'], $other['left']).' }'
-            .'@page :first { '.$background($first).' header: html_letterFirst; '.$margins((float) $letterhead->margin_top, (float) $letterhead->margin_right, (float) $letterhead->margin_bottom, (float) $letterhead->margin_left).' }'
+        // After the text: the page's footer, sitting on its bottom margin.
+        $flow = $elements->filter(fn ($element) => ($element['page'] ?? 'first') === Letterhead::AFTER_TEXT);
+        $flowHtml = $flow->map(fn ($element) => $this->flowing($element, $rtl))->implode('');
+        $footer = fn (float $bottom) => $flowHtml !== '' ? ' footer: html_letterAfterText; margin-footer: '.$bottom.'mm;' : '';
+
+        $css = '@page { '.$background($rest).' header: html_letterRest;'.$footer($other['bottom']).' '.$margins($other['top'], $other['right'], $other['bottom'], $other['left']).' }'
+            .'@page :first { '.$background($first).' header: html_letterFirst;'.$footer((float) $letterhead->margin_bottom).' '.$margins((float) $letterhead->margin_top, (float) $letterhead->margin_right, (float) $letterhead->margin_bottom, (float) $letterhead->margin_left).' }'
             .'body { font-family: '.self::FONT.'; font-size: 12pt; line-height: 1.55; text-align: justify; }'
             .'p { margin: 0 0 6pt 0; }'
             .'ol, ul { margin: 0 0 6pt 0; padding-'.($rtl ? 'right' : 'left').': 18pt; }'
@@ -200,7 +219,10 @@ class LetterPdf
         return '<html dir="'.($rtl ? 'rtl' : 'ltr').'"><head><style>'.$css.'</style></head><body>'
             .$header('letterFirst', ['first', 'all'])
             .$header('letterRest', ['rest', 'all'])
+            .($flowHtml !== '' ? '<htmlpagefooter name="letterAfterText">'.$flowHtml.'</htmlpagefooter>' : '')
             .$this->composer->bodyHtml()
+            // The last page's, straight after its last line.
+            .($flowHtml !== '' ? '<div style="margin-top: 4mm;">'.$flowHtml.'</div>' : '')
             .'</body></html>';
     }
 
@@ -211,6 +233,53 @@ class LetterPdf
      * @param  array<string, mixed>  $element
      */
     private function element(array $element, Letterhead $letterhead, bool $rtl): string
+    {
+        $content = $this->content($element, $letterhead);
+
+        // From the corner it is placed from: top or bottom, left or right.
+        [$vertical, $horizontal] = Letterhead::anchor($element);
+
+        $style = sprintf(
+            'position: absolute; %s: %smm; %s: %smm; width: %smm; font-size: %spt; color: %s; text-align: %s;',
+            $horizontal,
+            (float) ($element['x'] ?? 0),
+            $vertical,
+            (float) ($element['y'] ?? 0),
+            (float) ($element['width'] ?? 60),
+            (float) ($element['font_size'] ?? 11),
+            e($element['color'] ?? '#111827'),
+            e($element['align'] ?? ($rtl ? 'right' : 'left')),
+        );
+
+        return '<div dir="'.$this->direction($element, $rtl).'" style="'.$style.'">'.$content.'</div>';
+    }
+
+    /**
+     * An element "after the text": in the flow, across the text area.
+     *
+     * @param  array<string, mixed>  $element
+     */
+    private function flowing(array $element, bool $rtl): string
+    {
+        $content = $this->content($element, $this->composer->letterhead ?? Letterhead::fallback());
+
+        return $content === '' ? '' : '<div dir="'.$this->direction($element, $rtl).'" style="font-size: '.(float) ($element['font_size'] ?? 11).'pt; color: '.e($element['color'] ?? '#111827').'; text-align: '.e($element['align'] ?? ($rtl ? 'right' : 'left')).';">'.$content.'</div>';
+    }
+
+    /**
+     * @param  array<string, mixed>  $element
+     */
+    private function direction(array $element, bool $rtl): string
+    {
+        return in_array($element['type'] ?? null, ['reference', 'date'], true) && ! $this->composer->isArabic() ? 'ltr' : ($rtl ? 'rtl' : 'ltr');
+    }
+
+    /**
+     * What an element shows.
+     *
+     * @param  array<string, mixed>  $element
+     */
+    private function content(array $element, Letterhead $letterhead): string
     {
         $values = $this->composer->values();
         $arabic = $this->composer->isArabic();
@@ -235,23 +304,6 @@ class LetterPdf
             $content = '<span style="text-outline-width: '.$outline.'mm; text-outline-color: '.e($element['color'] ?? '#111827').';">'.$content.'</span>';
         }
 
-        // From the corner it is placed from: top or bottom, left or right.
-        [$vertical, $horizontal] = Letterhead::anchor($element);
-
-        $style = sprintf(
-            'position: absolute; %s: %smm; %s: %smm; width: %smm; font-size: %spt; color: %s; text-align: %s;',
-            $horizontal,
-            (float) ($element['x'] ?? 0),
-            $vertical,
-            (float) ($element['y'] ?? 0),
-            (float) ($element['width'] ?? 60),
-            (float) ($element['font_size'] ?? 11),
-            e($element['color'] ?? '#111827'),
-            e($element['align'] ?? ($rtl ? 'right' : 'left')),
-        );
-
-        $dir = in_array($element['type'] ?? null, ['reference', 'date'], true) && ! $arabic ? 'ltr' : ($rtl ? 'rtl' : 'ltr');
-
-        return '<div dir="'.$dir.'" style="'.$style.'">'.$content.'</div>';
+        return $content;
     }
 }

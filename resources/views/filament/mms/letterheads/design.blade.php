@@ -78,7 +78,7 @@
                 <div style="position: absolute; left: {{ $this->record->margin_left / $pageWidth * 100 }}%; right: {{ $this->record->margin_right / $pageWidth * 100 }}%; top: {{ $this->record->margin_top / $pageHeight * 100 }}%; bottom: {{ $this->record->margin_bottom / $pageHeight * 100 }}%; border: 1px dashed rgba(59,130,246,.45); pointer-events: none;"></div>
 
                 @foreach ($elements as $index => $element)
-                    @continue(($element['page'] ?? 'first') === 'rest')
+                    @continue(in_array($element['page'] ?? 'first', ['rest', \App\Models\Letterhead::AFTER_TEXT], true))
                     @php([$vertical, $horizontal] = \App\Models\Letterhead::anchor($element))
                     <div
                         wire:key="element-{{ $index }}-{{ $element['type'] }}"
@@ -119,7 +119,7 @@
                     @forelse ($elements as $index => $element)
                         <button type="button" wire:click="select({{ $index }})" style="text-align: start; padding: .35rem .5rem; border-radius: .4rem; {{ $selected === $index ? 'background: rgba(37,99,235,.12); font-weight: 600;' : '' }}">
                             {{ $types[$element['type']] ?? $element['type'] }}
-                            <span style="opacity: .6; font-size: .8em;">— {{ ['first' => __('First page'), 'all' => __('Every page'), 'rest' => __('Following pages')][$element['page'] ?? 'first'] }}</span>
+                            <span style="opacity: .6; font-size: .8em;">— {{ ['first' => __('First page'), 'all' => __('Every page'), 'rest' => __('Following pages'), \App\Models\Letterhead::AFTER_TEXT => __('After the text, every page')][$element['page'] ?? 'first'] ?? '' }}</span>
                         </button>
                     @empty
                         <p style="opacity: .7; font-size: .9rem;">{{ __('No elements yet.') }}</p>
@@ -140,6 +140,7 @@
                                     <option value="first">{{ __('First page') }}</option>
                                     <option value="all">{{ __('Every page') }}</option>
                                     <option value="rest">{{ __('Following pages') }}</option>
+                                    <option value="{{ \App\Models\Letterhead::AFTER_TEXT }}">{{ __('After the text, every page') }}</option>
                                 </x-filament::input.select>
                             </x-filament::input.wrapper>
                         </label>

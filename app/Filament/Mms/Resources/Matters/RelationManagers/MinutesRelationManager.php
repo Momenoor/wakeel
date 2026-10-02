@@ -284,7 +284,7 @@ class MinutesRelationManager extends RelationManager
                                 Toggle::make('present')->label(__('Attended'))->inline(false)->columnSpan(1),
                                 Select::make('title')
                                     ->label(__('Title'))
-                                    ->options(['الأستاذ/' => 'الأستاذ/', 'الأستاذة/' => 'الأستاذة/', 'السيد/' => 'السيد/', 'السيدة/' => 'السيدة/', 'Mr.' => 'Mr.', 'Ms.' => 'Ms.'])
+                                    ->options(['السادة/' => 'السادة/', 'الأستاذ/' => 'الأستاذ/', 'الأستاذة/' => 'الأستاذة/', 'السيد/' => 'السيد/', 'السيدة/' => 'السيدة/', 'Messrs.' => 'Messrs.', 'Mr.' => 'Mr.', 'Ms.' => 'Ms.'])
                                     ->placeholder('—')
                                     ->columnSpan(2),
                                 TextInput::make('name')->label(__('Name'))->required()->columnSpan(3),
@@ -365,8 +365,9 @@ class MinutesRelationManager extends RelationManager
                 'number' => TextInput::make('inputs.'.$input['key'])->numeric(),
                 'url' => TextInput::make('inputs.'.$input['key'])->url()->columnSpanFull(),
                 'select' => Select::make('inputs.'.$input['key'])->options(array_combine($input['options'] ?? [], $input['options'] ?? []) ?: []),
+                'toggle' => Toggle::make('inputs.'.$input['key'])->inline(false),
                 default => TextInput::make('inputs.'.$input['key']),
-            })->label($input['label'] ?? $input['key'])->required(! empty($input['required'])))
+            })->label($input['label'] ?? $input['key'])->required(! empty($input['required']) && ($input['type'] ?? null) !== 'toggle'))
             ->values()
             ->all();
 
@@ -383,7 +384,7 @@ class MinutesRelationManager extends RelationManager
     {
         return collect($record->template?->inputs ?? [])
             ->filter(fn (array $input) => filled($input['key'] ?? null) && ($input['type'] ?? 'text') !== 'items')
-            ->mapWithKeys(fn (array $input) => [$input['key'] => $record->inputs[$input['key']] ?? null])
+            ->mapWithKeys(fn (array $input) => [$input['key'] => $record->inputs[$input['key']] ?? (($input['type'] ?? null) === 'toggle' ? false : null)])
             ->all();
     }
 

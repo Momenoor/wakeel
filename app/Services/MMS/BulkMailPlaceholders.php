@@ -150,7 +150,9 @@ class BulkMailPlaceholders
         $lookup = self::lookup($values);
         $text = self::conditionals($text, $values);
 
-        return preg_replace_callback('/\{\{\s*([^{}]+?)\s*\}\}/u', function (array $m) use ($lookup, $escape) {
+        // A switch that is on counts as filled for <<…>> parts, but prints
+        // nothing.
+        return str_replace(self::ON, '', preg_replace_callback('/\{\{\s*([^{}]+?)\s*\}\}/u', function (array $m) use ($lookup, $escape) {
             $key = self::normalize(html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
 
             if (! array_key_exists($key, $lookup)) {
@@ -158,8 +160,14 @@ class BulkMailPlaceholders
             }
 
             return $escape ? e($lookup[$key]) : $lookup[$key];
-        }, $text);
+        }, $text) ?? $text);
     }
+
+    /**
+     * The value of an on/off field that is on: invisible, but not empty —
+     * a part [[…{{input.KEY}}…]] shows when it's on, and goes when it's off.
+     */
+    public const ON = "\u{2063}";
 
     /**
      * Parts written <<…>>: kept — without the << >> — when every
@@ -201,7 +209,14 @@ class BulkMailPlaceholders
         // A paragraph or list item that was only the part left out goes too.
         $text = preg_replace('/<(p|li|h[1-6])\b[^>]*>(?:\s|&nbsp;|&#160;|<br\s*\/?>)*'.$gone.'(?:\s|&nbsp;|&#160;|<br\s*\/?>)*<\/\1>/u', '', $text) ?? $text;
 
-        return str_replace($gone, '', $text);
+        // Where parts went between two spaces, one space is left — not both
+        // ("تقرر،  وأقفل"); written against a word or a full stop, none.
+        $text = preg_replace('/[ \x{00A0}]+(?:'.$gone.'[ \x{00A0}]*)*'.$gone.'[ \x{00A0}]+/u', ' ', $text) ?? $text;
+        $text = str_replace($gone, '', $text);
+
+        // A part kept with its own spaces inside the brackets, next to the
+        // spaces outside them: one.
+        return preg_replace('/(?<=\S) {2,}(?=\S)/u', ' ', $text) ?? $text;
     }
 
     /**

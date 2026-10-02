@@ -130,7 +130,7 @@ class MinutesService
         return collect(LetterComposer::candidates($minutes->matter, $arabic))
             ->map(fn (array $c): array => [
                 'present' => false,
-                'title' => $arabic ? 'الأستاذ/' : 'Mr.',
+                'title' => self::isCompany($c['name']) ? ($arabic ? 'السادة/' : 'Messrs.') : ($arabic ? 'الأستاذ/' : 'Mr.'),
                 'name' => $c['name'],
                 'capacity' => $c['role'],
                 'id_number' => $parties->get($c['party_id'])?->extra['id_number'] ?? null,
@@ -139,6 +139,18 @@ class MinutesService
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * A company, an office or an establishment — by its name — rather than
+     * a person: addressed "السادة/".
+     */
+    public static function isCompany(string $name): bool
+    {
+        return (bool) preg_match(
+            '/(^|[\s\-\(])(شركة|شركه|مؤسسة|مؤسسه|مجموعة|مكتب|بنك|مصرف|ذ\.?\s?م\.?\s?م|ش\.?\s?م\.?\s?[عخ]|م\.?\s?م\.?\s?ح|المحدودة|القابضة|للتجارة|للمقاولات|لخدمات|LLC|L\.L\.C|FZE|FZCO|FZ-?LLC|Ltd|Limited|Company|Co\.|Inc\.?|Corp|Group|Bank|PJSC|P\.J\.S\.C|PSC|Est\.|Establishment|Trading)($|[\s\.\,\-\)])/iu',
+            $name,
+        );
     }
 
     /**

@@ -31,6 +31,12 @@ class Letterhead extends Model
 
     public const ELEMENT_TYPES = ['reference', 'date', 'text', 'image', 'logo', 'line', 'page_number'];
 
+    /**
+     * An element shown on every page right after the text — not at a set
+     * place: the attendees' signatures under the minutes' text.
+     */
+    public const AFTER_TEXT = 'after_text';
+
     /** The page corner an element's x and y are measured from. */
     public const ANCHORS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
 

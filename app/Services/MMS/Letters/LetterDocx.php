@@ -52,6 +52,19 @@ class LetterDocx
         ]);
         $word->getDocInfo()->setTitle($this->composer->subject());
 
+        $elements = $this->composer->elements();
+
+        // Text placed from the bottom of the page, and "after the text": in
+        // the page's footer — its distance from the page's edge that of the
+        // lowest of them.
+        $footerText = $elements->filter(fn ($e) => self::isText($e) && (($e['page'] ?? 'first') === Letterhead::AFTER_TEXT || Letterhead::anchor($e)[0] === 'bottom'));
+        $footerFrom = $footerText->isEmpty() ? 0 : (float) $footerText
+            ->map(fn ($e) => ($e['page'] ?? 'first') === Letterhead::AFTER_TEXT ? (float) $letterhead->margin_bottom : (float) ($e['y'] ?? 0))
+            ->min();
+
+        $headerText = $elements->filter(fn ($e) => self::isText($e) && ($e['page'] ?? 'first') !== Letterhead::AFTER_TEXT && Letterhead::anchor($e)[0] === 'top');
+        $headerFrom = $headerText->isEmpty() ? 0 : (float) $headerText->map(fn ($e) => (float) ($e['y'] ?? 0))->min();
+
         $landscape = $letterhead->orientation === 'landscape';
         $section = $word->addSection([
             'paperSize' => 'A4',
@@ -60,39 +73,42 @@ class LetterDocx
             'marginRight' => Converter::cmToTwip($letterhead->margin_right / 10),
             'marginBottom' => Converter::cmToTwip($letterhead->margin_bottom / 10),
             'marginLeft' => Converter::cmToTwip($letterhead->margin_left / 10),
-            'headerHeight' => 0,
-            'footerHeight' => 0,
+            'headerHeight' => Converter::cmToTwip($headerFrom / 10),
+            'footerHeight' => Converter::cmToTwip($footerFrom / 10),
         ]);
 
         $first = $letterhead->file($letterhead->first_page_background);
         $rest = $letterhead->file($letterhead->other_pages_background) ?? $first;
-        $elements = $this->composer->elements();
 
         $this->header($section->addHeader(Header::FIRST), $first, $elements->filter(fn ($e) => in_array($e['page'] ?? 'first', ['first', 'all'], true))->all(), $letterhead, $rtl);
         $this->header($section->addHeader(), $rest, $elements->filter(fn ($e) => in_array($e['page'] ?? 'first', ['rest', 'all'], true))->all(), $letterhead, $rtl);
 
         $pageNumber = $elements->firstWhere('type', 'page_number');
-        if ($pageNumber) {
-            foreach ([Header::FIRST, Header::AUTO] as $type) {
+        if ($pageNumber || $footerText->isNotEmpty()) {
+            foreach ([Header::FIRST => ['first', 'all', Letterhead::AFTER_TEXT], Header::AUTO => ['rest', 'all', Letterhead::AFTER_TEXT]] as $type => $pages) {
+                $footer = $section->addFooter($type);
+
+                // Placed from the bottom, and "after the text" (Word can't
+                // follow the text): at the foot of the page — the highest
+                // first.
+                $this->textLines(
+                    $footer,
+                    $footerText->filter(fn ($e) => in_array($e['page'] ?? 'first', $pages, true))
+                        ->sortByDesc(fn ($e) => ($e['page'] ?? 'first') === Letterhead::AFTER_TEXT ? PHP_INT_MAX : (float) ($e['y'] ?? 0))
+                        ->values()->all(),
+                    fromTop: false,
+                    rtl: $rtl,
+                );
+
                 // Just the page number: "1 / 1" in a right-to-left
                 // document comes out as "/ 11".
-                $section->addFooter($type)->addPreserveText('{PAGE}', [
-                    'size' => (float) ($pageNumber['font_size'] ?? 9),
-                    'color' => ltrim((string) ($pageNumber['color'] ?? '#6b7280'), '#'),
-                ], ['alignment' => 'center', 'bidi' => false]);
+                if ($pageNumber) {
+                    $footer->addPreserveText('{PAGE}', [
+                        'size' => (float) ($pageNumber['font_size'] ?? 9),
+                        'color' => ltrim((string) ($pageNumber['color'] ?? '#6b7280'), '#'),
+                    ], ['alignment' => 'center', 'bidi' => false]);
+                }
             }
-        }
-
-        // First-page text elements (reference, date, text boxes) open the
-        // letter as plain lines: positioned text boxes aren't reliable in
-        // Word, and plain lines are easier to edit.
-        foreach ($elements->filter(fn ($e) => ($e['page'] ?? 'first') === 'first' && in_array($e['type'] ?? 'text', ['reference', 'date', 'text'], true))->sortBy(fn ($e) => Letterhead::topLeft($e, 0, Letterhead::PAGE_HEIGHT)[1]) as $element) {
-            $this->mixedLine(
-                $section,
-                $this->elementText($element),
-                ['size' => (float) ($element['font_size'] ?? 11), 'bold' => ! empty($element['bold']), 'color' => ltrim((string) ($element['color'] ?? '#111827'), '#')],
-                ['alignment' => $this->alignment($element['align'] ?? null, $rtl), 'bidi' => $rtl, 'spaceAfter' => 0],
-            );
         }
 
         $this->addBody($section, $this->wordHtml());
@@ -131,8 +147,66 @@ class LetterDocx
             if (is_array($part)) {
                 $this->signatureBlock($section, $part);
             } elseif (trim($part) !== '') {
-                Html::addHtml($section, $part, false, false);
+                // A horizontal rule as a line Word shows: PHPWord's own is
+                // 1/8 pt — too thin to see.
+                foreach (preg_split('~<hr\b[^>]*/?>(?:</hr>)?~i', $part) ?: [] as $i => $piece) {
+                    if ($i > 0) {
+                        $section->addText('', ['size' => 2], ['borderBottomSize' => 8, 'borderBottomColor' => '6B7280', 'borderBottomStyle' => 'single', 'spaceBefore' => 120, 'spaceAfter' => 120]);
+                    }
+                    if (trim($piece) !== '') {
+                        Html::addHtml($section, $piece, false, false);
+                    }
+                }
             }
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $element
+     */
+    private static function isText(array $element): bool
+    {
+        return in_array($element['type'] ?? 'text', ['reference', 'date', 'text'], true);
+    }
+
+    /**
+     * Text elements as the lines of a header or footer, in order down the
+     * page, each spaced from the one above as it is on the letterhead. The
+     * first sits at the header's (footer's) distance from the page edge.
+     *
+
+     * @param  list<array<string, mixed>>  $elements  top to bottom
+     */
+    private function textLines(AbstractContainer $container, array $elements, bool $fromTop, bool $rtl): void
+    {
+        // How tall a text is, roughly: its lines at its size.
+        $height = fn (array $e): float => (substr_count($this->elementText($e), "\n") + 1) * (float) ($e['font_size'] ?? 11) * 0.3528 * 1.25;
+        $previous = null;
+
+        foreach ($elements as $element) {
+            $gap = 0.0;
+            if ($previous !== null) {
+                // From the top: this one's top less the last one's bottom.
+                // From the bottom: the last one's bottom (its distance) less
+                // this one's, less this one's height.
+                $gap = $fromTop
+                    ? (float) ($element['y'] ?? 0) - ((float) ($previous['y'] ?? 0) + $height($previous))
+                    : (($previous['page'] ?? '') === Letterhead::AFTER_TEXT ? 0.0 : (float) ($previous['y'] ?? 0) - (float) ($element['y'] ?? 0) - $height($element));
+            }
+
+            $this->mixedLine(
+                $container,
+                $this->elementText($element),
+                ['size' => (float) ($element['font_size'] ?? 11), 'bold' => ! empty($element['bold']), 'color' => ltrim((string) ($element['color'] ?? '#111827'), '#')],
+                [
+                    'alignment' => $this->alignment($element['align'] ?? null, $rtl),
+                    'bidi' => $rtl,
+                    'spaceBefore' => (int) Converter::cmToTwip(max(0, $gap) / 10),
+                    'spaceAfter' => 0,
+                ],
+            );
+
+            $previous = $element;
         }
     }
 
@@ -224,8 +298,8 @@ class LetterDocx
     private function wordHtml(): string
     {
         $html = str_replace(
-            ['<strong>', '</strong>', '<em>', '</em>', ' dir="ltr"'],
-            ['<b>', '</b>', '<i>', '</i>', ''],
+            ['<strong>', '</strong>', '<em>', '</em>', ' dir="ltr"', '<bdo>', '</bdo>'],
+            ['<b>', '</b>', '<i>', '</i>', '', '<span>', '</span>'],
             $this->composer->bodyHtml(),
         );
 
@@ -377,38 +451,25 @@ class LetterDocx
                 'wrappingStyle' => Frame::WRAP_INFRONT,
             ];
 
-            if (in_array($type, ['logo', 'image'], true)) {
-                if ($file) {
-                    $header->addImage($file, $position);
-                }
-
-                continue;
+            // Pictures where they're placed. A line is part of the
+            // letterhead picture in practice; the page number goes in the
+            // footer (Word can't number pages inside a text box).
+            if ($file && in_array($type, ['logo', 'image'], true)) {
+                $header->addImage($file, $position);
             }
-
-            // A line is part of the letterhead picture in practice; the
-            // page number goes in the footer (Word can't number pages
-            // inside a text box).
-            if (in_array($type, ['line', 'page_number'], true)) {
-                continue;
-            }
-
-            // First-page text opens the letter body instead (see save()).
-            if (($element['page'] ?? 'first') === 'first') {
-                continue;
-            }
-
-            // On every page: a line in the header.
-            $this->mixedLine(
-                $header,
-                $this->elementText($element),
-                [
-                    'size' => (float) ($element['font_size'] ?? 11),
-                    'bold' => ! empty($element['bold']),
-                    'color' => ltrim((string) ($element['color'] ?? '#111827'), '#'),
-                ],
-                ['alignment' => $this->alignment($element['align'] ?? null, $rtl), 'bidi' => $rtl, 'spaceAfter' => 0],
-            );
         }
+
+        // Text placed from the top: the header's lines, from the highest;
+        // text placed from the bottom is in the footer (see save()).
+        $this->textLines(
+            $header,
+            collect($elements)
+                ->filter(fn ($e) => self::isText($e) && ($e['page'] ?? 'first') !== Letterhead::AFTER_TEXT && Letterhead::anchor($e)[0] === 'top')
+                ->sortBy(fn ($e) => (float) ($e['y'] ?? 0))
+                ->values()->all(),
+            fromTop: true,
+            rtl: $rtl,
+        );
     }
 
     private function alignment(?string $align, bool $rtl): string
