@@ -3350,5 +3350,6 @@
     "The PDF already filed with the attachments stays there.": "يبقى ملف PDF المضاف إلى المرفقات كما هو.",
     "number": "الرقم",
     "attendees": "الحضور",
-    "questions and answers": "الأسئلة والإجابات"
+    "questions and answers": "الأسئلة والإجابات",
+    "Insert placeholders from the { } menu, or type them: {{recipients}} puts the addressee block (put it alone on its own line), {{input.KEY}} what was filled in, {{input.KEY.day}} a date's weekday, {{signature}} and {{stamp}} the letterhead's images. The blocks menu has a ready signature block: the expert's name with the signature and stamp, placed where you drop it. Write a part between << and >> (or [[ and ]]) to print it only when its placeholders are filled — e.g. <<The meeting is at {{meeting.time}}.>>": "أدرج المتغيرات من قائمة { } أو اكتبها: {{recipients}} لبيانات المرسل إليهم (ضعه وحده في سطر مستقل)، و{{input.KEY}} للقيمة المدخلة، و{{input.KEY.day}} لاسم يوم التاريخ، و{{signature}} و{{stamp}} لصورتي التوقيع والختم. وفي قائمة الكتل كتلة توقيع جاهزة: اسم الخبير مع التوقيع والختم، توضع حيث تسحبها. اكتب جزءاً بين << و >> (أو [[ و ]]) ليُطبع فقط عندما تكون متغيراته معبأة — مثال: <<يُعقد الاجتماع الساعة {{meeting.time}}.>>"
 }

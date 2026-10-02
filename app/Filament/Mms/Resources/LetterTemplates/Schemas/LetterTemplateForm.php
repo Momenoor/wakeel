@@ -177,7 +177,7 @@ class LetterTemplateForm
 
                         TextEntry::make('placeholder_help')
                             ->hiddenLabel()
-                            ->state(new HtmlString(e(__('Insert placeholders from the { } menu, or type them: {{recipients}} puts the addressee block (put it alone on its own line), {{input.KEY}} what was filled in, {{input.KEY.day}} a date\'s weekday, {{signature}} and {{stamp}} the letterhead\'s images. The blocks menu has a ready signature block: the expert\'s name with the signature and stamp, placed where you drop it.')))),
+                            ->state(new HtmlString(e(__('Insert placeholders from the { } menu, or type them: {{recipients}} puts the addressee block (put it alone on its own line), {{input.KEY}} what was filled in, {{input.KEY.day}} a date\'s weekday, {{signature}} and {{stamp}} the letterhead\'s images. The blocks menu has a ready signature block: the expert\'s name with the signature and stamp, placed where you drop it. Write a part between << and >> (or [[ and ]]) to print it only when its placeholders are filled — e.g. <<The meeting is at {{meeting.time}}.>>')))),
                     ]),
             ]);
     }

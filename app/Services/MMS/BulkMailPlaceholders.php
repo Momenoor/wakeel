@@ -139,16 +139,16 @@ class BulkMailPlaceholders
 
     /**
      * Replaces every {{key}} that has a value. $escape for HTML bodies, so
-     * a name like "Smith & Sons" can't break the mail's markup.
+     * a name like "Smith & Sons" can't break the mail's markup. A part
+     * written <<like this>> is kept only when its placeholders are filled
+     * (see conditionals()).
      *
      * @param  array<string, string>  $values
      */
     public static function apply(string $text, array $values, bool $escape = false): string
     {
-        $lookup = [];
-        foreach ($values as $key => $value) {
-            $lookup[self::normalize((string) $key)] = (string) $value;
-        }
+        $lookup = self::lookup($values);
+        $text = self::conditionals($text, $values);
 
         return preg_replace_callback('/\{\{\s*([^{}]+?)\s*\}\}/u', function (array $m) use ($lookup, $escape) {
             $key = self::normalize(html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
@@ -159,6 +159,63 @@ class BulkMailPlaceholders
 
             return $escape ? e($lookup[$key]) : $lookup[$key];
         }, $text);
+    }
+
+    /**
+     * Parts written <<…>>: kept — without the << >> — when every
+     * placeholder in them has a value; left out whole when any is empty, a
+     * paragraph (or list item) they made up taken out with them, so no gap
+     * is left. A part with no placeholder is simply kept. A part whose
+     * placeholders aren't known here yet — {{recipient.name}} before each
+     * recipient's own email — is left as it is, to be decided when they are.
+     *
+     * [[…]] works the same. The editor keeps << >> as &lt;&lt; &gt;&gt;;
+     * both are read.
+     *
+     * @param  array<string, string>  $values
+     */
+    public static function conditionals(string $text, array $values): string
+    {
+        if (! str_contains($text, '&lt;&lt;') && ! str_contains($text, '<<') && ! str_contains($text, '[[')) {
+            return $text;
+        }
+
+        $lookup = self::lookup($values);
+        $gone = "\u{E001}";
+
+        $text = preg_replace_callback('/(?:&lt;&lt;|<<)(.*?)(?:&gt;&gt;|>>)|\[\[(.*?)\]\]/su', function (array $m) use ($lookup, $gone): string {
+            $part = ($m[1] ?? '') !== '' ? $m[1] : ($m[2] ?? '');
+            preg_match_all('/\{\{\s*([^{}]+?)\s*\}\}/u', $part, $found);
+            $keys = array_map(fn (string $key) => self::normalize(html_entity_decode($key, ENT_QUOTES | ENT_HTML5, 'UTF-8')), $found[1]);
+
+            // Not all known yet: decided later.
+            if (array_diff($keys, array_keys($lookup)) !== []) {
+                return $m[0];
+            }
+
+            $filled = array_filter($keys, fn (string $key) => preg_replace('/^[\s\x{00A0}]+|[\s\x{00A0}]+$/u', '', html_entity_decode(strip_tags($lookup[$key]), ENT_QUOTES | ENT_HTML5, 'UTF-8')) !== '');
+
+            return count($filled) === count($keys) ? $part : $gone;
+        }, $text) ?? $text;
+
+        // A paragraph or list item that was only the part left out goes too.
+        $text = preg_replace('/<(p|li|h[1-6])\b[^>]*>(?:\s|&nbsp;|&#160;|<br\s*\/?>)*'.$gone.'(?:\s|&nbsp;|&#160;|<br\s*\/?>)*<\/\1>/u', '', $text) ?? $text;
+
+        return str_replace($gone, '', $text);
+    }
+
+    /**
+     * @param  array<string, string>  $values
+     * @return array<string, string>
+     */
+    private static function lookup(array $values): array
+    {
+        $lookup = [];
+        foreach ($values as $key => $value) {
+            $lookup[self::normalize((string) $key)] = (string) $value;
+        }
+
+        return $lookup;
     }
 
     /**

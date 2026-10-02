@@ -424,6 +424,9 @@ class LetterComposer
         $pageWidth = $letterhead->orientation === 'landscape' ? Letterhead::PAGE_HEIGHT : Letterhead::PAGE_WIDTH;
         $html = SignatureLayouts::expand($html, $letterhead, $pageWidth - (float) $letterhead->margin_left - (float) $letterhead->margin_right);
 
+        // Parts written <<…>>: in only when their placeholders are filled.
+        $html = BulkMailPlaceholders::conditionals($html, $values);
+
         $blocks = array_filter($values, fn ($value, $key) => in_array($key, self::BLOCKS, true)
             || (str_starts_with($key, 'input.') && str_contains($value, '<ol>'))
             || (str_starts_with($key, 'input.') && str_contains($value, '<br'))
