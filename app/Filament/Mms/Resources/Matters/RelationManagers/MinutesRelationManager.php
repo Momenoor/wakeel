@@ -27,6 +27,7 @@ use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
+use Filament\Schemas\Components\View;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
@@ -89,6 +90,12 @@ class MinutesRelationManager extends RelationManager
             ->headerActions([$this->newAction()])
             ->recordActions([
                 $this->recordAction(),
+                Action::make('live')
+                    ->label(__('Live view'))
+                    ->icon('heroicon-o-presentation-chart-bar')
+                    ->color('gray')
+                    ->visible(fn (MatterMinutes $record): bool => ! $record->isFinal())
+                    ->url(fn (MatterMinutes $record) => route('minutes.live', $record), shouldOpenInNewTab: true),
                 $this->previewAction(),
                 Action::make('pdf')
                     ->label('PDF')
@@ -104,6 +111,28 @@ class MinutesRelationManager extends RelationManager
                     $this->deleteAction(),
                 ]),
             ]);
+    }
+
+    /**
+     * What's being typed in "Record the meeting", saved for the live view —
+     * every few seconds, without redrawing the window (nothing typed is
+     * disturbed). The answers reach the server with the call itself.
+     */
+    public function autosaveMinutes(): void
+    {
+        $this->skipRender();
+
+        $mounted = end($this->mountedActions) ?: [];
+        if (($mounted['name'] ?? null) !== 'recordMeeting' || ! $this->canChange()) {
+            return;
+        }
+
+        $minutes = $this->getOwnerRecord()->minutes()->whereKey($mounted['context']['recordKey'] ?? null)->first();
+        if (! $minutes || $minutes->isFinal()) {
+            return;
+        }
+
+        MinutesService::saveRecorded($minutes, (array) ($mounted['data'] ?? []));
     }
 
     private function canChange(): bool
@@ -210,6 +239,8 @@ class MinutesRelationManager extends RelationManager
                 'inputs' => self::inputDefaults($record),
             ])
             ->schema(fn (MatterMinutes $record): array => [
+                // Saved as it's typed, for the live view the attendees watch.
+                View::make('filament.mms.minutes.live-bar')->viewData(['url' => route('minutes.live', $record)]),
                 Section::make()
                     ->columns(2)
                     ->schema([
@@ -267,25 +298,7 @@ class MinutesRelationManager extends RelationManager
                 ...$this->templateFields($record->template),
             ])
             ->action(function (MatterMinutes $record, array $data): void {
-                $record->update([
-                    'meeting_at' => Carbon::parse($data['meeting_at']),
-                    'meeting_link' => $data['meeting_link'] ?? null,
-                    'attendees' => array_values(array_map(fn (array $a): array => [
-                        'present' => (bool) ($a['present'] ?? false),
-                        'title' => $a['title'] ?? null,
-                        'name' => (string) ($a['name'] ?? ''),
-                        'capacity' => $a['capacity'] ?? null,
-                        'id_number' => $a['id_number'] ?? null,
-                        'phone' => $a['phone'] ?? null,
-                        'party_id' => filled($a['party_id'] ?? null) ? (int) $a['party_id'] : null,
-                    ], $data['attendees'] ?? [])),
-                    'items' => array_values(array_map(fn (array $item): array => [
-                        'type' => ($item['type'] ?? 'question') === 'comment' ? 'comment' : 'question',
-                        'text' => trim((string) ($item['text'] ?? '')),
-                        'answer' => ($item['type'] ?? 'question') === 'comment' ? null : (filled($item['answer'] ?? null) ? trim((string) $item['answer']) : null),
-                    ], $data['items'] ?? [])),
-                    'inputs' => $data['inputs'] ?? [],
-                ]);
+                MinutesService::saveRecorded($record, $data);
 
                 MinutesService::rememberIdNumbers($record);
 

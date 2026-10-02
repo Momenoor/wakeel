@@ -6,12 +6,14 @@ use App\Enums\LetterTemplateCategories;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager;
 use App\Models\CalendarEvent;
+use App\Models\Letterhead;
 use App\Models\LetterTemplate;
 use App\Models\Matter;
 use App\Models\MatterMinutes;
 use App\Models\MatterParty;
 use App\Models\Party;
 use App\Models\User;
+use App\Services\MMS\Letters\LetterDocx;
 use App\Services\MMS\Letters\LetterPdf;
 use App\Services\MMS\Letters\MinutesService;
 use Filament\Facades\Filament;
@@ -136,6 +138,97 @@ class MinutesTest extends TestCase
 
         $this->get(route('minutes.pdf', $minutes))->assertOk()->assertHeader('Content-Type', 'application/pdf');
         $this->get(route('minutes.docx', $minutes))->assertOk();
+    }
+
+    public function test_what_is_typed_shows_on_the_live_view(): void
+    {
+        $minutes = MatterMinutes::create([
+            'matter_id' => $this->matter->id,
+            'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => 1,
+            'meeting_at' => '2026-09-30 16:00:00',
+            'items' => [['type' => 'question', 'text' => 'عن طبيعة العلاقة بين الطرفين؟', 'answer' => null]],
+            'status' => MatterMinutes::DRAFT,
+        ]);
+
+        $page = $this->minutesPage()->mountTableAction('recordMeeting', $minutes)
+            ->assertMountedActionModalSee('Open the live view');
+
+        $before = $this->getJson(route('minutes.live.feed', $minutes))->assertOk()->json('version');
+
+        // Typed, not yet saved: the live bar's autosave keeps it.
+        $items = array_values($page->get('mountedActions.0.data.items'));
+        $items[0]['answer'] = 'علاقة توريد عمالة.';
+        $page->set('mountedActions.0.data.items', $items)->call('autosaveMinutes');
+
+        $this->assertSame('علاقة توريد عمالة.', $minutes->fresh()->items[0]['answer']);
+
+        $feed = $this->getJson(route('minutes.live.feed', $minutes))->assertOk();
+        $this->assertNotSame($before, $feed->json('version'));
+        $this->assertStringContainsString('<strong>ج:</strong> علاقة توريد عمالة.', $feed->json('html'));
+        $this->assertStringNotContainsString('<img', $feed->json('html'));
+        $this->assertFalse($feed->json('final'));
+
+        $this->get(route('minutes.live', $minutes))->assertOk()
+            ->assertSee('علاقة توريد عمالة.')
+            // It asks for updates (the address JSON-escaped in its script).
+            ->assertSee(str_replace('/', '\/', route('minutes.live.feed', $minutes)), false);
+
+        // Final: no more autosaving.
+        $minutes->update(['status' => MatterMinutes::FINAL]);
+        $items[0]['answer'] = 'تغيير بعد الاعتماد';
+        $page->set('mountedActions.0.data.items', $items)->call('autosaveMinutes');
+        $this->assertSame('علاقة توريد عمالة.', $minutes->fresh()->items[0]['answer']);
+
+        // Someone who can't see the matter can't watch it.
+        $this->actingAs(User::factory()->create());
+        $this->get(route('minutes.live', $minutes))->assertForbidden();
+        $this->get(route('minutes.live.feed', $minutes))->assertForbidden();
+    }
+
+    public function test_the_attendees_sign_at_the_foot_of_every_page(): void
+    {
+        // A letterhead for minutes: the attendees' names at the foot of every page.
+        $letterhead = Letterhead::create(['name' => 'Minutes', 'elements' => [
+            ['type' => 'text', 'page' => 'all', 'x' => 20, 'y' => 260, 'width' => 170, 'content' => 'الحضور: {{minutes.signatures}} <ok>', 'font_size' => 10, 'align' => 'center', 'color' => '#111827'],
+        ]]);
+        $minutes = MatterMinutes::create([
+            'matter_id' => $this->matter->id,
+            'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'letterhead_id' => $letterhead->id,
+            'number' => 1,
+            'meeting_at' => '2026-09-30 16:00:00',
+            'attendees' => [
+                ['present' => true, 'title' => 'الأستاذ/', 'name' => 'محمد عبد المقصود', 'capacity' => 'وكيل المدعي'],
+                ['present' => false, 'title' => 'الأستاذة/', 'name' => 'غائبة', 'capacity' => 'وكيل المدعى عليه'],
+                ['present' => true, 'title' => 'الأستاذة/', 'name' => 'نضال قرشي', 'capacity' => 'وكيل المدعى عليه'],
+            ],
+            'status' => MatterMinutes::DRAFT,
+        ]);
+        $composer = MinutesService::composer($minutes);
+
+        $this->assertSame(['الأستاذ/ محمد عبد المقصود', 'الأستاذة/ نضال قرشي'], $composer->signatureNames());
+
+        // The PDF's text box: its table of names, each over a line to sign on.
+        $box = (new \ReflectionMethod(LetterPdf::class, 'element'))->invoke(new LetterPdf($composer), $letterhead->elements[0], $letterhead, true);
+        $this->assertStringContainsString('الحضور: <table', $box);
+        $this->assertStringContainsString('<strong>الأستاذ/ محمد عبد المقصود</strong></div><div style="margin-top: 5mm;">التوقيع: ....................', $box);
+        $this->assertStringContainsString('الأستاذة/ نضال قرشي', $box);
+        $this->assertStringNotContainsString('غائبة', $box);
+        // The rest of the box stays text.
+        $this->assertStringContainsString('&lt;ok&gt;', $box);
+        $this->assertStringStartsWith('%PDF', (new LetterPdf($composer))->render());
+
+        // In Word, the names in a row.
+        $docx = (new LetterDocx($composer))->save(storage_path('app/temp/test-minutes-signatures.docx'));
+        $zip = new \ZipArchive;
+        $zip->open($docx);
+        $headers = collect(range(0, $zip->numFiles - 1))->map(fn ($i) => $zip->getNameIndex($i))->filter(fn ($name) => str_starts_with($name, 'word/header'))
+            ->map(fn ($name) => (string) $zip->getFromName($name))->implode('');
+        $zip->close();
+        @unlink($docx);
+        $this->assertStringContainsString('محمد عبد المقصود', $headers);
+        $this->assertStringContainsString('نضال قرشي', $headers);
     }
 
     public function test_finalised_minutes_are_filed_and_keep_their_wording(): void

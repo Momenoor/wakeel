@@ -323,7 +323,10 @@ class LetterDocx
         return match ($element['type'] ?? 'text') {
             'reference' => ($arabic ? 'المرجع: ' : 'Ref: ').$values['reference'],
             'date' => ($arabic ? 'التاريخ: ' : 'Date: ').$values['date'],
-            default => BulkMailPlaceholders::apply((string) ($element['content'] ?? ''), array_map('strip_tags', $values)),
+            default => BulkMailPlaceholders::apply(
+                preg_replace('/\{\{\s*'.preg_quote(LetterComposer::SIGNATURES, '/').'\s*\}\}/u', implode('          ', $this->composer->signatureNames()), (string) ($element['content'] ?? '')) ?? '',
+                array_map('strip_tags', $values),
+            ),
         };
     }
 

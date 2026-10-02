@@ -33,7 +33,10 @@ use Illuminate\Support\Collection;
 class LetterComposer
 {
     /** Placeholders whose value is a block of HTML, not text. */
-    private const BLOCKS = ['recipients', 'signature', 'stamp', 'minutes.attendees', 'minutes.qa'];
+    private const BLOCKS = ['recipients', 'signature', 'stamp', 'minutes.attendees', 'minutes.qa', 'minutes.signatures'];
+
+    /** {{minutes.signatures}}: in a letterhead text box (every page), drawn as its table. */
+    public const SIGNATURES = 'minutes.signatures';
 
     /** Where a letter keeps the Teams meeting made when it was issued ({{meeting.link}}). */
     public const MEETING_LINK = '__meeting_link';
@@ -176,6 +179,7 @@ class LetterComposer
         $values['minutes.number'] = (string) ($minutes['number'] ?? '');
         $values['minutes.attendees'] = $this->attendeesHtml((array) ($minutes['attendees'] ?? []));
         $values['minutes.qa'] = $this->questionsHtml((array) ($minutes['items'] ?? []));
+        $values[self::SIGNATURES] = $this->signaturesHtml();
 
         $values['subject'] = BulkMailPlaceholders::apply((string) $this->template->subject, $values);
 
@@ -372,6 +376,43 @@ class LetterComposer
     }
 
     /**
+     * The names of the minutes' attendees who were present, with their title
+     * — who signs it.
+     *
+     * @return list<string>
+     */
+    public function signatureNames(): array
+    {
+        return collect((array) (((array) ($this->inputs[self::MINUTES] ?? []))['attendees'] ?? []))
+            ->filter(fn ($a) => is_array($a) && ! empty($a['present']) && filled($a['name'] ?? null))
+            ->map(fn (array $a) => trim(trim((string) ($a['title'] ?? '')).' '.trim((string) $a['name'])))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * The attendees' names, each over a line to sign on, three to a row —
+     * for the foot of every page (a letterhead text box) or the end of the
+     * minutes.
+     */
+    public function signaturesHtml(): string
+    {
+        $names = $this->signatureNames();
+        if ($names === []) {
+            return '';
+        }
+
+        $sign = $this->isArabic() ? 'التوقيع: ' : 'Signature: ';
+
+        return '<table style="width: 100%; border-collapse: collapse;">'
+            .collect($names)->chunk(3)->map(fn ($row) => '<tr>'.$row->map(fn (string $name) => '<td style="width: 33.3%; border: 0; padding: 1mm 2mm; text-align: center; vertical-align: top;">'
+                .'<div><strong>'.e($name).'</strong></div>'
+                .'<div style="margin-top: 5mm;">'.$sign.'....................</div>'
+                .'</td>')->implode('').str_repeat('<td style="width: 33.3%; border: 0;"></td>', 3 - $row->count()).'</tr>')->implode('')
+            .'</table>';
+    }
+
+    /**
      * The questions asked (س:) each with its answer (ج:), and the comments
      * made between them, in their order.
      *
@@ -487,6 +528,7 @@ class LetterComposer
             'minutes.number' => __('Minutes').' — '.__('number'),
             'minutes.attendees' => __('Minutes').' — '.__('attendees'),
             'minutes.qa' => __('Minutes').' — '.__('questions and answers'),
+            'minutes.signatures' => __('Minutes').' — '.__('attendees\' signatures'),
             'meeting.date' => __('Meeting date'),
             'meeting.day' => __('Meeting date').' — '.__('weekday'),
             'meeting.time' => __('Meeting time'),

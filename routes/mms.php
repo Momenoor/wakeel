@@ -74,6 +74,35 @@ Route::middleware('auth')->group(function () {
         return response()->download($path, MinutesService::fileName($minutes).'.docx')->deleteFileAfterSend();
     })->name('minutes.docx');
 
+    // The live view the attendees watch (shared in the meeting), and what
+    // it asks for every two seconds.
+    Route::get('minutes/{minutes}/live', function (MatterMinutes $minutes) {
+        abort_unless(auth()->user()->can('view', $minutes->matter), 403);
+
+        $html = MinutesService::liveHtml($minutes);
+
+        return view('minutes.live', [
+            'title' => MinutesService::fileName($minutes),
+            'html' => $html,
+            // The text's own fingerprint: saves a second apart look the same by time.
+            'version' => md5($html),
+            'feed' => route('minutes.live.feed', $minutes),
+            'rtl' => (($minutes->template?->locale) ?: 'ar') !== 'en',
+        ]);
+    })->name('minutes.live');
+
+    Route::get('minutes/{minutes}/live/feed', function (MatterMinutes $minutes) {
+        abort_unless(auth()->user()->can('view', $minutes->matter), 403);
+
+        $html = MinutesService::liveHtml($minutes);
+
+        return response()->json([
+            'version' => md5($html),
+            'html' => $html,
+            'final' => $minutes->isFinal(),
+        ])->header('Cache-Control', 'no-store');
+    })->name('minutes.live.feed');
+
     Route::get('bulk-mail/pdf/{recipient}', function (BulkMailRecipient $recipient) {
         abort_unless(auth()->user()->can('view', $recipient->campaign), 403);
 

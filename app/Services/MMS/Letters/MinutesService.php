@@ -6,6 +6,7 @@ use App\Models\Letterhead;
 use App\Models\LetterTemplate;
 use App\Models\MatterMinutes;
 use App\Models\Party;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -49,6 +50,46 @@ class MinutesService
             $minutes->meeting_at ?? $minutes->created_at ?? now(),
             $minutes->letterhead ?? $template->letterhead ?? Letterhead::default(),
         );
+    }
+
+    /**
+     * What was recorded at the meeting, kept: the meeting's time and link,
+     * who attended, the questions and answers, the template's own fields.
+     * Also while typing (the live view's autosave): nothing is required.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public static function saveRecorded(MatterMinutes $minutes, array $data): void
+    {
+        $minutes->update([
+            'meeting_at' => filled($data['meeting_at'] ?? null) ? Carbon::parse($data['meeting_at']) : $minutes->meeting_at,
+            'meeting_link' => $data['meeting_link'] ?? null,
+            'attendees' => array_values(array_map(fn (array $a): array => [
+                'present' => (bool) ($a['present'] ?? false),
+                'title' => $a['title'] ?? null,
+                'name' => (string) ($a['name'] ?? ''),
+                'capacity' => $a['capacity'] ?? null,
+                'id_number' => $a['id_number'] ?? null,
+                'phone' => $a['phone'] ?? null,
+                'party_id' => filled($a['party_id'] ?? null) ? (int) $a['party_id'] : null,
+            ], array_filter((array) ($data['attendees'] ?? []), 'is_array'))),
+            'items' => array_values(array_map(fn (array $item): array => [
+                'type' => ($item['type'] ?? 'question') === 'comment' ? 'comment' : 'question',
+                'text' => trim((string) ($item['text'] ?? '')),
+                'answer' => ($item['type'] ?? 'question') === 'comment' ? null : (filled($item['answer'] ?? null) ? trim((string) $item['answer']) : null),
+            ], array_filter((array) ($data['items'] ?? []), 'is_array'))),
+            'inputs' => (array) ($data['inputs'] ?? $minutes->inputs ?? []),
+        ]);
+    }
+
+    /**
+     * The minutes as they read now, for the live view shown to the
+     * attendees: the same text as the PDF, without the signature and stamp
+     * (files on the server, not for the screen).
+     */
+    public static function liveHtml(MatterMinutes $minutes): string
+    {
+        return preg_replace('/<img\b[^>]*>/i', '', self::composer($minutes)->bodyHtml()) ?? '';
     }
 
     /**

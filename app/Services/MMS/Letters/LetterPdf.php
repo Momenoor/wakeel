@@ -222,7 +222,9 @@ class LetterPdf
             'logo' => ($logo = Branding::logoFile()) ? '<img src="'.e($logo).'" style="width: 100%;" />' : '',
             'image' => ($image = $letterhead->file($element['content'] ?? null)) ? '<img src="'.e($image).'" style="width: 100%;" />' : '',
             'line' => '<div style="border-top: '.max(0.2, (float) ($element['font_size'] ?? 1) / 10).'mm solid '.e($element['color'] ?? '#111827').';"></div>',
-            default => nl2br(BulkMailPlaceholders::apply(e((string) ($element['content'] ?? '')), array_map('strip_tags', $values))),
+            default => collect(preg_split('/\{\{\s*'.preg_quote(LetterComposer::SIGNATURES, '/').'\s*\}\}/u', (string) ($element['content'] ?? '')) ?: [])
+                ->map(fn (string $text) => nl2br(BulkMailPlaceholders::apply(e($text), array_map('strip_tags', $values))))
+                ->implode($values[LetterComposer::SIGNATURES] ?? ''),
         };
 
         // Bold: the font has one weight, so — as for bold in the letter — a
