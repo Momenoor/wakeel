@@ -26,6 +26,26 @@ class Type extends Model
         'allow_current_status_import' => 'boolean',
         'exclude_from_incentive_count' => 'boolean',
         'incentive_config_id' => 'integer',
+        'party_capacities' => 'array',
+    ];
+
+    /** The sides of a matter, as its parties are typed. */
+    public const SIDES = ['plaintiff', 'defendant', 'implicate-litigant'];
+
+    /**
+     * Common names for the two sides, to pick from — plaintiff | defendant.
+     *
+     * @var list<array{0: string, 1: string}>
+     */
+    public const CAPACITY_PRESETS = [
+        ['المدعي', 'المدعى عليه'],
+        ['المتنازع', 'المتنازع ضدها'],
+        ['الشاكي', 'المشكو في حقه'],
+        ['الطاعن', 'المطعون عليه'],
+        ['طالب التنفيذ', 'المنفذ ضده'],
+        ['المستأنف', 'المستأنف ضده'],
+        ['المتظلم', 'المتظلم ضده'],
+        ['طالب الإجراء', 'المطلوب ضده الإجراء'],
     ];
 
     protected $fillable = [
@@ -35,7 +55,43 @@ class Type extends Model
         'allow_current_status_import',
         'exclude_from_incentive_count',
         'incentive_config_id',
+        'party_capacities',
     ];
+
+    /**
+     * What a side is called in this type's matters (in Arabic), or null
+     * for the usual name.
+     */
+    public function capacity(?string $side): ?string
+    {
+        $name = trim((string) (($this->party_capacities ?? [])[$side] ?? ''));
+
+        return $name !== '' ? $name : null;
+    }
+
+    /**
+     * A side's name on screen: the matter type's own, otherwise the usual
+     * one in the interface's language.
+     */
+    public static function sideLabel(?self $type, ?string $side): string
+    {
+        return $type?->capacity($side) ?? match ($side) {
+            'plaintiff' => __('Plaintiff'),
+            'defendant' => __('Defendant'),
+            'implicate-litigant' => __('Implicate Litigant'),
+            default => __(ucfirst(str_replace('-', ' ', (string) $side))),
+        };
+    }
+
+    /**
+     * The sides to choose from for a party of a matter of this type.
+     *
+     * @return array<string, string>
+     */
+    public static function sideOptions(?self $type): array
+    {
+        return collect(self::SIDES)->mapWithKeys(fn (string $side) => [$side => self::sideLabel($type, $side)])->all();
+    }
 
     /**
      * @return HasMany<Matter, $this>

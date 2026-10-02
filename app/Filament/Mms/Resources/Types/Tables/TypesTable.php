@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Resources\Types\Tables;
 
+use App\Filament\Mms\Resources\Types\Schemas\TypeForm;
 use App\Models\LetterTemplate;
 use App\Models\Type;
 use Filament\Actions\BulkAction;
@@ -121,6 +122,17 @@ class TypesTable
                                 'remove' => $type->letterTemplates()->detach($ids),
                                 default => $type->letterTemplates()->syncWithoutDetaching($ids),
                             });
+
+                            Notification::make()->success()->title(__('Saved'))->send();
+                        })
+                        ->deselectRecordsAfterCompletion(),
+                    BulkAction::make('setCapacities')
+                        ->label(__('Set party capacities'))
+                        ->icon('heroicon-o-scale')
+                        ->schema(TypeForm::capacityFields())
+                        ->action(function (Collection $records, array $data): void {
+                            $capacities = array_map(fn ($name) => trim((string) $name) ?: null, (array) ($data['party_capacities'] ?? []));
+                            $records->each(fn (Type $type) => $type->update(['party_capacities' => $capacities]));
 
                             Notification::make()->success()->title(__('Saved'))->send();
                         })

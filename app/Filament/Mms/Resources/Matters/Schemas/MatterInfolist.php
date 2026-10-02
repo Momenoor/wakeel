@@ -562,8 +562,8 @@ class MatterInfolist
                     ->schema([
                         TextEntry::make('type')
                             ->label(__('Role'))
-                            ->formatStateUsing(fn ($state) => __($state
-                                ? ucfirst(str_replace('-', ' ', $state)) : ''))
+                            // As the matter's type calls the side (المتنازع, الطاعن …).
+                            ->formatStateUsing(fn ($state, $record) => $state ? Type::sideLabel($record?->matter?->type, $state) : '')
                             ->badge()
                             ->color(fn ($state) => static::partyTypeColor($state)),
                         TextEntry::make('role_index')

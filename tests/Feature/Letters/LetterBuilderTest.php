@@ -9,6 +9,7 @@ use App\Filament\Mms\Resources\LetterTemplates\Actions\PreviewLetterTemplateActi
 use App\Filament\Mms\Resources\LetterTemplates\LetterTemplateResource;
 use App\Filament\Mms\Resources\LetterTemplates\Pages\CreateLetterTemplate;
 use App\Filament\Mms\Resources\LetterTemplates\Pages\ViewLetterTemplate;
+use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
 use App\Filament\Mms\Resources\Types\Pages\ListTypes;
@@ -856,6 +857,37 @@ class LetterBuilderTest extends TestCase
 
         $table->callTableBulkAction('assignLetters', [$first, $second], ['templates' => [$this->template->id], 'mode' => 'remove']);
         $this->assertSame(0, $this->template->types()->count());
+    }
+
+    public function test_each_side_is_named_as_the_matter_type_calls_it(): void
+    {
+        $dispute = Type::factory()->create(['name' => 'تنازع', 'party_capacities' => ['plaintiff' => 'المتنازع', 'defendant' => 'المتنازع ضدها']]);
+        $this->matter->update(['type_id' => $dispute->id]);
+        $matter = $this->matter->fresh();
+
+        // In letters and minutes: the side, and its representative.
+        $roles = collect(LetterComposer::candidates($matter))->pluck('role')->all();
+        $this->assertContains('المتنازع', $roles);
+        $this->assertNotContains('المدعي', $roles);
+        // Not named for this type: the usual name.
+        $this->assertSame('الخصم المدخل', LetterComposer::typeLabel('implicate-litigant', true, $dispute));
+        $this->assertSame('Plaintiff', LetterComposer::typeLabel('plaintiff', false, $dispute));
+
+        // On the matter page.
+        $this->get(MatterResource::getUrl('view', ['record' => $matter]))->assertSuccessful()->assertSee('المتنازع');
+
+        // The create form's choices, once the matter type is picked (the
+        // form itself can't be drawn on the test database).
+        $this->assertSame(['plaintiff' => 'المتنازع', 'defendant' => 'المتنازع ضدها', 'implicate-litigant' => 'Implicate Litigant'], Type::sideOptions($dispute));
+        $this->assertSame('Plaintiff', Type::sideOptions(null)['plaintiff']);
+
+        // Set for several types at once, from a common pair.
+        $appeal = Type::factory()->create();
+        Livewire::test(ListTypes::class)
+            ->callTableBulkAction('setCapacities', [$appeal], ['party_capacities' => ['plaintiff' => 'المستأنف', 'defendant' => 'المستأنف ضده', 'implicate-litigant' => '']])
+            ->assertHasNoTableBulkActionErrors();
+        $this->assertSame('المستأنف ضده', $appeal->fresh()->capacity('defendant'));
+        $this->assertNull($appeal->fresh()->capacity('implicate-litigant'));
     }
 
     public function test_the_screens_open(): void

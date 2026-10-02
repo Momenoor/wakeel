@@ -305,13 +305,10 @@ class MatterForm
                                             ->columns(3)
                                             ->itemNumbers()
                                             ->schema([
+                                                // Named as the matter's type calls each side (المتنازع, الطاعن …).
                                                 Select::make('type')
                                                     ->label(__('Type'))
-                                                    ->options([
-                                                        'plaintiff' => __('Plaintiff'),
-                                                        'defendant' => __('Defendant'),
-                                                        'implicate-litigant' => __('Implicate Litigant'),
-                                                    ])
+                                                    ->options(fn (Get $get) => Type::sideOptions(Type::find($get('../../type_id'))))
                                                     ->required()
                                                     ->live(onBlur: true) // onBlur reduces round-trips
                                                     ->afterStateUpdated(function (Set $set) {

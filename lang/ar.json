@@ -3455,5 +3455,13 @@
     "A table": "جدول",
     "Each attendee": "سطر كل حاضر",
     "Leave empty for the standard line. Placeholders: :list. A part between << >> shows only when its placeholder is filled.": "اتركه فارغاً للسطر المعتاد. المتغيرات: :list. الجزء بين << >> يظهر فقط إذا كان متغيره معبأً.",
-    "Capacity heading": "عنوان الصفة"
+    "Capacity heading": "عنوان الصفة",
+    "Party capacities": "صفات الأطراف",
+    "What each side is called in this type's matters — in letters, minutes and the matter page. Leave empty for the usual names.": "مسمّى كل طرف في دعاوى هذا النوع — في الخطابات والمحاضر وصفحة الدعوى. اتركه فارغاً للمسمّيات المعتادة.",
+    "Common names": "مسمّيات شائعة",
+    "Pick to fill in": "اختر للتعبئة",
+    "Plaintiff side": "طرف المدعي",
+    "Defendant side": "طرف المدعى عليه",
+    "Implicated litigant": "الخصم المدخل",
+    "Set party capacities": "تحديد صفات الأطراف"
 }

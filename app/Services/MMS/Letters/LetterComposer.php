@@ -7,6 +7,7 @@ use App\Models\LetterItem;
 use App\Models\LetterTemplate;
 use App\Models\Matter;
 use App\Models\MatterParty;
+use App\Models\Type;
 use App\Services\MMS\BulkMailPlaceholders;
 use App\Services\MMS\Letters\Blocks\SignatureBlock;
 use App\Support\RichHtml;
@@ -79,13 +80,13 @@ class LetterComposer
      */
     public static function candidates(Matter $matter, bool $arabic = true): array
     {
-        $matter->loadMissing(['matterParties.party']);
+        $matter->loadMissing(['matterParties.party', 'type']);
         $rows = $matter->matterParties;
         $top = $rows->filter(fn (MatterParty $mp) => empty($mp->parent_id) && $mp->role === 'party');
 
         $candidates = [];
         foreach ($top as $mp) {
-            $label = self::typeLabel($mp->type, $arabic);
+            $label = self::typeLabel($mp->type, $arabic, $matter->type);
             $representatives = $rows->filter(fn (MatterParty $rep) => (int) $rep->parent_id === (int) $mp->id);
 
             $candidates[$mp->id] = [
@@ -124,8 +125,16 @@ class LetterComposer
         ];
     }
 
-    private static function typeLabel(?string $type, bool $arabic): ?string
+    /**
+     * A side's name: as the matter's type calls it (المتنازع, الطاعن …),
+     * otherwise the usual one.
+     */
+    public static function typeLabel(?string $type, bool $arabic, ?Type $matterType = null): ?string
     {
+        if ($arabic && ($own = $matterType?->capacity($type))) {
+            return $own;
+        }
+
         return match ($type) {
             'plaintiff' => $arabic ? 'المدعي' : 'Plaintiff',
             'defendant' => $arabic ? 'المدعى عليه' : 'Defendant',
