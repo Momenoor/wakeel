@@ -154,6 +154,13 @@ class AppServiceProvider extends ServiceProvider
         // label already translated has no key and stays as it is.
         Action::configureUsing(fn (Action $action) => $action->translateLabel());
 
+        // An action outside a table (a page's Export, Import, Create …)
+        // named its records by adding "s" to the singular — "تصدير
+        // القضيةs" — Filament having no plural for them. Their model's
+        // plural instead (ModelLabels); in a table, the table's, as before.
+        Action::configureUsing(fn (Action $action) => $action
+            ->pluralModelLabel(fn (Action $action): ?string => $action->getTable() ? null : ModelLabels::plural($action->getModel())));
+
         // Every table named in the reader's language, singular and plural,
         // unless it names itself (a resource's own tables do): reports and
         // widgets showed "matters", or "القضيةs", in their filter and column

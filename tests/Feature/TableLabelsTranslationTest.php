@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use Filament\Actions\ActionGroup;
 use Filament\Facades\Filament;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Contracts\HasTable;
@@ -49,9 +50,24 @@ class TableLabelsTranslationTest extends TestCase
             Filament::setCurrentPanel(str_contains($class, '\\Pms\\') ? 'pms' : 'mms');
 
             try {
-                $table = Livewire::test($class)->instance()->getTable();
+                $page = Livewire::test($class)->instance();
+                $table = $page->getTable();
             } catch (Throwable) {
                 continue; // Needs data or a parameter this test does not give.
+            }
+
+            // Its header actions too (Export, Import, Create …): outside the
+            // table, Filament added an "s" — "تصدير القضيةs".
+            $actions = method_exists($page, 'getCachedHeaderActions') ? $page->getCachedHeaderActions() : [];
+            foreach ($actions as $action) {
+                foreach ($action instanceof ActionGroup ? $action->getFlatActions() : [$action] as $one) {
+                    $texts = [(string) $one->getPluralModelLabel(), (string) $one->getModalHeading(), (string) $one->getLabel()];
+                    foreach ($texts as $text) {
+                        if (preg_match('/\p{Arabic}s/u', $text)) {
+                            $wrong[] = class_basename($class).' action '.$one->getName().": {$text}";
+                        }
+                    }
+                }
             }
 
             $checked++;
