@@ -347,6 +347,28 @@ class MinutesTest extends TestCase
         $this->assertSame(0, Party::where('name', 'زائر')->count());
     }
 
+    public function test_the_title_reads_right_in_word(): void
+    {
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => 2, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
+
+        $path = (new LetterDocx(MinutesService::composer($minutes)))->save(storage_path('app/temp/minutes-title.docx'));
+        $zip = new \ZipArchive;
+        $zip->open($path);
+        $document = (string) $zip->getFromName('word/document.xml');
+        $styles = (string) $zip->getFromName('word/styles.xml');
+        $zip->close();
+        @unlink($path);
+
+        // "(2)" one left-to-right run — not "((2".
+        $this->assertMatchesRegularExpression('~<w:r>(?:<w:rPr/>|<w:rPr>(?:(?!</w:rPr>|<w:rtl/>).)*</w:rPr>)<w:t[^>]*>\(2\)</w:t>~s', $document);
+
+        // The heading in the document's font and the PDF's size, black — not
+        // Word's own Heading 2.
+        $this->assertMatchesRegularExpression('~w:styleId="Heading2".*?<w:rFonts w:ascii="Calibri"[^>]*/>.*?<w:color w:val="000000"/>.*?<w:sz w:val="32"/>~s', $styles);
+        $this->assertStringContainsString('<w:pStyle w:val="Heading2"/>', $document);
+    }
+
     public function test_companies_are_addressed_as_messrs(): void
     {
         $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),

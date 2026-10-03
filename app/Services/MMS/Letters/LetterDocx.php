@@ -54,6 +54,16 @@ class LetterDocx
             'alignment' => 'both',
             'spaceAfter' => Converter::pointToTwip(6),
         ]);
+
+        // Headings as in the PDF — the document's font, black, bold, 18,
+        // 16 and 14 pt — not Word's own Heading styles (their font, size and
+        // colour), which a heading otherwise falls back to.
+        foreach ([1 => 18, 2 => 16, 3 => 14] as $level => $size) {
+            $word->addTitleStyle($level,
+                ['name' => self::wordFont(), 'size' => $size, 'bold' => true, 'color' => '000000'],
+                ['bidi' => $rtl, 'spaceBefore' => 0, 'spaceAfter' => Converter::pointToTwip(6), 'keepNext' => true],
+            );
+        }
         $word->getDocInfo()->setTitle($this->composer->subject());
 
         $elements = $this->composer->elements();
@@ -327,9 +337,10 @@ class LetterDocx
     /**
      * Dates, times, links, emails, references: runs of Latin letters and
      * digits (with their separators), spaces included between Latin words
-     * so "Microsoft Teams" stays in order.
+     * so "Microsoft Teams" stays in order. One in brackets keeps them —
+     * "(2)" one run: the brackets apart, in Arabic runs, came out "((2".
      */
-    private const LTR_TOKEN = '~(?<![\p{L}\p{N}])([\p{Latin}\p{N}](?:[\p{Latin}\p{N}/:.@_\-?=&%#+ ]*[\p{Latin}\p{N}])?)(?![\p{L}\p{N}])~u';
+    private const LTR_TOKEN = '~(?<![\p{L}\p{N}])((?:\(|\[)[\p{Latin}\p{N}](?:[\p{Latin}\p{N}/:.@_\-?=&%#+ ]*[\p{Latin}\p{N}])?(?:\)|\])|[\p{Latin}\p{N}](?:[\p{Latin}\p{N}/:.@_\-?=&%#+ ]*[\p{Latin}\p{N}])?)(?![\p{L}\p{N}])~u';
 
     /**
      * A line split into runs: Arabic ones right to left, the rest left to
