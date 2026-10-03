@@ -1,7 +1,16 @@
 @if (! $isPopup)
-    @php($other = $this->activeConversation ? $this->otherParticipant($this->activeConversation) : null)
+    @php($other = $this->activeConversation && ! $this->activeConversation->is_group ? $this->otherParticipant($this->activeConversation) : null)
     <div class="flex items-center gap-3 border-b border-gray-100 px-4 py-3 dark:border-white/10">
-        @if ($other)
+        @if ($this->activeConversation?->is_group)
+            @include('livewire.partials.chat-group-avatar', ['conversation' => $this->activeConversation, 'size' => 36])
+            <span class="flex min-w-0 flex-1 flex-col">
+                <span class="truncate font-semibold text-gray-950 dark:text-white">{{ $this->activeConversation->name }}</span>
+                <span class="truncate text-xs text-gray-400">{{ trans_choice(':count member|:count members', $this->activeConversation->participants->count()) }}</span>
+            </span>
+            <span class="text-gray-500"><button type="button" wire:click="toggleMembers" title="{{ __('Members') }}" aria-label="{{ __('Members') }}" style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: 9999px;">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </button></span>
+        @elseif ($other)
             @include('livewire.partials.chat-avatar', ['user' => $other, 'size' => 36])
             <span class="flex min-w-0 flex-1 flex-col">
                 <span class="truncate font-semibold text-gray-950 dark:text-white">{{ $other->display_name ?: $other->name }}</span>
@@ -20,6 +29,9 @@
 @endif
 
 @if ($this->activeConversation)
+    @if ($this->activeConversation->is_group && $showMembers)
+        @include('livewire.partials.chat-group-panel')
+    @endif
     {{--
         Keeps the newest message in view: when the list first shows (the
         popup opening resizes it from display:none), when messages arrive
@@ -85,6 +97,10 @@
                     'rounded-br-md bg-gradient-to-br from-primary-600 to-primary-500 text-white' => $isMine,
                     'rounded-bl-md bg-gray-100 text-gray-950 dark:bg-white/10 dark:text-white' => ! $isMine,
                 ]) style="min-width: 0;">
+                    {{-- In a group: who wrote it, above the first of theirs in a row. --}}
+                    @if (! $isMine && $this->activeConversation->is_group && ($previousSender ?? null) !== $message->user_id)
+                        <p style="font-size: .72rem; font-weight: 700; margin-bottom: 2px; color: rgb(124 58 237);">{{ $message->sender?->display_name ?: $message->sender?->name }}</p>
+                    @endif
                     {{-- The message answered: tap to go to it. --}}
                     @if ($message->replyTo)
                         <button
@@ -100,7 +116,15 @@
                     {{-- Files: pictures shown, the rest as a link to download. --}}
                     @foreach ($message->files() as $index => $file)
                         @php($url = route('chat.attachment', [$message, $index]))
-                        @if (\App\Models\ChatMessage::isImage($file) && $file['mime'] !== 'image/svg+xml')
+                        @if (\App\Models\ChatMessage::isAudio($file))
+                            {{-- A voice note (or sound file): played here. --}}
+                            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                                @if (! empty($file['voice']))<span aria-hidden="true">🎤</span>@endif
+                                <audio controls preload="metadata" src="{{ $url }}" style="height: 36px; max-width: 240px;"></audio>
+                            </div>
+                        @elseif (\App\Models\ChatMessage::isVideo($file))
+                            <video controls preload="metadata" src="{{ $url }}" style="display: block; max-width: 100%; max-height: 260px; border-radius: 10px; margin-bottom: 6px;"></video>
+                        @elseif (\App\Models\ChatMessage::isImage($file) && $file['mime'] !== 'image/svg+xml')
                             <a href="{{ $url }}" target="_blank" rel="noopener" style="display: block; margin-bottom: 6px;">
                                 <img src="{{ $url }}" alt="{{ $file['name'] }}" loading="lazy" style="display: block; max-width: 100%; max-height: 240px; border-radius: 10px; object-fit: cover;">
                             </a>
@@ -145,6 +169,7 @@
                 </div>
                 @unless ($isMine) {!! $replyButton !!} @endunless
             </div>
+            @php($previousSender = $message->user_id)
         @endforeach
     </div>
 
@@ -164,76 +189,200 @@
             <button type="button" wire:click="cancelReply" aria-label="{{ __('Cancel') }}" style="padding: 2px 6px; font-size: 1rem; line-height: 1; opacity: .6;">×</button>
         </div>
     @endif
-    @if ($uploads !== [])
-        <div style="display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 12px 0;">
-            @foreach ($uploads as $index => $upload)
-                <span wire:key="chat-upload-{{ $index }}" style="display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 3px 4px 3px 10px; border-radius: 9999px; background: rgba(107, 114, 128, .12); font-size: .75rem;">
-                    <span dir="auto" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 12rem;">📎 {{ method_exists($upload, 'getClientOriginalName') ? $upload->getClientOriginalName() : '' }}</span>
-                    <button type="button" wire:click="removeUpload({{ $index }})" aria-label="{{ __('Remove') }}" style="padding: 0 6px; font-size: .9rem; line-height: 1; opacity: .6;">×</button>
-                </span>
-            @endforeach
-        </div>
-    @endif
-    @error('uploads') <p style="margin: 6px 12px 0; font-size: .75rem; color: rgb(220 38 38);">{{ $message }}</p> @enderror
-    @error('uploads.*') <p style="margin: 6px 12px 0; font-size: .75rem; color: rgb(220 38 38);">{{ $message }}</p> @enderror
-    <div wire:loading.flex wire:target="uploads" style="margin: 6px 12px 0; font-size: .75rem; opacity: .7;">{{ __('Uploading…') }}</div>
+    {{--
+        Files are kept here, in the browser, until Send: then the text and
+        the files go up together in one request (ChatMessageController) —
+        its progress shown — and the list shows the message. A text alone
+        goes the quick way below.
+    --}}
+    <div x-data="{
+        files: [],
+        error: '',
+        progress: null,
+        recording: false,
+        seconds: 0,
+        timer: null,
+        // A voice note: recorded here, sent as a file on Send.
+        async record() {
+            this.error = '';
+            if (! navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+                this.error = @js(__('This browser cannot record sound.'));
+                return;
+            }
+            let stream;
+            try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+            catch (e) { this.error = @js(__('The microphone is not allowed. Allow it in the browser to record.')); return; }
+            const type = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/webm'].find((t) => MediaRecorder.isTypeSupported?.(t)) || '';
+            // Kept outside Alpine's state: the browser's recorder doesn't
+            // work through its proxies.
+            const voice = window.wakeelVoice = { recorder: new MediaRecorder(stream, type ? { mimeType: type } : {}), chunks: [] };
+            voice.recorder.ondataavailable = (e) => { if (e.data.size) { voice.chunks.push(e.data); } };
+            voice.recorder.start();
+            this.recording = true;
+            this.seconds = 0;
+            this.timer = setInterval(() => { this.seconds++; if (this.seconds >= 300) { this.stopRecording(true); } }, 1000);
+        },
+        stopRecording(send) {
+            const voice = window.wakeelVoice;
+            const recorder = voice?.recorder;
+            if (! recorder) { return; }
+            clearInterval(this.timer);
+            window.wakeelVoice = null;
+            this.recording = false;
+            recorder.onstop = () => {
+                recorder.stream.getTracks().forEach((t) => t.stop());
+                if (! send || ! voice.chunks.length) { return; }
+                const type = recorder.mimeType || 'audio/webm';
+                const ext = type.includes('mp4') ? 'm4a' : (type.includes('ogg') ? 'ogg' : 'webm');
+                const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+                const file = new File([new Blob(voice.chunks, { type })], 'voice-note-' + stamp + '.' + ext, { type });
+                this.sendFiles('', [file], true);
+            };
+            recorder.stop();
+        },
+        clock() { return Math.floor(this.seconds / 60) + ':' + String(this.seconds % 60).padStart(2, '0'); },
+        pick(event) {
+            this.error = '';
+            for (const file of event.target.files) {
+                if (this.files.length >= {{ \App\Services\Chat\ChatMessenger::MAX_FILES }}) {
+                    this.error = @js(__('Up to :count files at a time.', ['count' => \App\Services\Chat\ChatMessenger::MAX_FILES]));
+                    break;
+                }
+                if (file.size > {{ \App\Services\Chat\ChatMessenger::MAX_KB * 1024 }}) {
+                    this.error = @js(__(':name is larger than 20 MB.')).replace(':name', file.name);
+                    continue;
+                }
+                this.files.push(file);
+            }
+            event.target.value = '';
+        },
+        sendFiles(text, files = null, voice = false) {
+            const data = new FormData();
+            data.append('body', text);
+            if (voice) { data.append('voice', '1'); }
+            if (this.$wire.replyToId) { data.append('reply_to_id', this.$wire.replyToId); }
+            (files || this.files).forEach((file) => data.append('files[]', file, file.name));
 
-    <form
-        x-data="{
-            send() {
-                const input = this.$refs.input;
-                const text = input.value.trim();
-                const files = (this.$wire.uploads || []).length;
-                if (text === '' && files === 0) { return; }
-                input.value = '';
-                this.$wire.body = '';
-                const bubble = this.$refs.pending.content.firstElementChild.cloneNode(true);
-                bubble.querySelector('[data-text]').textContent = text || ('📎 ' + files);
-                this.$el.closest('.fi-chat-widget').querySelector('[data-chat-messages]')?.appendChild(bubble);
-                window.dispatchEvent(new CustomEvent('message-sent'));
-                this.$wire.sendMessage(text);
-            },
-        }"
-        x-on:submit.prevent="send()"
-        class="flex items-center gap-2 border-t border-gray-100 p-3 dark:border-white/10"
-    >
-        <template x-ref="pending">
-            <div class="flex justify-end" style="opacity: 0.6;">
-                <div class="max-w-[80%] rounded-2xl rounded-br-md bg-gradient-to-br from-primary-600 to-primary-500 px-4 py-2 text-sm text-white shadow-sm">
-                    <p data-text class="whitespace-pre-wrap break-words leading-relaxed"></p>
-                    <p class="mt-1 text-end text-[10px] tracking-wide text-white/70">{{ __('Sending...') }}</p>
-                </div>
+            const request = new XMLHttpRequest();
+            request.open('POST', @js(route('chat.messages.store', $this->activeConversation)));
+            request.setRequestHeader('X-CSRF-TOKEN', @js(csrf_token()));
+            request.setRequestHeader('Accept', 'application/json');
+            request.upload.onprogress = (e) => { if (e.lengthComputable) { this.progress = Math.round(e.loaded * 100 / e.total); } };
+            request.onload = () => {
+                this.progress = null;
+                if (request.status >= 200 && request.status < 300) {
+                    if (! voice) {
+                        this.files = [];
+                        this.$refs.input.value = '';
+                        this.$wire.body = '';
+                    }
+                    window.dispatchEvent(new CustomEvent('message-sent'));
+                    this.$wire.sentWithFiles();
+                    return;
+                }
+                let message = null;
+                try { message = JSON.parse(request.responseText).message; } catch (e) {}
+                this.error = request.status === 413 ? @js(__('The files are too large for the server.')) : (message || @js(__('The files could not be sent. Try again.')));
+            };
+            request.onerror = () => { this.progress = null; this.error = @js(__('The files could not be sent. Try again.')); };
+            this.progress = 0;
+            request.send(data);
+        },
+        send() {
+            const input = this.$refs.input;
+            const text = input.value.trim();
+            if (this.files.length) {
+                if (this.progress === null) { this.sendFiles(text); }
+                return;
+            }
+            if (text === '') { return; }
+            input.value = '';
+            this.$wire.body = '';
+            const bubble = this.$refs.pending.content.firstElementChild.cloneNode(true);
+            bubble.querySelector('[data-text]').textContent = text;
+            this.$el.closest('.fi-chat-widget').querySelector('[data-chat-messages]')?.appendChild(bubble);
+            window.dispatchEvent(new CustomEvent('message-sent'));
+            this.$wire.sendMessage(text);
+        },
+    }">
+        <template x-if="files.length">
+            <div style="display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 12px 0;">
+                <template x-for="(file, index) in files" :key="index">
+                    <span style="display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 3px 4px 3px 10px; border-radius: 9999px; background: rgba(107, 114, 128, .12); font-size: .75rem;">
+                        <span dir="auto" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 12rem;" x-text="'📎 ' + file.name"></span>
+                        <button type="button" x-on:click="files.splice(index, 1)" x-bind:disabled="progress !== null" aria-label="{{ __('Remove') }}" style="padding: 0 6px; font-size: .9rem; line-height: 1; opacity: .6;">×</button>
+                    </span>
+                </template>
             </div>
         </template>
-        {{-- Files to send with the message (each up to 20 MB, five at a time). --}}
-        <label
-            title="{{ __('Attach files') }}"
-            style="display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex-shrink: 0; border-radius: 9999px; cursor: pointer; color: rgb(107 114 128);"
+        <p x-show="error" x-text="error" style="margin: 6px 12px 0; font-size: .75rem; color: rgb(220 38 38);"></p>
+        <div x-show="progress !== null" style="margin: 6px 12px 0; font-size: .75rem;">
+            <span>{{ __('Uploading…') }} <span x-text="progress + '%'"></span></span>
+            <div style="height: 4px; margin-top: 3px; border-radius: 9999px; background: rgba(107, 114, 128, .2); overflow: hidden;">
+                <div x-bind:style="'height: 100%; background: rgb(37 99 235); width: ' + (progress || 0) + '%'"></div>
+            </div>
+        </div>
+
+        {{-- While recording: the time, cancel, and send. --}}
+        <div x-show="recording" x-cloak style="display: flex; align-items: center; gap: 10px; margin: 8px 12px 0; padding: 6px 12px; border-radius: 9999px; background: rgba(220, 38, 38, .08); font-size: .85rem;">
+            <span style="width: 10px; height: 10px; border-radius: 9999px; background: rgb(220 38 38); animation: pulse 1s infinite;"></span>
+            <span style="flex: 1;">{{ __('Recording…') }} <span dir="ltr" x-text="clock()"></span></span>
+            <button type="button" x-on:click="stopRecording(false)" style="font-size: .8rem; opacity: .7;">{{ __('Cancel') }}</button>
+            <button type="button" x-on:click="stopRecording(true)" class="rounded-full bg-primary-600 px-3 py-1 text-xs font-semibold text-white">{{ __('Send') }}</button>
+        </div>
+
+        <form
+            x-on:submit.prevent="send()"
+            class="flex items-center gap-2 border-t border-gray-100 p-3 dark:border-white/10"
         >
-            <input type="file" multiple wire:model="uploads" style="display: none;">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-        </label>
-        <input
-            type="text"
-            x-ref="input"
-            wire:model="body"
-            autocomplete="off"
-            placeholder="{{ __('Type a message...') }}"
-            class="fi-input block w-full rounded-full border-none bg-gray-100 px-4 py-2.5 text-sm text-gray-950 shadow-sm ring-1 ring-transparent transition focus:bg-white focus:ring-2 focus:ring-primary-500 dark:bg-white/5 dark:text-white dark:focus:bg-white/10"
-        />
-        <button
-            type="submit"
-            wire:loading.attr="disabled"
-            wire:target="uploads"
-            class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-primary-600 text-white shadow-sm transition hover:bg-primary-500 disabled:opacity-60"
-            aria-label="{{ __('Send') }}"
-        >
-            {{-- Points toward the end side: right in English, left in Arabic. --}}
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4" @if (__('filament-panels::layout.direction') === 'rtl') style="transform: scaleX(-1)" @endif>
-                <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
-            </svg>
-        </button>
-    </form>
+            <template x-ref="pending">
+                <div class="flex justify-end" style="opacity: 0.6;">
+                    <div class="max-w-[80%] rounded-2xl rounded-br-md bg-gradient-to-br from-primary-600 to-primary-500 px-4 py-2 text-sm text-white shadow-sm">
+                        <p data-text class="whitespace-pre-wrap break-words leading-relaxed"></p>
+                        <p class="mt-1 text-end text-[10px] tracking-wide text-white/70">{{ __('Sending...') }}</p>
+                    </div>
+                </div>
+            </template>
+            {{-- Files to send with the message (each up to 20 MB, five at a time). --}}
+            <label
+                title="{{ __('Attach files') }}"
+                style="display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex-shrink: 0; border-radius: 9999px; cursor: pointer; color: rgb(107 114 128);"
+            >
+                <input type="file" multiple x-on:change="pick($event)" style="display: none;">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            </label>
+            <input
+                type="text"
+                x-ref="input"
+                wire:model="body"
+                autocomplete="off"
+                placeholder="{{ __('Type a message...') }}"
+                class="fi-input block w-full rounded-full border-none bg-gray-100 px-4 py-2.5 text-sm text-gray-950 shadow-sm ring-1 ring-transparent transition focus:bg-white focus:ring-2 focus:ring-primary-500 dark:bg-white/5 dark:text-white dark:focus:bg-white/10"
+            />
+            {{-- A voice note. --}}
+            <button
+                type="button"
+                x-on:click="record()"
+                x-bind:disabled="recording || progress !== null"
+                title="{{ __('Record a voice note') }}"
+                aria-label="{{ __('Record a voice note') }}"
+                style="display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex-shrink: 0; border-radius: 9999px; color: rgb(107 114 128);"
+            >
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></svg>
+            </button>
+            <button
+                type="submit"
+                x-bind:disabled="progress !== null"
+                class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-primary-600 text-white shadow-sm transition hover:bg-primary-500 disabled:opacity-60"
+                aria-label="{{ __('Send') }}"
+            >
+                {{-- Points toward the end side: right in English, left in Arabic. --}}
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4" @if (__('filament-panels::layout.direction') === 'rtl') style="transform: scaleX(-1)" @endif>
+                    <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
+                </svg>
+            </button>
+        </form>
+    </div>
 @else
     <div class="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" class="h-10 w-10 text-gray-300 dark:text-gray-600">

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ChatAttachmentController;
+use App\Http\Controllers\ChatMessageController;
 use App\Http\Controllers\LetterFontFileController;
 use App\Http\Controllers\LicenseController;
 use App\Http\Controllers\PushSubscriptionController;
@@ -67,6 +68,8 @@ Route::middleware('auth')->group(function () {
 
     // A file sent in a chat message, to those in the conversation.
     Route::get('/chat/files/{message}/{index}', ChatAttachmentController::class)->whereNumber('index')->name('chat.attachment');
+    // A message with files, uploaded straight from the browser.
+    Route::post('/chat/conversations/{conversation}/messages', [ChatMessageController::class, 'store'])->name('chat.messages.store');
 
     // The system's font, when an uploaded one is chosen for it.
     Route::get('/fonts/letter/{font}/{weight}', LetterFontFileController::class)->name('letter-fonts.file');

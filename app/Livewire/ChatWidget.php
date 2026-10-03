@@ -2,24 +2,19 @@
 
 namespace App\Livewire;
 
-use App\Events\ChatMessageSent;
 use App\Events\ChatMessagesStatusChanged;
 use App\Filament\Mms\Pages\Chat;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
-use App\Models\PushSubscription;
 use App\Models\User;
-use App\Services\Push\WebPushSender;
+use App\Services\Chat\ChatMessenger;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Str;
 use Livewire\Component;
-use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
-use Livewire\WithFileUploads;
 use Throwable;
 
 /**
@@ -39,13 +34,6 @@ use Throwable;
  */
 class ChatWidget extends Component
 {
-    use WithFileUploads;
-
-    /** Files one message may carry, and the size of each (KB). */
-    public const MAX_FILES = 5;
-
-    public const MAX_KB = 20480;
-
     /** Session key holding the popup's open state and conversation. */
     private const POPUP_STATE = 'chat.popup';
 
@@ -57,11 +45,22 @@ class ChatWidget extends Component
 
     public string $body = '';
 
-    /** @var array<int, TemporaryUploadedFile> files picked for the next message */
-    public array $uploads = [];
-
     /** The message the next one answers. */
     public ?int $replyToId = null;
+
+    /** A new group being made: its name and who's in it (besides me). */
+    public bool $creatingGroup = false;
+
+    public string $groupName = '';
+
+    /** @var list<int> */
+    public array $groupMembers = [];
+
+    /** The group's members panel, open. */
+    public bool $showMembers = false;
+
+    /** @var list<int> people picked to add to the group */
+    public array $addingMembers = [];
 
     public string $userSearch = '';
 
@@ -149,11 +148,12 @@ class ChatWidget extends Component
 
         // A desktop notification too, when Wakeel is in a background tab —
         // the same tag as its push, so it never shows twice.
-        $latest->loadMissing('sender');
+        $latest->loadMissing(['sender', 'conversation']);
         $this->dispatch(
             'wakeel-desktop-notification',
             id: 'chat-'.$latest->chat_conversation_id,
-            title: (string) ($latest->sender?->display_name ?: $latest->sender?->name ?: __('Chat')),
+            // In a group: the group, then who wrote.
+            title: ($latest->conversation?->is_group ? $latest->conversation->name.' — ' : '').(string) ($latest->sender?->display_name ?: $latest->sender?->name ?: __('Chat')),
             body: $latest->preview(),
             url: self::chatUrl(),
         );
@@ -312,6 +312,7 @@ class ChatWidget extends Component
     public function backToList(): void
     {
         $this->activeConversationId = null;
+        $this->showMembers = false;
         $this->replyToId = null;
         $this->rememberState();
     }
@@ -319,6 +320,7 @@ class ChatWidget extends Component
     public function selectConversation(int $conversationId): void
     {
         $this->activeConversationId = $conversationId;
+        $this->showMembers = false;
         $this->replyToId = null;
         $this->markActiveConversationRead();
         $this->rememberState();
@@ -343,90 +345,28 @@ class ChatWidget extends Component
      */
     public function sendMessage(?string $text = null): void
     {
-        $body = trim($text ?? $this->body);
-
-        if (($body === '' && $this->uploads === []) || ! $this->activeConversationId) {
-            return;
-        }
-
         $conversation = $this->activeConversation;
 
         if (! $conversation) {
             return;
         }
 
-        $this->validate([
-            'uploads' => ['array', 'max:'.self::MAX_FILES],
-            'uploads.*' => ['file', 'max:'.self::MAX_KB],
-        ], [], ['uploads.*' => __('file')]);
-
-        // Only a message of this conversation can be answered.
-        $replyTo = $this->replyToId
-            ? ChatMessage::query()->where('chat_conversation_id', $conversation->id)->whereKey($this->replyToId)->value('id')
-            : null;
-
-        $message = ChatMessage::create([
-            'chat_conversation_id' => $conversation->id,
-            'user_id' => Auth::id(),
-            'reply_to_id' => $replyTo,
-            'body' => Str::limit($body, 5000, ''),
-            'attachments' => $this->storeUploads($conversation->id) ?: null,
-        ]);
-
-        $conversation->update(['last_message_at' => $message->created_at]);
-        $conversation->participants()->updateExistingPivot(Auth::id(), ['last_read_at' => $message->created_at]);
-
-        // After the response has gone back — the broadcaster's HTTP call to
-        // Pusher no longer holds up the sender's own reply.
-        $message->load('sender');
-        defer(fn () => broadcast(new ChatMessageSent($message))->toOthers());
-
-        // And as a push to the other side's browsers and phones — seen even
-        // with no Wakeel tab open.
-        $recipients = $conversation->participants->pluck('id')->reject(fn ($id) => $id === Auth::id())->values()->all();
-        if (PushSubscription::whereIn('user_id', $recipients)->exists()) {
-            $payload = WebPushSender::chatPayload(
-                $conversation->id,
-                (string) ($message->sender?->display_name ?: $message->sender?->name ?: __('Chat')),
-                $message->preview(),
-                self::chatUrl(),
-            );
-
-            defer(function () use ($recipients, $payload) {
-                foreach ($recipients as $userId) {
-                    try {
-                        app(WebPushSender::class)->sendToUser((int) $userId, $payload);
-                    } catch (Throwable $e) {
-                        report($e);
-                    }
-                }
-            });
-        }
+        // Files go with a message straight from the browser (see
+        // ChatMessageController); this is a message typed.
+        app(ChatMessenger::class)->send($conversation, Auth::user(), (string) ($text ?? $this->body), $this->replyToId);
 
         $this->body = '';
-        $this->uploads = [];
         $this->replyToId = null;
     }
 
     /**
-     * The files picked, kept privately under the conversation.
-     *
-     * @return list<array{path: string, name: string, size: int, mime: string}>
+     * Sent with files from the browser: the input clears, and the list
+     * shows it.
      */
-    private function storeUploads(int $conversationId): array
+    public function sentWithFiles(): void
     {
-        return array_values(array_map(fn (TemporaryUploadedFile $file): array => [
-            'path' => $file->store('chat-attachments/'.$conversationId, ChatMessage::DISK),
-            'name' => Str::limit($file->getClientOriginalName(), 200, ''),
-            'size' => (int) $file->getSize(),
-            'mime' => (string) ($file->getMimeType() ?: 'application/octet-stream'),
-        ], array_filter($this->uploads, fn ($file) => $file instanceof TemporaryUploadedFile)));
-    }
-
-    public function removeUpload(int $index): void
-    {
-        unset($this->uploads[$index]);
-        $this->uploads = array_values($this->uploads);
+        $this->replyToId = null;
+        $this->markActiveConversationRead();
     }
 
     /**
@@ -555,6 +495,144 @@ class ChatWidget extends Component
         }
 
         return ! $pivot->last_read_at || $pivot->last_read_at->lt($conversation->last_message_at);
+    }
+
+    public function startGroup(): void
+    {
+        $this->creatingGroup = true;
+        $this->groupName = '';
+        $this->groupMembers = [];
+        $this->userSearch = '';
+        $this->resetErrorBag();
+    }
+
+    public function cancelGroup(): void
+    {
+        $this->creatingGroup = false;
+        $this->userSearch = '';
+        $this->resetErrorBag();
+    }
+
+    /**
+     * The group made — me and at least two others — and opened.
+     */
+    public function createGroup(): void
+    {
+        $this->validate([
+            'groupName' => ['required', 'string', 'max:100'],
+            'groupMembers' => ['required', 'array', 'min:2'],
+            'groupMembers.*' => ['integer', 'distinct', 'exists:users,id', 'not_in:'.Auth::id()],
+        ], [], ['groupName' => __('Group name'), 'groupMembers' => __('Members')]);
+
+        $group = ChatConversation::group(Auth::user(), $this->groupName, $this->groupMembers);
+
+        $this->creatingGroup = false;
+        $this->userSearch = '';
+        $this->activeConversationId = $group->id;
+        $this->showMembers = false;
+        unset($this->conversations);
+        $this->rememberState();
+    }
+
+    public function toggleMembers(): void
+    {
+        $this->showMembers = ! $this->showMembers;
+        $this->addingMembers = [];
+        $this->userSearch = '';
+    }
+
+    public function renameGroup(string $name): void
+    {
+        $group = $this->activeGroup();
+        $name = trim($name);
+        if ($group && $name !== '') {
+            $group->update(['name' => mb_substr($name, 0, 100)]);
+            unset($this->conversations);
+        }
+    }
+
+    public function addMembers(): void
+    {
+        $group = $this->activeGroup();
+        $ids = User::query()->whereKey(array_map('intval', $this->addingMembers))->pluck('id')->all();
+        if ($group && $ids !== []) {
+            $group->participants()->syncWithoutDetaching($ids);
+            unset($this->conversations);
+        }
+
+        $this->addingMembers = [];
+        $this->userSearch = '';
+    }
+
+    /**
+     * Only whoever made the group removes others from it.
+     */
+    public function removeMember(int $userId): void
+    {
+        $group = $this->activeGroup();
+        if ($group && (int) $group->created_by === (int) Auth::id() && $userId !== Auth::id()) {
+            $group->participants()->detach($userId);
+            unset($this->conversations);
+        }
+    }
+
+    public function leaveGroup(): void
+    {
+        $group = $this->activeGroup();
+        if (! $group) {
+            return;
+        }
+
+        $group->participants()->detach(Auth::id());
+        $this->activeConversationId = null;
+        $this->showMembers = false;
+        unset($this->conversations);
+        $this->rememberState();
+    }
+
+    private function activeGroup(): ?ChatConversation
+    {
+        $conversation = $this->activeConversation;
+
+        return $conversation?->is_group ? $conversation : null;
+    }
+
+    /**
+     * People to pick: everyone else (not yet in the group being added to),
+     * as searched.
+     *
+     * @return Collection<int, User>
+     */
+    public function getPickableUsersProperty(): Collection
+    {
+        $members = $this->showMembers && $this->activeConversation ? $this->activeConversation->participants->pluck('id')->all() : [Auth::id()];
+
+        return User::query()
+            ->whereNotIn('id', $members)
+            ->when($this->userSearch !== '', fn ($q) => $q->where(fn ($q) => $q->where('name', 'like', "%{$this->userSearch}%")->orWhere('display_name', 'like', "%{$this->userSearch}%")))
+            ->orderBy('display_name')
+            ->orderBy('name')
+            ->limit(50)
+            ->get();
+    }
+
+    /**
+     * What a conversation is called: the group's name, or the other person's.
+     */
+    public function conversationTitle(ChatConversation $conversation): string
+    {
+        if ($conversation->is_group) {
+            return (string) $conversation->name;
+        }
+
+        $other = $this->otherParticipant($conversation);
+
+        return (string) ($other?->display_name ?: $other?->name);
+    }
+
+    public function groupAvatarUrl(ChatConversation $conversation): string
+    {
+        return 'https://ui-avatars.com/api/?name='.urlencode((string) $conversation->name).'&size=128&background=7C3AED&color=FFFFFF';
     }
 
     /**

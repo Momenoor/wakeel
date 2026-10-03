@@ -9,6 +9,7 @@ use App\Livewire\ChatWidget;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\User;
+use App\Services\Chat\ChatMessenger;
 use Filament\Facades\Filament;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -189,42 +190,141 @@ class ChatWidgetTest extends TestCase
         Event::fake([ChatMessageSent::class, ChatMessagesStatusChanged::class]);
         Storage::fake(ChatMessage::DISK);
 
-        $chat = Livewire::test(ChatWidget::class)
-            ->call('startConversationWith', $this->colleague->id)
-            ->set('uploads', [UploadedFile::fake()->image('photo.jpg'), UploadedFile::fake()->create('report.pdf', 100, 'application/pdf')])
-            ->call('sendMessage', '')
-            ->assertHasNoErrors()
-            ->assertSet('uploads', []);
+        $conversation = ChatConversation::betweenUsers($this->me, $this->colleague);
+        $question = ChatMessage::create(['chat_conversation_id' => $conversation->id, 'user_id' => $this->colleague->id, 'body' => 'أرسل المستندات']);
+        $send = fn (array $data) => $this->postJson(route('chat.messages.store', $conversation), $data);
 
-        $message = ChatMessage::sole();
+        // Straight from the browser: the files with the text, as an answer.
+        $send(['body' => 'تفضل', 'reply_to_id' => $question->id, 'files' => [UploadedFile::fake()->image('photo.jpg'), UploadedFile::fake()->create('report.pdf', 100, 'application/pdf')]])
+            ->assertOk();
+
+        $message = ChatMessage::latest('id')->first();
+        $this->assertSame('تفضل', $message->body);
+        $this->assertSame($question->id, $message->reply_to_id);
         $this->assertSame(['photo.jpg', 'report.pdf'], array_column($message->files(), 'name'));
-        $this->assertSame('📎 photo.jpg +1', $message->preview());
         Storage::disk(ChatMessage::DISK)->assertExists($message->files()[1]['path']);
+        Event::assertDispatched(ChatMessageSent::class);
 
-        // The picture shown, the PDF to download.
-        $chat->assertSeeHtml('src="'.route('chat.attachment', [$message, 0]).'"')
-            ->assertSeeHtml('href="'.route('chat.attachment', [$message, 1]).'?download=1"');
+        // Files alone.
+        $send(['files' => [UploadedFile::fake()->image('only.png')]])->assertOk();
+        $this->assertSame('📎 only.png', ChatMessage::latest('id')->first()->preview());
+
+        // The picture shown, the PDF to download; the files go up to the
+        // conversation's own address.
+        Livewire::test(ChatWidget::class)->call('selectConversation', $conversation->id)
+            ->assertSeeHtml('src="'.route('chat.attachment', [$message, 0]).'"')
+            ->assertSeeHtml('href="'.route('chat.attachment', [$message, 1]).'?download=1"')
+            ->assertSeeHtml(str_replace('/', '\/', route('chat.messages.store', $conversation)));
 
         $this->get(route('chat.attachment', [$message, 1]).'?download=1')->assertOk()->assertDownload('report.pdf');
         $this->actingAs($this->colleague)->get(route('chat.attachment', [$message, 0]))->assertOk();
         $this->actingAs(User::factory()->create())->get(route('chat.attachment', [$message, 0]))->assertForbidden();
 
-        // Up to the limit: taken.
-        $this->actingAs($this->me);
-        Livewire::test(ChatWidget::class)
-            ->call('startConversationWith', $this->colleague->id)
-            ->set('uploads', [UploadedFile::fake()->create('big.zip', ChatWidget::MAX_KB)])
-            ->call('sendMessage', '')
-            ->assertHasNoErrors();
-        $this->assertSame('big.zip', ChatMessage::latest('id')->first()->files()[0]['name']);
+        // Not in the conversation: nothing sent.
+        $this->postJson(route('chat.messages.store', $conversation), ['files' => [UploadedFile::fake()->image('x.png')]])->assertForbidden();
 
-        // Too big: refused, and nothing goes.
+        // Up to the limit: taken; too big, or too many: refused, nothing sent.
+        $this->actingAs($this->me);
+        $send(['files' => [UploadedFile::fake()->create('big.zip', ChatMessenger::MAX_KB)]])->assertOk();
+        $count = ChatMessage::count();
+        $send(['body' => 'كبير', 'files' => [UploadedFile::fake()->create('huge.zip', ChatMessenger::MAX_KB + 1)]])->assertJsonValidationErrors('files.0');
+        $send(['files' => array_map(fn ($i) => UploadedFile::fake()->image("p{$i}.png"), range(1, ChatMessenger::MAX_FILES + 1))])->assertJsonValidationErrors('files');
+        $this->assertSame($count, ChatMessage::count());
+    }
+
+    public function test_the_ticks_broadcast_redraws_the_chat(): void
+    {
+        // As Echo hands it over: the event with its data.
         Livewire::test(ChatWidget::class)
             ->call('startConversationWith', $this->colleague->id)
-            ->set('uploads', [UploadedFile::fake()->create('huge.zip', ChatWidget::MAX_KB + 1)])
-            ->call('sendMessage', 'كبير')
-            ->assertHasErrors('uploads.0');
-        $this->assertSame(2, ChatMessage::count());
+            ->call('__dispatch', 'echo-private:App.Models.User.'.$this->me->id.',.chat.status', [['conversation_id' => 1]])
+            ->assertOk();
+    }
+
+    public function test_a_voice_note_is_sent_and_played_in_the_chat(): void
+    {
+        $this->withoutDefer();
+        Event::fake([ChatMessageSent::class, ChatMessagesStatusChanged::class]);
+        Storage::fake(ChatMessage::DISK);
+        $conversation = ChatConversation::betweenUsers($this->me, $this->colleague);
+
+        // As the browser records it: a WebM file, marked as a voice note.
+        $this->postJson(route('chat.messages.store', $conversation), [
+            'voice' => '1',
+            'files' => [UploadedFile::fake()->createWithContent('voice-note-2026-10-03.webm', str_repeat("\x1A\x45\xDF\xA3", 64))],
+        ])->assertOk();
+        // And a video.
+        $this->postJson(route('chat.messages.store', $conversation), ['files' => [UploadedFile::fake()->create('clip.mp4', 10, 'video/mp4')]])->assertOk();
+
+        [$voice, $video] = ChatMessage::orderBy('id')->get();
+        $this->assertTrue($voice->files()[0]['voice']);
+        $this->assertTrue(ChatMessage::isAudio($voice->files()[0]));
+        $this->assertSame('🎤 Voice note', $voice->preview());
+
+        // Played in the bubble — the voice note as sound, the video as video.
+        Livewire::test(ChatWidget::class)->call('selectConversation', $conversation->id)
+            ->assertSeeHtml('<audio controls preload="metadata" src="'.route('chat.attachment', [$voice, 0]).'"')
+            ->assertSeeHtml('<video controls preload="metadata" src="'.route('chat.attachment', [$video, 0]).'"');
+
+        // Sent as a file the player can seek in.
+        $this->get(route('chat.attachment', [$voice, 0]))->assertOk()->assertHeader('Accept-Ranges', 'bytes');
+        $this->get(route('chat.attachment', [$video, 0]).'?download=1')->assertDownload('clip.mp4');
+    }
+
+    public function test_a_group_is_made_talked_in_and_managed(): void
+    {
+        $this->withoutDefer();
+        Event::fake([ChatMessageSent::class, ChatMessagesStatusChanged::class]);
+        $third = User::factory()->create(['name' => 'سارة']);
+        $fourth = User::factory()->create(['name' => 'خالد']);
+
+        // Two others at least, and a name.
+        $chat = Livewire::test(ChatWidget::class)
+            ->call('startGroup')
+            ->set('groupName', '')
+            ->set('groupMembers', [$this->colleague->id])
+            ->call('createGroup')
+            ->assertHasErrors(['groupName', 'groupMembers'])
+            ->set('groupName', 'فريق الخبرة')
+            ->set('groupMembers', [$this->colleague->id, $third->id])
+            ->call('createGroup')
+            ->assertHasNoErrors();
+
+        $group = ChatConversation::where('is_group', true)->sole();
+        $this->assertSame('فريق الخبرة', $group->name);
+        $this->assertEqualsCanonicalizing([$this->me->id, $this->colleague->id, $third->id], $group->participants->pluck('id')->all());
+        $chat->assertSet('activeConversationId', $group->id)->assertSee('فريق الخبرة')->assertSee('3 members');
+
+        // Its messages reach everyone in it; others' show who wrote them.
+        $chat->call('sendMessage', 'صباح الخير');
+        ChatMessage::create(['chat_conversation_id' => $group->id, 'user_id' => $third->id, 'body' => 'أهلاً']);
+        $chat->call('$refresh')->assertSeeHtml('color: rgb(124 58 237);">سارة</p>');
+        $this->assertCount(3, (new ChatMessageSent(ChatMessage::first()->load('sender')))->broadcastOn());
+
+        // A group of two people isn't their one-to-one conversation.
+        $this->assertNotSame($group->id, ChatConversation::betweenUsers($this->me, $this->colleague)->id);
+
+        // Members: renamed, added; removed only by whoever made the group.
+        $chat->call('toggleMembers')
+            ->call('renameGroup', 'فريق الخبرة الحسابية')
+            ->set('addingMembers', [$fourth->id])
+            ->call('addMembers');
+        $this->assertSame('فريق الخبرة الحسابية', $group->fresh()->name);
+        $this->assertTrue($group->participants()->whereKey($fourth->id)->exists());
+
+        $this->actingAs($this->colleague);
+        Livewire::test(ChatWidget::class)->call('selectConversation', $group->id)->call('removeMember', $third->id);
+        $this->assertTrue($group->participants()->whereKey($third->id)->exists());
+
+        $this->actingAs($this->me);
+        Livewire::test(ChatWidget::class)->call('selectConversation', $group->id)->call('removeMember', $third->id);
+        $this->assertFalse($group->participants()->whereKey($third->id)->exists());
+
+        // Left: no longer theirs to see.
+        $this->actingAs($this->colleague);
+        Livewire::test(ChatWidget::class)->call('selectConversation', $group->id)->call('leaveGroup')->assertSet('activeConversationId', null);
+        $this->assertFalse($group->participants()->whereKey($this->colleague->id)->exists());
+        Livewire::test(ChatWidget::class)->call('selectConversation', $group->id)->assertDontSee('صباح الخير');
     }
 
     public function test_the_broadcast_goes_to_every_participants_personal_channel(): void

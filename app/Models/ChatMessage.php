@@ -64,6 +64,17 @@ class ChatMessage extends Model
         return str_starts_with((string) ($file['mime'] ?? ''), 'image/');
     }
 
+    /** A voice note recorded in the chat, or a sound file. */
+    public static function isAudio(array $file): bool
+    {
+        return ! empty($file['voice']) || str_starts_with((string) ($file['mime'] ?? ''), 'audio/');
+    }
+
+    public static function isVideo(array $file): bool
+    {
+        return ! self::isAudio($file) && str_starts_with((string) ($file['mime'] ?? ''), 'video/');
+    }
+
     /**
      * One line for a notification or a quote: the text, or the file sent.
      */
@@ -75,6 +86,10 @@ class ChatMessage extends Model
         }
 
         $files = $this->files();
+
+        if ($files !== [] && ! empty($files[0]['voice'])) {
+            return '🎤 '.__('Voice note');
+        }
 
         return $files === [] ? '' : '📎 '.Str::limit($files[0]['name'], $limit).(count($files) > 1 ? ' +'.(count($files) - 1) : '');
     }

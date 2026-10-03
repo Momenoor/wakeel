@@ -1,5 +1,33 @@
 <div class="border-b border-gray-100 p-3 dark:border-white/10">
-    <div class="relative">
+  @if ($creatingGroup)
+    {{-- A new group: its name, and two or more colleagues ticked. --}}
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+            <span class="text-sm font-semibold text-gray-950 dark:text-white">{{ __('New group') }}</span>
+            <button type="button" wire:click="cancelGroup" class="text-xs text-gray-500">{{ __('Cancel') }}</button>
+        </div>
+        <input type="text" wire:model="groupName" placeholder="{{ __('Group name') }}" maxlength="100"
+            class="fi-input block w-full rounded-xl border-none bg-gray-100 px-3 py-2 text-sm text-gray-950 shadow-sm ring-1 ring-transparent focus:bg-white focus:ring-2 focus:ring-primary-500 dark:bg-white/5 dark:text-white" />
+        @error('groupName') <p style="font-size: .75rem; color: rgb(220 38 38);">{{ $message }}</p> @enderror
+        <input type="text" wire:model.live.debounce.300ms="userSearch" placeholder="{{ __('Search colleagues...') }}"
+            class="fi-input block w-full rounded-xl border-none bg-gray-100 px-3 py-2 text-sm text-gray-950 shadow-sm ring-1 ring-transparent focus:bg-white focus:ring-2 focus:ring-primary-500 dark:bg-white/5 dark:text-white" />
+        <div style="max-height: 14rem; overflow-y: auto;">
+            @foreach ($this->pickableUsers as $user)
+                <label wire:key="group-pick-{{ $user->id }}" class="flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-2 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-white/5">
+                    <input type="checkbox" value="{{ $user->id }}" wire:model="groupMembers" class="rounded">
+                    @include('livewire.partials.chat-avatar', ['user' => $user, 'size' => 24, 'showStatus' => false])
+                    <span class="min-w-0 flex-1 truncate text-gray-950 dark:text-white">{{ $user->display_name ?: $user->name }}</span>
+                </label>
+            @endforeach
+        </div>
+        @error('groupMembers') <p style="font-size: .75rem; color: rgb(220 38 38);">{{ $message }}</p> @enderror
+        <button type="button" wire:click="createGroup" class="rounded-xl bg-primary-600 px-3 py-2 text-sm font-semibold text-white hover:bg-primary-500">
+            {{ __('Create group') }} <span x-text="'(' + ($wire.groupMembers || []).length + ')'"></span>
+        </button>
+    </div>
+  @else
+    <div style="display: flex; align-items: center; gap: 6px;">
+    <div class="relative" style="flex: 1;">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="pointer-events-none absolute inset-y-0 start-3 my-auto h-4 w-4 text-gray-400">
             <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
         </svg>
@@ -9,6 +37,11 @@
             placeholder="{{ __('Start a chat with...') }}"
             class="fi-input block w-full rounded-xl border-none bg-gray-100 py-2 ps-9 pe-3 text-sm text-gray-950 shadow-sm ring-1 ring-transparent transition focus:bg-white focus:ring-2 focus:ring-primary-500 dark:bg-white/5 dark:text-white dark:focus:bg-white/10"
         />
+    </div>
+    <button type="button" wire:click="startGroup" title="{{ __('New group') }}" aria-label="{{ __('New group') }}"
+        style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: .75rem; color: rgb(107 114 128);" class="hover:bg-gray-100 dark:hover:bg-white/5">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
+    </button>
     </div>
 
     @if ($userSearch !== '')
@@ -27,12 +60,13 @@
             @endforelse
         </div>
     @endif
+  @endif
 </div>
 
 <div class="flex-1 overflow-y-auto">
     @forelse ($this->conversations as $conversation)
-        @php($other = $this->otherParticipant($conversation))
-        @continue(! $other)
+        @php($other = $conversation->is_group ? null : $this->otherParticipant($conversation))
+        @continue(! $conversation->is_group && ! $other)
         @php($isUnread = $this->isConversationUnread($conversation))
         <button
             type="button"
@@ -43,7 +77,11 @@
             ])
         >
             <span class="relative flex-shrink-0">
-                @include('livewire.partials.chat-avatar', ['user' => $other, 'size' => 40])
+                @if ($conversation->is_group)
+                    @include('livewire.partials.chat-group-avatar', ['conversation' => $conversation, 'size' => 40])
+                @else
+                    @include('livewire.partials.chat-avatar', ['user' => $other, 'size' => 40])
+                @endif
                 @if ($isUnread)
                     <span class="absolute -start-0.5 -top-0.5 h-3 w-3 rounded-full bg-primary-600 ring-2 ring-white dark:ring-gray-900"></span>
                 @endif
@@ -54,7 +92,7 @@
                         'truncate text-sm text-gray-950 dark:text-white',
                         'font-semibold' => $isUnread,
                         'font-medium' => ! $isUnread,
-                    ])>{{ $other->display_name ?: $other->name }}</span>
+                    ])>{{ $this->conversationTitle($conversation) }}</span>
                     @if ($conversation->last_message_at)
                         <span class="flex-shrink-0 text-[11px] text-gray-400">{{ $conversation->last_message_at->diffForHumans(null, true) }}</span>
                     @endif
