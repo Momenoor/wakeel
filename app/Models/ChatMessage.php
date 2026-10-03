@@ -17,13 +17,51 @@ class ChatMessage extends Model
         'reply_to_id',
         'body',
         'attachments',
+        'reactions',
         'delivered_at',
     ];
 
     protected $casts = [
         'delivered_at' => 'datetime',
         'attachments' => 'array',
+        'reactions' => 'array',
     ];
+
+    /** The reactions offered, in the picker's order. */
+    public const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '👎'];
+
+    /**
+     * Mine set to this emoji — or taken back, when it already was.
+     */
+    public function react(int $userId, string $emoji): void
+    {
+        $reactions = (array) ($this->reactions ?? []);
+
+        if (($reactions[$userId] ?? null) === $emoji) {
+            unset($reactions[$userId]);
+        } else {
+            $reactions[$userId] = $emoji;
+        }
+
+        $this->update(['reactions' => $reactions ?: null]);
+    }
+
+    /**
+     * Each emoji given, with who gave it — in the picker's order.
+     *
+     * @return array<string, list<int>>
+     */
+    public function reactionGroups(): array
+    {
+        $groups = [];
+        foreach ((array) ($this->reactions ?? []) as $userId => $emoji) {
+            $groups[$emoji][] = (int) $userId;
+        }
+
+        uksort($groups, fn ($a, $b) => array_search($a, self::REACTIONS, true) <=> array_search($b, self::REACTIONS, true));
+
+        return $groups;
+    }
 
     /**
      * @return BelongsTo<ChatConversation, $this>

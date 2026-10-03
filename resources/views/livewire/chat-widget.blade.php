@@ -118,6 +118,20 @@
     @endif
     class="fi-chat-widget {{ $isPopup ? 'fixed bottom-6 end-6 z-50 flex flex-col items-end gap-3' : '' }}"
 >
+    {{--
+        Who is online, as one style: the dots (data-chat-dot) and the status
+        lines (data-chat-status) are rendered offline, and these rules turn
+        the online people's green — from the live presence channel with
+        Pusher, else $wire's last_seen_at list. Kept out of re-renders
+        (wire:ignore); a status bound on each element was wiped by every
+        refresh, and the dots went blank after a minute or so.
+    --}}
+    <style>[data-chat-status]::after { content: attr(data-offline); }</style>
+    <style
+        wire:ignore
+        x-data
+        x-text="(($store.chatOnline?.ids) ?? $wire.onlineUserIds ?? []).map((id) => `[data-chat-dot='${id}'] { background: #22c55e !important; box-shadow: 0 0 6px 2px rgba(34, 197, 94, .55) !important; } [data-chat-status='${id}']::after { content: attr(data-online); } [data-chat-status='${id}'][data-online-green] { color: #16a34a; }`).join(' ')"
+    ></style>
     @if ($isPopup)
         {{-- Floating launcher bubble — click to open, drag to move --}}
         <button

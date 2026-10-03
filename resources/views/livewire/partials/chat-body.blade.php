@@ -27,9 +27,10 @@
                 <span class="truncate font-semibold">{{ $other->display_name ?: $other->name }}</span>
                 {{-- Online, or when last seen — live, as on the Chat page (chat-thread.blade.php). --}}
                 <span
-                    x-data="{ get on() { const ids = $store.chatOnline?.ids; return (ids ?? $wire.onlineUserIds).includes({{ $other->id }}); } }"
+                    data-chat-status="{{ $other->id }}"
+                    data-online="{{ __('Online') }}"
+                    data-offline="{{ $other->last_seen_at ? __('Last seen :time', ['time' => $other->last_seen_at->diffForHumans()]) : __('Offline') }}"
                     class="truncate text-xs text-white/80"
-                    x-text="on ? @js(__('Online')) : @js($other->last_seen_at ? __('Last seen :time', ['time' => $other->last_seen_at->diffForHumans()]) : __('Offline'))"
                 ></span>
             </span>
         @endif

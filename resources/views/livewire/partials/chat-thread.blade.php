@@ -14,12 +14,13 @@
             @include('livewire.partials.chat-avatar', ['user' => $other, 'size' => 36])
             <span class="flex min-w-0 flex-1 flex-col">
                 <span class="truncate font-semibold text-gray-950 dark:text-white">{{ $other->display_name ?: $other->name }}</span>
-                {{-- Live like the avatar dot — see chat-avatar.blade.php --}}
+                {{-- Live like the avatar dot — see the online-status style in chat-widget.blade.php --}}
                 <span
-                    x-data="{ get on() { const ids = $store.chatOnline?.ids; return (ids ?? $wire.onlineUserIds).includes({{ $other->id }}); } }"
-                    class="text-xs"
-                    :class="on ? 'text-green-600 dark:text-green-400' : 'text-gray-400'"
-                    x-text="on ? @js(__('Online')) : @js($other->last_seen_at ? __('Last seen :time', ['time' => $other->last_seen_at->diffForHumans()]) : __('Offline'))"
+                    data-chat-status="{{ $other->id }}"
+                    data-online="{{ __('Online') }}"
+                    data-offline="{{ $other->last_seen_at ? __('Last seen :time', ['time' => $other->last_seen_at->diffForHumans()]) : __('Offline') }}"
+                    data-online-green
+                    class="text-xs text-gray-400"
                 ></span>
             </span>
         @else
@@ -95,16 +96,30 @@
             <div
                 id="chat-msg-{{ $message->id }}"
                 wire:key="chat-msg-{{ $message->id }}"
-                x-data="{ hover: false }"
+                x-data="{ hover: false, picking: false }"
                 x-on:mouseenter="hover = true"
-                x-on:mouseleave="hover = false"
+                x-on:mouseleave="hover = false; picking = false"
                 @class(['flex', 'justify-end' => $isMine])
-                style="align-items: center; gap: 4px; transition: background-color .6s; border-radius: 1rem;"
+                style="position: relative; align-items: center; gap: 4px; transition: background-color .6s; border-radius: 1rem;"
             >
+                {{-- The reactions to pick from, over the message. --}}
+                <div
+                    x-show="picking"
+                    x-cloak
+                    x-transition.opacity
+                    x-on:click.outside="picking = false"
+                    class="bg-white shadow-lg ring-1 ring-gray-950/10 dark:bg-gray-800 dark:ring-white/10"
+                    style="position: absolute; bottom: calc(100% - 4px); {{ $isMine ? 'inset-inline-end' : 'inset-inline-start' }}: 8px; z-index: 20; display: flex; gap: 2px; padding: 4px 6px; border-radius: 9999px;"
+                >
+                    @foreach (\App\Models\ChatMessage::REACTIONS as $emoji)
+                        <button type="button" wire:click="react({{ $message->id }}, @js($emoji))" x-on:click="picking = false" aria-label="{{ $emoji }}" style="font-size: 1.25rem; line-height: 1; padding: 3px; border-radius: 9999px; transition: transform .1s;" onmouseover="this.style.transform='scale(1.25)'" onmouseout="this.style.transform=''">{{ $emoji }}</button>
+                    @endforeach
+                </div>
                 @php($replyButton = '<button type="button" wire:click="replyTo('.$message->id.')" title="'.e(__('Reply')).'" aria-label="'.e(__('Reply')).'" x-bind:style="\'opacity: \' + (hover ? 1 : (window.matchMedia(\'(hover: none)\').matches ? .45 : 0)) + \'; transition: opacity .15s; padding: 4px; border-radius: 9999px; color: rgb(107 114 128); flex-shrink: 0;\'"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform: '.(__('filament-panels::layout.direction') === 'rtl' ? 'scaleX(-1)' : 'none').';"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>')
                 {{-- Delete: mine until someone else reads it; any, for a super admin. --}}
                 @php($deleteButton = $this->canDelete($message) ? '<button type="button" wire:click="deleteMessage('.$message->id.')" wire:confirm="'.e(__('Delete this message for everyone?')).'" title="'.e(__('Delete')).'" aria-label="'.e(__('Delete')).'" x-bind:style="\'opacity: \' + (hover ? 1 : (window.matchMedia(\'(hover: none)\').matches ? .45 : 0)) + \'; transition: opacity .15s; padding: 4px; border-radius: 9999px; color: rgb(220 38 38); flex-shrink: 0;\'"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg></button>' : '')
-                @if ($isMine) {!! $deleteButton !!}{!! $replyButton !!} @endif
+                @php($reactButton = '<button type="button" x-on:click="picking = ! picking" title="'.e(__('React')).'" aria-label="'.e(__('React')).'" x-bind:style="\'opacity: \' + (hover || picking ? 1 : (window.matchMedia(\'(hover: none)\').matches ? .45 : 0)) + \'; transition: opacity .15s; padding: 4px; border-radius: 9999px; color: rgb(107 114 128); flex-shrink: 0;\'"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01M15 9h.01"/></svg></button>')
+                @if ($isMine) {!! $deleteButton !!}{!! $reactButton !!}{!! $replyButton !!} @endif
                 <div @class([
                     'max-w-[80%] rounded-2xl px-4 py-2 text-sm shadow-sm',
                     'rounded-br-md bg-gradient-to-br from-primary-600 to-primary-500 text-white' => $isMine,
@@ -183,8 +198,26 @@
                             </span>
                         @endif
                     </p>
+                    {{-- Its reactions: each emoji with how many; tap one to give (or take back) it. --}}
+                    @if ($groups = $message->reactionGroups())
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; {{ $isMine ? 'justify-content: flex-end;' : '' }}">
+                            @foreach ($groups as $emoji => $userIds)
+                                @php($mineToo = in_array(auth()->id(), $userIds, true))
+                                <button
+                                    type="button"
+                                    wire:click="react({{ $message->id }}, @js($emoji))"
+                                    title="{{ $this->reactorNames($userIds) }}"
+                                    data-reaction="{{ $emoji }}"
+                                    style="display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 9999px; font-size: .8rem; line-height: 1.4; background: {{ $isMine ? 'rgba(255,255,255,.2)' : 'rgba(0,0,0,.06)' }}; border: 1px solid {{ $mineToo ? ($isMine ? 'rgba(255,255,255,.85)' : 'rgb(37 99 235)') : 'transparent' }};"
+                                >
+                                    <span>{{ $emoji }}</span>
+                                    @if (count($userIds) > 1)<span style="font-size: .7rem; font-weight: 600;">{{ count($userIds) }}</span>@endif
+                                </button>
+                            @endforeach
+                        </div>
+                    @endif
                 </div>
-                @unless ($isMine) {!! $replyButton !!}{!! $deleteButton !!} @endunless
+                @unless ($isMine) {!! $replyButton !!}{!! $reactButton !!}{!! $deleteButton !!} @endunless
             </div>
             @php($previousSender = $message->user_id)
         @endforeach

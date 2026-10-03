@@ -537,4 +537,58 @@ class ChatWidgetTest extends TestCase
             ->call('selectConversation', $conversation->id)
             ->assertSee(__('Last seen :time', ['time' => $this->colleague->last_seen_at->diffForHumans()]));
     }
+
+    public function test_people_react_to_a_message_once_each(): void
+    {
+        $this->withoutDefer();
+        Event::fake([ChatMessageSent::class, ChatMessagesStatusChanged::class]);
+        $conversation = ChatConversation::betweenUsers($this->me, $this->colleague);
+        $message = app(ChatMessenger::class)->send($conversation, $this->colleague, 'Done!');
+
+        $chat = Livewire::test(ChatWidget::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSeeHtml('wire:click="react('.$message->id.', '."'❤️'".')"')
+            ->call('react', $message->id, '❤️')
+            ->assertSeeHtml('data-reaction="❤️"');
+        $this->assertSame([(string) $this->me->id => '❤️'], array_map('strval', $message->fresh()->reactions));
+        Event::assertDispatched(ChatMessagesStatusChanged::class, fn ($e) => $e->userIds === [$this->colleague->id]);
+
+        // Another emoji replaces mine; the same again takes it back.
+        $chat->call('react', $message->id, '😂');
+        $this->assertSame('😂', $message->fresh()->reactions[$this->me->id]);
+        $chat->call('react', $message->id, '😂')->assertDontSeeHtml('data-reaction=');
+        $this->assertNull($message->fresh()->reactions);
+
+        // Theirs and mine, shown together with who gave them.
+        $message->react($this->colleague->id, '👍');
+        $chat->call('react', $message->id, '👍')
+            ->assertSeeHtml('title="'.e(($this->colleague->display_name ?: $this->colleague->name).', '.__('You')).'"');
+        $this->assertSame(['👍' => [$this->colleague->id, $this->me->id]], $message->fresh()->reactionGroups());
+
+        // Only the reactions offered, and only in my conversations.
+        $chat->call('react', $message->id, '<b>');
+        $this->assertCount(2, $message->fresh()->reactions);
+        $other = app(ChatMessenger::class)->send(ChatConversation::betweenUsers($this->colleague, User::factory()->create()), $this->colleague, 'Private');
+        $chat->call('react', $other->id, '❤️');
+        $this->assertNull($other->fresh()->reactions);
+    }
+
+    public function test_the_online_dots_survive_the_chats_refreshes(): void
+    {
+        $this->colleague->forceFill(['last_seen_at' => now()])->save();
+        $conversation = ChatConversation::betweenUsers($this->me, $this->colleague);
+
+        $chat = Livewire::test(ChatWidget::class)->call('selectConversation', $conversation->id);
+
+        // Each dot and status line: plain, rendered offline, marked with its
+        // person — nothing a refresh can wipe.
+        $chat->assertSeeHtml('data-chat-dot="'.$this->colleague->id.'"')
+            ->assertSeeHtml('data-chat-status="'.$this->colleague->id.'"')
+            ->assertDontSeeHtml(':class="on ?');
+
+        // One style, outside re-renders, turns the online ones green.
+        $chat->assertSeeHtml('wire:ignore')
+            ->assertSeeHtml("[data-chat-dot='\${id}']")
+            ->assertSet('onlineUserIds', fn ($ids) => in_array($this->colleague->id, $ids));
+    }
 }

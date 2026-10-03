@@ -395,6 +395,38 @@ class ChatWidget extends Component
     }
 
     /**
+     * React to a message (❤️ 😂 👍 …) — the same one again takes it back.
+     * The others' chats redraw with it.
+     */
+    public function react(int $messageId, string $emoji): void
+    {
+        $conversation = $this->activeConversation;
+        $message = $conversation ? $conversation->messages()->whereKey($messageId)->first() : null;
+
+        if (! $message || ! in_array($emoji, ChatMessage::REACTIONS, true)) {
+            return;
+        }
+
+        $message->react((int) Auth::id(), $emoji);
+
+        $this->tellSenders($conversation->participants->pluck('id')->reject(fn ($id) => $id === Auth::id())->all(), $conversation->id);
+    }
+
+    /**
+     * Who gave a reaction, for its tooltip: "You, Ahmed".
+     *
+     * @param  list<int>  $userIds
+     */
+    public function reactorNames(array $userIds): string
+    {
+        $people = $this->activeConversation?->participants->keyBy('id');
+
+        return collect($userIds)
+            ->map(fn (int $id) => $id === Auth::id() ? __('You') : ($people?->get($id)?->display_name ?: $people?->get($id)?->name ?: '—'))
+            ->implode(', ');
+    }
+
+    /**
      * A message of mine no one else has read yet — or any message, for a
      * super admin — can be deleted.
      */
