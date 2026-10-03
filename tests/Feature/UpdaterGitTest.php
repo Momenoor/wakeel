@@ -204,6 +204,30 @@ class UpdaterGitTest extends TestCase
         $this->assertSame('1.2.0', AppUpdate::currentVersion());
     }
 
+    public function test_after_updating_to_an_annotated_tag_the_app_reports_that_version(): void
+    {
+        config(['license.version_from_git' => true]);
+
+        // v1.6.12 was cut with `git tag -a`: fetched, its ref holds the tag
+        // object's hash, not the commit's — the version fell back to the
+        // config's 1.0.7, and the same update was offered again.
+        $work = $this->root.'/work';
+        File::put($work.'/app.txt', "v4\n");
+        $this->git($work, ['add', '-A']);
+        $this->git($work, ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-m', 'v1.3.0']);
+        $this->git($work, ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'tag', '-a', 'v1.3.0', '-m', 'Annotated release']);
+        $this->git($work, ['push', 'origin', 'main', '--tags']);
+
+        $updater = app(Updater::class);
+        $updater->start('1.3.0');
+
+        $this->assertTrue($updater->runNextStep(), (string) $updater->state()['log']); // preflight
+        $this->assertTrue($updater->runNextStep(), (string) $updater->state()['log']); // maintenance
+        $this->assertTrue($updater->runNextStep(), (string) $updater->state()['log']); // code
+
+        $this->assertSame('1.3.0', AppUpdate::currentVersion());
+    }
+
     /**
      * @param  list<string>  $arguments
      */

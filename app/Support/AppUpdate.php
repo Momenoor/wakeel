@@ -25,9 +25,46 @@ class AppUpdate
             if ($tagged !== null) {
                 return $tagged;
             }
+
+            // The release the updater put in, while that is still what is
+            // checked out. An annotated tag (git tag -a) fetched by the
+            // updater holds the tag's own hash, not the commit's, so the
+            // tags alone said 1.0.7 after updating to 1.6.12.
+            $installed = static::installed();
+            $head = static::resolveHead(base_path('.git'));
+
+            if ($installed !== null && $head !== null && $installed['commit'] === $head) {
+                return $installed['version'];
+            }
         }
 
         return (string) config('license.app_version');
+    }
+
+    /** Where the updater records the release it checked out. */
+    public static function installedPath(): string
+    {
+        return storage_path('app/updater/installed-version.json');
+    }
+
+    /**
+     * Kept by the updater after checking a release out.
+     */
+    public static function recordInstalled(string $version, string $commit): void
+    {
+        $path = static::installedPath();
+        @mkdir(dirname($path), 0755, true);
+        file_put_contents($path, json_encode(['version' => $version, 'commit' => trim($commit)]));
+    }
+
+    /**
+     * @return array{version: string, commit: string}|null
+     */
+    private static function installed(): ?array
+    {
+        $data = json_decode((string) @file_get_contents(static::installedPath()), true);
+
+        return is_array($data) && is_string($data['version'] ?? null) && is_string($data['commit'] ?? null) ? $data : null;
     }
 
     public static function versionFromGit(string $gitDir): ?string

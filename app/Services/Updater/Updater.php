@@ -313,6 +313,13 @@ class Updater
 
         $this->process([...$this->gitCommand(), 'branch', "--set-upstream-to=origin/{$branch}", $branch]);
 
+        // What was put in, against the commit — the version shown even when
+        // the tag cannot be read from .git (an annotated tag).
+        $head = $this->process([...$this->gitCommand(), 'rev-parse', 'HEAD']);
+        if ($head['ok']) {
+            AppUpdate::recordInstalled($version, trim($head['output']));
+        }
+
         return $output;
     }
 
