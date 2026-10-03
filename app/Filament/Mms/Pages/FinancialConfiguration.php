@@ -7,6 +7,7 @@ use App\Filament\Mms\Pages\Schemas\PayrollSettingsForm;
 use App\Filament\Mms\Widgets\IncentiveExtraRulesOverviewWidget;
 use App\Filament\Mms\Widgets\IncentiveMetaAdjustmentsOverviewWidget;
 use App\Filament\Mms\Widgets\IncentiveTypeConfigsOverviewWidget;
+use App\Filament\Shared\Clusters\Settings;
 use App\Models\Setting;
 use App\Support\ScreenPermissions;
 use BackedEnum;
@@ -20,7 +21,6 @@ use Filament\Schemas\Components\Livewire;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
-use UnitEnum;
 
 /**
  * Incentive Configuration and Payroll Configuration merged into one page,
@@ -33,9 +33,9 @@ class FinancialConfiguration extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::AdjustmentsHorizontal;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Financial';
+    protected static ?int $navigationSort = 12;
 
-    protected static ?int $navigationSort = 7;
+    protected static ?string $cluster = Settings::class;
 
     public ?array $incentiveData = [];
 
@@ -48,7 +48,7 @@ class FinancialConfiguration extends Page
 
     public static function getNavigationGroup(): ?string
     {
-        return __('Financial');
+        return __('General');
     }
 
     public function getTitle(): string

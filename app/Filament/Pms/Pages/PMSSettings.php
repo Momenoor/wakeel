@@ -3,6 +3,7 @@
 namespace App\Filament\Pms\Pages;
 
 use App\Filament\Pms\Pages\Schemas\PMSSettingsForm;
+use App\Filament\Shared\Clusters\Settings;
 use App\Models\Setting;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -13,15 +14,14 @@ use Filament\Schemas\Components\EmbeddedSchema;
 use Filament\Schemas\Components\Form;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
-use UnitEnum;
 
 class PMSSettings extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::AdjustmentsHorizontal;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Settings';
+    protected static ?int $navigationSort = 11;
 
-    protected static ?int $navigationSort = 7;
+    protected static ?string $cluster = Settings::class;
 
     public ?array $data = [];
 
@@ -32,7 +32,7 @@ class PMSSettings extends Page
 
     public static function getNavigationGroup(): ?string
     {
-        return __('Settings');
+        return __('General');
     }
 
     public function getTitle(): string

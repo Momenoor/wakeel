@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\WhatsAppTemplates;
 
 use App\Filament\Concerns\HasModuleGate;
+use App\Filament\Mms\Clusters\Templates;
 use App\Filament\Mms\Resources\WhatsAppTemplates\Pages\ManageWhatsAppTemplates;
 use App\Models\WhatsAppTemplate;
 use App\Services\MMS\Letters\LetterComposer;
@@ -39,16 +40,13 @@ class WhatsAppTemplateResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleLeftRight;
 
-    protected static ?int $navigationSort = 8;
+    protected static ?int $navigationSort = 7;
+
+    protected static ?string $cluster = Templates::class;
 
     public static function moduleGateKey(): string
     {
         return 'mms_communications';
-    }
-
-    public static function getNavigationGroup(): ?string
-    {
-        return __('Communication');
     }
 
     public static function getModelLabel(): string

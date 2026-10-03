@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\Letterheads;
 
 use App\Filament\Concerns\HasModuleGate;
+use App\Filament\Mms\Clusters\Templates;
 use App\Filament\Mms\Resources\Letterheads\Pages\CreateLetterhead;
 use App\Filament\Mms\Resources\Letterheads\Pages\DesignLetterhead;
 use App\Filament\Mms\Resources\Letterheads\Pages\EditLetterhead;
@@ -39,16 +40,13 @@ class LetterheadResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedNewspaper;
 
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 3;
+
+    protected static ?string $cluster = Templates::class;
 
     public static function moduleGateKey(): string
     {
         return 'mms_communications';
-    }
-
-    public static function getNavigationGroup(): ?string
-    {
-        return __('Communication');
     }
 
     public static function getModelLabel(): string

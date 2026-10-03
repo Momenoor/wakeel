@@ -10,6 +10,7 @@ use App\Filament\Mms\Resources\Types\RelationManagers\FieldDefinitionsRelationMa
 use App\Filament\Mms\Resources\Types\Schemas\TypeForm;
 use App\Filament\Mms\Resources\Types\Schemas\TypeInfolist;
 use App\Filament\Mms\Resources\Types\Tables\TypesTable;
+use App\Filament\Shared\Clusters\Settings;
 use App\Models\Type;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -22,11 +23,13 @@ class TypeResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-tag';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 20;
+
+    protected static ?string $cluster = Settings::class;
 
     public static function getNavigationGroup(): ?string
     {
-        return __('Settings');
+        return __('Master Data');
     }
 
     public static function getModelLabel(): string

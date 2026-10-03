@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\EmailTemplates;
 
 use App\Filament\Concerns\HasModuleGate;
+use App\Filament\Mms\Clusters\Templates;
 use App\Filament\Mms\Resources\EmailTemplates\Pages\ManageEmailTemplates;
 use App\Filament\Support\RichEditorDirection;
 use App\Models\EmailTemplate;
@@ -37,16 +38,13 @@ class EmailTemplateResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedEnvelope;
 
-    protected static ?int $navigationSort = 7;
+    protected static ?int $navigationSort = 6;
+
+    protected static ?string $cluster = Templates::class;
 
     public static function moduleGateKey(): string
     {
         return 'mms_communications';
-    }
-
-    public static function getNavigationGroup(): ?string
-    {
-        return __('Communication');
     }
 
     public static function getModelLabel(): string

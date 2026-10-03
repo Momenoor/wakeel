@@ -74,7 +74,7 @@ class LetterTemplateForm
                             ->label(__('English font'))
                             ->relationship('font', 'name')
                             ->placeholder(__('The standard font'))
-                            ->helperText(__('For the PDF. Fonts are added under Communication → Fonts; Word documents use the font set there.'))
+                            ->helperText(__('For the PDF. Fonts are added under Communication → Templates → Fonts; Word documents use the font set there.'))
                             ->preload(),
                         Select::make('arabic_font_id')
                             ->label(__('Arabic font'))

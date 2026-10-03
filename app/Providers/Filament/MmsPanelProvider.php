@@ -107,6 +107,8 @@ class MmsPanelProvider extends PanelProvider
                 fn () => view('filament.shared.update-banner'),
             )
             ->discoverClusters(in: app_path('Filament/Mms/Clusters'), for: 'App\Filament\Mms\Clusters')
+            // The Settings cluster, shared with the other panel.
+            ->discoverClusters(in: app_path('Filament/Shared/Clusters'), for: 'App\Filament\Shared\Clusters')
             ->discoverWidgets(in: app_path('Filament/Mms/Widgets'), for: 'App\Filament\Mms\Widgets')
             ->renderHook(
                 PanelsRenderHook::USER_MENU_PROFILE_AFTER,
@@ -147,7 +149,7 @@ class MmsPanelProvider extends PanelProvider
                 NavigationGroup::make(fn () => __('Communication')),
                 NavigationGroup::make(fn () => __('Financial')),
                 NavigationGroup::make(fn () => __('Human Resources')),
-                NavigationGroup::make(fn () => __('Settings')),
+                // Administration: the Settings cluster, Users and Roles.
                 NavigationGroup::make(fn () => __('filament-shield::filament-shield.nav.group')),
             ])
             ->authMiddleware([
@@ -159,13 +161,16 @@ class MmsPanelProvider extends PanelProvider
                 //                FilamentCronManagerPlugin::make(),
                 FilamentUsersPlugin::make()
                     ->useAvatar(),
-                FilamentShieldPlugin::make(),
+                FilamentShieldPlugin::make()
+                    ->navigationSort(2),
                 FilamentFullCalendarPlugin::make()
                     ->timezone(config('app.timezone'))
                     ->editable()
                     ->selectable(),
-                // Grouped with the rest of Settings, not its own 'System' —
-                // the plugin's getNavigationGroup() evaluates this closure on
+                // Beside Users and Roles, not inside the Settings cluster —
+                // the plugin works out its cluster before the panel exists,
+                // so a clustered log never made it into the cluster's menu.
+                // The plugin's getNavigationGroup() evaluates this closure on
                 // every request via Filament's evaluate(), so it always
                 // reflects the current locale rather than baking in whichever
                 // one was active if config/routes ever get cached. label()/
@@ -178,7 +183,8 @@ class MmsPanelProvider extends PanelProvider
                 // (behind a Shield permission) is registered instead.
                 ActivityLogPlugin::make()
                     ->dashboard(false)
-                    ->navigationGroup(fn () => __('Settings')),
+                    ->navigationGroup(fn () => __('filament-shield::filament-shield.nav.group'))
+                    ->navigationSort(90),
                 // FilamentUiSwitcherPlugin::make(),
                 FilamentLanguageSwitcherPlugin::make()
                     ->locales(['en', ['code' => 'ar', 'name' => __('Arabic'), 'flag' => 'ae']]),

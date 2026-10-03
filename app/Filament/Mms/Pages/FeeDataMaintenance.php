@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Pages;
 
 use App\Enums\FeeType;
+use App\Filament\Shared\Clusters\Settings;
 use App\Models\Allocation;
 use App\Models\Fee;
 use App\Models\Matter;
@@ -19,7 +20,6 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use UnitEnum;
 
 /**
  * Operator-driven fee data corrections.
@@ -36,9 +36,9 @@ class FeeDataMaintenance extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedWrenchScrewdriver;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Settings';
+    protected static ?int $navigationSort = 30;
 
-    protected static ?int $navigationSort = 90;
+    protected static ?string $cluster = Settings::class;
 
     protected string $view = 'filament.pages.fee-data-maintenance';
 
@@ -54,7 +54,7 @@ class FeeDataMaintenance extends Page
 
     public static function getNavigationGroup(): ?string
     {
-        return __('Settings');
+        return __('Maintenance');
     }
 
     /**

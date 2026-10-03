@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\ExpertiseAreas;
 
 use App\Filament\Mms\Resources\ExpertiseAreas\Pages\ManageExpertiseAreas;
+use App\Filament\Shared\Clusters\Settings;
 use App\Models\ExpertiseArea;
 use BackedEnum;
 use Filament\Actions\CreateAction;
@@ -28,11 +29,13 @@ class ExpertiseAreaResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-academic-cap';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 21;
+
+    protected static ?string $cluster = Settings::class;
 
     public static function getNavigationGroup(): ?string
     {
-        return __('Settings');
+        return __('Master Data');
     }
 
     public static function getModelLabel(): string

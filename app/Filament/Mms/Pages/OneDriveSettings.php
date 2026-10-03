@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Pages;
 
+use App\Filament\Shared\Clusters\Settings;
 use App\Models\Setting;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\OneDriveClient;
@@ -22,7 +23,6 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\HtmlString;
 use Throwable;
-use UnitEnum;
 
 /**
  * Matter folders in the assistants' OneDrive: on or off, and the standard
@@ -33,9 +33,9 @@ class OneDriveSettings extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCloud;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Settings';
+    protected static ?int $navigationSort = 13;
 
-    protected static ?int $navigationSort = 8;
+    protected static ?string $cluster = Settings::class;
 
     public ?array $data = [];
 
@@ -53,7 +53,7 @@ class OneDriveSettings extends Page
 
     public static function getNavigationGroup(): ?string
     {
-        return __('Settings');
+        return __('General');
     }
 
     public function getTitle(): string

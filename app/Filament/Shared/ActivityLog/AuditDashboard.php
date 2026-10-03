@@ -15,6 +15,28 @@ class AuditDashboard extends BaseAuditDashboard
 {
     use HasPageShield;
 
+    /**
+     * Beside the Activity Log, in the Users and Roles group.
+     */
+    public static function getNavigationGroup(): ?string
+    {
+        return __('filament-shield::filament-shield.nav.group');
+    }
+
+    public static function getNavigationSort(): ?int
+    {
+        return 91;
+    }
+
+    /**
+     * The parent ties this to the plugin's own dashboard, which is switched
+     * off — this one is listed in its place (access is still per permission).
+     */
+    public static function shouldRegisterNavigation(): bool
+    {
+        return static::canAccess();
+    }
+
     protected function getHeaderWidgets(): array
     {
         return [

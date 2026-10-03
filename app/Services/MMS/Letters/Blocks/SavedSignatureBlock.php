@@ -9,7 +9,7 @@ use Filament\Forms\Components\RichEditor\RichContentCustomBlock;
 use Filament\Forms\Components\Select;
 
 /**
- * A saved signature block (Communication → Signature blocks), dropped into
+ * A saved signature block (Communication → Templates → Signature blocks), dropped into
  * a letter from the editor's blocks menu. Designed once, used in any
  * template; editing it changes every template using it, while letters
  * already issued keep it as it was (SignatureLayouts::freeze()).
@@ -31,7 +31,7 @@ class SavedSignatureBlock extends RichContentCustomBlock
     public static function configureEditorAction(Action $action): Action
     {
         return $action
-            ->modalDescription(__('Signature blocks are designed under Communication → Signature blocks.'))
+            ->modalDescription(__('Signature blocks are designed under Communication → Templates → Signature blocks.'))
             ->fillForm(fn (array $arguments): array => ['layout_id' => $arguments['config']['layout_id'] ?? SignatureLayout::query()->value('id')])
             ->schema([
                 Select::make('layout_id')

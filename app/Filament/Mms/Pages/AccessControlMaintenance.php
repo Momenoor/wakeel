@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Pages;
 
+use App\Filament\Shared\Clusters\Settings;
 use App\Services\AccessControlRepairService;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -11,7 +12,6 @@ use Filament\Pages\Page;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
-use UnitEnum;
 
 /**
  * Operator-driven role/permission repairs.
@@ -27,9 +27,9 @@ class AccessControlMaintenance extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShieldCheck;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Settings';
+    protected static ?int $navigationSort = 31;
 
-    protected static ?int $navigationSort = 91;
+    protected static ?string $cluster = Settings::class;
 
     protected string $view = 'filament.pages.access-control-maintenance';
 
@@ -45,7 +45,7 @@ class AccessControlMaintenance extends Page
 
     public static function getNavigationGroup(): ?string
     {
-        return __('Settings');
+        return __('Maintenance');
     }
 
     /**

@@ -85,6 +85,8 @@ class PmsPanelProvider extends PanelProvider
             ->discoverResources(in: app_path('Filament/Pms/Resources'), for: 'App\Filament\Pms\Resources')
             ->discoverPages(in: app_path('Filament/Pms/Pages'), for: 'App\Filament\Pms\Pages')
             ->discoverClusters(in: app_path('Filament/Pms/Clusters'), for: 'App\Filament\Pms\Clusters')
+            // The Settings cluster, shared with the other panel.
+            ->discoverClusters(in: app_path('Filament/Shared/Clusters'), for: 'App\Filament\Shared\Clusters')
             ->discoverWidgets(in: app_path('Filament/Pms/Widgets'), for: 'App\Filament\Pms\Widgets')
             ->renderHook(
                 PanelsRenderHook::USER_MENU_PROFILE_AFTER,
@@ -105,7 +107,7 @@ class PmsPanelProvider extends PanelProvider
                 NavigationGroup::make(fn () => __('Properties')),
                 NavigationGroup::make(fn () => __('Leasing')),
                 NavigationGroup::make(fn () => __('Ownership')),
-                NavigationGroup::make(fn () => __('Settings')),
+                // Administration: the Settings cluster, Users and Roles.
                 NavigationGroup::make(fn () => __('filament-shield::filament-shield.nav.group')),
             ])
             ->renderHook(
@@ -141,17 +143,20 @@ class PmsPanelProvider extends PanelProvider
                 // discovery needs this registered here too, or canAccess()
                 // calls on PMS widgets/pages throw BadMethodCallException.
 
-                FilamentShieldPlugin::make(),
+                FilamentShieldPlugin::make()
+                    ->navigationSort(2),
                 FilamentFullCalendarPlugin::make()
                     ->timezone(config('app.timezone'))
                     ->editable()
                     ->selectable(),
                 // Its Audit Dashboard has no access check of its own; ours
                 // (behind a Shield permission) is registered instead.
+                // Beside Users and Roles: the plugin works out a cluster
+                // before the panel exists, so it can't join Settings.
                 ActivityLogPlugin::make()
                     ->dashboard(false)
-                    ->navigationGroup(fn () => __('Settings'))
-                    ->navigationSort(99),
+                    ->navigationGroup(fn () => __('filament-shield::filament-shield.nav.group'))
+                    ->navigationSort(90),
                 // FilamentUiSwitcherPlugin::make(),
                 FilamentLanguageSwitcherPlugin::make()
                     ->locales(['en', ['code' => 'ar', 'name' => __('Arabic'), 'flag' => 'ae']]),
