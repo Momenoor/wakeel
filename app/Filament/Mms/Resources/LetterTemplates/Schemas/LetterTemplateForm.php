@@ -71,10 +71,15 @@ class LetterTemplateForm
                             ->placeholder(__('The default letterhead'))
                             ->preload(),
                         Select::make('letter_font_id')
-                            ->label(__('Font'))
+                            ->label(__('English font'))
                             ->relationship('font', 'name')
                             ->placeholder(__('The standard font'))
-                            ->helperText(__('Fonts are added under Communication → Fonts. Arabic text is written in it too when it has the Arabic letters (as Calibri does), otherwise in the standard Arabic font.'))
+                            ->helperText(__('For the PDF. Fonts are added under Communication → Fonts; Word documents use the font set there.'))
+                            ->preload(),
+                        Select::make('arabic_font_id')
+                            ->label(__('Arabic font'))
+                            ->relationship('arabicFont', 'name')
+                            ->placeholder(__('As the English font, if it has Arabic letters; otherwise the standard one'))
                             ->preload(),
                         Select::make('email_template_id')
                             ->label(__('Covering email'))

@@ -25,13 +25,19 @@ class LetterPdf
 
     public function __construct(private LetterComposer $composer) {}
 
-    public static function mpdf(Letterhead $letterhead, bool $rtl, ?LetterFont $font = null): Mpdf
+    public static function mpdf(Letterhead $letterhead, bool $rtl, ?LetterFont $font = null, ?LetterFont $arabicFont = null): Mpdf
     {
-        // The template's own font (Calibri …), from its uploaded files —
-        // for all the text when it has the Arabic letters; otherwise its
-        // Arabic is drawn in the app's font (see ArabicInBoutros).
-        $files = $font?->pdfFiles() ?? [];
-        $own = isset($files['R']) ? $font : null;
+        // The template's fonts, from their uploaded files: one for its
+        // English text, one for its Arabic (see ArabicInBoutros). Arabic
+        // without a font of its own: in the English one when it has the
+        // letters (Calibri does), otherwise in the app's.
+        $latin = $font && isset($font->pdfFiles()['R']) ? $font : null;
+        $arabic = $arabicFont && isset($arabicFont->pdfFiles()['R']) ? $arabicFont : null;
+        $default = $latin?->pdfKey() ?? self::FONT;
+        $arabicKey = $arabic?->pdfKey() ?? ($latin?->coversArabic() ? $latin->pdfKey() : self::FONT);
+
+        $own = collect([$latin, $arabic])->filter()->keyBy(fn (LetterFont $f) => $f->pdfKey());
+        $files = $own->flatMap(fn (LetterFont $f) => array_values($f->pdfFiles()))->all();
 
         $tempDir = storage_path('app/mpdf-tmp');
         if (! is_dir($tempDir)) {
@@ -62,16 +68,16 @@ class LetterPdf
                     'B' => 'BoutrosMBCDinkum-Medium.ttf',
                     'useOTL' => 0xFF,
                 ],
-            ] + ($own ? [$own->pdfKey() => [...array_map('basename', $files), 'useOTL' => 0xFF]] : []),
-            'default_font' => $own?->pdfKey() ?? self::FONT,
+            ] + $own->map(fn (LetterFont $f) => [...array_map('basename', $f->pdfFiles()), 'useOTL' => 0xFF])->all(),
+            'default_font' => $default,
             'autoScriptToLang' => true,
-            'autoLangToFont' => $own !== null && ! $own->coversArabic(),
-            'languageToFont' => new ArabicInBoutros,
+            'autoLangToFont' => $arabicKey !== $default,
+            'languageToFont' => new ArabicInBoutros($arabicKey),
         ]);
     }
 
     /**
-     * The template's font, when it has one with its files.
+     * The template's English font, when it has one with its files.
      */
     private function font(): ?LetterFont
     {
@@ -81,15 +87,25 @@ class LetterPdf
     }
 
     /**
-     * Bold in the font's own bold, when it has one and the text is all in
-     * it — Arabic too, or none. Arabic in the app's single-weight font keeps
-     * the outline.
+     * The font its Arabic is in: its own, or the English one when that has
+     * the Arabic letters; null for the app's.
+     */
+    private function arabicFont(): ?LetterFont
+    {
+        $font = $this->composer->template->arabicFont;
+
+        return $font && isset($font->pdfFiles()['R']) ? $font : ($this->font()?->coversArabic() ? $this->font() : null);
+    }
+
+    /**
+     * Bold in the font's own bold, where the letter's language is written
+     * in a font that has one. The app's single-weight font keeps the outline.
      */
     private function realBold(): bool
     {
-        $font = $this->font();
+        $font = $this->composer->isArabic() ? $this->arabicFont() : $this->font();
 
-        return $font !== null && $font->hasBold() && (! $this->composer->isArabic() || $font->coversArabic());
+        return (bool) $font?->hasBold();
     }
 
     public function render(): string
@@ -97,7 +113,7 @@ class LetterPdf
         $letterhead = $this->composer->letterhead ?? Letterhead::fallback();
         $rtl = $this->composer->isArabic();
 
-        $mpdf = self::mpdf($letterhead, $rtl, $this->font());
+        $mpdf = self::mpdf($letterhead, $rtl, $this->font(), $this->composer->template->arabicFont);
         $mpdf->SetTitle($this->composer->subject() ?: (string) $this->composer->reference);
 
         if ($letterhead->watermark_type === 'text' && filled($letterhead->watermark_text)) {

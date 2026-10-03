@@ -3501,5 +3501,19 @@
     "Record a voice note": "تسجيل رسالة صوتية",
     "Recording…": "جارٍ التسجيل…",
     "This browser cannot record sound.": "هذا المتصفح لا يدعم تسجيل الصوت.",
-    "The microphone is not allowed. Allow it in the browser to record.": "الميكروفون غير مسموح به. اسمح به في المتصفح لتتمكن من التسجيل."
+    "The microphone is not allowed. Allow it in the browser to record.": "الميكروفون غير مسموح به. اسمح به في المتصفح لتتمكن من التسجيل.",
+    "English text": "النص الإنجليزي",
+    "Arabic text": "النص العربي",
+    "Use for English text": "استخدامه للنص الإنجليزي",
+    "Use for Arabic text": "استخدامه للنص العربي",
+    "Every screen of the system shows this text in this font, for everyone. Windows uses its own copy; other devices load the uploaded files.": "تعرض كل شاشات النظام هذا النص بهذا الخط لجميع المستخدمين. يستخدم Windows نسخته المثبتة، وتحمّل الأجهزة الأخرى الملفات المرفوعة.",
+    "Saved. Refresh the page to see it.": "تم الحفظ. حدّث الصفحة لرؤيته.",
+    "Word documents font": "خط مستندات Word",
+    "Calibri — on every Windows computer, Arabic included": "Calibri — موجود على كل أجهزة Windows، ويشمل العربية",
+    "The system's standard font": "خط النظام المعتاد",
+    "English font": "الخط الإنجليزي",
+    "Arabic font": "الخط العربي",
+    "For the PDF. Fonts are added under Communication → Fonts; Word documents use the font set there.": "لملف PDF. تُضاف الخطوط من المراسلات ← الخطوط، ومستندات Word تستخدم الخط المحدد هناك.",
+    "As the English font, if it has Arabic letters; otherwise the standard one": "كالخط الإنجليزي إن كان يدعم العربية، وإلا فالخط المعتاد",
+    "This font has PostScript outlines, which the PDF cannot use. Upload its TrueType (.ttf) version.": "هذا الخط بصيغة PostScript التي لا يدعمها ملف PDF. ارفع نسخة TrueType ‏(.ttf) منه."
 }

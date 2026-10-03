@@ -3,6 +3,7 @@
 namespace App\Services\MMS\Letters;
 
 use App\Models\Letterhead;
+use App\Models\Setting;
 use App\Services\MMS\BulkMailPlaceholders;
 use App\Support\Branding;
 use DOMDocument;
@@ -43,9 +44,10 @@ class LetterDocx
         $rtl = $this->composer->isArabic();
 
         $word = new PhpWord;
-        // The template's font by name (Word has Calibri); the standard one
-        // otherwise.
-        $word->setDefaultFontName($this->composer->template->font?->name ?: self::FONT);
+        // One font for the whole document, Arabic included: Calibri by
+        // default (every Windows computer has it), or the standard one —
+        // set under Fonts, not per template.
+        $word->setDefaultFontName(self::wordFont());
         $word->setDefaultFontSize(12);
         $word->setDefaultParagraphStyle([
             'bidi' => $rtl,
@@ -127,6 +129,14 @@ class LetterDocx
         }
 
         return $path;
+    }
+
+    /** Where the Word documents' font is set: 'calibri' (the default) or 'standard'. */
+    public const WORD_FONT = 'word_font';
+
+    public static function wordFont(): string
+    {
+        return Setting::get(self::WORD_FONT, 'calibri') === 'standard' ? self::FONT : 'Calibri';
     }
 
     /**
