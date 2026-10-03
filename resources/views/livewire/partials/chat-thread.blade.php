@@ -44,6 +44,7 @@
         data-chat-messages
         wire:key="chat-messages-{{ $this->activeConversation->id }}"
         x-data="{
+            preview: null,
             stick: true,
             toBottom() {
                 this.$el.scrollTop = this.$el.scrollHeight;
@@ -59,6 +60,8 @@
         "
         x-on:scroll="stick = $el.scrollHeight - $el.scrollTop - $el.clientHeight < 80"
         x-on:message-sent.window="stick = true; toBottom()"
+        x-on:chat-preview="preview = $event.detail"
+        x-on:keydown.escape.window="preview = null"
         class="flex-1 space-y-3 overflow-y-auto p-4"
     >
         @php($lastDay = null)
@@ -123,13 +126,17 @@
                                 <audio controls preload="metadata" src="{{ $url }}" style="height: 36px; max-width: 240px;"></audio>
                             </div>
                         @elseif (\App\Models\ChatMessage::isVideo($file))
-                            <video controls preload="metadata" src="{{ $url }}" style="display: block; max-width: 100%; max-height: 260px; border-radius: 10px; margin-bottom: 6px;"></video>
+                            <div style="position: relative; margin-bottom: 6px;">
+                                <video controls preload="metadata" src="{{ $url }}" style="display: block; max-width: 100%; max-height: 260px; border-radius: 10px;"></video>
+                                <button type="button" x-on:click="$dispatch('chat-preview', { type: 'video', url: @js($url), name: @js($file['name']) })" title="{{ __('Enlarge') }}" aria-label="{{ __('Enlarge') }}" style="position: absolute; top: 6px; inset-inline-end: 6px; width: 28px; height: 28px; border-radius: 9999px; background: rgba(0,0,0,.55); color: #fff; font-size: .9rem; line-height: 1;">⤢</button>
+                            </div>
                         @elseif (\App\Models\ChatMessage::isImage($file) && $file['mime'] !== 'image/svg+xml')
-                            <a href="{{ $url }}" target="_blank" rel="noopener" style="display: block; margin-bottom: 6px;">
+                            <button type="button" x-on:click="$dispatch('chat-preview', { type: 'image', url: @js($url), name: @js($file['name']) })" style="display: block; margin-bottom: 6px; padding: 0; cursor: zoom-in;">
                                 <img src="{{ $url }}" alt="{{ $file['name'] }}" loading="lazy" style="display: block; max-width: 100%; max-height: 240px; border-radius: 10px; object-fit: cover;">
-                            </a>
+                            </button>
                         @else
-                            <a href="{{ $url }}?download=1" style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; padding: 6px 8px; border-radius: 8px; background: {{ $isMine ? 'rgba(255,255,255,.18)' : 'rgba(0,0,0,.06)' }}; color: inherit; text-decoration: none;">
+                            {{-- A PDF previews here; any other file downloads. --}}
+                            <a href="{{ $url }}?download=1" @if (($file['mime'] ?? '') === 'application/pdf') x-on:click.prevent="$dispatch('chat-preview', { type: 'pdf', url: @js($url), name: @js($file['name']) })" @endif style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; padding: 6px 8px; border-radius: 8px; background: {{ $isMine ? 'rgba(255,255,255,.18)' : 'rgba(0,0,0,.06)' }}; color: inherit; text-decoration: none;">
                                 <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0;"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
                                 <span style="min-width: 0;">
                                     <span dir="auto" style="display: block; font-size: .8rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ $file['name'] }}</span>
@@ -171,6 +178,38 @@
             </div>
             @php($previousSender = $message->user_id)
         @endforeach
+
+        {{-- A picture, PDF or video, previewed over the page — not opened in
+             a new one. Moved to <body>: inside the chat's own box it would be
+             cut to its size. --}}
+        <template x-teleport="body">
+            <div
+                x-show="preview"
+                x-cloak
+                x-transition.opacity
+                style="position: fixed; inset: 0; z-index: 9999; background: rgba(0, 0, 0, .85);"
+            >
+              {{-- The layout on an inner box: x-show replaces the outer one's display. --}}
+              <div x-on:click.self="preview = null" style="height: 100%; display: flex; flex-direction: column;">
+                <div style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; color: #fff;">
+                    <span dir="auto" style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem;" x-text="preview?.name"></span>
+                    <a x-bind:href="preview ? preview.url + '?download=1' : '#'" style="padding: 6px 12px; border-radius: 9999px; background: rgba(255,255,255,.15); color: #fff; font-size: .8rem; text-decoration: none;">{{ __('Download') }}</a>
+                    <button type="button" x-on:click="preview = null" aria-label="{{ __('Close') }}" style="width: 36px; height: 36px; border-radius: 9999px; background: rgba(255,255,255,.15); color: #fff; font-size: 1.3rem; line-height: 1;">×</button>
+                </div>
+                <div x-on:click.self="preview = null" style="flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 0 14px 14px;">
+                    <template x-if="preview?.type === 'image'">
+                        <img x-bind:src="preview.url" x-bind:alt="preview.name" style="max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px;">
+                    </template>
+                    <template x-if="preview?.type === 'video'">
+                        <video x-bind:src="preview.url" controls autoplay style="max-width: 100%; max-height: 100%; border-radius: 6px; background: #000;"></video>
+                    </template>
+                    <template x-if="preview?.type === 'pdf'">
+                        <iframe x-bind:src="preview.url" x-bind:title="preview.name" style="width: min(100%, 960px); align-self: stretch; border: 0; border-radius: 6px; background: #fff;"></iframe>
+                    </template>
+                </div>
+              </div>
+            </div>
+        </template>
     </div>
 
     {{--

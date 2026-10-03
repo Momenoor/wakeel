@@ -214,6 +214,11 @@ class ChatWidgetTest extends TestCase
         Livewire::test(ChatWidget::class)->call('selectConversation', $conversation->id)
             ->assertSeeHtml('src="'.route('chat.attachment', [$message, 0]).'"')
             ->assertSeeHtml('href="'.route('chat.attachment', [$message, 1]).'?download=1"')
+            // Previewed over the page, not opened in a new one.
+            ->assertSeeHtml("x-on:chat-preview=\"preview = \$event.detail\"")
+            ->assertSeeHtml("\$dispatch('chat-preview', { type: 'image'")
+            ->assertSeeHtml("\$dispatch('chat-preview', { type: 'pdf'")
+            ->assertDontSeeHtml('target="_blank" rel="noopener" style="display: block; margin-bottom: 6px;"')
             ->assertSeeHtml(str_replace('/', '\/', route('chat.messages.store', $conversation)));
 
         $this->get(route('chat.attachment', [$message, 1]).'?download=1')->assertOk()->assertDownload('report.pdf');
