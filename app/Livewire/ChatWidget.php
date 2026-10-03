@@ -8,12 +8,13 @@ use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\User;
 use App\Services\Chat\ChatMessenger;
+use BezhanSalleh\FilamentShield\Support\Utils;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Component;
 use Throwable;
 
@@ -71,20 +72,33 @@ class ChatWidget extends Component
     public int $lastSeenMessageId = 0;
 
     /**
-     * Where a chat notification takes you: the full Chat page.
+     * The message a notification points at: the list scrolls to it and
+     * flashes it, instead of going to the newest.
      */
-    private static function chatUrl(): string
-    {
-        return Route::has('filament.mms.pages.chat') ? route('filament.mms.pages.chat') : url('/');
-    }
+    public ?int $focusMessageId = null;
 
-    public function mount(string $mode = 'page'): void
+    /**
+     * Opened from a notification: on its conversation, at its message.
+     */
+    public function mount(string $mode = 'page', ?int $conversation = null, ?int $message = null): void
     {
         abort_unless(Chat::canAccess(), 403);
 
         $this->mode = $mode;
         $this->lastSeenMessageId = (int) $this->incomingMessages()->max('id');
         $this->markIncomingDelivered();
+
+        if ($conversation !== null) {
+            $this->activeConversationId = $conversation;
+
+            // Only one of this user's own conversations.
+            if ($this->activeConversation === null) {
+                $this->activeConversationId = null;
+            } else {
+                $this->focusMessageId = $message !== null && $this->activeConversation->messages()->whereKey($message)->exists() ? $message : null;
+                $this->markActiveConversationRead();
+            }
+        }
 
         // The popup comes back as it was left — open, on the same
         // conversation — after a refresh or on the next page.
@@ -155,7 +169,7 @@ class ChatWidget extends Component
             // In a group: the group, then who wrote.
             title: ($latest->conversation?->is_group ? $latest->conversation->name.' — ' : '').(string) ($latest->sender?->display_name ?: $latest->sender?->name ?: __('Chat')),
             body: $latest->preview(),
-            url: self::chatUrl(),
+            url: ChatMessenger::chatUrl($latest),
         );
 
         // A conversation on screen is being read as its messages arrive —
@@ -320,6 +334,7 @@ class ChatWidget extends Component
     public function selectConversation(int $conversationId): void
     {
         $this->activeConversationId = $conversationId;
+        $this->focusMessageId = null;
         $this->showMembers = false;
         $this->replyToId = null;
         $this->markActiveConversationRead();
@@ -377,6 +392,57 @@ class ChatWidget extends Component
         $this->replyToId = $this->activeConversation
             ? ChatMessage::query()->where('chat_conversation_id', $this->activeConversation->id)->whereKey($messageId)->value('id')
             : null;
+    }
+
+    /**
+     * A message of mine no one else has read yet — or any message, for a
+     * super admin — can be deleted.
+     */
+    public function canDelete(ChatMessage $message): bool
+    {
+        if (Auth::user()?->hasRole(Utils::getSuperAdminName())) {
+            return true;
+        }
+
+        if ((int) $message->user_id !== (int) Auth::id()) {
+            return false;
+        }
+
+        // Read by anyone else in the conversation (one of a group is enough).
+        return ! (bool) $this->activeConversation?->participants
+            ->reject(fn (User $u) => $u->id === Auth::id())
+            ->contains(fn (User $u) => $u->pivot?->last_read_at?->gte($message->created_at));
+    }
+
+    /**
+     * Gone for everyone — its files too; answers to it keep their text, the
+     * quote goes. The others' chats redraw without it.
+     */
+    public function deleteMessage(int $messageId): void
+    {
+        $conversation = $this->activeConversation;
+        $message = $conversation ? $conversation->messages()->whereKey($messageId)->first() : null;
+
+        if (! $message || ! $this->canDelete($message)) {
+            return;
+        }
+
+        foreach ($message->files() as $file) {
+            Storage::disk(ChatMessage::DISK)->delete($file['path']);
+        }
+
+        $message->delete();
+
+        // The conversation's latest message: what's left of it. Otherwise
+        // the others' list showed it unread with nothing new in it.
+        $conversation->update(['last_message_at' => $conversation->messages()->max('created_at')]);
+
+        if ($this->replyToId === $messageId) {
+            $this->replyToId = null;
+        }
+
+        unset($this->conversations);
+        $this->tellSenders($conversation->participants->pluck('id')->reject(fn ($id) => $id === Auth::id())->all(), $conversation->id);
     }
 
     public function cancelReply(): void

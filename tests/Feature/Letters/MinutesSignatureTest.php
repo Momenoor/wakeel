@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Letters;
 
+use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager;
 use App\Filament\Mms\Resources\WhatsAppTemplates\Pages\ManageWhatsAppTemplates;
@@ -200,6 +201,11 @@ class MinutesSignatureTest extends TestCase
 
         // Thanked, once.
         $this->assertSame('text', end($this->whatsapp)['type']);
+
+        // Whoever sent the minutes is told — linked to the matter's minutes.
+        $told = User::findOrFail($delivery->sent_by)->notifications()->sole();
+        $this->assertSame('Signed minutes received', $told->data['title']);
+        $this->assertSame(MatterResource::getUrl('view', ['record' => $this->minutes->matter_id, 'relation' => 1], panel: 'mms'), $told->data['actions'][0]['url']);
 
         // Sent again by Meta: taken in once.
         $post()->assertOk();

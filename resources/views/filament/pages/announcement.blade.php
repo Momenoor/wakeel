@@ -21,7 +21,7 @@
     copy arrives exactly as the first leaves and the line never shows a gap. The
     duplicate is aria-hidden so a screen reader announces the message once.
 --}}
-<div class="mt-2.5">
+<div class="wakeel-banner">
     <x-filament::callout color="warning" icon="heroicon-o-megaphone">
         <x-slot name="controls">
             <div style="width:200% !important">

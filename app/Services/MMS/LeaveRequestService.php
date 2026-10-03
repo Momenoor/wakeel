@@ -141,13 +141,20 @@ class LeaveRequestService
             'end' => $request->end_date?->format('d/m/Y') ?? '—',
         ]);
 
+        $user = $request->party?->user;
+
         UserAlert::send(
-            $request->party?->user,
+            $user,
             $approved ? __('Leave request approved') : __('Leave request rejected'),
             $approved
                 ? __('Your leave request for :period was approved.', ['period' => $period])
                 : __('Your leave request for :period was rejected: :reason', ['period' => $period, 'reason' => (string) $request->approved_comment]),
-            Route::has('filament.mms.resources.leave-requests.index') ? route('filament.mms.resources.leave-requests.index') : null,
+            // The request itself, for whoever may open it; the list otherwise.
+            match (true) {
+                $user?->can('update', $request) && Route::has('filament.mms.resources.leave-requests.edit') => route('filament.mms.resources.leave-requests.edit', $request),
+                Route::has('filament.mms.resources.leave-requests.index') => route('filament.mms.resources.leave-requests.index'),
+                default => null,
+            },
             $approved ? 'success' : 'danger',
         );
     }

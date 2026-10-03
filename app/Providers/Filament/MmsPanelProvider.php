@@ -9,6 +9,7 @@ use App\Filament\Mms\Pages\Auth\CustomLogin;
 use App\Filament\Mms\Pages\Auth\CustomProfile;
 use App\Filament\Mms\Pages\Chat;
 use App\Filament\Mms\Support\SystemSwitcher;
+use App\Filament\Mms\Resources\Matters\Pages\ListMatters;
 use App\Filament\Shared\Actions\ForceSignOutActions;
 use App\Filament\Shared\ActivityLog\AuditDashboard;
 use App\Filament\Shared\Pages\SystemSettings;
@@ -105,6 +106,12 @@ class MmsPanelProvider extends PanelProvider
             ->renderHook(
                 PanelsRenderHook::CONTENT_START,
                 fn () => view('filament.shared.update-banner'),
+            )
+            // The matters' tab counts, kept current.
+            ->renderHook(
+                PanelsRenderHook::PAGE_END,
+                fn () => view('filament.partials.live-tab-badges'),
+                scopes: ListMatters::class,
             )
             ->discoverClusters(in: app_path('Filament/Mms/Clusters'), for: 'App\Filament\Mms\Clusters')
             // The Settings cluster, shared with the other panel.

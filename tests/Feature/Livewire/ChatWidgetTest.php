@@ -10,6 +10,7 @@ use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\User;
 use App\Services\Chat\ChatMessenger;
+use BezhanSalleh\FilamentShield\Support\Utils;
 use Filament\Facades\Filament;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -18,6 +19,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class ChatWidgetTest extends TestCase
@@ -441,5 +443,98 @@ class ChatWidgetTest extends TestCase
         Filament::getPanel('pms')->bootUsing(fn () => null)->boot();
 
         $this->assertContains(TrackUserLastSeen::class, Livewire::getPersistentMiddleware());
+    }
+
+    public function test_a_chat_notification_opens_the_conversation_at_its_message(): void
+    {
+        $this->withoutDefer();
+        Event::fake([ChatMessageSent::class, ChatMessagesStatusChanged::class]);
+        $conversation = ChatConversation::betweenUsers($this->me, $this->colleague);
+        $message = app(ChatMessenger::class)->send($conversation, $this->colleague, 'The file is ready');
+
+        $url = ChatMessenger::chatUrl($message);
+        $this->assertStringContainsString('conversation='.$conversation->id, $url);
+        $this->assertStringContainsString('message='.$message->id, $url);
+
+        Livewire::test(ChatWidget::class, ['conversation' => $conversation->id, 'message' => $message->id])
+            ->assertSet('activeConversationId', $conversation->id)
+            ->assertSet('focusMessageId', $message->id)
+            ->assertSeeHtml('id="chat-msg-'.$message->id.'"');
+        // Opened from the notification: read.
+        $this->assertNotNull($conversation->participants()->whereKey($this->me->id)->first()->pivot->last_read_at);
+
+        // The page passes the link's conversation and message on.
+        Filament::setCurrentPanel('mms');
+        $this->get($url)->assertSuccessful()->assertSeeHtml('id="chat-msg-'.$message->id.'"');
+
+        // Someone else's conversation: not opened.
+        $theirs = ChatConversation::betweenUsers($this->colleague, User::factory()->create());
+        Livewire::test(ChatWidget::class, ['conversation' => $theirs->id, 'message' => $message->id])
+            ->assertSet('activeConversationId', null)
+            ->assertSet('focusMessageId', null);
+    }
+
+    public function test_a_message_is_deleted_until_read_and_by_a_super_admin_always(): void
+    {
+        $this->withoutDefer();
+        Event::fake([ChatMessageSent::class, ChatMessagesStatusChanged::class]);
+        Storage::fake(ChatMessage::DISK);
+        $conversation = ChatConversation::betweenUsers($this->me, $this->colleague);
+        $messenger = app(ChatMessenger::class);
+
+        // Mine, not yet read: deleted, with its file.
+        $first = $messenger->send($conversation, $this->me, 'Oops', null, [UploadedFile::fake()->create('wrong.pdf', 10, 'application/pdf')]);
+        $path = $first->files()[0]['path'];
+        $this->travel(1)->minutes();
+        $kept = $messenger->send($conversation, $this->me, 'Kept');
+        $this->travel(1)->minutes();
+        $last = $messenger->send($conversation, $this->me, 'Last one');
+
+        Livewire::test(ChatWidget::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertSeeHtml('wire:click="deleteMessage('.$first->id.')"')
+            ->call('deleteMessage', $first->id)
+            ->call('deleteMessage', $last->id)
+            ->assertDontSeeHtml('id="chat-msg-'.$first->id.'"');
+        $this->assertModelMissing($first);
+        $this->assertModelMissing($last);
+        Storage::disk(ChatMessage::DISK)->assertMissing($path);
+        Event::assertDispatched(ChatMessagesStatusChanged::class, fn ($e) => $e->userIds === [$this->colleague->id]);
+        // The conversation's latest is what's left.
+        $this->assertTrue($conversation->fresh()->last_message_at->eq($kept->created_at));
+
+        // Read by the other side: stays.
+        $this->travel(1)->minutes();
+        $conversation->participants()->updateExistingPivot($this->colleague->id, ['last_read_at' => now()]);
+        Livewire::test(ChatWidget::class)
+            ->call('selectConversation', $conversation->id)
+            ->assertDontSeeHtml('wire:click="deleteMessage('.$kept->id.')"')
+            ->call('deleteMessage', $kept->id);
+        $this->assertModelExists($kept);
+
+        // Theirs: never mine to delete.
+        $theirs = $messenger->send($conversation, $this->colleague, 'Mine to keep');
+        Livewire::test(ChatWidget::class)->call('selectConversation', $conversation->id)->call('deleteMessage', $theirs->id);
+        $this->assertModelExists($theirs);
+
+        // A super admin: any message, read or not.
+        $this->me->assignRole(Role::firstOrCreate(['name' => Utils::getSuperAdminName(), 'guard_name' => 'web']));
+        Livewire::test(ChatWidget::class)
+            ->call('selectConversation', $conversation->id)
+            ->call('deleteMessage', $kept->id)
+            ->call('deleteMessage', $theirs->id);
+        $this->assertModelMissing($kept);
+        $this->assertModelMissing($theirs);
+    }
+
+    public function test_the_popup_shows_when_the_other_person_was_last_online(): void
+    {
+        $this->colleague->forceFill(['last_seen_at' => now()->subHours(3)])->save();
+        $conversation = ChatConversation::betweenUsers($this->me, $this->colleague);
+
+        Livewire::test(ChatWidget::class, ['mode' => 'popup'])
+            ->call('toggleOpen')
+            ->call('selectConversation', $conversation->id)
+            ->assertSee(__('Last seen :time', ['time' => $this->colleague->last_seen_at->diffForHumans()]));
     }
 }

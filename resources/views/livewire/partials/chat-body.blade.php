@@ -23,7 +23,15 @@
         </button>
         @else
             @include('livewire.partials.chat-avatar', ['user' => $other, 'size' => 36])
-            <span class="min-w-0 flex-1 truncate font-semibold">{{ $other->display_name ?: $other->name }}</span>
+            <span class="flex min-w-0 flex-1 flex-col" style="line-height: 1.2;">
+                <span class="truncate font-semibold">{{ $other->display_name ?: $other->name }}</span>
+                {{-- Online, or when last seen — live, as on the Chat page (chat-thread.blade.php). --}}
+                <span
+                    x-data="{ get on() { const ids = $store.chatOnline?.ids; return (ids ?? $wire.onlineUserIds).includes({{ $other->id }}); } }"
+                    class="truncate text-xs text-white/80"
+                    x-text="on ? @js(__('Online')) : @js($other->last_seen_at ? __('Last seen :time', ['time' => $other->last_seen_at->diffForHumans()]) : __('Offline'))"
+                ></span>
+            </span>
         @endif
     @else
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="h-5 w-5 flex-shrink-0">

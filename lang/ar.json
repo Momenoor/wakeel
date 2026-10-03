@@ -3518,5 +3518,6 @@
     "This font has PostScript outlines, which the PDF cannot use. Upload its TrueType (.ttf) version.": "هذا الخط بصيغة PostScript التي لا يدعمها ملف PDF. ارفع نسخة TrueType ‏(.ttf) منه.",
     "General": "عام",
     "Master Data": "البيانات الأساسية",
-    "Maintenance": "الصيانة"
+    "Maintenance": "الصيانة",
+    "Delete this message for everyone?": "حذف هذه الرسالة لدى الجميع؟"
 }

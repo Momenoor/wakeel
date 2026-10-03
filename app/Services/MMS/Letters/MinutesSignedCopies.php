@@ -8,6 +8,9 @@ use App\Models\WhatsAppTemplate;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\WhatsAppCloud;
 use App\Services\WhatsAppService;
+use App\Filament\Mms\Resources\Matters\MatterResource;
+use App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager;
+use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -168,6 +171,13 @@ class MinutesSignedCopies
                 ->success()
                 ->title(__('Signed minutes received'))
                 ->body(__(':name sent back minutes (:number) of :matter signed.', ['name' => $delivery->name, 'number' => $number, 'matter' => $reference]))
+                // The matter, on its minutes tab.
+                ->actions(array_filter([
+                    ($matterId = $delivery->minutes?->matter_id) ? Action::make('view')->label(__('View'))->url(MatterResource::getUrl('view', [
+                        'record' => $matterId,
+                        'relation' => array_search(MinutesRelationManager::class, MatterResource::getRelations(), true),
+                    ], panel: 'mms'))->markAsRead() : null,
+                ]))
                 ->sendToDatabase($user);
         } catch (\Throwable $e) {
             Log::info('Signed minutes notification not sent', ['error' => $e->getMessage()]);

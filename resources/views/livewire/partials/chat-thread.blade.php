@@ -54,7 +54,15 @@
             },
         }"
         x-init="
-            toBottom();
+            {{-- From a notification: at its message, flashed; otherwise the newest. --}}
+            const focus = document.getElementById('chat-msg-' + @js($this->focusMessageId));
+            if (focus) {
+                stick = false;
+                $nextTick(() => { focus.scrollIntoView({ block: 'center' }); focus.style.backgroundColor = 'rgba(250, 204, 21, .3)'; setTimeout(() => focus.style.backgroundColor = '', 2500); });
+                $wire.set('focusMessageId', null, false);
+            } else {
+                toBottom();
+            }
             new MutationObserver(() => follow()).observe($el, { childList: true, subtree: true, characterData: true });
             new ResizeObserver(() => follow()).observe($el);
         "
@@ -94,7 +102,9 @@
                 style="align-items: center; gap: 4px; transition: background-color .6s; border-radius: 1rem;"
             >
                 @php($replyButton = '<button type="button" wire:click="replyTo('.$message->id.')" title="'.e(__('Reply')).'" aria-label="'.e(__('Reply')).'" x-bind:style="\'opacity: \' + (hover ? 1 : (window.matchMedia(\'(hover: none)\').matches ? .45 : 0)) + \'; transition: opacity .15s; padding: 4px; border-radius: 9999px; color: rgb(107 114 128); flex-shrink: 0;\'"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform: '.(__('filament-panels::layout.direction') === 'rtl' ? 'scaleX(-1)' : 'none').';"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>')
-                @if ($isMine) {!! $replyButton !!} @endif
+                {{-- Delete: mine until someone else reads it; any, for a super admin. --}}
+                @php($deleteButton = $this->canDelete($message) ? '<button type="button" wire:click="deleteMessage('.$message->id.')" wire:confirm="'.e(__('Delete this message for everyone?')).'" title="'.e(__('Delete')).'" aria-label="'.e(__('Delete')).'" x-bind:style="\'opacity: \' + (hover ? 1 : (window.matchMedia(\'(hover: none)\').matches ? .45 : 0)) + \'; transition: opacity .15s; padding: 4px; border-radius: 9999px; color: rgb(220 38 38); flex-shrink: 0;\'"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg></button>' : '')
+                @if ($isMine) {!! $deleteButton !!}{!! $replyButton !!} @endif
                 <div @class([
                     'max-w-[80%] rounded-2xl px-4 py-2 text-sm shadow-sm',
                     'rounded-br-md bg-gradient-to-br from-primary-600 to-primary-500 text-white' => $isMine,
@@ -174,7 +184,7 @@
                         @endif
                     </p>
                 </div>
-                @unless ($isMine) {!! $replyButton !!} @endunless
+                @unless ($isMine) {!! $replyButton !!}{!! $deleteButton !!} @endunless
             </div>
             @php($previousSender = $message->user_id)
         @endforeach

@@ -69,7 +69,7 @@ class ChatMessenger
                 // In a group: the group, then who wrote.
                 ($conversation->is_group ? $conversation->name.' — ' : '').(string) ($sender->display_name ?: $sender->name ?: __('Chat')),
                 $message->preview(),
-                self::chatUrl(),
+                self::chatUrl($message),
             );
 
             defer(function () use ($recipients, $payload) {
@@ -87,11 +87,16 @@ class ChatMessenger
     }
 
     /**
-     * Where a chat notification takes you: the full Chat page.
+     * Where a chat notification takes you: the full Chat page, open on the
+     * message's conversation and scrolled to the message.
      */
-    public static function chatUrl(): string
+    public static function chatUrl(?ChatMessage $message = null): string
     {
-        return Route::has('filament.mms.pages.chat') ? route('filament.mms.pages.chat') : url('/');
+        if (! Route::has('filament.mms.pages.chat')) {
+            return url('/');
+        }
+
+        return route('filament.mms.pages.chat', $message ? ['conversation' => $message->chat_conversation_id, 'message' => $message->getKey()] : []);
     }
 
     /**

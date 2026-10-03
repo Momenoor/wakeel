@@ -57,6 +57,10 @@ class ListMatters extends ListRecords
     }
 
     /**
+     * The counts load after the page (deferBadge) and are kept current by
+     * filament.partials.live-tab-badges — after actions here, and as others
+     * change matters.
+     *
      * @return array<string, Tab>
      */
     private function allTabs(): array
@@ -72,6 +76,7 @@ class ListMatters extends ListRecords
                     : null
                 )
                 ->badgeColor(Color::Blue)
+                ->deferBadge()
                 ->modifyQueryUsing(fn (Builder $query) => $query->whereNull('initial_report_at')->withoutTrashed()),
 
             'initial_prepared' => Tab::make('Initial Prepared')
@@ -80,6 +85,7 @@ class ListMatters extends ListRecords
                     ? Matter::whereNotNull('initial_report_at')->whereNull('final_report_at')->withoutTrashed()->count()
                     : null)
                 ->badgeColor('warning')
+                ->deferBadge()
                 ->modifyQueryUsing(fn (Builder $query) => $query->whereNotNull('initial_report_at')->withoutTrashed()->whereNull('final_report_at')),
 
             'final_submitted' => Tab::make('Final Submitted')
@@ -88,11 +94,13 @@ class ListMatters extends ListRecords
                     ? Matter::whereNotNull('initial_report_at')->whereNotNull('final_report_at')->withoutTrashed()->count()
                     : null)
                 ->badgeColor('success')
+                ->deferBadge()
                 ->modifyQueryUsing(fn (Builder $query) => $query->whereNotNull('initial_report_at')->withoutTrashed()->whereNotNull('final_report_at')),
 
             'deleted' => Tab::make('Deleted')
                 ->label(__('Deleted'))
                 ->badgeColor('danger')
+                ->deferBadge()
                 ->icon('heroicon-o-trash')
                 ->modifyQueryUsing(fn (Builder $query) => $query->onlyTrashed())
                 ->visible(fn () => auth()->user()->can('ViewTrashed:Matter'))

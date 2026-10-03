@@ -74,6 +74,19 @@ html {
 }
 
 /*
+ * Banners above the page (announcement, update notice): rendered before the
+ * page header, so outside its top padding — they sat flush under the top bar.
+ */
+.wakeel-banner {
+    margin-top: 1.5rem;
+}
+
+/* A notification with a link opens it from anywhere on it (AppServiceProvider). */
+.fi-no-notification:has(.fi-no-notification-actions a[href]) {
+    cursor: pointer;
+}
+
+/*
  * Scrolling system announcement.
  *
  * Replaces <marquee>, which is obsolete, cannot be paused, ignores

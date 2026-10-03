@@ -171,6 +171,16 @@ class SystemNotificationsTest extends TestCase
         $this->assertContains('Leave request approved', $titles);
         $this->assertContains('Leave request rejected', $titles);
         $this->assertStringContainsString('Court hearing that week.', $employee->notifications()->get()->firstWhere('data.title', 'Leave request rejected')->data['body']);
+
+        // The link: the list, for an employee who may not open the request;
+        // the request itself for one who may.
+        $link = fn (string $reason) => $employee->notifications()->get()->first(fn ($n) => str_contains($n->data['body'], $reason))->data['actions'][0]['url'];
+        $this->assertSame(route('filament.mms.resources.leave-requests.index'), $link('Court hearing'));
+
+        Gate::before(fn ($user, string $ability) => $user->is($employee) && $ability === 'Update:LeaveRequest' ? true : null);
+        $again = $this->leaveRequest($employee);
+        $service->reject($again, User::factory()->create(), 'Again.');
+        $this->assertSame(route('filament.mms.resources.leave-requests.edit', $again), $link('Again.'));
     }
 
     public function test_a_user_alert_skips_nobody_and_never_throws(): void

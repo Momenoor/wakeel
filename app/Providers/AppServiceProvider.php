@@ -132,6 +132,29 @@ class AppServiceProvider extends ServiceProvider
             fn (): string => '<style>@media (max-width: 767px) { input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea, select, [contenteditable=true] { font-size: 16px !important; } }</style>',
         );
 
+        // A page left open past the session's lifetime (a laptop asleep
+        // overnight): its next click or poll comes back 419, and Livewire
+        // asked "This page has expired" — cancel it and every click failed,
+        // which looked like being signed out. Reload instead: "remember me"
+        // signs the user straight back in; without it, the login page.
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::BODY_END,
+            fn (): string => '<script>(() => { const expired = () => Livewire.interceptRequest(({ onError }) => onError(({ response, preventDefault }) => {'
+                .' if (response.status === 419) { preventDefault(); if (! window.wakeelReloading) { window.wakeelReloading = true; window.location.reload(); } }'
+                .' })); window.Livewire ? expired() : document.addEventListener("livewire:init", expired); })();</script>',
+        );
+
+        // A notification (in the bell, or a toast) opens what it is about
+        // when clicked anywhere — not only on its small "View" button.
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::BODY_END,
+            fn (): string => '<script>document.addEventListener("click", (event) => {'
+                .' const notification = event.target.closest(".fi-no-notification");'
+                .' if (! notification || event.target.closest("a, button, input, [role=button]")) { return; }'
+                .' notification.querySelector(".fi-no-notification-actions a[href]")?.click();'
+                .' });</script>',
+        );
+
         // ->aed(): an amount with the Dirham sign before it, in table columns,
         // detail entries and table totals (instead of money('AED')).
         foreach ([TextColumn::class, TextEntry::class, Summarizer::class] as $component) {
