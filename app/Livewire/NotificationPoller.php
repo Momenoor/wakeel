@@ -4,6 +4,7 @@
 
 namespace App\Livewire;
 
+use App\Services\Chat\ChatBellNotifications;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Contracts\View\View;
@@ -39,6 +40,12 @@ class NotificationPoller extends Component
         }
 
         foreach ($user->unreadNotifications as $notification) {
+            // A chat entry stays unread in the bell, counting up — the chat
+            // shows its own pop-up and notification.
+            if (ChatBellNotifications::isChat($notification)) {
+                continue;
+            }
+
             $data = $notification->data;
             $actions = collect($data['actions'] ?? [])
                 ->map(fn (array $action) => Action::make($action['name'] ?? 'action')

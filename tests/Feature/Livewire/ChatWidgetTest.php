@@ -6,6 +6,7 @@ use App\Events\ChatMessageSent;
 use App\Events\ChatMessagesStatusChanged;
 use App\Http\Middleware\TrackUserLastSeen;
 use App\Livewire\ChatWidget;
+use App\Livewire\NotificationPoller;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\User;
@@ -605,7 +606,8 @@ class ChatWidgetTest extends TestCase
         $chat = Livewire::test(ChatWidget::class)->call('selectConversation', $conversation->id)
             ->call('react', $theirs->id, '❤️');
 
-        $told = $this->colleague->notifications()->sole();
+        $reactions = fn () => $this->colleague->notifications()->get()->reject(fn ($n) => isset($n->data['viewData']['chat_conversation']));
+        $told = $reactions()->sole();
         $this->assertStringContainsString('❤️', $told->data['title']);
         $this->assertStringContainsString($this->me->display_name ?: $this->me->name, $told->data['title']);
         $this->assertStringContainsString('The file is ready', $told->data['body']);
@@ -614,16 +616,62 @@ class ChatWidgetTest extends TestCase
 
         // Changed: told again. Taken back: not.
         $chat->call('react', $theirs->id, '😂');
-        $this->assertSame(2, $this->colleague->notifications()->count());
+        $this->assertSame(2, $reactions()->count());
         $chat->call('react', $theirs->id, '😂');
-        $this->assertSame(2, $this->colleague->notifications()->count());
+        $this->assertSame(2, $reactions()->count());
 
         // My own message: nobody is told.
         $chat->call('react', $mine->id, '👍');
-        $this->assertSame(0, $this->me->notifications()->count());
-        $this->assertSame(2, $this->colleague->notifications()->count());
+        $this->assertSame(0, $this->me->notifications()->get()->reject(fn ($n) => isset($n->data['viewData']['chat_conversation']))->count());
+        $this->assertSame(2, $reactions()->count());
 
         Mail::assertNothingSent();
         Mail::assertNothingQueued();
+    }
+
+    public function test_chat_messages_show_in_the_bell_one_entry_per_sender_counting_up(): void
+    {
+        $this->withoutDefer();
+        Event::fake([ChatMessageSent::class, ChatMessagesStatusChanged::class]);
+        $conversation = ChatConversation::betweenUsers($this->me, $this->colleague);
+        $messenger = app(ChatMessenger::class);
+        $name = $this->colleague->display_name ?: $this->colleague->name;
+
+        $messenger->send($conversation, $this->colleague, 'First');
+        $entry = $this->me->unreadNotifications()->sole();
+        $this->assertSame(__(':name sent you a message', ['name' => $name]), $entry->data['title']);
+        $this->assertSame('First', $entry->data['body']);
+
+        // More while unread: the same entry, counting up, the latest under it.
+        $messenger->send($conversation, $this->colleague, 'Second');
+        $last = $messenger->send($conversation, $this->colleague, 'Third');
+        $entry = $this->me->unreadNotifications()->sole();
+        $this->assertSame(__(':name sent you :count messages', ['name' => $name, 'count' => 3]), $entry->data['title']);
+        $this->assertSame('Third', $entry->data['body']);
+        $this->assertSame(ChatMessenger::chatUrl($last), $entry->data['actions'][0]['url']);
+        // The sender's own bell: nothing.
+        $this->assertSame(0, $this->colleague->notifications()->count());
+
+        // The toasts leave it unread, counting.
+        Livewire::test(NotificationPoller::class)->call('checkNotifications');
+        $this->assertSame(1, $this->me->unreadNotifications()->count());
+
+        // Seen: the next message starts a new entry.
+        $entry->markAsRead();
+        $messenger->send($conversation, $this->colleague, 'Fourth');
+        $this->assertSame(2, $this->me->notifications()->count());
+        $this->assertSame(__(':name sent you a message', ['name' => $name]), $this->me->unreadNotifications()->sole()->data['title']);
+
+        // Opening the conversation reads its entries.
+        Livewire::test(ChatWidget::class)->call('selectConversation', $conversation->id);
+        $this->assertSame(0, $this->me->unreadNotifications()->count());
+
+        // Another sender: an entry of its own.
+        $third = User::factory()->create();
+        $group = ChatConversation::group($third, 'Team', [$this->me->id, $this->colleague->id]);
+        $messenger->send($group, $third, 'Hello team');
+        $messenger->send($group, $this->colleague, 'Hi');
+        $this->assertSame(2, $this->me->unreadNotifications()->count());
+        $this->assertStringStartsWith('Team — ', $this->me->unreadNotifications()->first()->data['title']);
     }
 }

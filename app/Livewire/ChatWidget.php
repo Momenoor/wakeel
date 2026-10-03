@@ -7,6 +7,7 @@ use App\Filament\Mms\Pages\Chat;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\User;
+use App\Services\Chat\ChatBellNotifications;
 use App\Services\Chat\ChatMessenger;
 use App\Services\Notify\UserAlert;
 use BezhanSalleh\FilamentShield\Support\Utils;
@@ -514,6 +515,8 @@ class ChatWidget extends Component
 
         $readBefore = $conversation->participants->firstWhere('id', Auth::id())?->pivot?->last_read_at;
         $conversation->participants()->updateExistingPivot(Auth::id(), ['last_read_at' => now()]);
+        // Read here: its entries in the bell too.
+        ChatBellNotifications::markRead(Auth::user(), $conversation->id);
 
         // Their messages now read: their ticks turn.
         $senders = ChatMessage::query()

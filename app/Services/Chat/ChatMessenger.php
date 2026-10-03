@@ -63,6 +63,13 @@ class ChatMessenger
         // And as a push to the other side's browsers and phones — seen even
         // with no Wakeel tab open.
         $recipients = $conversation->participants->pluck('id')->reject(fn ($id) => $id === $sender->getKey())->values()->all();
+
+        // In the bell, one entry per sender counting up while unread.
+        foreach ($conversation->participants as $participant) {
+            if ($participant->getKey() !== $sender->getKey()) {
+                ChatBellNotifications::record($message, $participant);
+            }
+        }
         if (PushSubscription::whereIn('user_id', $recipients)->exists()) {
             $payload = WebPushSender::chatPayload(
                 $conversation->id,

@@ -74,8 +74,15 @@ class CreateRequestAction extends Action
                 ->options(RequestType::class)
                 ->required()
                 ->disableOptionWhen(fn (string $value, $record): bool => $record->requests()->where('type', $value)->whereNot('status', RequestStatus::REJECTED)->exists())
-                ->live(),
+                ->live()
+                // The type's own fields (new difficulty, new date …) filled
+                // as they appear — Filament's way for fields that depend on
+                // another. Their state did not exist before, so a dropdown
+                // picked there was never sent: "New Difficulty is required"
+                // with one chosen.
+                ->afterStateUpdated(fn (Select $component) => $component->getContainer()->getComponent('typeFields')?->getChildSchema()->fill()),
             Group::make()
+                ->key('typeFields')
                 ->schema(fn (Get $get) => $get('type')
                     ? RequestServiceFactory::classFor($get('type'))::createFormFields()
                     : [])

@@ -8,6 +8,7 @@ use App\Enums\RequestType;
 use Filament\Notifications\Notification;
 use App\Filament\Mms\Actions\Request\ApproveRequestAction;
 use App\Filament\Mms\Resources\MatterRequests\Pages\ViewMatterRequest;
+use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Models\Matter;
 use App\Models\MatterRequest;
 use App\Models\User;
@@ -359,5 +360,28 @@ class MatterRequestTest extends TestCase
         $this->assertSame('عرض', $button());
         app()->setLocale('en');
         $this->assertSame('View', $button());
+    }
+
+    public function test_a_request_types_own_fields_exist_once_the_type_is_picked(): void
+    {
+        $this->allowEverything();
+        Mail::fake();
+        $this->actingAs(User::factory()->create());
+        $matter = $this->makeMatter(['difficulty' => MatterDifficulty::EASY]);
+
+        // The new difficulty's state is there as soon as the type is: a
+        // dropdown with no state behind it sent nothing, and the form said
+        // "New Difficulty is required" with one picked.
+        $page = Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])
+            ->call('mountAction', 'add_request', [], ['recordKey' => (string) $matter->getKey(), 'schemaComponent' => 'infolist'])
+            ->set('mountedActions.0.data.type', RequestType::CHANGE_DIFFICULTY->value);
+        $this->assertArrayHasKey('new_difficulty', $page->get('mountedActions.0.data'));
+
+        $page->set('mountedActions.0.data.new_difficulty', MatterDifficulty::HARD->value)
+            ->set('mountedActions.0.data.comment', 'Please')
+            ->call('callMountedAction')
+            ->assertHasNoErrors();
+
+        $this->assertSame(['new_difficulty' => 'hard'], $matter->requests()->sole()->extra);
     }
 }

@@ -97,8 +97,10 @@ class SystemNotificationsTest extends TestCase
         $this->assertSame('Are you in the office?', $payload['body']);
         $this->assertSame('wakeel-chat-'.$conversation->id, $payload['tag']);
         $this->assertTrue($payload['renotify']);
-        // Chat has its own unread counts: not added to the bell.
-        $this->assertSame(0, $other->notifications()->count());
+        // In the bell as one entry for the sender — and pushed once, by the
+        // chat itself: the entry is not sent again as a push.
+        $this->assertSame(1, $other->notifications()->count());
+        $this->assertSame(0, $me->notifications()->count());
     }
 
     public function test_a_received_chat_message_is_offered_as_a_desktop_notification(): void
