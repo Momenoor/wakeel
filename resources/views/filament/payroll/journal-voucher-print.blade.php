@@ -138,6 +138,7 @@
             cursor: pointer;
         }
     </style>
+    {{ \App\Support\Currency::fontLink() }}
 </head>
 <body>
     <div class="no-print">
@@ -161,8 +162,8 @@
         <thead>
             <tr>
                 <th>{{ __('Account') }}</th>
-                <th class="amount">{{ __('Debit') }}</th>
-                <th class="amount">{{ __('Credit') }}</th>
+                <th class="amount">{{ __('Debit') }} ({{ \App\Support\Currency::symbol() }})</th>
+                <th class="amount">{{ __('Credit') }} ({{ \App\Support\Currency::symbol() }})</th>
             </tr>
         </thead>
         <tbody>
@@ -224,11 +225,11 @@
             <thead>
                 <tr>
                     <th>{{ __('Employee') }}</th>
-                    <th class="amount">{{ __('Opening Balance') }}</th>
-                    <th class="amount">{{ __('Current Year Amount') }}</th>
-                    <th class="amount">{{ __('Closing Balance') }}</th>
-                    <th class="amount">{{ __('Paid') }}</th>
-                    <th class="amount">{{ __('Outstanding') }}</th>
+                    <th class="amount">{{ __('Opening Balance') }} ({{ \App\Support\Currency::symbol() }})</th>
+                    <th class="amount">{{ __('Current Year Amount') }} ({{ \App\Support\Currency::symbol() }})</th>
+                    <th class="amount">{{ __('Closing Balance') }} ({{ \App\Support\Currency::symbol() }})</th>
+                    <th class="amount">{{ __('Paid') }} ({{ \App\Support\Currency::symbol() }})</th>
+                    <th class="amount">{{ __('Outstanding') }} ({{ \App\Support\Currency::symbol() }})</th>
                     <th>{{ __('Status') }}</th>
                 </tr>
             </thead>

@@ -84,30 +84,30 @@ class PayslipsRelationManager extends RelationManager
                     ->sortable(),
                 TextColumn::make('basic_snapshot')
                     ->label(__('Basic'))
-                    ->numeric(decimalPlaces: 2),
+                    ->aed(),
                 TextColumn::make('allowances_snapshot')
                     ->label(__('Allowances'))
-                    ->numeric(decimalPlaces: 2),
+                    ->aed(),
                 TextColumn::make('incentive_amount')
                     ->label(__('Incentive'))
-                    ->numeric(decimalPlaces: 2),
+                    ->aed(),
                 TextColumn::make('flight_ticket_amount')
                     ->label(__('Flight Ticket'))
-                    ->numeric(decimalPlaces: 2)
+                    ->aed()
                     ->toggleable(),
                 TextColumn::make('gross')
                     ->label(__('Gross'))
-                    ->numeric(decimalPlaces: 2)
-                    ->summarize(Sum::make()->label(__('Total'))),
+                    ->aed()
+                    ->summarize(Sum::make()->label(__('Total'))->aed()),
                 TextColumn::make('unpaid_days')
                     ->label(__('Unpaid Days'))
                     ->numeric(decimalPlaces: 1),
                 TextColumn::make('unpaid_deduction')
                     ->label(__('Leave Deduction'))
-                    ->numeric(decimalPlaces: 2),
+                    ->aed(),
                 TextColumn::make('loan_deduction')
                     ->label(__('Loan'))
-                    ->numeric(decimalPlaces: 2)
+                    ->aed()
                     // One figure cannot explain two concurrent advances plus an
                     // instalment carried over from a month with no payslip, and
                     // that is exactly what HR gets asked about.
@@ -117,17 +117,17 @@ class PayslipsRelationManager extends RelationManager
                         : null),
                 TextColumn::make('manual_deduction')
                     ->label(__('Other Deduction'))
-                    ->numeric(decimalPlaces: 2),
+                    ->aed(),
                 TextColumn::make('net_pay')
                     ->label(__('Net Pay'))
-                    ->numeric(decimalPlaces: 2)
+                    ->aed()
                     ->weight('bold')
                     ->color(fn (Payslip $record): string => $record->needs_review ? 'danger' : 'success')
-                    ->summarize(Sum::make()->label(__('Total'))),
+                    ->summarize(Sum::make()->label(__('Total'))->aed()),
                 TextColumn::make('eosg_accrued')
                     ->label(__('Gratuity Accrued'))
-                    ->numeric(decimalPlaces: 2)
-                    ->summarize(Sum::make()->label(__('Total')))
+                    ->aed()
+                    ->summarize(Sum::make()->label(__('Total'))->aed())
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('iban_snapshot')
                     ->label(__('IBAN'))
@@ -152,7 +152,7 @@ class PayslipsRelationManager extends RelationManager
                         'review_note' => $record->review_note,
                     ])
                     ->schema([
-                        TextInput::make('incentive_amount')
+                        TextInput::make('incentive_amount')->suffix(Currency::symbol())
                             ->label(Currency::label(__('Incentive (AED)')))
                             ->numeric()
                             ->minValue(0)
@@ -161,7 +161,7 @@ class PayslipsRelationManager extends RelationManager
                             // closing in this period. Changing it here marks the
                             // payslip so the next Generate keeps your figure.
                             ->helperText(__('Imported from the incentive calculation. A change here survives regeneration.')),
-                        TextInput::make('manual_deduction')
+                        TextInput::make('manual_deduction')->suffix(Currency::symbol())
                             ->label(Currency::label(__('Other Deduction (AED)')))
                             ->numeric()
                             ->minValue(0)

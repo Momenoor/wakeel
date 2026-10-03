@@ -23,7 +23,7 @@
                 @foreach ($installments as $installment)
                     <tr class="border-b border-dashed">
                         <td class="py-1.5">{{ $installment->loan->kind->getLabel() }}</td>
-                        <td class="py-1.5 tabular-nums">{{ number_format((float) $installment->loan->principal, 2) }}</td>
+                        <td class="py-1.5 tabular-nums">{{ \App\Support\Currency::format($installment->loan->principal) }}</td>
                         <td class="py-1.5">
                             {{ __(':seq of :total', ['seq' => $installment->seq, 'total' => $installment->loan->months]) }}
                         </td>

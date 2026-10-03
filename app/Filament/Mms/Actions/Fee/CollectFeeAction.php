@@ -9,6 +9,7 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Support\Enums\Size;
+use Illuminate\Support\HtmlString;
 
 class CollectFeeAction extends Action
 {
@@ -32,11 +33,15 @@ class CollectFeeAction extends Action
         return __('Fully Paid');
     }
 
-    private static function modalHeadingLabel($record): string
+    private static function modalHeadingLabel($record): HtmlString
     {
-        return $record->type?->isNegative()
-            ? __('Pay Fee').': '.number_format(abs($record?->amount), 2)
-            : __('Collect Payment — Fee').': '.number_format(abs($record?->amount), 2);
+        return self::withAmount($record->type?->isNegative() ? __('Pay Fee') : __('Collect Payment — Fee'), abs((float) $record?->amount));
+    }
+
+    /** "Label: ⃁ 1,234.00" — the amount with its sign. */
+    private static function withAmount(string $label, float $amount): HtmlString
+    {
+        return new HtmlString(e($label).': '.Currency::format($amount));
     }
 
     private static function amountLabel($record): string
@@ -76,9 +81,10 @@ class CollectFeeAction extends Action
                 default => __('Remaining balance').': '.number_format(abs(static::feeBalance($record)), 2),
             })
             ->modalHeading(fn ($record) => static::modalHeadingLabel($record))   // ✅ Pay Fee / Collect Payment
-            ->modalDescription(fn ($record) => ($record->type?->isNegative() ? __('Paid so far') : __('Collected so far')).': '.number_format(abs(static::collectedAmount($record)), 2)
-                .' · '.__('Remaining balance').': '.number_format(abs(static::feeBalance($record)), 2)
-            )
+            ->modalDescription(fn ($record) => new HtmlString(
+                static::withAmount($record->type?->isNegative() ? __('Paid so far') : __('Collected so far'), abs(static::collectedAmount($record)))
+                .' · '.static::withAmount(__('Remaining balance'), abs(static::feeBalance($record)))
+            ))
             ->modalWidth('md')
             ->schema(fn ($record) => [
                 TextInput::make('amount')
@@ -89,7 +95,7 @@ class CollectFeeAction extends Action
                     ->maxValue(abs(static::feeBalance($record)))
                     ->default(abs(static::feeBalance($record)))
                     ->required()
-                    ->helperText(__('Max allowed').': '.number_format(abs(static::feeBalance($record)), 2)),
+                    ->helperText(static::withAmount(__('Max allowed'), abs(static::feeBalance($record)))),
                 DatePicker::make('date')->label(__('Payment Date'))->default(now())->required(),
                 Textarea::make('description')
                     ->label(__('Notes / Reference'))

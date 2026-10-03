@@ -24,13 +24,13 @@ class QuotationsTable
                     ->sortable(),
                 TextColumn::make('base_rent')
                     ->label(__('Base Rent'))
-                    ->numeric(decimalPlaces: 2),
+                    ->aed(),
                 TextColumn::make('vat_amount')
                     ->label(__('VAT'))
-                    ->numeric(decimalPlaces: 2),
+                    ->aed(),
                 TextColumn::make('total_amount')
                     ->label(__('Total'))
-                    ->numeric(decimalPlaces: 2)
+                    ->aed()
                     ->weight('bold'),
                 TextColumn::make('validity_date')
                     ->label(__('Valid Until'))

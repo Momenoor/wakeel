@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\Incentive\MatterTypeIncentiveConfigs\RelationManagers;
 
 use App\Filament\Mms\Resources\Incentive\MatterTypeIncentiveConfigs\Schemas\MatterTypeIncentiveConfigForm;
+use App\Support\Currency;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -58,7 +59,12 @@ class IncentiveConfigRelationManager extends RelationManager
                         default => $state,
                     }),
                 TextColumn::make('assistant_rate_value')
-                    ->label(__('Value')),
+                    ->label(__('Value'))
+                    // A fixed amount with its sign; a percentage with %.
+                    ->formatStateUsing(fn ($state, $record) => ! is_numeric($state) ? $state : ($record->assistant_rate_type === 'fixed'
+                        ? Currency::format($state)
+                        : rtrim(rtrim(number_format((float) $state, 2), '0'), '.').'%'))
+                    ->html(),
             ])
             ->headerActions([
                 CreateAction::make()

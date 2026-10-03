@@ -65,7 +65,7 @@ class QuotationForm
                                     ->distinct()
                                     ->live()
                                     ->afterStateUpdated(fn (Get $get, Set $set) => self::syncSchedule($get, $set, '../../')),
-                                TextInput::make('offered_rent')
+                                TextInput::make('offered_rent')->suffix(Currency::symbol())
                                     ->label(Currency::label(__('Offered Rent (AED/year)')))
                                     ->numeric()
                                     ->minValue(0)
@@ -111,7 +111,7 @@ class QuotationForm
                         Select::make('contract_type')
                             ->label(__('Contract Type'))
                             ->options(fn (Get $get): array => self::contractTypeOptions($get('units'))),
-                        TextInput::make('security_deposit')
+                        TextInput::make('security_deposit')->suffix(Currency::symbol())
                             ->label(Currency::label(__('Security Deposit (AED)')))
                             ->numeric()
                             ->minValue(0)
@@ -150,7 +150,7 @@ class QuotationForm
                                 DatePicker::make('due_date')
                                     ->hiddenLabel()
                                     ->required(),
-                                TextInput::make('amount')
+                                TextInput::make('amount')->suffix(Currency::symbol())
                                     ->hiddenLabel()
                                     ->disabled()
                                     ->dehydrated(false),

@@ -21,7 +21,7 @@
                 <div>
                     <dt class="text-sm text-gray-500 dark:text-gray-400">{{ __('Extra') }}</dt>
                     <dd class="text-lg font-semibold text-success-600 dark:text-success-400">
-                        {{ number_format((float) ($extra?->extra_amount ?? 0), 2) }}
+                        <span dir="ltr" style="white-space:nowrap"><span class="text-sm font-normal">{{ \App\Support\Currency::symbol() }}</span> {{ number_format((float) ($extra?->extra_amount ?? 0), 2) }}</span>
                         @if (($extra?->extra_percentage ?? 0) > 0)
                             <span class="text-sm font-normal">(+{{ $extra->extra_percentage }}%)</span>
                         @endif
@@ -31,14 +31,14 @@
                 <div>
                     <dt class="text-sm text-gray-500 dark:text-gray-400">{{ __('Penalty') }}</dt>
                     <dd class="text-lg font-semibold text-danger-600 dark:text-danger-400">
-                        {{ number_format((float) ($extra?->penalty_amount ?? 0), 2) }}
+                        <span dir="ltr" style="white-space:nowrap"><span class="text-sm font-normal">{{ \App\Support\Currency::symbol() }}</span> {{ number_format((float) ($extra?->penalty_amount ?? 0), 2) }}</span>
                     </dd>
                 </div>
 
                 <div>
                     <dt class="text-sm text-gray-500 dark:text-gray-400">{{ __('Fixed Deduction') }}</dt>
                     <dd class="text-lg font-semibold text-danger-600 dark:text-danger-400">
-                        {{ number_format((float) ($extra?->fixed_deduction ?? 0), 2) }}
+                        <span dir="ltr" style="white-space:nowrap"><span class="text-sm font-normal">{{ \App\Support\Currency::symbol() }}</span> {{ number_format((float) ($extra?->fixed_deduction ?? 0), 2) }}</span>
                     </dd>
                     @if ($extra?->fixed_deduction_reason)
                         <dd class="text-xs text-gray-500 dark:text-gray-400">{{ $extra->fixed_deduction_reason }}</dd>

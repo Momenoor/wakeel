@@ -20,11 +20,11 @@
             <thead>
             <tr class="border-b">
                 <th class="py-2 text-start font-semibold">{{ __('Employee') }}</th>
-                <th class="py-2 text-end font-semibold">{{ __('Opening Balance') }}</th>
-                <th class="py-2 text-end font-semibold">{{ __('Current Year Amount') }}</th>
-                <th class="py-2 text-end font-semibold">{{ __('Closing Balance') }}</th>
-                <th class="py-2 text-end font-semibold">{{ __('Paid') }}</th>
-                <th class="py-2 text-end font-semibold">{{ __('Outstanding') }}</th>
+                <th class="py-2 text-end font-semibold">{{ __('Opening Balance') }} ({{ \App\Support\Currency::symbol() }})</th>
+                <th class="py-2 text-end font-semibold">{{ __('Current Year Amount') }} ({{ \App\Support\Currency::symbol() }})</th>
+                <th class="py-2 text-end font-semibold">{{ __('Closing Balance') }} ({{ \App\Support\Currency::symbol() }})</th>
+                <th class="py-2 text-end font-semibold">{{ __('Paid') }} ({{ \App\Support\Currency::symbol() }})</th>
+                <th class="py-2 text-end font-semibold">{{ __('Outstanding') }} ({{ \App\Support\Currency::symbol() }})</th>
                 <th class="py-2 text-center font-semibold">{{ __('Status') }}</th>
             </tr>
             </thead>

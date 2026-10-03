@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Widgets;
 
+use App\Support\Currency;
 use App\Enums\MatterCommissiong;
 use App\Enums\MatterDifficulty;
 use App\Filament\Mms\Concerns\HasMultiWordSearch;
@@ -306,7 +307,7 @@ class IncentiveSummaryTableWidget extends TableWidget
                     ->modalDescription(__('An amount subtracted from this assistant\'s total incentive for this calculation (e.g. a penalty or reimbursement).'))
                     ->disabled(fn () => ! $this->isCalculationDraft())
                     ->schema([
-                        TextInput::make('fixed_deduction')
+                        TextInput::make('fixed_deduction')->suffix(Currency::symbol())
                             ->label(__('Deduction Amount'))
                             ->numeric()
                             ->minValue(0)

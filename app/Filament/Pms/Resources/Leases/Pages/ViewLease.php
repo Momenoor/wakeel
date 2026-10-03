@@ -124,7 +124,7 @@ class ViewLease extends ViewRecord
                     ->label(__('Target Renewal Date'))
                     ->default(now())
                     ->required(),
-                TextInput::make('market_average_rent')
+                TextInput::make('market_average_rent')->suffix(Currency::symbol())
                     ->label(Currency::label(__('Market Average Rent (AED)')))
                     ->numeric()
                     ->minValue(0)
@@ -177,7 +177,7 @@ class ViewLease extends ViewRecord
                     ->default(fn (): string => $this->lease()->end_date->addYear()->toDateString())
                     ->required()
                     ->afterOrEqual('start_date'),
-                TextInput::make('total_base_rent')
+                TextInput::make('total_base_rent')->suffix(Currency::symbol())
                     ->label(Currency::label(__('New Total Base Rent (AED)')))
                     ->numeric()
                     ->minValue(0)

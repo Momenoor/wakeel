@@ -88,7 +88,7 @@ class UnitsRelationManager extends RelationManager
                 ->options(PropertyClassification::class)
                 ->required()
                 ->helperText(__('Drives VAT: residential is exempt, commercial and industrial are taxed at 5%.')),
-            TextInput::make('rental_rate')
+            TextInput::make('rental_rate')->suffix(Currency::symbol())
                 ->label(Currency::label(__('Rental Rate (AED/year)')))
                 ->numeric()
                 ->minValue(0)
@@ -136,7 +136,7 @@ class UnitsRelationManager extends RelationManager
                     ->badge(),
                 TextColumn::make('rental_rate')
                     ->label(__('Rental Rate'))
-                    ->numeric(decimalPlaces: 2),
+                    ->aed(),
                 TextColumn::make('status')
                     ->label(__('Status'))
                     ->badge(),

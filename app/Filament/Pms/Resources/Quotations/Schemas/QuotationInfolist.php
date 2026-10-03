@@ -56,7 +56,7 @@ class QuotationInfolist
                             ->placeholder('—'),
                         TextEntry::make('security_deposit')
                             ->label(__('Security Deposit'))
-                            ->numeric(decimalPlaces: 2),
+                            ->aed(),
                     ])->columns(4),
 
                 Section::make(__('Units'))
@@ -69,10 +69,10 @@ class QuotationInfolist
                                     ->state(fn ($record): string => trim(($record->property?->name ? $record->property->name.' — ' : '').$record->unit_number)),
                                 TextEntry::make('pivot.offered_rent')
                                     ->label(__('Offered Rent'))
-                                    ->numeric(decimalPlaces: 2),
+                                    ->aed(),
                                 TextEntry::make('pivot.vat_amount')
                                     ->label(__('VAT'))
-                                    ->numeric(decimalPlaces: 2),
+                                    ->aed(),
                             ])
                             ->columns(3),
                     ]),
@@ -81,16 +81,16 @@ class QuotationInfolist
                     ->schema([
                         TextEntry::make('base_rent')
                             ->label(__('Base Rent'))
-                            ->numeric(decimalPlaces: 2),
+                            ->aed(),
                         TextEntry::make('vat_amount')
                             ->label(__('VAT'))
-                            ->numeric(decimalPlaces: 2),
+                            ->aed(),
                         TextEntry::make('attestation_fee_estimate')
                             ->label(__('Attestation Fee (Estimate)'))
-                            ->numeric(decimalPlaces: 2),
+                            ->aed(),
                         TextEntry::make('total_amount')
                             ->label(__('Total Due'))
-                            ->numeric(decimalPlaces: 2)
+                            ->aed()
                             ->weight('bold'),
                     ])->columns(4),
 

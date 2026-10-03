@@ -173,6 +173,7 @@
             cursor: pointer;
         }
     </style>
+    {{ \App\Support\Currency::fontLink() }}
 </head>
 <body>
     <div class="no-print">
@@ -223,7 +224,7 @@
                 <th class="personal-no">Personal No.</th>
                 <th>Employee Name</th>
                 <th>Mobile</th>
-                <th class="amount">Salary</th>
+                <th class="amount">Salary ({{ \App\Support\Currency::symbol() }})</th>
             </tr>
         </thead>
         <tbody>

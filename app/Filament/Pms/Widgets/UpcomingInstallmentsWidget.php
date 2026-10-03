@@ -62,7 +62,7 @@ class UpcomingInstallmentsWidget extends TableWidget
                     ->state(fn (Installment $record): string => $record->lease?->units->pluck('unit_number')->implode(', ') ?: '—'),
                 TextColumn::make('balance_due')
                     ->label(__('Amount Due'))
-                    ->numeric(decimalPlaces: 2)
+                    ->aed()
                     ->sortable(),
                 TextColumn::make('payment_status')
                     ->label(__('Status'))

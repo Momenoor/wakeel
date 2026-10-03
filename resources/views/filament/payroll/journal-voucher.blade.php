@@ -22,8 +22,8 @@
             <thead>
                 <tr class="border-b">
                     <th class="py-2 text-start font-semibold">{{ __('Account') }}</th>
-                    <th class="py-2 text-end font-semibold">{{ __('Debit') }}</th>
-                    <th class="py-2 text-end font-semibold">{{ __('Credit') }}</th>
+                    <th class="py-2 text-end font-semibold">{{ __('Debit') }} ({{ \App\Support\Currency::symbol() }})</th>
+                    <th class="py-2 text-end font-semibold">{{ __('Credit') }} ({{ \App\Support\Currency::symbol() }})</th>
                 </tr>
             </thead>
             <tbody>

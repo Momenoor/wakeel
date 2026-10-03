@@ -33,7 +33,7 @@ class LeasesTable
                     ->sortable(),
                 TextColumn::make('total_base_rent')
                     ->label(__('Total Base Rent'))
-                    ->numeric(decimalPlaces: 2),
+                    ->aed(),
                 TextColumn::make('status')
                     ->label(__('Status'))
                     ->badge(),

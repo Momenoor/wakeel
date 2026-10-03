@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Resources\Incentive\IncentiveCalculations\Pages;
 
+use App\Support\Currency;
 use App\Filament\Mms\Resources\Incentive\IncentiveCalculations\IncentiveCalculationResource;
 use App\Filament\Mms\Widgets\IncentiveSummaryTableWidget;
 use App\Models\IncentiveAssistantExtra;
@@ -83,9 +84,9 @@ class ViewIncentiveCalculation extends ViewRecord
                                 ->disabled(),
                             TextInput::make('court_name')->label(__('Court'))->disabled(),
                             TextInput::make('assistant_names')->label(__('Assistants'))->disabled(),
-                            TextInput::make('fees_amount')->label(__('Fees'))->numeric()->disabled(),
-                            TextInput::make('collected_fees_amount')->label(__('Collected'))->numeric()->disabled(),
-                            TextInput::make('net_collected_amount')->label(__('Net Basis'))->numeric()->disabled(),
+                            TextInput::make('fees_amount')->suffix(Currency::symbol())->label(__('Fees'))->numeric()->disabled(),
+                            TextInput::make('collected_fees_amount')->suffix(Currency::symbol())->label(__('Collected'))->numeric()->disabled(),
+                            TextInput::make('net_collected_amount')->suffix(Currency::symbol())->label(__('Net Basis'))->numeric()->disabled(),
                         ])
                         ->columns(7)
                         ->addable(false)

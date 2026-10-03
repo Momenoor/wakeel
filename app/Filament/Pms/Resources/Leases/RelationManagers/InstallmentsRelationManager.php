@@ -82,20 +82,20 @@ class InstallmentsRelationManager extends RelationManager
                     ->sortable(),
                 TextColumn::make('net_amount')
                     ->label(__('Net'))
-                    ->numeric(decimalPlaces: 2),
+                    ->aed(),
                 TextColumn::make('vat_amount')
                     ->label(__('VAT'))
-                    ->numeric(decimalPlaces: 2),
+                    ->aed(),
                 TextColumn::make('total_due_amount')
                     ->label(__('Total Due'))
-                    ->numeric(decimalPlaces: 2)
-                    ->summarize(Sum::make()->label(__('Total'))),
+                    ->aed()
+                    ->summarize(Sum::make()->label(__('Total'))->aed()),
                 TextColumn::make('paid_amount')
                     ->label(__('Paid'))
-                    ->numeric(decimalPlaces: 2),
+                    ->aed(),
                 TextColumn::make('balance_due')
                     ->label(__('Balance'))
-                    ->numeric(decimalPlaces: 2)
+                    ->aed()
                     ->weight('bold'),
                 TextColumn::make('payment_method')
                     ->label(__('Method'))
@@ -206,7 +206,7 @@ class InstallmentsRelationManager extends RelationManager
                 'paid_date' => now()->toDateString(),
             ])
             ->schema([
-                TextInput::make('amount')
+                TextInput::make('amount')->suffix(Currency::symbol())
                     ->label(Currency::label(__('Amount (AED)')))
                     ->numeric()
                     ->minValue(0.01)

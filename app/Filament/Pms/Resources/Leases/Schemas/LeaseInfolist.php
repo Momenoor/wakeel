@@ -32,10 +32,10 @@ class LeaseInfolist
                             ->label(__('Grace Period (Days)')),
                         TextEntry::make('total_base_rent')
                             ->label(__('Total Base Rent'))
-                            ->numeric(decimalPlaces: 2),
+                            ->aed(),
                         TextEntry::make('security_deposit_amount')
                             ->label(__('Security Deposit'))
-                            ->numeric(decimalPlaces: 2),
+                            ->aed(),
                     ])->columns(4),
 
                 Section::make(__('Attestation'))

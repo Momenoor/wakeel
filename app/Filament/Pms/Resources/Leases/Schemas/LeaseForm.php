@@ -68,7 +68,7 @@ class LeaseForm
 
                 Section::make(__('Financials'))
                     ->schema([
-                        TextInput::make('total_base_rent')
+                        TextInput::make('total_base_rent')->suffix(Currency::symbol())
                             ->label(Currency::label(__('Total Base Rent (AED)')))
                             ->numeric()
                             ->minValue(0)
@@ -86,7 +86,7 @@ class LeaseForm
                             ->options(YesNo::class)
                             ->default(YesNo::NO->value)
                             ->required(),
-                        TextInput::make('security_deposit_amount')
+                        TextInput::make('security_deposit_amount')->suffix(Currency::symbol())
                             ->label(Currency::label(__('Security Deposit (AED)')))
                             ->numeric()
                             ->minValue(0)

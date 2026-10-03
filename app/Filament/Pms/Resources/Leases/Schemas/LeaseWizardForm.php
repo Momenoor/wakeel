@@ -228,7 +228,7 @@ class LeaseWizardForm
 
                 Section::make(__('Financials'))
                     ->schema([
-                        TextInput::make('total_base_rent')
+                        TextInput::make('total_base_rent')->suffix(Currency::symbol())
                             ->label(Currency::label(__('Total Base Rent (AED)')))
                             ->numeric()
                             ->minValue(0)
@@ -246,7 +246,7 @@ class LeaseWizardForm
                             ->options(YesNo::class)
                             ->default(YesNo::NO->value)
                             ->required(),
-                        TextInput::make('security_deposit_amount')
+                        TextInput::make('security_deposit_amount')->suffix(Currency::symbol())
                             ->label(Currency::label(__('Security Deposit (AED)')))
                             ->numeric()
                             ->minValue(0)
@@ -418,7 +418,7 @@ class LeaseWizardForm
                 ->live(onBlur: true)
                 ->helperText(fn (Get $get): ?string => self::installmentDateWarning($get, $get('payment_date'))),
             $withAmount
-                ? TextInput::make('amount')
+                ? TextInput::make('amount')->suffix(Currency::symbol())
                     ->label(Currency::label(__('Amount (AED)')))
                     ->numeric()
                     ->minValue(0.01)

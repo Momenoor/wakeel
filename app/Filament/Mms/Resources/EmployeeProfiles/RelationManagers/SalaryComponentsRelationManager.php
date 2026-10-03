@@ -102,7 +102,7 @@ class SalaryComponentsRelationManager extends RelationManager
                 ->label(__('Component'))
                 ->options(SalaryComponent::class)
                 ->required(),
-            TextInput::make('amount')
+            TextInput::make('amount')->suffix(Currency::symbol())
                 ->label(Currency::label(__('Monthly Amount (AED)')))
                 ->numeric()
                 ->minValue(0)

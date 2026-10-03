@@ -61,14 +61,14 @@ class PMSSettingsForm
                         ->suffix('%')
                         ->required()
                         ->default(0),
-                    TextInput::make('pms_attestation_fee_dubai')
+                    TextInput::make('pms_attestation_fee_dubai')->suffix(Currency::symbol())
                         ->label(Currency::label(__('Dubai — Ejari fee per contract (AED)')))
                         ->numeric()
                         ->minValue(0)
                         ->step(0.01)
                         ->required()
                         ->default(0),
-                    TextInput::make('pms_attestation_fee_estimate')
+                    TextInput::make('pms_attestation_fee_estimate')->suffix(Currency::symbol())
                         ->label(Currency::label(__('Other emirates — fee per contract (AED)')))
                         ->numeric()
                         ->minValue(0)

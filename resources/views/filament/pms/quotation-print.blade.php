@@ -145,8 +145,8 @@
         <thead>
             <tr>
                 <th>{{ __('Unit') }}</th>
-                <th class="amount">{{ __('Offered Rent') }}</th>
-                <th class="amount">{{ __('VAT') }}</th>
+                <th class="amount">{{ __('Offered Rent') }} ({{ \App\Support\Currency::symbol() }})</th>
+                <th class="amount">{{ __('VAT') }} ({{ \App\Support\Currency::symbol() }})</th>
             </tr>
         </thead>
         <tbody>

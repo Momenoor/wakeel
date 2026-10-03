@@ -12,6 +12,7 @@
         table.schedule th, table.schedule td { border: 1px solid #999; padding: 4px 6px; text-align: left; }
         table.schedule th { background: #f3f4f6; }
     </style>
+    {{ \App\Support\Currency::fontLink() }}
 </head>
 <body>
     <div class="no-print">
@@ -50,9 +51,9 @@
                 <thead>
                     <tr>
                         <th>Due Date</th>
-                        <th>Net</th>
-                        <th>VAT</th>
-                        <th>Total</th>
+                        <th>Net ({{ \App\Support\Currency::symbol() }})</th>
+                        <th>VAT ({{ \App\Support\Currency::symbol() }})</th>
+                        <th>Total ({{ \App\Support\Currency::symbol() }})</th>
                         <th>Status</th>
                     </tr>
                 </thead>
