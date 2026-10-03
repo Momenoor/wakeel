@@ -13,6 +13,7 @@ use App\Services\MMS\Calendar\UnmatchedEventReferences;
 use App\Services\Push\WebPushSender;
 use App\Support\Currency;
 use App\Support\InterfaceFont;
+use App\Support\ModelLabels;
 use Carbon\Carbon;
 use Carbon\Translator as CarbonTranslator;
 use Filament\Actions\Action;
@@ -22,6 +23,7 @@ use Filament\Support\Facades\FilamentAsset;
 use Filament\Support\Facades\FilamentView;
 use Filament\Tables\Columns\Summarizers\Summarizer;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Foundation\Events\LocaleUpdated;
@@ -151,6 +153,14 @@ class AppServiceProvider extends ServiceProvider
         // when sending) and each reader sees it in their own language. A
         // label already translated has no key and stays as it is.
         Action::configureUsing(fn (Action $action) => $action->translateLabel());
+
+        // Every table named in the reader's language, singular and plural,
+        // unless it names itself (a resource's own tables do): reports and
+        // widgets showed "matters", or "القضيةs", in their filter and column
+        // modals.
+        Table::configureUsing(fn (Table $table) => $table
+            ->modelLabel(fn (Table $table): ?string => ModelLabels::singular($table->getModel()))
+            ->pluralModelLabel(fn (Table $table): ?string => ModelLabels::plural($table->getModel())));
 
         // A notification (in the bell, or a toast) opens what it is about
         // when clicked anywhere — not only on its small "View" button.

@@ -56,6 +56,11 @@ class AssistantPerformanceReport extends Page implements HasTable
         return __('Assistant Performance');
     }
 
+    public function getTableModelLabel(): string
+    {
+        return __('Assistant');
+    }
+
     public function getTablePluralModelLabel(): string
     {
         return __('assistants');

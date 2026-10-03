@@ -3524,5 +3524,8 @@
     ":name reacted :emoji": ":name تفاعل بـ :emoji",
     "To: “:message”": "على: «:message»",
     ":name sent you a message": ":name أرسل لك رسالة",
-    ":name sent you :count messages": ":name أرسل لك :count رسائل"
+    ":name sent you :count messages": ":name أرسل لك :count رسائل",
+    "Payment": "دفعة",
+    "Incentive line": "بند حافز",
+    "Incentive lines": "بنود الحوافز"
 }

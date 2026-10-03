@@ -73,6 +73,11 @@ class FeeCollectionAgingReport extends Page implements HasTable
         return __('Fee Collection & Aging');
     }
 
+    public function getTableModelLabel(): string
+    {
+        return __('Fee');
+    }
+
     public function getTablePluralModelLabel(): string
     {
         return __('fees');
