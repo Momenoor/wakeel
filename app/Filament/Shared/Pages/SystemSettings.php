@@ -2,6 +2,7 @@
 
 namespace App\Filament\Shared\Pages;
 
+use App\Filament\Shared\Clusters\Settings;
 use App\Filament\Shared\Pages\Schemas\SystemSettingsForm;
 use App\Models\MatterLetter;
 use App\Models\Setting;
@@ -19,15 +20,14 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Mail;
-use UnitEnum;
 
 class SystemSettings extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Cog6Tooth;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Settings';
+    protected static ?int $navigationSort = 10;
 
-    protected static ?int $navigationSort = 99;
+    protected static ?string $cluster = Settings::class;
 
     public ?array $data = [];
 
@@ -38,7 +38,7 @@ class SystemSettings extends Page
 
     public static function getNavigationGroup(): ?string
     {
-        return __('Settings');
+        return __('General');
     }
 
     public function getTitle(): string

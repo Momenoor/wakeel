@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\LetterItems;
 
 use App\Filament\Concerns\HasModuleGate;
+use App\Filament\Mms\Clusters\Templates;
 use App\Filament\Mms\Resources\LetterItems\Pages\ManageLetterItems;
 use App\Models\LetterItem;
 use BackedEnum;
@@ -36,16 +37,13 @@ class LetterItemResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedListBullet;
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 2;
+
+    protected static ?string $cluster = Templates::class;
 
     public static function moduleGateKey(): string
     {
         return 'mms_communications';
-    }
-
-    public static function getNavigationGroup(): ?string
-    {
-        return __('Communication');
     }
 
     public static function getModelLabel(): string

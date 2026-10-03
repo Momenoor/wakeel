@@ -10,6 +10,7 @@ use App\Filament\Mms\Resources\Courts\RelationManagers\MattersRelationManager;
 use App\Filament\Mms\Resources\Courts\Schemas\CourtForm;
 use App\Filament\Mms\Resources\Courts\Schemas\CourtInfolist;
 use App\Filament\Mms\Resources\Courts\Tables\CourtsTable;
+use App\Filament\Shared\Clusters\Settings;
 use App\Models\Court;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -22,7 +23,14 @@ class CourtResource extends Resource
 
     protected static string|null|BackedEnum $navigationIcon = 'heroicon-o-building-library';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 22;
+
+    protected static ?string $cluster = Settings::class;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('Master Data');
+    }
 
     public static function getModelLabel(): string
     {

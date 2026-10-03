@@ -19,6 +19,9 @@ class Reports extends Cluster
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentChartBar;
 
+    // After the day-to-day screens (Matters … Calendar).
+    protected static ?int $navigationSort = 90;
+
     public static function getNavigationLabel(): string
     {
         return __('Reports');

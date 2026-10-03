@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Resources\MailSenders;
 
 use App\Filament\Concerns\HasModuleGate;
 use App\Filament\Mms\Resources\MailSenders\Pages\ManageMailSenders;
+use App\Filament\Shared\Clusters\Settings;
 use App\Filament\Support\RichEditorDirection;
 use App\Models\MailSender;
 use App\Services\MMS\MailboxDetector;
@@ -44,7 +45,9 @@ class MailSenderResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedAtSymbol;
 
-    protected static ?int $navigationSort = 8;
+    protected static ?int $navigationSort = 14;
+
+    protected static ?string $cluster = Settings::class;
 
     public static function moduleGateKey(): string
     {
@@ -53,7 +56,7 @@ class MailSenderResource extends Resource
 
     public static function getNavigationGroup(): ?string
     {
-        return __('Communication');
+        return __('General');
     }
 
     public static function getModelLabel(): string

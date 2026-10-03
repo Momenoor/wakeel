@@ -222,4 +222,7 @@ return [
         'view_p_m_s_overview_widget' => 'نظرة عامة على نظام إدارة الممتلكات',
         'view_pms_revenue_chart_widget' => 'رسم إيرادات نظام إدارة الممتلكات',
     ],
+
+    // The sidebar group holding Settings, Users, Roles and the activity log.
+    'nav.group' => 'الإدارة',
 ];

@@ -28,8 +28,7 @@ class PanelNavigationOrderTest extends TestCase
             'Communication',
             'Financial',
             'Human Resources',
-            'Settings',
-            'Filament Shield',
+            'Administration',
         ], $groups);
     }
 
@@ -48,7 +47,6 @@ class PanelNavigationOrderTest extends TestCase
             __('Communication'),
             __('Financial'),
             __('Human Resources'),
-            __('Settings'),
             __('filament-shield::filament-shield.nav.group'),
         ], $groups);
     }
@@ -68,8 +66,7 @@ class PanelNavigationOrderTest extends TestCase
             'Properties',
             'Leasing',
             'Ownership',
-            'Settings',
-            'Filament Shield',
+            'Administration',
         ], $groups);
     }
 
@@ -88,7 +85,6 @@ class PanelNavigationOrderTest extends TestCase
             __('Properties'),
             __('Leasing'),
             __('Ownership'),
-            __('Settings'),
             __('filament-shield::filament-shield.nav.group'),
         ], $groups);
     }
@@ -111,13 +107,14 @@ class PanelNavigationOrderTest extends TestCase
             ->values()
             ->all();
 
-        $settingsIndex = array_search('Settings', $navGroups);
-        $shieldIndex = array_search('Filament Shield', $navGroups);
+        $this->assertSame('Administration', end($navGroups), 'Administration should be the last group');
+        $this->assertNotContains('Settings', $navGroups, 'Settings is one entry inside Administration, not a group');
 
-        $this->assertNotFalse($settingsIndex, 'Settings group should be present');
-        $this->assertNotFalse($shieldIndex, 'Filament Shield group should be present');
-        $this->assertGreaterThanOrEqual(count($navGroups) - 2, $settingsIndex, 'Settings should be near the bottom');
-        $this->assertGreaterThanOrEqual(count($navGroups) - 2, $shieldIndex, 'Shield should be near the bottom');
+        $administration = collect(Filament::getNavigation())
+            ->first(fn (NavigationGroup $group) => $group->getLabel() === 'Administration')
+            ->getItems();
+
+        $this->assertSame('Settings', collect($administration)->first()?->getLabel(), 'Settings should lead the Administration group');
     }
 
     public function test_pms_panel_rendered_navigation_order(): void
@@ -138,12 +135,13 @@ class PanelNavigationOrderTest extends TestCase
             ->values()
             ->all();
 
-        $settingsIndex = array_search('Settings', $navGroups);
-        $shieldIndex = array_search('Filament Shield', $navGroups);
+        $this->assertSame('Administration', end($navGroups), 'Administration should be the last group');
+        $this->assertNotContains('Settings', $navGroups, 'Settings is one entry inside Administration, not a group');
 
-        $this->assertNotFalse($settingsIndex, 'Settings group should be present');
-        $this->assertNotFalse($shieldIndex, 'Filament Shield group should be present');
-        $this->assertGreaterThanOrEqual(count($navGroups) - 2, $settingsIndex, 'Settings should be near the bottom');
-        $this->assertGreaterThanOrEqual(count($navGroups) - 2, $shieldIndex, 'Shield should be near the bottom');
+        $administration = collect(Filament::getNavigation())
+            ->first(fn (NavigationGroup $group) => $group->getLabel() === 'Administration')
+            ->getItems();
+
+        $this->assertSame('Settings', collect($administration)->first()?->getLabel(), 'Settings should lead the Administration group');
     }
 }

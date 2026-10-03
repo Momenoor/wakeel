@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Filament\Mms\Clusters\Templates;
 use App\Filament\Mms\Resources\BulkMailCampaigns\BulkMailCampaignResource;
 use App\Filament\Mms\Resources\CalendarEvents\CalendarEventResource;
 use App\Filament\Mms\Resources\EmployeeLoans\EmployeeLoanResource;
@@ -12,6 +13,7 @@ use App\Filament\Mms\Resources\LetterItems\LetterItemResource;
 use App\Filament\Mms\Resources\LetterTemplates\LetterTemplateResource;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\PayrollRuns\PayrollRunResource;
+use App\Filament\Shared\Clusters\Settings;
 use App\Support\ScreenPermissions;
 use BezhanSalleh\FilamentShield\Resources\Roles\RoleResource;
 use Filament\Pages\Dashboard;
@@ -307,6 +309,11 @@ return [
         'prefix' => 'view',
         'exclude' => [
             Dashboard::class,
+            // Clusters are just menus: access follows the screens inside.
+            // Shield only skips a cluster on its own when a page (not just
+            // resources) is in it.
+            Settings::class,
+            Templates::class,
         ],
     ],
 

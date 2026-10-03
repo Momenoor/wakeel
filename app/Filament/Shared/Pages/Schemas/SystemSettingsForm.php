@@ -153,13 +153,13 @@ class SystemSettingsForm
                                 ->columns(2)
                                 ->schema([
                                     // The same mailboxes letters and bulk mail use
-                                    // (Communication → Mail senders). The server
+                                    // (Settings → Mail senders). The server
                                     // fields below are only for a custom setup.
                                     Select::make('mail_sender_key')
                                         ->label(__('Send system emails from'))
                                         ->options(fn () => SenderMailer::options())
                                         ->placeholder(__('A custom mail server (below)'))
-                                        ->helperText(__('Notifications, assistant emails and every other email the system sends go out from this mailbox. Mailboxes are added under Communication → Mail senders.'))
+                                        ->helperText(__('Notifications, assistant emails and every other email the system sends go out from this mailbox. Mailboxes are added under Settings → Mail senders.'))
                                         ->live()
                                         ->columnSpanFull(),
 
