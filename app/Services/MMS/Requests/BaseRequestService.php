@@ -143,11 +143,17 @@ abstract class BaseRequestService
 
     private function notify(string $title, string $body, mixed $recipients): void
     {
+        // The button kept as "View" — untranslated, so each reader sees it
+        // in their own language when shown (AppServiceProvider); it showed
+        // "View" in Arabic — and an icon, which it had none of.
         Notification::make()
             ->title($title)
             ->body($body)
+            ->icon('heroicon-o-clipboard-document-list')
+            ->iconColor('info')
             ->actions([
                 Action::make('view')
+                    ->label('View')->translateLabel(false)
                     ->url(route('filament.mms.resources.matter-requests.view', $this->request))
                     ->markAsRead(),
             ])

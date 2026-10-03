@@ -8,6 +8,7 @@ use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\User;
 use App\Services\Chat\ChatMessenger;
+use App\Services\Notify\UserAlert;
 use BezhanSalleh\FilamentShield\Support\Utils;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
@@ -408,6 +409,22 @@ class ChatWidget extends Component
         }
 
         $message->react((int) Auth::id(), $emoji);
+
+        // Its writer hears of it — everywhere a notification shows (bell,
+        // toast, desktop, phone), never by email — unless it is their own
+        // message, or a reaction taken back.
+        if ((int) $message->user_id !== (int) Auth::id() && ($message->reactions[Auth::id()] ?? null) === $emoji) {
+            $me = Auth::user();
+            $quote = $message->preview(120);
+            UserAlert::send(
+                $message->sender,
+                ($conversation->is_group ? $conversation->name.' — ' : '').__(':name reacted :emoji', ['name' => (string) ($me->display_name ?: $me->name), 'emoji' => $emoji]),
+                $quote !== '' ? __('To: “:message”', ['message' => $quote]) : null,
+                ChatMessenger::chatUrl($message),
+                'info',
+                'heroicon-o-face-smile',
+            );
+        }
 
         $this->tellSenders($conversation->participants->pluck('id')->reject(fn ($id) => $id === Auth::id())->all(), $conversation->id);
     }

@@ -3520,5 +3520,7 @@
     "Master Data": "البيانات الأساسية",
     "Maintenance": "الصيانة",
     "Delete this message for everyone?": "حذف هذه الرسالة لدى الجميع؟",
-    "React": "تفاعل"
+    "React": "تفاعل",
+    ":name reacted :emoji": ":name تفاعل بـ :emoji",
+    "To: “:message”": "على: «:message»"
 }

@@ -173,7 +173,7 @@ class MinutesSignedCopies
                 ->body(__(':name sent back minutes (:number) of :matter signed.', ['name' => $delivery->name, 'number' => $number, 'matter' => $reference]))
                 // The matter, on its minutes tab.
                 ->actions(array_filter([
-                    ($matterId = $delivery->minutes?->matter_id) ? Action::make('view')->label(__('View'))->url(MatterResource::getUrl('view', [
+                    ($matterId = $delivery->minutes?->matter_id) ? Action::make('view')->label('View')->translateLabel(false)->url(MatterResource::getUrl('view', [
                         'record' => $matterId,
                         'relation' => array_search(MinutesRelationManager::class, MatterResource::getRelations(), true),
                     ], panel: 'mms'))->markAsRead() : null,

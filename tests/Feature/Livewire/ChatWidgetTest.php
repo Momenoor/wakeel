@@ -17,6 +17,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
@@ -590,5 +591,39 @@ class ChatWidgetTest extends TestCase
         $chat->assertSeeHtml('wire:ignore')
             ->assertSeeHtml("[data-chat-dot='\${id}']")
             ->assertSet('onlineUserIds', fn ($ids) => in_array($this->colleague->id, $ids));
+    }
+
+    public function test_a_reaction_notifies_the_messages_writer_but_never_by_email(): void
+    {
+        $this->withoutDefer();
+        Mail::fake();
+        Event::fake([ChatMessageSent::class, ChatMessagesStatusChanged::class]);
+        $conversation = ChatConversation::betweenUsers($this->me, $this->colleague);
+        $theirs = app(ChatMessenger::class)->send($conversation, $this->colleague, 'The file is ready');
+        $mine = app(ChatMessenger::class)->send($conversation, $this->me, 'Thanks');
+
+        $chat = Livewire::test(ChatWidget::class)->call('selectConversation', $conversation->id)
+            ->call('react', $theirs->id, '❤️');
+
+        $told = $this->colleague->notifications()->sole();
+        $this->assertStringContainsString('❤️', $told->data['title']);
+        $this->assertStringContainsString($this->me->display_name ?: $this->me->name, $told->data['title']);
+        $this->assertStringContainsString('The file is ready', $told->data['body']);
+        $this->assertSame('heroicon-o-face-smile', $told->data['icon']);
+        $this->assertSame(ChatMessenger::chatUrl($theirs), $told->data['actions'][0]['url']);
+
+        // Changed: told again. Taken back: not.
+        $chat->call('react', $theirs->id, '😂');
+        $this->assertSame(2, $this->colleague->notifications()->count());
+        $chat->call('react', $theirs->id, '😂');
+        $this->assertSame(2, $this->colleague->notifications()->count());
+
+        // My own message: nobody is told.
+        $chat->call('react', $mine->id, '👍');
+        $this->assertSame(0, $this->me->notifications()->count());
+        $this->assertSame(2, $this->colleague->notifications()->count());
+
+        Mail::assertNothingSent();
+        Mail::assertNothingQueued();
     }
 }

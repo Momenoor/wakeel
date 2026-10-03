@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\MatterDifficulty;
 use App\Enums\RequestStatus;
 use App\Enums\RequestType;
+use Filament\Notifications\Notification;
 use App\Filament\Mms\Actions\Request\ApproveRequestAction;
 use App\Filament\Mms\Resources\MatterRequests\Pages\ViewMatterRequest;
 use App\Models\Matter;
@@ -18,6 +19,7 @@ use App\Services\MMS\Requests\ReviewReportRequestService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -329,5 +331,33 @@ class MatterRequestTest extends TestCase
 
         Log::shouldNotHaveReceived('error');
         $this->assertEquals(RequestStatus::PENDING, $request->fresh()->status);
+    }
+
+    public function test_the_request_notification_has_an_icon_and_its_button_in_the_readers_language(): void
+    {
+        Mail::fake();
+        $admin = User::factory()->create()->assignRole(Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']));
+        $request = MatterRequest::create([
+            'matter_id' => $this->makeMatter()->id,
+            'request_by' => User::factory()->create()->id,
+            'type' => RequestType::CHANGE_DIFFICULTY,
+            'status' => 'pending',
+            'comment' => 'x',
+            'extra' => ['new_difficulty' => 'hard'],
+        ]);
+
+        // Sent by someone working in Arabic.
+        app()->setLocale('ar');
+        RequestServiceFactory::make($request)->onCreateNotify();
+
+        $stored = $admin->notifications()->sole();
+        $this->assertSame('heroicon-o-clipboard-document-list', $stored->data['icon']);
+        $this->assertSame(route('filament.mms.resources.matter-requests.view', $request), $stored->data['actions'][0]['url']);
+
+        // Its button shown in each reader's language.
+        $button = fn () => Notification::fromDatabase($stored)->getActions()[0]->getLabel();
+        $this->assertSame('عرض', $button());
+        app()->setLocale('en');
+        $this->assertSame('View', $button());
     }
 }

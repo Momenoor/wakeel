@@ -20,8 +20,9 @@ class UserAlert
     /**
      * @param  User|iterable<User|null>|null  $users
      * @param  'info'|'success'|'warning'|'danger'  $status
+     * @param  string|null  $icon  in place of the status's own icon
      */
-    public static function send(User|iterable|null $users, string $title, ?string $body = null, ?string $url = null, string $status = 'info'): void
+    public static function send(User|iterable|null $users, string $title, ?string $body = null, ?string $url = null, string $status = 'info', ?string $icon = null): void
     {
         $recipients = Collection::wrap($users instanceof User ? [$users] : ($users ?? []))
             ->filter(fn ($user) => $user instanceof User)
@@ -39,9 +40,13 @@ class UserAlert
                 $notification->body($body);
             }
 
+            if (filled($icon)) {
+                $notification->icon($icon)->iconColor($status);
+            }
+
             if (filled($url)) {
                 $notification->actions([
-                    Action::make('view')->label(__('View'))->url($url)->markAsRead(),
+                    Action::make('view')->label('View')->translateLabel(false)->url($url)->markAsRead(),
                 ]);
             }
 

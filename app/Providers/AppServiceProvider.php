@@ -15,6 +15,7 @@ use App\Support\Currency;
 use App\Support\InterfaceFont;
 use Carbon\Carbon;
 use Carbon\Translator as CarbonTranslator;
+use Filament\Actions\Action;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Support\Assets\Js;
 use Filament\Support\Facades\FilamentAsset;
@@ -143,6 +144,13 @@ class AppServiceProvider extends ServiceProvider
                 .' if (response.status === 419) { preventDefault(); if (! window.wakeelReloading) { window.wakeelReloading = true; window.location.reload(); } }'
                 .' })); window.Livewire ? expired() : document.addEventListener("livewire:init", expired); })();</script>',
         );
+
+        // Action labels translated as they are shown. A notification keeps
+        // its buttons' labels as sent, so a "View" showed in English to an
+        // Arabic reader; the senders keep the key (translateLabel(false)
+        // when sending) and each reader sees it in their own language. A
+        // label already translated has no key and stays as it is.
+        Action::configureUsing(fn (Action $action) => $action->translateLabel());
 
         // A notification (in the bell, or a toast) opens what it is about
         // when clicked anywhere — not only on its small "View" button.
