@@ -31,7 +31,7 @@ class IncentiveCalculationsTable
                     }),
                 TextColumn::make('lines_count')->counts('lines')->label(__('Fees')),
                 TextColumn::make('finalized_at')->label(__('Finalized'))->dateTime()->placeholder('—')->sortable(),
-                TextColumn::make('createdBy.name')->label(__('Created By')),
+                TextColumn::make('creator.name')->label(__('Created By')),
             ])
             ->defaultSort('created_at', 'desc')
             ->filters([
