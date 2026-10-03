@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Letters;
 
+use App\Filament\Mms\Resources\LetterFonts\Pages\ManageLetterFonts;
 use App\Filament\Mms\Resources\Letterheads\LetterheadResource;
 use App\Filament\Mms\Resources\Letterheads\Pages\DesignLetterhead;
 use App\Filament\Mms\Resources\LetterItems\LetterItemResource;
@@ -14,6 +15,7 @@ use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
 use App\Filament\Mms\Resources\Types\Pages\ListTypes;
 use App\Models\CalendarEvent;
+use App\Models\LetterFont;
 use App\Models\Letterhead;
 use App\Models\LetterItem;
 use App\Models\LetterTemplate;
@@ -24,13 +26,17 @@ use App\Models\Party;
 use App\Models\Setting;
 use App\Models\Type;
 use App\Models\User;
+use App\Services\MMS\Letters\ArabicInBoutros;
 use App\Services\MMS\Letters\Blocks\SignatureBlock;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterDocx;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterPdf;
+use App\Support\InterfaceFont;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\File;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use ReflectionMethod;
@@ -893,6 +899,106 @@ class LetterBuilderTest extends TestCase
             ->assertHasNoTableBulkActionErrors();
         $this->assertSame('المستأنف ضده', $appeal->fresh()->capacity('defendant'));
         $this->assertNull($appeal->fresh()->capacity('implicate-litigant'));
+    }
+
+    public function test_a_template_can_be_written_in_an_uploaded_font(): void
+    {
+        Storage::fake(LetterFont::DISK);
+        // Any TrueType font stands in for Calibri here.
+        $ttf = (string) file_get_contents(public_path('fonts/BoutrosMBCDinkum-Medium.ttf'));
+        Livewire::test(ManageLetterFonts::class)
+            ->callAction('create', [
+                'name' => 'Calibri',
+                'files' => [
+                    'regular' => [UploadedFile::fake()->createWithContent('calibri.ttf', $ttf)],
+                    'bold' => [UploadedFile::fake()->createWithContent('calibrib.ttf', $ttf)],
+                ],
+            ])
+            ->assertHasNoActionErrors();
+
+        $font = LetterFont::sole();
+        $this->assertSame(['R', 'B'], array_keys($font->pdfFiles()));
+
+        $template = $this->template->replicate();
+        $template->locale = 'en';
+        $template->letter_font_id = $font->id;
+        $composer = new LetterComposer($template, $this->matter, [], [], 'REF/1', now());
+
+        // The PDF: written in it, its own bold (an English letter).
+        $pdf = new LetterPdf($composer);
+        $html = (new ReflectionMethod(LetterPdf::class, 'html'))->invoke($pdf, Letterhead::fallback(), false);
+        $this->assertStringContainsString('body { font-family: '.$font->pdfKey().';', $html);
+        $this->assertStringContainsString('strong, b, h1, h2, h3, th { font-weight: bold; }', $html);
+        $this->assertStringStartsWith('%PDF', $pdf->render());
+
+        // An Arabic letter in a font with the Arabic letters (as Windows'
+        // Calibri): all of it in that font, bold its own.
+        $this->assertTrue($font->coversArabic());
+        $template->locale = 'ar';
+        $arabicHtml = fn () => (new ReflectionMethod(LetterPdf::class, 'html'))->invoke(new LetterPdf(new LetterComposer($template, $this->matter, [], [], 'REF/1', now())), Letterhead::fallback(), true);
+        $this->assertStringContainsString('strong, b, h1, h2, h3, th { font-weight: bold; }', $arabicHtml());
+
+        // A font without them: its Arabic in the Arabic font, bold drawn.
+        $latin = LetterFont::create(['name' => 'Latin only', 'files' => ['regular' => Storage::disk(LetterFont::DISK)->putFileAs(LetterFont::DIRECTORY, new File(public_path('fonts/AED.ttf')), 'latin.ttf'), 'bold' => $font->files['bold']]]);
+        $this->assertFalse($latin->coversArabic());
+        $template->letter_font_id = $latin->id;
+        $template->unsetRelation('font');
+        $this->assertStringContainsString('text-outline-width: 0.12mm', $arabicHtml());
+        $this->assertSame([LetterPdf::FONT, false], (new ArabicInBoutros)->getLanguageOptions('und-Arab', false));
+        $this->assertSame(['', false], (new ArabicInBoutros)->getLanguageOptions('en', false));
+        $template->letter_font_id = $font->id;
+        $template->unsetRelation('font');
+
+        // Word: asked for by name.
+        $docx = (new LetterDocx($composer))->save(storage_path('app/temp/font-letter.docx'));
+        $zip = new ZipArchive;
+        $zip->open($docx);
+        $styles = $zip->getFromName('word/styles.xml');
+        $zip->close();
+        @unlink($docx);
+        $this->assertStringContainsString('w:ascii="Calibri"', $styles);
+
+        // The template form offers it.
+        $this->get(LetterTemplateResource::getUrl('edit', ['record' => $this->template]))->assertSuccessful()->assertSee('Calibri');
+    }
+
+    public function test_an_uploaded_font_can_be_the_systems_font(): void
+    {
+        Storage::fake(LetterFont::DISK);
+        $ttf = (string) file_get_contents(public_path('fonts/BoutrosMBCDinkum-Medium.ttf'));
+        $font = LetterFont::create(['name' => 'Calibri', 'files' => [
+            'regular' => Storage::disk(LetterFont::DISK)->put('letter-fonts/calibri.ttf', $ttf) ? 'letter-fonts/calibri.ttf' : null,
+            'bold' => Storage::disk(LetterFont::DISK)->put('letter-fonts/calibrib.ttf', $ttf) ? 'letter-fonts/calibrib.ttf' : null,
+        ]]);
+
+        // The standard font until one is chosen.
+        $this->assertSame('', InterfaceFont::css());
+
+        Livewire::test(ManageLetterFonts::class)
+            ->callTableAction('useForSystem', $font)
+            ->assertHasNoTableActionErrors();
+        Setting::clearCache();
+
+        // Every screen: its own copy first (Windows), else the files —
+        // its weights; the standard font behind it for what it lacks.
+        $css = InterfaceFont::css();
+        $this->assertStringContainsString("src: local('Calibri'), url('".route('letter-fonts.file', ['font' => $font, 'weight' => 'regular', 'v' => $font->updated_at->timestamp])."')", $css);
+        $this->assertStringContainsString("local('Calibri Bold')", $css);
+        $this->assertStringNotContainsString('Italic', $css);
+        $this->assertStringContainsString(":root { --font-family: 'Calibri', 'Boutros MBC Dinkum'", $css);
+        $this->get(LetterTemplateResource::getUrl())->assertSuccessful()->assertSee("--font-family: 'Calibri'", false);
+
+        // Its files: for signed-in users only.
+        $this->get(route('letter-fonts.file', ['font' => $font, 'weight' => 'bold']))->assertOk()->assertHeader('Content-Type', 'font/ttf');
+        $this->get(route('letter-fonts.file', ['font' => $font, 'weight' => 'italic']))->assertNotFound();
+        auth()->logout();
+        $this->get(route('letter-fonts.file', ['font' => $font, 'weight' => 'regular']))->assertRedirect();
+        $this->actingAs(User::factory()->create()->assignRole(Role::firstOrCreate(['name' => config('filament-shield.super_admin.name', 'super_admin'), 'guard_name' => 'web'])));
+
+        // Back to the standard font.
+        Livewire::test(ManageLetterFonts::class)->callTableAction('standardSystemFont');
+        Setting::clearCache();
+        $this->assertSame('', InterfaceFont::css());
     }
 
     public function test_the_screens_open(): void

@@ -3465,5 +3465,21 @@
     "Implicated litigant": "الخصم المدخل",
     "Set party capacities": "تحديد صفات الأطراف",
     "On / off switch": "مفتاح تشغيل / إيقاف",
-    "After the text, every page": "بعد النص، في كل صفحة"
+    "After the text, every page": "بعد النص، في كل صفحة",
+    "Font": "الخط",
+    "Fonts": "الخطوط",
+    "Weights": "الأوزان",
+    "Regular": "عادي",
+    "Italic": "مائل",
+    "Bold italic": "عريض مائل",
+    "As Word names it, e.g. Calibri or Calibri Light — Word documents ask for it by this name.": "كما يسميه Word، مثل Calibri أو Calibri Light — تطلبه مستندات Word بهذا الاسم.",
+    "A .ttf file — for Calibri, calibri.ttf from C:\\Windows\\Fonts.": "ملف ‎.ttf — لخط Calibri: الملف calibri.ttf من المجلد C:\\Windows\\Fonts.",
+    "The standard font": "الخط المعتاد",
+    "Fonts are added under Communication → Fonts. Arabic text is written in it too when it has the Arabic letters (as Calibri does), otherwise in the standard Arabic font.": "تُضاف الخطوط من المراسلات ← الخطوط. يُكتب النص العربي بالخط نفسه إذا كان يدعم العربية، وإلا فبالخط العربي المعتاد.",
+    "System font": "خط النظام",
+    "Use for the system": "استخدامه للنظام",
+    "Every screen of the system is shown in this font, for everyone. Windows uses its own copy; other devices load the uploaded files.": "تُعرض كل شاشات النظام بهذا الخط لجميع المستخدمين. يستخدم Windows نسخته المثبتة، وتحمّل الأجهزة الأخرى الملفات المرفوعة.",
+    "The system is now shown in :font. Refresh the page to see it.": "أصبح النظام يُعرض بخط :font. حدّث الصفحة لرؤيته.",
+    "Back to the standard font": "العودة إلى الخط المعتاد",
+    "The system is shown in the standard font again. Refresh the page to see it.": "عاد النظام يُعرض بالخط المعتاد. حدّث الصفحة لرؤيته."
 }

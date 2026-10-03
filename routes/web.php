@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ChatAttachmentController;
+use App\Http\Controllers\LetterFontFileController;
 use App\Http\Controllers\LicenseController;
 use App\Http\Controllers\PushSubscriptionController;
 use App\Livewire\Installer\InstallWizard;
@@ -66,6 +67,9 @@ Route::middleware('auth')->group(function () {
 
     // A file sent in a chat message, to those in the conversation.
     Route::get('/chat/files/{message}/{index}', ChatAttachmentController::class)->whereNumber('index')->name('chat.attachment');
+
+    // The system's font, when an uploaded one is chosen for it.
+    Route::get('/fonts/letter/{font}/{weight}', LetterFontFileController::class)->name('letter-fonts.file');
 });
 
 // Lets phones add Wakeel to the home screen — which iPhone requires

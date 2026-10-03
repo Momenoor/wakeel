@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\MMS\Calendar\UnmatchedEventReferences;
 use App\Services\Push\WebPushSender;
 use App\Support\Currency;
+use App\Support\InterfaceFont;
 use Carbon\Carbon;
 use Carbon\Translator as CarbonTranslator;
 use Filament\Infolists\Components\TextEntry;
@@ -91,6 +92,9 @@ class AppServiceProvider extends ServiceProvider
 
         // The font that draws the Dirham sign, on every panel page.
         FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): string => (string) Currency::fontLink());
+
+        // The system's font, when an uploaded one (Calibri …) is chosen for it.
+        FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): string => InterfaceFont::css());
 
         // The rich editors' placeholders (merge tags) stay inside the editor.
         // Filament keeps each on one line, so a long name — an Arabic label,

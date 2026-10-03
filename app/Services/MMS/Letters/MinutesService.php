@@ -6,6 +6,7 @@ use App\Models\Letterhead;
 use App\Models\LetterTemplate;
 use App\Models\MatterMinutes;
 use App\Models\Party;
+use App\Services\WhatsAppService;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -162,20 +163,66 @@ class MinutesService
     }
 
     /**
-     * ID numbers typed at the meeting, kept on the parties for next time.
+     * The ID numbers and phones typed at the meeting, kept on the parties
+     * for next time: the ID replaces the one known, a new phone goes first
+     * among theirs (one they have already, however written, isn't added
+     * again). An attendee added by hand counts when named as one of the
+     * matter's parties.
      */
-    public static function rememberIdNumbers(MatterMinutes $minutes): void
+    public static function rememberContactDetails(MatterMinutes $minutes): void
     {
+        $minutes->loadMissing('matter.matterParties.party');
+        $byName = $minutes->matter?->matterParties
+            ->pluck('party')->filter()
+            ->keyBy(fn (Party $party) => self::nameKey((string) $party->name)) ?? collect();
+
         foreach ($minutes->attendees ?? [] as $attendee) {
-            if (blank($attendee['party_id'] ?? null) || blank($attendee['id_number'] ?? null)) {
+            if (! is_array($attendee)) {
                 continue;
             }
 
-            $party = Party::find($attendee['party_id']);
-            if ($party && ($party->extra['id_number'] ?? null) !== $attendee['id_number']) {
-                $party->update(['extra' => [...((array) ($party->extra ?? [])), 'id_number' => trim((string) $attendee['id_number'])]]);
+            $id = trim((string) ($attendee['id_number'] ?? ''));
+            $phone = trim((string) ($attendee['phone'] ?? ''));
+            if ($id === '' && $phone === '') {
+                continue;
+            }
+
+            // Read afresh: two lines may be the same party.
+            $party = Party::find(filled($attendee['party_id'] ?? null)
+                ? $attendee['party_id']
+                : $byName->get(self::nameKey((string) ($attendee['name'] ?? '')))?->getKey());
+            if (! $party) {
+                continue;
+            }
+
+            $changes = [];
+
+            if ($id !== '' && ($party->extra['id_number'] ?? null) !== $id) {
+                $changes['extra'] = [...((array) ($party->extra ?? [])), 'id_number' => $id];
+            }
+
+            $phones = array_values(array_filter((array) ($party->phone ?? []), 'filled'));
+            $known = array_map(fn ($p) => self::phoneKey((string) $p), $phones);
+            if ($phone !== '' && ! in_array(self::phoneKey($phone), $known, true)) {
+                $changes['phone'] = [$phone, ...$phones];
+            }
+
+            if ($changes !== []) {
+                $party->update($changes);
             }
         }
+    }
+
+    /** A name compared without its spacing or case. */
+    private static function nameKey(string $name): string
+    {
+        return mb_strtolower(preg_replace('/\s+/u', ' ', trim($name)) ?? '');
+    }
+
+    /** A phone compared as its international digits: 050…, +97150…, 0097150… are one. */
+    private static function phoneKey(string $phone): string
+    {
+        return WhatsAppService::formatWhatsAppNumber($phone) ?? preg_replace('/\D+/', '', $phone) ?? '';
     }
 
     /**
@@ -196,6 +243,8 @@ class MinutesService
                 'status' => MatterMinutes::FINAL,
                 'finalized_at' => now(),
             ]);
+
+            self::rememberContactDetails($minutes);
 
             $pdf = (new LetterPdf(self::composer($minutes->fresh())))->render();
             $path = 'attachments/minutes/'.$minutes->matter_id.'/'.$minutes->number.'-'.Str::random(6).'.pdf';

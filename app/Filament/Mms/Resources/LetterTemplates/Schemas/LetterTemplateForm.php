@@ -70,6 +70,12 @@ class LetterTemplateForm
                             ->relationship('letterhead', 'name')
                             ->placeholder(__('The default letterhead'))
                             ->preload(),
+                        Select::make('letter_font_id')
+                            ->label(__('Font'))
+                            ->relationship('font', 'name')
+                            ->placeholder(__('The standard font'))
+                            ->helperText(__('Fonts are added under Communication → Fonts. Arabic text is written in it too when it has the Arabic letters (as Calibri does), otherwise in the standard Arabic font.'))
+                            ->preload(),
                         Select::make('email_template_id')
                             ->label(__('Covering email'))
                             ->relationship('emailTemplate', 'name', fn ($query) => $query->where('is_active', true))

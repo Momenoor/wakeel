@@ -12,10 +12,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ $title }}</title>
     <link rel="stylesheet" href="{{ asset('fonts/Boutros.css') }}">
+    {!! \App\Support\InterfaceFont::css() !!}
     <style>
         :root { --size: 20px; }
         * { box-sizing: border-box; }
-        body { margin: 0; background: #e5e7eb; color: #111827; font-family: 'Boutros MBC Dinkum', Tahoma, Arial, sans-serif; }
+        body { margin: 0; background: #e5e7eb; color: #111827; font-family: var(--font-family, 'Boutros MBC Dinkum', Tahoma, Arial, sans-serif); }
         .bar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: .75rem; padding: .5rem 1rem; background: #111827; color: #f9fafb; font-size: 14px; }
         .bar .title { flex: 1; font-weight: 600; }
         .bar button, .bar label { background: rgba(255,255,255,.12); color: inherit; border: 0; border-radius: .4rem; padding: .3rem .6rem; font: inherit; cursor: pointer; }

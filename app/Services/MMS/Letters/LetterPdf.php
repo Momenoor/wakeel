@@ -2,6 +2,7 @@
 
 namespace App\Services\MMS\Letters;
 
+use App\Models\LetterFont;
 use App\Models\Letterhead;
 use App\Services\MMS\BulkMailPlaceholders;
 use App\Support\Branding;
@@ -24,8 +25,14 @@ class LetterPdf
 
     public function __construct(private LetterComposer $composer) {}
 
-    public static function mpdf(Letterhead $letterhead, bool $rtl): Mpdf
+    public static function mpdf(Letterhead $letterhead, bool $rtl, ?LetterFont $font = null): Mpdf
     {
+        // The template's own font (Calibri …), from its uploaded files —
+        // for all the text when it has the Arabic letters; otherwise its
+        // Arabic is drawn in the app's font (see ArabicInBoutros).
+        $files = $font?->pdfFiles() ?? [];
+        $own = isset($files['R']) ? $font : null;
+
         $tempDir = storage_path('app/mpdf-tmp');
         if (! is_dir($tempDir)) {
             mkdir($tempDir, 0755, true);
@@ -45,7 +52,7 @@ class LetterPdf
             'margin_footer' => 0,
             'directionality' => $rtl ? 'rtl' : 'ltr',
             'tempDir' => $tempDir,
-            'fontDir' => [...$fontDirs, public_path('fonts')],
+            'fontDir' => [...$fontDirs, public_path('fonts'), ...array_values(array_unique(array_map('dirname', $files)))],
             'fontdata' => $fontData + [
                 // The app's font. It has one weight, so bold is drawn with a
                 // thin outline (see html()). No kashida: justified lines are
@@ -55,11 +62,34 @@ class LetterPdf
                     'B' => 'BoutrosMBCDinkum-Medium.ttf',
                     'useOTL' => 0xFF,
                 ],
-            ],
-            'default_font' => self::FONT,
+            ] + ($own ? [$own->pdfKey() => [...array_map('basename', $files), 'useOTL' => 0xFF]] : []),
+            'default_font' => $own?->pdfKey() ?? self::FONT,
             'autoScriptToLang' => true,
-            'autoLangToFont' => false,
+            'autoLangToFont' => $own !== null && ! $own->coversArabic(),
+            'languageToFont' => new ArabicInBoutros,
         ]);
+    }
+
+    /**
+     * The template's font, when it has one with its files.
+     */
+    private function font(): ?LetterFont
+    {
+        $font = $this->composer->template->font;
+
+        return $font && isset($font->pdfFiles()['R']) ? $font : null;
+    }
+
+    /**
+     * Bold in the font's own bold, when it has one and the text is all in
+     * it — Arabic too, or none. Arabic in the app's single-weight font keeps
+     * the outline.
+     */
+    private function realBold(): bool
+    {
+        $font = $this->font();
+
+        return $font !== null && $font->hasBold() && (! $this->composer->isArabic() || $font->coversArabic());
     }
 
     public function render(): string
@@ -67,7 +97,7 @@ class LetterPdf
         $letterhead = $this->composer->letterhead ?? Letterhead::fallback();
         $rtl = $this->composer->isArabic();
 
-        $mpdf = self::mpdf($letterhead, $rtl);
+        $mpdf = self::mpdf($letterhead, $rtl, $this->font());
         $mpdf->SetTitle($this->composer->subject() ?: (string) $this->composer->reference);
 
         if ($letterhead->watermark_type === 'text' && filled($letterhead->watermark_text)) {
@@ -200,13 +230,16 @@ class LetterPdf
 
         $css = '@page { '.$background($rest).' header: html_letterRest;'.$footer($other['bottom']).' '.$margins($other['top'], $other['right'], $other['bottom'], $other['left']).' }'
             .'@page :first { '.$background($first).' header: html_letterFirst;'.$footer((float) $letterhead->margin_bottom).' '.$margins((float) $letterhead->margin_top, (float) $letterhead->margin_right, (float) $letterhead->margin_bottom, (float) $letterhead->margin_left).' }'
-            .'body { font-family: '.self::FONT.'; font-size: 12pt; line-height: 1.55; text-align: justify; }'
+            .'body { font-family: '.($this->font()?->pdfKey() ?? self::FONT).'; font-size: 12pt; line-height: 1.55; text-align: justify; }'
             .'p { margin: 0 0 6pt 0; }'
             .'ol, ul { margin: 0 0 6pt 0; padding-'.($rtl ? 'right' : 'left').': 18pt; }'
             .'li { margin-bottom: 3pt; }'
             .'h1 { font-size: 18pt; } h2 { font-size: 16pt; } h3 { font-size: 14pt; }'
-            // Bold, drawn: the font has a single weight.
-            .'strong, b, h1, h2, h3, th { font-weight: normal; text-outline-width: 0.12mm; text-outline-color: #111827; }'
+            // Bold: the font's own — or drawn with an outline, where the
+            // text is in the app's font, which has a single weight.
+            .($this->realBold()
+                ? 'strong, b, h1, h2, h3, th { font-weight: bold; }'
+                : 'strong, b, h1, h2, h3, th { font-weight: normal; text-outline-width: 0.12mm; text-outline-color: #111827; }')
             .'.recipient { margin: 0; } .recipient-email { margin: 0 0 4pt 0; text-align: left; }'
             .'table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid #9ca3af; padding: 4pt; }';
 
@@ -300,7 +333,9 @@ class LetterPdf
         // Bold: the font has one weight, so — as for bold in the letter — a
         // thin outline in the element's colour, sized with its text. mPDF
         // draws it on an inner span only, never on the positioned box itself.
-        if (! empty($element['bold']) && ! in_array($element['type'] ?? null, ['logo', 'image', 'line'], true) && $content !== '') {
+        if (! empty($element['bold']) && ! in_array($element['type'] ?? null, ['logo', 'image', 'line'], true) && $content !== '' && $this->realBold()) {
+            $content = '<b>'.$content.'</b>';
+        } elseif (! empty($element['bold']) && ! in_array($element['type'] ?? null, ['logo', 'image', 'line'], true) && $content !== '') {
             $outline = round(max(0.08, (float) ($element['font_size'] ?? 11) * 0.0092), 3);
             $content = '<span style="text-outline-width: '.$outline.'mm; text-outline-color: '.e($element['color'] ?? '#111827').';">'.$content.'</span>';
         }

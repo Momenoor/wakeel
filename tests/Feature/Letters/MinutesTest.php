@@ -321,6 +321,32 @@ class MinutesTest extends TestCase
         $this->assertStringContainsString('>التوقيع</th>', MinutesService::composer($minutes)->bodyHtml());
     }
 
+    public function test_ids_and_phones_typed_at_the_meeting_update_the_parties(): void
+    {
+        $company = Party::where('name', 'المهاد لخدمات صيانة السفن')->sole();
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
+
+        $page = $this->minutesPage()->mountTableAction('recordMeeting', $minutes);
+        $attendees = array_values($page->get('mountedActions.0.data.attendees'));
+        // The company: an ID and a phone it didn't have.
+        $attendees[0] = [...$attendees[0], 'present' => true, 'id_number' => '784-1998-6110217-8', 'phone' => '0567778899'];
+        // The lawyer: their own number, written another way — not added twice.
+        $attendees[1] = [...$attendees[1], 'present' => true, 'phone' => '+971 50 113 2801'];
+        // Added by hand, named as the company: counted as it.
+        $attendees[] = ['present' => true, 'title' => 'السادة/', 'name' => ' المهاد لخدمات صيانة السفن ', 'phone' => '042223333', 'party_id' => null];
+        // Not a party of the matter: nothing to update.
+        $attendees[] = ['present' => true, 'title' => 'السيد/', 'name' => 'زائر', 'id_number' => '784-2000-0000000-0', 'party_id' => null];
+
+        $page->setTableActionData(['attendees' => $attendees])->callMountedTableAction()->assertHasNoTableActionErrors();
+
+        $company->refresh();
+        $this->assertSame('784-1998-6110217-8', $company->extra['id_number']);
+        $this->assertSame(['042223333', '0567778899'], $company->phone);
+        $this->assertSame(['0501132801'], $this->lawyer->fresh()->phone);
+        $this->assertSame(0, Party::where('name', 'زائر')->count());
+    }
+
     public function test_companies_are_addressed_as_messrs(): void
     {
         $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),

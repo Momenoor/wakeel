@@ -43,7 +43,9 @@ class LetterDocx
         $rtl = $this->composer->isArabic();
 
         $word = new PhpWord;
-        $word->setDefaultFontName(self::FONT);
+        // The template's font by name (Word has Calibri); the standard one
+        // otherwise.
+        $word->setDefaultFontName($this->composer->template->font?->name ?: self::FONT);
         $word->setDefaultFontSize(12);
         $word->setDefaultParagraphStyle([
             'bidi' => $rtl,

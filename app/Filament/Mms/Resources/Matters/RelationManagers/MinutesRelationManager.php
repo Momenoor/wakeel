@@ -333,7 +333,7 @@ class MinutesRelationManager extends RelationManager
             ->action(function (MatterMinutes $record, array $data): void {
                 MinutesService::saveRecorded($record, $data);
 
-                MinutesService::rememberIdNumbers($record);
+                MinutesService::rememberContactDetails($record);
 
                 Notification::make()->success()->title(__('Minutes (:number) saved', ['number' => $record->number]))->send();
             });
