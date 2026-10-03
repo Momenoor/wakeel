@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use BezhanSalleh\FilamentShield\Support\Utils;
+use Filament\Exceptions\NoDefaultPanelSetException;
 use Filament\Facades\Filament;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -244,12 +245,17 @@ class AccessControlRepairService
      * removed automatically — a name that looks orphaned here may simply belong
      * to a panel this environment does not register.
      *
+     * Every panel's pages count (MMS and PMS): one panel alone reported the
+     * other's pages as orphaned.
+     *
      * @return Collection<int, string>
      */
     public function orphanedPagePermissions(): Collection
     {
-        $live = collect(Filament::getPanel('admin')->getPages())
-            ->merge(Filament::getPanel('admin')->getWidgets())
+        $panels = collect(Filament::getPanels());
+
+        $live = $panels
+            ->flatMap(fn ($panel) => [...$panel->getPages(), ...$panel->getWidgets()])
             ->map(fn (string $class) => 'View:'.class_basename($class));
 
         $subjects = Permission::query()
@@ -258,7 +264,8 @@ class AccessControlRepairService
 
         // A resource's View permission is named for its MODEL, so keep any name
         // that matches a model-backed subject.
-        $resourceSubjects = collect(Filament::getPanel('admin')->getResources())
+        $resourceSubjects = $panels
+            ->flatMap(fn ($panel) => $panel->getResources())
             ->map(fn (string $resource) => 'View:'.class_basename($resource::getModel()));
 
         return $subjects
