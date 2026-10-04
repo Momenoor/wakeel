@@ -184,7 +184,7 @@ class ChatWidgetTest extends TestCase
         $this->assertSame($question->id, $answer->reply_to_id);
 
         // Quoted above the answer, a tap away from the question.
-        $chat->assertSeeHtml("getElementById('chat-msg-{$question->id}')")
+        $chat->assertSeeHtml('x-on:click="jump('.$question->id.')"')
             ->assertSeeHtml('id="chat-msg-'.$question->id.'"');
     }
 
@@ -307,7 +307,7 @@ class ChatWidgetTest extends TestCase
         // Its messages reach everyone in it; others' show who wrote them.
         $chat->call('sendMessage', 'صباح الخير');
         ChatMessage::create(['chat_conversation_id' => $group->id, 'user_id' => $third->id, 'body' => 'أهلاً']);
-        $chat->call('$refresh')->assertSeeHtml('color: rgb(124 58 237);">سارة</p>');
+        $chat->call('$refresh')->assertSeeHtml('<p class="wk-sender">سارة</p>');
         $this->assertCount(3, (new ChatMessageSent(ChatMessage::first()->load('sender')))->broadcastOn());
 
         // A group of two people isn't their one-to-one conversation.
@@ -549,7 +549,9 @@ class ChatWidgetTest extends TestCase
 
         $chat = Livewire::test(ChatWidget::class)
             ->call('selectConversation', $conversation->id)
-            ->assertSeeHtml('wire:click="react('.$message->id.', '."'❤️'".')"')
+            // Its React button opens the conversation's one picker on it.
+            ->assertSeeHtml('x-on:click.stop="pick('.$message->id.', $event)"')
+            ->assertSeeHtml('x-on:click="react('."'❤️'".')"')
             ->call('react', $message->id, '❤️')
             ->assertSeeHtml('data-reaction="❤️"');
         $this->assertSame([(string) $this->me->id => '❤️'], array_map('strval', $message->fresh()->reactions));
@@ -673,5 +675,53 @@ class ChatWidgetTest extends TestCase
         $messenger->send($group, $this->colleague, 'Hi');
         $this->assertSame(2, $this->me->unreadNotifications()->count());
         $this->assertStringStartsWith('Team — ', $this->me->unreadNotifications()->first()->data['title']);
+    }
+
+    public function test_a_long_conversation_shows_its_newest_messages_and_earlier_ones_on_request(): void
+    {
+        $conversation = ChatConversation::betweenUsers($this->me, $this->colleague);
+        $rows = [];
+        for ($i = 1; $i <= 100; $i++) {
+            $rows[] = ['chat_conversation_id' => $conversation->id, 'user_id' => $this->colleague->id, 'body' => "Message {$i}", 'created_at' => now()->subMinutes(200 - $i), 'updated_at' => now()];
+        }
+        ChatMessage::insert($rows);
+        $conversation->update(['last_message_at' => now()]);
+        $first = ChatMessage::query()->where('body', 'Message 1')->value('id');
+        $tenth = ChatMessage::query()->where('body', 'Message 10')->value('id');
+
+        // The newest 40 — all of them made every open, switch and new
+        // message send (and redraw) megabytes in a long conversation.
+        $chat = Livewire::test(ChatWidget::class)->call('selectConversation', $conversation->id);
+        $this->assertCount(ChatWidget::PAGE, $chat->instance()->messages);
+        $chat->assertSeeHtml('id="chat-msg-'.ChatMessage::query()->where('body', 'Message 100')->value('id').'"')
+            ->assertDontSeeHtml('id="chat-msg-'.$first.'"')
+            ->assertSee(__('Show earlier messages'));
+        $this->assertLessThan(150_000, strlen($chat->html()));
+
+        // Earlier on request, 40 at a time, until there are none.
+        $chat->call('loadEarlier')->call('loadEarlier');
+        $this->assertCount(100, $chat->instance()->messages);
+        $chat->assertSeeHtml('id="chat-msg-'.$first.'"')->assertDontSee(__('Show earlier messages'));
+
+        // Another conversation, or this one again, starts at the newest.
+        $chat->call('backToList')->call('selectConversation', $conversation->id);
+        $this->assertCount(ChatWidget::PAGE, $chat->instance()->messages);
+
+        // A notification's link to an old message reaches it.
+        Livewire::test(ChatWidget::class, ['conversation' => $conversation->id, 'message' => $tenth])
+            ->assertSeeHtml('id="chat-msg-'.$tenth.'"');
+    }
+
+    public function test_the_popup_opens_and_closes_without_waiting_for_a_redraw(): void
+    {
+        $popup = Livewire::test(ChatWidget::class, ['mode' => 'popup'])
+            ->call('setOpen', true)
+            ->assertSet('isOpen', true)
+            ->assertSeeHtml('>'.__('Messages').'</span>');
+
+        // Closed in the browser already: kept, nothing sent back to redraw.
+        $popup->call('setOpen', false)->assertSet('isOpen', false);
+        $this->assertFalse(session('chat.popup')['open']);
+        $this->assertArrayNotHasKey('html', $popup->effects);
     }
 }

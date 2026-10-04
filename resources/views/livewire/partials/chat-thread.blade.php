@@ -47,11 +47,30 @@
         x-data="{
             preview: null,
             stick: true,
+            {{-- The one reaction picker, for the message whose button was pressed. --}}
+            picker: null,
             toBottom() {
                 this.$el.scrollTop = this.$el.scrollHeight;
             },
             follow() {
                 if (this.stick) { this.toBottom(); }
+            },
+            pick(id, event) {
+                const r = event.currentTarget.getBoundingClientRect();
+                this.picker = this.picker?.id === id ? null : { id, x: Math.max(8, Math.min(r.left - 120, window.innerWidth - 300)), y: Math.max(8, r.top - 52) };
+            },
+            react(emoji) {
+                this.$wire.react(this.picker.id, emoji);
+                this.picker = null;
+            },
+            jump(id) {
+                const el = document.getElementById('chat-msg-' + id);
+                if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.style.backgroundColor = 'rgba(250, 204, 21, .25)'; setTimeout(() => el.style.backgroundColor = '', 1200); }
+            },
+            {{-- Older messages above, where the reader is kept. --}}
+            earlier() {
+                const fromBottom = this.$el.scrollHeight - this.$el.scrollTop;
+                this.$wire.loadEarlier().then(() => this.$nextTick(() => { this.$el.scrollTop = this.$el.scrollHeight - fromBottom; }));
             },
         }"
         x-init="
@@ -70,9 +89,27 @@
         x-on:scroll="stick = $el.scrollHeight - $el.scrollTop - $el.clientHeight < 80"
         x-on:message-sent.window="stick = true; toBottom()"
         x-on:chat-preview="preview = $event.detail"
-        x-on:keydown.escape.window="preview = null"
+        x-on:keydown.escape.window="preview = null; picker = null"
+        x-on:scroll.passive="picker = null"
         class="flex-1 space-y-3 overflow-y-auto p-4"
     >
+        @include('livewire.partials.chat-styles')
+
+        @if ($this->hasEarlierMessages)
+            <div class="flex justify-center">
+                <button type="button" x-on:click="earlier()" wire:loading.attr="disabled" wire:target="loadEarlier" class="wk-earlier">
+                    <span wire:loading.remove wire:target="loadEarlier">{{ __('Show earlier messages') }}</span>
+                    <span wire:loading wire:target="loadEarlier">{{ __('Loading…') }}</span>
+                </button>
+            </div>
+        @endif
+
+        {{-- The reactions to pick from, over the message whose button was pressed. --}}
+        <div x-show="picker" x-cloak x-transition.opacity x-on:click.outside="picker = null" class="wk-picker" x-bind:style="picker ? 'left:' + picker.x + 'px; top:' + picker.y + 'px' : ''">
+            @foreach (\App\Models\ChatMessage::REACTIONS as $emoji)
+                <button type="button" x-on:click="react(@js($emoji))" aria-label="{{ $emoji }}">{{ $emoji }}</button>
+            @endforeach
+        </div>
         @php($lastDay = null)
         @foreach ($this->messages as $message)
             @php($isMine = $message->user_id === auth()->id())
@@ -92,34 +129,17 @@
                     </span>
                 </div>
             @endif
-            {{-- The reply button shows beside the bubble on hover (always, faintly, on touch screens). --}}
+            {{-- Its tools (reply, react, delete) beside the bubble, shown on hover
+                 by CSS (wk-chat-styles) — no script of their own per message. --}}
             <div
                 id="chat-msg-{{ $message->id }}"
                 wire:key="chat-msg-{{ $message->id }}"
-                x-data="{ hover: false, picking: false }"
-                x-on:mouseenter="hover = true"
-                x-on:mouseleave="hover = false; picking = false"
-                @class(['flex', 'justify-end' => $isMine])
-                style="position: relative; align-items: center; gap: 4px; transition: background-color .6s; border-radius: 1rem;"
+                @class(['wk-msg', 'mine' => $isMine])
             >
-                {{-- The reactions to pick from, over the message. --}}
-                <div
-                    x-show="picking"
-                    x-cloak
-                    x-transition.opacity
-                    x-on:click.outside="picking = false"
-                    class="bg-white shadow-lg ring-1 ring-gray-950/10 dark:bg-gray-800 dark:ring-white/10"
-                    style="position: absolute; bottom: calc(100% - 4px); {{ $isMine ? 'inset-inline-end' : 'inset-inline-start' }}: 8px; z-index: 20; display: flex; gap: 2px; padding: 4px 6px; border-radius: 9999px;"
-                >
-                    @foreach (\App\Models\ChatMessage::REACTIONS as $emoji)
-                        <button type="button" wire:click="react({{ $message->id }}, @js($emoji))" x-on:click="picking = false" aria-label="{{ $emoji }}" style="font-size: 1.25rem; line-height: 1; padding: 3px; border-radius: 9999px; transition: transform .1s;" onmouseover="this.style.transform='scale(1.25)'" onmouseout="this.style.transform=''">{{ $emoji }}</button>
-                    @endforeach
-                </div>
-                @php($replyButton = '<button type="button" wire:click="replyTo('.$message->id.')" title="'.e(__('Reply')).'" aria-label="'.e(__('Reply')).'" x-bind:style="\'opacity: \' + (hover ? 1 : (window.matchMedia(\'(hover: none)\').matches ? .45 : 0)) + \'; transition: opacity .15s; padding: 4px; border-radius: 9999px; color: rgb(107 114 128); flex-shrink: 0;\'"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform: '.(__('filament-panels::layout.direction') === 'rtl' ? 'scaleX(-1)' : 'none').';"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>')
-                {{-- Delete: mine until someone else reads it; any, for a super admin. --}}
-                @php($deleteButton = $this->canDelete($message) ? '<button type="button" wire:click="deleteMessage('.$message->id.')" wire:confirm="'.e(__('Delete this message for everyone?')).'" title="'.e(__('Delete')).'" aria-label="'.e(__('Delete')).'" x-bind:style="\'opacity: \' + (hover ? 1 : (window.matchMedia(\'(hover: none)\').matches ? .45 : 0)) + \'; transition: opacity .15s; padding: 4px; border-radius: 9999px; color: rgb(220 38 38); flex-shrink: 0;\'"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg></button>' : '')
-                @php($reactButton = '<button type="button" x-on:click="picking = ! picking" title="'.e(__('React')).'" aria-label="'.e(__('React')).'" x-bind:style="\'opacity: \' + (hover || picking ? 1 : (window.matchMedia(\'(hover: none)\').matches ? .45 : 0)) + \'; transition: opacity .15s; padding: 4px; border-radius: 9999px; color: rgb(107 114 128); flex-shrink: 0;\'"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01M15 9h.01"/></svg></button>')
-                @if ($isMine) {!! $deleteButton !!}{!! $reactButton !!}{!! $replyButton !!} @endif
+                @php($tools = '<button type="button" class="wk-tool" wire:click="replyTo('.$message->id.')" title="'.e(__('Reply')).'" aria-label="'.e(__('Reply')).'"><svg class="wk-flip"><use href="#wk-i-reply"/></svg></button>'
+                    .'<button type="button" class="wk-tool" x-on:click.stop="pick('.$message->id.', $event)" title="'.e(__('React')).'" aria-label="'.e(__('React')).'"><svg><use href="#wk-i-react"/></svg></button>'
+                    .($this->canDelete($message) ? '<button type="button" class="wk-tool del" wire:click="deleteMessage('.$message->id.')" wire:confirm="'.e(__('Delete this message for everyone?')).'" title="'.e(__('Delete')).'" aria-label="'.e(__('Delete')).'"><svg><use href="#wk-i-delete"/></svg></button>' : ''))
+                @if ($isMine) {!! $tools !!} @endif
                 <div @class([
                     'max-w-[80%] rounded-2xl px-4 py-2 text-sm shadow-sm',
                     'rounded-br-md bg-gradient-to-br from-primary-600 to-primary-500 text-white' => $isMine,
@@ -127,17 +147,13 @@
                 ]) style="min-width: 0;">
                     {{-- In a group: who wrote it, above the first of theirs in a row. --}}
                     @if (! $isMine && $this->activeConversation->is_group && ($previousSender ?? null) !== $message->user_id)
-                        <p style="font-size: .72rem; font-weight: 700; margin-bottom: 2px; color: rgb(124 58 237);">{{ $message->sender?->display_name ?: $message->sender?->name }}</p>
+                        <p class="wk-sender">{{ $message->sender?->display_name ?: $message->sender?->name }}</p>
                     @endif
                     {{-- The message answered: tap to go to it. --}}
                     @if ($message->replyTo)
-                        <button
-                            type="button"
-                            x-on:click="const el = document.getElementById('chat-msg-{{ $message->reply_to_id }}'); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.style.backgroundColor = 'rgba(250, 204, 21, .25)'; setTimeout(() => el.style.backgroundColor = '', 1200); }"
-                            style="display: block; width: 100%; text-align: start; margin-bottom: 6px; padding: 4px 8px; border-radius: 8px; border-inline-start: 3px solid {{ $isMine ? 'rgba(255,255,255,.8)' : 'rgb(37 99 235)' }}; background: {{ $isMine ? 'rgba(255,255,255,.18)' : 'rgba(0,0,0,.06)' }}; font-size: .75rem; line-height: 1.3;"
-                        >
-                            <span style="display: block; font-weight: 600;">{{ $message->replyTo->user_id === auth()->id() ? __('You') : ($message->replyTo->sender?->display_name ?: $message->replyTo->sender?->name) }}</span>
-                            <span style="display: block; opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ $message->replyTo->preview(90) }}</span>
+                        <button type="button" class="wk-quote" x-on:click="jump({{ $message->reply_to_id }})">
+                            <b>{{ $message->replyTo->user_id === auth()->id() ? __('You') : ($message->replyTo->sender?->display_name ?: $message->replyTo->sender?->name) }}</b>
+                            <span>{{ $message->replyTo->preview(90) }}</span>
                         </button>
                     @endif
 
@@ -161,7 +177,7 @@
                             </button>
                         @else
                             {{-- A PDF previews here; any other file downloads. --}}
-                            <a href="{{ $url }}?download=1" @if (($file['mime'] ?? '') === 'application/pdf') x-on:click.prevent="$dispatch('chat-preview', { type: 'pdf', url: @js($url), name: @js($file['name']) })" @endif style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; padding: 6px 8px; border-radius: 8px; background: {{ $isMine ? 'rgba(255,255,255,.18)' : 'rgba(0,0,0,.06)' }}; color: inherit; text-decoration: none;">
+                            <a href="{{ $url }}?download=1" @if (($file['mime'] ?? '') === 'application/pdf') x-on:click.prevent="$dispatch('chat-preview', { type: 'pdf', url: @js($url), name: @js($file['name']) })" @endif class="wk-file">
                                 <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0;"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
                                 <span style="min-width: 0;">
                                     <span dir="auto" style="display: block; font-size: .8rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ $file['name'] }}</span>
@@ -175,49 +191,30 @@
                     @if (trim((string) $message->body) !== '')
                         <p class="whitespace-pre-wrap break-words leading-relaxed">{!! \App\Support\Linkify::html($message->body) !!}</p>
                     @endif
-                    <p @class([
-                        'mt-1 text-end text-[10px] tracking-wide',
-                        'text-white/70' => $isMine,
-                        'text-gray-400' => ! $isMine,
-                    ]) style="display: flex; align-items: center; justify-content: flex-end; gap: 3px;">
+                    <p class="wk-meta">
                         <span>{{ $message->created_at->translatedFormat('g:i A') }}</span>
                         {{-- Mine: one tick sent, two delivered, two coloured read. --}}
                         @if ($isMine)
                             @php($status = $this->messageStatus($message))
-                            <span
-                                data-status="{{ $status }}"
-                                title="{{ ['sent' => __('Sent'), 'delivered' => __('Delivered'), 'read' => __('Read')][$status] }}"
-                                style="display: inline-flex; color: {{ $status === 'read' ? '#7dd3fc' : 'rgba(255,255,255,.75)' }};"
-                            >
-                                <svg viewBox="0 0 18 12" width="16" height="11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <path d="M1 6.5 4.5 10 11 2" />
-                                    @if ($status !== 'sent')
-                                        <path d="M7.5 9 8.5 10 15 2" />
-                                    @endif
-                                </svg>
-                            </span>
+                            <span data-status="{{ $status }}" title="{{ ['sent' => __('Sent'), 'delivered' => __('Delivered'), 'read' => __('Read')][$status] }}" @class(['wk-ticks', 'read' => $status === 'read'])><svg><use href="#wk-i-{{ $status === 'sent' ? 'tick' : 'ticks' }}"/></svg></span>
                         @endif
                     </p>
                     {{-- Its reactions: each emoji with how many; tap one to give (or take back) it. --}}
                     @if ($groups = $message->reactionGroups())
-                        <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; {{ $isMine ? 'justify-content: flex-end;' : '' }}">
+                        <div class="wk-reactions">
                             @foreach ($groups as $emoji => $userIds)
-                                @php($mineToo = in_array(auth()->id(), $userIds, true))
                                 <button
                                     type="button"
                                     wire:click="react({{ $message->id }}, @js($emoji))"
                                     title="{{ $this->reactorNames($userIds) }}"
                                     data-reaction="{{ $emoji }}"
-                                    style="display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 9999px; font-size: .8rem; line-height: 1.4; background: {{ $isMine ? 'rgba(255,255,255,.2)' : 'rgba(0,0,0,.06)' }}; border: 1px solid {{ $mineToo ? ($isMine ? 'rgba(255,255,255,.85)' : 'rgb(37 99 235)') : 'transparent' }};"
-                                >
-                                    <span>{{ $emoji }}</span>
-                                    @if (count($userIds) > 1)<span style="font-size: .7rem; font-weight: 600;">{{ count($userIds) }}</span>@endif
-                                </button>
+                                    @class(['wk-reaction', 'own' => in_array(auth()->id(), $userIds, true)])
+                                >{{ $emoji }}@if (count($userIds) > 1)<small>{{ count($userIds) }}</small>@endif</button>
                             @endforeach
                         </div>
                     @endif
                 </div>
-                @unless ($isMine) {!! $replyButton !!}{!! $reactButton !!}{!! $deleteButton !!} @endunless
+                @unless ($isMine) {!! $tools !!} @endunless
             </div>
             @php($previousSender = $message->user_id)
         @endforeach

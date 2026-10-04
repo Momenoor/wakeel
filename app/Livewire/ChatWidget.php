@@ -79,6 +79,16 @@ class ChatWidget extends Component
      */
     public ?int $focusMessageId = null;
 
+    /** Messages shown before "Show earlier messages": the newest this many. */
+    public const PAGE = 40;
+
+    /**
+     * How many of the conversation's newest messages are shown. All of them
+     * made a long conversation's every open, switch and new message send
+     * (and redraw) thousands of lines.
+     */
+    public int $messageLimit = self::PAGE;
+
     /**
      * Opened from a notification: on its conversation, at its message.
      */
@@ -98,6 +108,12 @@ class ChatWidget extends Component
                 $this->activeConversationId = null;
             } else {
                 $this->focusMessageId = $message !== null && $this->activeConversation->messages()->whereKey($message)->exists() ? $message : null;
+
+                // Far enough back to show the message pointed at.
+                if ($this->focusMessageId !== null) {
+                    $newer = $this->activeConversation->messages()->where('id', '>=', $this->focusMessageId)->count();
+                    $this->messageLimit = max(self::PAGE, $newer + 10);
+                }
                 $this->markActiveConversationRead();
             }
         }
@@ -251,11 +267,30 @@ class ChatWidget extends Component
             return new Collection;
         }
 
+        // The newest $messageLimit, oldest first.
         return ChatMessage::query()
             ->where('chat_conversation_id', $this->activeConversation->id)
             ->with(['sender', 'replyTo.sender'])
-            ->orderBy('created_at')
-            ->get();
+            ->latest('created_at')
+            ->latest('id')
+            ->limit($this->messageLimit)
+            ->get()
+            ->reverse()
+            ->values();
+    }
+
+    /**
+     * Older messages than those shown: the "Show earlier messages" button.
+     */
+    public function getHasEarlierMessagesProperty(): bool
+    {
+        return $this->activeConversation !== null
+            && $this->activeConversation->messages()->count() > $this->messageLimit;
+    }
+
+    public function loadEarlier(): void
+    {
+        $this->messageLimit += self::PAGE;
     }
 
     public function getActiveConversationProperty(): ?ChatConversation
@@ -321,13 +356,30 @@ class ChatWidget extends Component
 
     public function toggleOpen(): void
     {
-        $this->isOpen = ! $this->isOpen;
+        $this->setOpen(! $this->isOpen);
+    }
+
+    /**
+     * The popup opened or closed — already, in the browser (see the
+     * bubble's click): this keeps it, and fills it when opened. A close
+     * sends nothing back: what it hides needs no redraw.
+     */
+    public function setOpen(bool $open): void
+    {
+        $this->isOpen = $open;
         $this->rememberState();
+
+        if ($open) {
+            $this->markActiveConversationRead();
+        } else {
+            $this->skipRender();
+        }
     }
 
     public function backToList(): void
     {
         $this->activeConversationId = null;
+        $this->messageLimit = self::PAGE;
         $this->showMembers = false;
         $this->replyToId = null;
         $this->rememberState();
@@ -337,6 +389,7 @@ class ChatWidget extends Component
     {
         $this->activeConversationId = $conversationId;
         $this->focusMessageId = null;
+        $this->messageLimit = self::PAGE;
         $this->showMembers = false;
         $this->replyToId = null;
         $this->markActiveConversationRead();
@@ -351,6 +404,7 @@ class ChatWidget extends Component
 
         $this->userSearch = '';
         $this->activeConversationId = $conversation->id;
+        $this->messageLimit = self::PAGE;
         $this->markActiveConversationRead();
         $this->rememberState();
     }
@@ -450,7 +504,11 @@ class ChatWidget extends Component
      */
     public function canDelete(ChatMessage $message): bool
     {
-        if (Auth::user()?->hasRole(Utils::getSuperAdminName())) {
+        // Asked for every message shown: the role and the others' reading
+        // looked up once.
+        $this->isSuperAdmin ??= (bool) Auth::user()?->hasRole(Utils::getSuperAdminName());
+
+        if ($this->isSuperAdmin) {
             return true;
         }
 
@@ -458,11 +516,24 @@ class ChatWidget extends Component
             return false;
         }
 
-        // Read by anyone else in the conversation (one of a group is enough).
-        return ! (bool) $this->activeConversation?->participants
-            ->reject(fn (User $u) => $u->id === Auth::id())
-            ->contains(fn (User $u) => $u->pivot?->last_read_at?->gte($message->created_at));
+        // Read by anyone else in the conversation (one of a group is enough):
+        // the latest any of them read it.
+        $this->readByAnyoneAt ??= [
+            $this->activeConversation?->participants
+                ->reject(fn (User $u) => $u->id === Auth::id())
+                ->map(fn (User $u) => $u->pivot?->last_read_at)
+                ->filter()
+                ->max(),
+        ];
+
+        return ! $this->readByAnyoneAt[0]?->gte($message->created_at);
     }
+
+    /** For canDelete(), within one request. */
+    private ?bool $isSuperAdmin = null;
+
+    /** @var array{0: Carbon|null}|null */
+    private ?array $readByAnyoneAt = null;
 
     /**
      * Gone for everyone — its files too; answers to it keep their text, the
