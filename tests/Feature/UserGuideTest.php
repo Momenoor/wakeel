@@ -134,7 +134,11 @@ class UserGuideTest extends TestCase
             ->assertSee('wakeel-user-guide-intro', false)
             // Remembered per user, in a cookie, once opened or skipped.
             ->assertSee('wakeel_guide_intro_'.$user->id, false)
-            ->assertSee(__('Discover the User Guide'));
+            ->assertSee(__('Discover the User Guide'))
+            // "Open the guide" is a link to it: a function of the dialog's
+            // own scope (Filament's open()) had answered the click instead.
+            ->assertSee('href="'.UserGuide::getUrl().'"', false)
+            ->assertDontSee('x-on:click="open()"', false);
         $this->get($page)->assertDontSee('wakeel-user-guide-intro', false);
 
         // Not on the guide itself.

@@ -18,7 +18,9 @@ class UserGuide extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::AcademicCap;
 
-    protected static ?int $navigationSort = 99;
+    // First in the menu, above every group, styled apart (theme.css:
+    // .fi-sidebar-item a[href$="/user-guide"]).
+    protected static ?int $navigationSort = -100;
 
     protected static ?string $slug = 'user-guide';
 
@@ -34,7 +36,7 @@ class UserGuide extends Page
 
     public static function getNavigationGroup(): ?string
     {
-        return __('Help');
+        return null;
     }
 
     public function getTitle(): string

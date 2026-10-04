@@ -26,3 +26,7 @@ Homestead.yaml
 Thumbs.db
 /tests/http/*.private.env.json
 /storage/installed
+
+# User Guide production tooling: demo data and screenshot scripts stay local
+/database/seeders/Demo/
+/tools/
