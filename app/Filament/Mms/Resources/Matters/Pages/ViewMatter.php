@@ -20,6 +20,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Section;
 use Filament\Support\Colors\Color;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -27,6 +28,15 @@ use Illuminate\Support\Facades\Storage;
 class ViewMatter extends ViewRecord
 {
     protected static string $resource = MatterResource::class;
+
+    /**
+     * The requests' attachments and requesters loaded with the matter: each
+     * request on the page fetched its own otherwise.
+     */
+    protected function resolveRecord(int|string $key): Model
+    {
+        return parent::resolveRecord($key)->loadMissing(['requests.attachments', 'requests.requestBy']);
+    }
 
     /**
      * Letters show in their own tab of the page (MatterInfolist), not as a

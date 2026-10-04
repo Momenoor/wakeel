@@ -105,6 +105,8 @@ class PerformanceTrackingTest extends TestCase
         $this->assertMatchesRegularExpression('~| mms: resources.matters.index | 1 | d+ |~', $report);
         $this->assertStringContainsString('mms: slow.screen — 2500 ms, 300 queries (290 repeated)', $report);
         $this->assertStringContainsString("most run: `290× select * from 'fees' where 'matter_id' = ?`", $report);
+        $this->assertStringContainsString("## Most repeated query, by screen", $report);
+        $this->assertStringContainsString("- mms: slow.screen (290 repeated): `290× select * from 'fees' where 'matter_id' = ?`", $report);
 
         // Downloaded as a file.
         Livewire::test(Performance::class)->callAction('export')->assertFileDownloaded();

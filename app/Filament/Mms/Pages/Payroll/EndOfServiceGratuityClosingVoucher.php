@@ -125,8 +125,19 @@ class EndOfServiceGratuityClosingVoucher extends Page
     #[Computed]
     public function voucher(): ?array
     {
-        return app(EndOfServiceGratuityClosingVoucherService::class)->forYear($this->year());
+        // Kept for the request, "none" included: Livewire's cache keeps no
+        // null, and a year without a voucher was looked up four times.
+        $year = $this->year();
+
+        if (! array_key_exists($year, $this->vouchers)) {
+            $this->vouchers[$year] = app(EndOfServiceGratuityClosingVoucherService::class)->forYear($year);
+        }
+
+        return $this->vouchers[$year];
     }
+
+    /** @var array<int, array<string, mixed>|null> */
+    private array $vouchers = [];
 
     /**
      * Years an office would plausibly want to close: this one, and the ten
@@ -150,22 +161,22 @@ class EndOfServiceGratuityClosingVoucher extends Page
                 ]),
 
             Section::make(__('Journal Voucher'))
-                ->visible(fn (): bool => $this->voucher() !== null)
+                ->visible(fn (): bool => $this->voucher !== null)
                 ->schema([
                     View::make('filament.payroll.journal-voucher')
-                        ->viewData(fn (): array => ['voucher' => $this->voucher()]),
+                        ->viewData(fn (): array => ['voucher' => $this->voucher]),
                 ]),
 
             Section::make(__('Opening / Closing Balances Per Employee'))
                 ->description(__('Informational only — the journal entry above posts only this year\'s movement.'))
-                ->visible(fn (): bool => $this->voucher() !== null)
+                ->visible(fn (): bool => $this->voucher !== null)
                 ->schema([
                     View::make('filament.payroll.eosg-rollforward')
-                        ->viewData(fn (): array => ['rollforward' => $this->voucher()['rollforward']]),
+                        ->viewData(fn (): array => ['rollforward' => $this->voucher['rollforward']]),
                 ]),
 
             Section::make(__('Journal Voucher'))
-                ->visible(fn (): bool => $this->voucher() === null)
+                ->visible(fn (): bool => $this->voucher === null)
                 ->schema([
                     Text::make(fn (): string => __(
                         'No EOSG closing voucher has been generated for :year yet.',
@@ -183,7 +194,7 @@ class EndOfServiceGratuityClosingVoucher extends Page
                 ->icon('heroicon-o-calculator')
                 ->color('primary')
                 ->requiresConfirmation()
-                ->modalDescription(fn (): string => $this->voucher() === null
+                ->modalDescription(fn (): string => $this->voucher === null
                     ? __('Computes and saves the EOSG closing voucher for :year from that year\'s payroll runs.', ['year' => $this->year()])
                     : __('Replaces the voucher already saved for :year with a fresh figure from that year\'s payroll runs. This cannot be undone.', ['year' => $this->year()]))
                 ->authorize(fn (): bool => auth()->user()?->can('generate', EosgClosingVoucher::class) ?? false)
@@ -191,6 +202,7 @@ class EndOfServiceGratuityClosingVoucher extends Page
                     $voucher = app(EndOfServiceGratuityClosingVoucherService::class)->generate($this->year());
 
                     unset($this->voucher);
+                    $this->vouchers = [];
 
                     Notification::make()
                         ->success()
@@ -206,7 +218,7 @@ class EndOfServiceGratuityClosingVoucher extends Page
                 ->label(__('Print Voucher'))
                 ->icon('heroicon-o-printer')
                 ->color('gray')
-                ->visible(fn (): bool => $this->voucher() !== null)
+                ->visible(fn (): bool => $this->voucher !== null)
                 ->url(fn (): string => route('payroll.eosg-closing-voucher.print', ['year' => $this->year()]))
                 ->openUrlInNewTab(),
         ];

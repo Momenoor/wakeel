@@ -36,6 +36,8 @@ class CalendarEventsTable
     {
         return $table
             ->recordTitleAttribute('title')
+            // The linked matters loaded with the rows: a query per event before.
+            ->modifyQueryUsing(fn (Builder $query) => $query->with('matters'))
             ->columns([
                 TextColumn::make('title')
                     ->label(__('Title'))

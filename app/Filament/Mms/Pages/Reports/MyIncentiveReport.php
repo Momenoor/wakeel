@@ -114,12 +114,17 @@ class MyIncentiveReport extends Page implements HasTable
             return collect();
         }
 
-        return IncentiveCalculation::query()
+        // Asked for by the filter, the totals and the table: found once per
+        // request (a private property starts afresh on each).
+        return $this->calculations ??= IncentiveCalculation::query()
             ->where('status', 'finalized')
             ->whereHas('lines.assistantLines', fn (Builder $q) => $q->where('party_id', $partyId))
             ->orderByDesc('period_end')
             ->get();
     }
+
+    /** @var Collection<int, IncentiveCalculation>|null */
+    private ?Collection $calculations = null;
 
     public function selectedCalculationId(): ?int
     {

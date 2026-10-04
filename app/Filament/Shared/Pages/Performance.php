@@ -274,6 +274,20 @@ class Performance extends Page
             $lines[] = '| '.$row->name.' | '.$row->requests.' | '.round((float) $row->avg_ms).' | '.$row->max_ms.' | '.round((float) $row->avg_queries).' | '.$row->max_queries.' | '.round((float) $row->avg_repeated).' | '.round((float) $row->avg_mb, 1).' | '.round((float) $row->avg_kb).' |';
         }
 
+        // Each screen's most repeated query, whether or not it was slow:
+        // what to fix to stop a query running once per row.
+        $lines = [...$lines, '', '## Most repeated query, by screen', ''];
+        $repeats = $this->samples()
+            ->whereNotNull('top_query')
+            ->orderByDesc('repeated')
+            ->get(['name', 'repeated', 'top_query'])
+            ->unique('name')
+            ->take(80);
+
+        foreach ($repeats as $sample) {
+            $lines[] = '- '.$sample->name.' ('.$sample->repeated.' repeated): `'.str_replace('`', "'", $sample->top_query).'`';
+        }
+
         $lines = [...$lines, '', '## Slowest requests', ''];
 
         foreach ($this->slowest(50) as $sample) {

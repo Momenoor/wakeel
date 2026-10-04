@@ -16,6 +16,7 @@ use App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager;
 use App\Helpers\FileUploadHelper;
 use App\Models\CalendarEvent;
 use App\Models\IncentiveAssistantLine;
+use App\Models\Matter;
 use App\Models\MatterOneDriveFolder;
 use App\Models\Type;
 use App\Services\MMS\Calendar\EventMatterLinker;
@@ -1028,13 +1029,24 @@ class MatterInfolist
             });
     }
 
+    /**
+     * The matter on screen — for a payment's or attachment's buttons, asked
+     * for every row: each row loaded its matter again otherwise.
+     */
+    private static function pageMatter(mixed $record, mixed $livewire): ?Matter
+    {
+        $matter = method_exists($livewire, 'getRecord') ? $livewire->getRecord() : null;
+
+        return $matter instanceof Matter && (int) $matter->getKey() === (int) $record?->matter_id ? $matter : $record?->matter;
+    }
+
     private static function editAllocationAction(): Action
     {
         return Action::make('editAllocation')
             ->label(__('Edit'))
             ->iconButton()
             ->icon('heroicon-o-pencil')
-            ->visible(fn ($record) => auth()->user()->can('updateAllocation', $record->matter))
+            ->visible(fn ($record, $livewire) => auth()->user()->can('updateAllocation', static::pageMatter($record, $livewire)))
             ->modalHeading(__('Edit Payment'))
             ->schema([
                 TextInput::make('amount')->label(__('Amount'))
@@ -1065,7 +1077,7 @@ class MatterInfolist
             ->iconButton()
             ->icon('heroicon-o-trash')
             ->color('danger')
-            ->visible(fn ($record) => auth()->user()->can('deleteAllocation', $record->matter))
+            ->visible(fn ($record, $livewire) => auth()->user()->can('deleteAllocation', static::pageMatter($record, $livewire)))
             ->requiresConfirmation()
             ->action(function ($record, $component) {
                 $record->delete();
@@ -1153,7 +1165,7 @@ class MatterInfolist
             ->iconButton()
             ->icon('heroicon-o-trash')
             ->color('danger')
-            ->visible(fn ($record) => auth()->user()->can('deleteAttachment', $record->matter))
+            ->visible(fn ($record, $livewire) => auth()->user()->can('deleteAttachment', static::pageMatter($record, $livewire)))
             ->requiresConfirmation()
             ->action(function ($record, $component) {
                 Storage::disk('public')->delete($record->path);

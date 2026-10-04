@@ -38,14 +38,24 @@ class OutlookCalendarSync
         // renamed events) — counted as what the run added in total.
         $linksBefore = DB::table('calendar_event_matter')->count();
 
-        foreach ($this->outlook->eventsBetween($from, $to) as $remote) {
+        $remotes = $this->outlook->eventsBetween($from, $to);
+
+        // Their events here, found in one go: one query per event made a
+        // sync of a few hundred take eight seconds.
+        $locals = collect(array_filter(array_map(fn ($remote) => (string) ($remote['id'] ?? ''), $remotes)))
+            ->unique()
+            ->chunk(500)
+            ->flatMap(fn ($ids) => CalendarEvent::withTrashed()->whereIn('outlook_event_id', $ids->all())->get())
+            ->keyBy('outlook_event_id');
+
+        foreach ($remotes as $remote) {
             $id = (string) ($remote['id'] ?? '');
 
             if ($id === '') {
                 continue;
             }
 
-            $local = CalendarEvent::withTrashed()->where('outlook_event_id', $id)->first();
+            $local = $locals->get($id);
 
             if ($remote['isCancelled'] ?? false) {
                 continue;
@@ -70,6 +80,8 @@ class OutlookCalendarSync
                     'update_next_session_date' => false,
                     'type' => 'single',
                 ]);
+                // Found if Outlook lists it again in this run.
+                $locals->put($id, $local);
                 $counts['added']++;
             } else {
                 // An event written in Wakeel keeps its own description —
