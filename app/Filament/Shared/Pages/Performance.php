@@ -6,6 +6,7 @@ use App\Filament\Shared\Clusters\Settings;
 use App\Http\Middleware\TrackPerformance;
 use App\Models\PerformanceSample;
 use App\Models\Setting;
+use App\Support\AppUpdate;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
@@ -16,6 +17,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Routing\Route;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Renderless;
 
@@ -115,7 +117,7 @@ class Performance extends Page
      *
      * @return Collection<int, object>
      */
-    public function screens(): Collection
+    public function screens(int $limit = 60): Collection
     {
         $order = match ($this->sort) {
             'max' => 'max_ms',
@@ -130,7 +132,7 @@ class Performance extends Page
             ->selectRaw('name, count(*) as requests, avg(duration_ms) as avg_ms, max(duration_ms) as max_ms, avg(queries) as avg_queries, max(queries) as max_queries, avg(repeated) as avg_repeated, avg(memory_mb) as avg_mb, avg(response_kb) as avg_kb')
             ->groupBy('name')
             ->orderByDesc($order)
-            ->limit(60)
+            ->limit($limit)
             ->get();
     }
 
@@ -139,12 +141,12 @@ class Performance extends Page
      *
      * @return Collection<int, PerformanceSample>
      */
-    public function slowest(): Collection
+    public function slowest(int $limit = 25): Collection
     {
         return $this->samples()
             ->with('user:id,name,display_name')
             ->orderByDesc('duration_ms')
-            ->limit(25)
+            ->limit($limit)
             ->get();
     }
 
@@ -233,9 +235,71 @@ class Performance extends Page
         return null;
     }
 
+    /**
+     * Everything on this page, as text to send for a look: the server, the
+     * figures, every screen, the slowest requests with their queries.
+     */
+    public function report(): string
+    {
+        $stats = $this->stats();
+        $scope = $this->check
+            ? 'Check of every screen ('.$this->check.')'
+            : ['24h' => 'Last 24 hours', '7d' => 'Last 7 days', '14d' => 'Last 14 days'][$this->period] ?? $this->period;
+
+        $lines = [
+            '# Wakeel performance report',
+            '',
+            '- Generated: '.now()->toDateTimeString().' ('.config('app.timezone').')',
+            '- Scope: '.$scope,
+            '- App version: '.AppUpdate::currentVersion(),
+            '- Server: PHP '.PHP_VERSION.', memory_limit '.ini_get('memory_limit').', max_execution_time '.ini_get('max_execution_time').', OPcache '.(function_exists('opcache_get_status') && (opcache_get_status(false)['opcache_enabled'] ?? false) ? 'on' : 'off'),
+            '- Database: '.config('database.default').' '.(string) rescue(fn () => DB::connection()->getPdo()->getAttribute(\PDO::ATTR_SERVER_VERSION), '?', false),
+            '- Drivers: cache '.config('cache.default').', session '.config('session.driver').', queue '.config('queue.default').', broadcasting '.config('broadcasting.default'),
+            '- Config cached: '.(app()->configurationIsCached() ? 'yes' : 'no').', routes cached: '.(app()->routesAreCached() ? 'yes' : 'no').', debug: '.(config('app.debug') ? 'on' : 'off'),
+            '',
+            '## Summary',
+            '',
+            '- Requests: '.$stats['requests'],
+            '- Average: '.$stats['avg'].' ms; 95% within: '.$stats['p95'].' ms',
+            '- Slow (>= '.TrackPerformance::SLOW_MS.' ms): '.$stats['slow'],
+            '- Queries per request: '.$stats['queries'],
+            '',
+            '## By screen',
+            '',
+            '| Screen or action | Requests | Avg ms | Max ms | Avg queries | Max queries | Avg repeated | Avg MB | Avg KB |',
+            '|---|---:|---:|---:|---:|---:|---:|---:|---:|',
+        ];
+
+        foreach ($this->screens(500) as $row) {
+            $lines[] = '| '.$row->name.' | '.$row->requests.' | '.round((float) $row->avg_ms).' | '.$row->max_ms.' | '.round((float) $row->avg_queries).' | '.$row->max_queries.' | '.round((float) $row->avg_repeated).' | '.round((float) $row->avg_mb, 1).' | '.round((float) $row->avg_kb).' |';
+        }
+
+        $lines = [...$lines, '', '## Slowest requests', ''];
+
+        foreach ($this->slowest(50) as $sample) {
+            $lines[] = '- '.$sample->created_at->toDateTimeString().' — '.$sample->name.' — '.$sample->duration_ms.' ms, '.$sample->queries.' queries ('.$sample->repeated.' repeated), '.$sample->memory_mb.' MB, '.$sample->response_kb.' KB, status '.$sample->status.' — '.$sample->method.' '.$sample->path;
+            if ($sample->top_query) {
+                $lines[] = '  - most run: `'.str_replace('`', "'", $sample->top_query).'`';
+            }
+        }
+
+        return implode("\n", $lines)."\n";
+    }
+
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('export')
+                ->label(__('Export report'))
+                ->icon('heroicon-o-arrow-down-tray')
+                ->color('gray')
+                ->action(fn () => response()->streamDownload(
+                    function (): void {
+                        echo $this->report();
+                    },
+                    'wakeel-performance-'.now()->format('Y-m-d-His').'.md',
+                    ['Content-Type' => 'text/markdown; charset=UTF-8'],
+                )),
             Action::make('tracking')
                 ->label(fn () => $this->tracking() ? __('Stop measuring') : __('Start measuring'))
                 ->icon(fn () => $this->tracking() ? 'heroicon-o-pause' : 'heroicon-o-play')

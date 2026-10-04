@@ -51,7 +51,10 @@ class AssistantMatterFeesReport extends Page implements HasTable
 
         return $table
             ->query(fn () => $this->getTableQuery())
-            ->paginated(false)
+            // 50 rows a page (All for printing — see ReportPrintAction): every row at
+            // once made pages of many megabytes, seconds to build.
+            ->paginated([25, 50, 100, 'all'])
+            ->defaultPaginationPageOption(50)
             ->columns([
                 TextColumn::make('matter.reference')
                     ->label(__('Matter'))

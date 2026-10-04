@@ -90,7 +90,8 @@ class ExpertiseAreaResource extends Resource
                     ->searchable(),
                 TextColumn::make('experts')
                     ->label(__('Experts'))
-                    ->state(fn (ExpertiseArea $record): int => $record->partiesCount())
+                    // Every area's, counted in one pass: a query per row before.
+                    ->state(fn (ExpertiseArea $record): int => ExpertiseArea::partiesCounts()[$record->key] ?? 0)
                     ->badge()
                     ->color('gray'),
                 IconColumn::make('is_active')

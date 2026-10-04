@@ -92,4 +92,21 @@ class PerformanceTrackingTest extends TestCase
         $this->assertModelMissing($old);
         $this->assertModelExists($recent);
     }
+
+    public function test_the_report_exports_everything_to_send_for_a_look(): void
+    {
+        $this->get(route('filament.mms.resources.matters.index'))->assertSuccessful();
+        PerformanceSample::create(['method' => 'GET', 'path' => '/mms/x', 'name' => 'mms: slow.screen', 'status' => 200, 'duration_ms' => 2500, 'queries' => 300, 'repeated' => 290, 'top_query' => '290× select * from `fees` where `matter_id` = ?', 'memory_mb' => 40, 'response_kb' => 900]);
+
+        $report = Livewire::test(Performance::class)->instance()->report();
+
+        $this->assertStringContainsString('# Wakeel performance report', $report);
+        $this->assertStringContainsString('PHP '.PHP_VERSION, $report);
+        $this->assertMatchesRegularExpression('~| mms: resources.matters.index | 1 | d+ |~', $report);
+        $this->assertStringContainsString('mms: slow.screen — 2500 ms, 300 queries (290 repeated)', $report);
+        $this->assertStringContainsString("most run: `290× select * from 'fees' where 'matter_id' = ?`", $report);
+
+        // Downloaded as a file.
+        Livewire::test(Performance::class)->callAction('export')->assertFileDownloaded();
+    }
 }

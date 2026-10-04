@@ -81,4 +81,19 @@ class ExpertiseAreaTest extends TestCase
         Livewire::test(ManageExpertiseAreas::class)->callAction(TestAction::make('delete')->table($unused));
         $this->assertModelMissing($unused);
     }
+
+    public function test_the_list_counts_every_areas_experts_in_one_pass(): void
+    {
+        Party::factory()->create(['role' => [['role' => 'expert', 'type' => 'certified', 'field' => 'civil'], ['role' => 'expert', 'type' => 'certified', 'field' => 'banking']]]);
+        Party::factory()->create(['role' => [['role' => 'expert', 'type' => 'certified', 'field' => 'civil']]]);
+        Party::factory()->create(['role' => [['role' => 'party', 'type' => 'plaintiff']]]);
+
+        // The same as counting each area on its own — which the list did,
+        // one query per row.
+        foreach (ExpertiseArea::all() as $area) {
+            $this->assertSame($area->partiesCount(), ExpertiseArea::partiesCounts()[$area->key] ?? 0, $area->key);
+        }
+        $this->assertSame(1, ExpertiseArea::partiesCounts()['civil']);
+        $this->assertSame(1, ExpertiseArea::partiesCounts()['banking']);
+    }
 }

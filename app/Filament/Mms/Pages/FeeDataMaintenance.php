@@ -98,7 +98,7 @@ class FeeDataMaintenance extends Page
     {
         $stale = 0;
 
-        Fee::query()->with('allocations')->chunkById(500, function ($fees) use (&$stale) {
+        Fee::withOffsetAllowances(fn () => Fee::query()->with('allocations')->chunkById(500, function ($fees) use (&$stale) {
             foreach ($fees as $fee) {
                 $original = $fee->status;
                 $fee->syncStatus();
@@ -107,7 +107,7 @@ class FeeDataMaintenance extends Page
                     $stale++;
                 }
             }
-        });
+        }));
 
         return $stale;
     }
@@ -425,7 +425,8 @@ class FeeDataMaintenance extends Page
         $feesChanged = 0;
         $mattersChanged = 0;
 
-        Fee::query()->with('allocations')->chunkById(500, function ($fees) use (&$feesChanged) {
+        // Saving a status leaves the deductions' totals as they were.
+        Fee::withOffsetAllowances(fn () => Fee::query()->with('allocations')->chunkById(500, function ($fees) use (&$feesChanged) {
             foreach ($fees as $fee) {
                 $original = $fee->status;
                 $fee->syncStatus();
@@ -435,7 +436,7 @@ class FeeDataMaintenance extends Page
                     $feesChanged++;
                 }
             }
-        });
+        }));
 
         Matter::query()->chunkById(500, function ($matters) use (&$mattersChanged) {
             foreach ($matters as $matter) {

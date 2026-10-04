@@ -73,7 +73,10 @@ class VatSummaryReport extends Page implements HasTable
     {
         return $table
             ->query(fn () => $this->getTableQuery())
-            ->paginated(false)
+            // 50 rows a page (All for printing — see ReportPrintAction): every row at
+            // once made pages of many megabytes, seconds to build.
+            ->paginated([25, 50, 100, 'all'])
+            ->defaultPaginationPageOption(50)
             ->defaultSort('date', 'desc')
             ->emptyStateHeading(__('No VAT recorded'))
             ->emptyStateDescription(__('No VAT fee falls in this period.'))

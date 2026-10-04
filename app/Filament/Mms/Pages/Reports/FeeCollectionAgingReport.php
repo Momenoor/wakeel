@@ -119,7 +119,10 @@ class FeeCollectionAgingReport extends Page implements HasTable
     {
         return $table
             ->query(fn () => $this->getTableQuery())
-            ->paginated(false)
+            // 50 rows a page (All for printing — see ReportPrintAction): every row at
+            // once made pages of many megabytes, seconds to build.
+            ->paginated([25, 50, 100, 'all'])
+            ->defaultPaginationPageOption(50)
             ->defaultSort('outstanding_amount', 'desc')
             ->emptyStateHeading(__('Nothing outstanding'))
             ->emptyStateDescription(__('No matter matches these filters with a balance owing.'))

@@ -159,7 +159,8 @@ class MatterInfolist
                             ->icon('heroicon-o-envelope')
                             ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_LETTERS_TAB)
                                 && ScreenPermissions::can(ScreenPermissions::MATTER_LETTERS))
-                            ->badge(fn ($record) => $record ? ($record->letters()->count() ?: null) : null)
+                            // Counted once (the badge is asked for more than once).
+                            ->badge(fn ($record) => $record ? (($record->letters_count ?? $record->loadCount('letters')->letters_count) ?: null) : null)
                             ->schema([
                                 Livewire::make(LettersRelationManager::class, fn ($record) => [
                                     'ownerRecord' => $record,
@@ -172,7 +173,7 @@ class MatterInfolist
                             ->icon('heroicon-o-clipboard-document-list')
                             ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_MINUTES_TAB)
                                 && ScreenPermissions::can(ScreenPermissions::MATTER_MINUTES))
-                            ->badge(fn ($record) => $record ? ($record->minutes()->count() ?: null) : null)
+                            ->badge(fn ($record) => $record ? (($record->minutes_count ?? $record->loadCount('minutes')->minutes_count) ?: null) : null)
                             ->schema([
                                 Livewire::make(MinutesRelationManager::class, fn ($record) => [
                                     'ownerRecord' => $record,
@@ -375,7 +376,7 @@ class MatterInfolist
                             return [];
                         }
 
-                        $type = Type::find($record->type_id);
+                        $type = $record->type;
                         if (! $type) {
                             return [];
                         }
@@ -563,7 +564,9 @@ class MatterInfolist
                         TextEntry::make('type')
                             ->label(__('Role'))
                             // As the matter's type calls the side (المتنازع, الطاعن …).
-                            ->formatStateUsing(fn ($state, $record) => $state ? Type::sideLabel($record?->matter?->type, $state) : '')
+                            // The matter on screen's type: each party row loaded its matter and
+                            // type again.
+                            ->formatStateUsing(fn ($state, $record, $livewire) => $state ? Type::sideLabel((method_exists($livewire, 'getRecord') ? $livewire->getRecord() : $record?->matter)?->type, $state) : '')
                             ->badge()
                             ->color(fn ($state) => static::partyTypeColor($state)),
                         TextEntry::make('role_index')

@@ -336,7 +336,8 @@ class MatterForm
                                                         return Party::create($data)->id;
                                                     })
                                                     ->searchable()
-                                                    ->preload()
+                                                    // Not preloaded: found by typing. 50 names fetched for every row of
+                                                    // the form (thousands of parties) made each open of a matter slow.
                                                     ->columnSpan(2)
                                                     ->required(),
 
@@ -378,7 +379,8 @@ class MatterForm
                                                                 $set('party_phone', $party->phone);
                                                             })
                                                             ->live(onBlur: true)
-                                                            ->preload()
+                                                            // Not preloaded: found by typing. 50 names fetched for every row of
+                                                            // the form (thousands of parties) made each open of a matter slow.
                                                             ->required()
                                                             ->searchable()
                                                             ->disableOptionsWhenSelectedInSiblingRepeaterItems()

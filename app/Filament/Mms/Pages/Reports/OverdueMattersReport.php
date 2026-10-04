@@ -89,6 +89,11 @@ class OverdueMattersReport extends Page implements HasTable
      */
     private function firstAssistantId(Matter $matter): ?int
     {
+        // From the assistants the rows already load: a query per row before.
+        if ($matter->relationLoaded('assistantsOnly')) {
+            return $matter->assistantsOnly->sortBy('id')->first()?->party_id;
+        }
+
         return $this->firstAssistantCache[$matter->id] ??= MatterParty::query()
             ->where('matter_id', $matter->id)
             ->where('role', 'expert')
@@ -124,7 +129,10 @@ class OverdueMattersReport extends Page implements HasTable
     {
         return $table
             ->query(fn () => $this->getTableQuery())
-            ->paginated(false)
+            // 50 rows a page (All for printing — see ReportPrintAction): every row at
+            // once made pages of many megabytes, seconds to build.
+            ->paginated([25, 50, 100, 'all'])
+            ->defaultPaginationPageOption(50)
             ->defaultSort('days_open', 'desc')
             ->emptyStateHeading(__('Nothing overdue'))
             ->emptyStateDescription(__('No open matter matches these filters.'))

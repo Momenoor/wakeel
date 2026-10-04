@@ -135,6 +135,37 @@ class Fee extends Model
      *
      * Deduction fees get no allowance: they are the offset, not the offsettee.
      */
+    /** @var array<int, float>|null every matter's offset allowance, during withOffsetAllowances() */
+    private static ?array $offsetAllowances = null;
+
+    /**
+     * Runs $callback with every matter's offset allowance read in one query
+     * — for going through all fees: one query per fee otherwise (3,000 to
+     * open the fee data maintenance page).
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public static function withOffsetAllowances(callable $callback): mixed
+    {
+        static::$offsetAllowances = static::query()
+            ->whereIn('type', FeeType::deductionTypeValues())
+            ->whereNotNull('matter_id')
+            ->groupBy('matter_id')
+            ->selectRaw('matter_id, SUM(ABS(amount)) as total')
+            ->pluck('total', 'matter_id')
+            ->map(fn ($total) => (float) $total)
+            ->all();
+
+        try {
+            return $callback();
+        } finally {
+            static::$offsetAllowances = null;
+        }
+    }
+
     private function offsetAllowance(): float
     {
         if ($this->type?->isNegative() ?? false) {
@@ -143,6 +174,11 @@ class Fee extends Model
 
         if (! $this->matter_id) {
             return 0.0;
+        }
+
+        // Within withOffsetAllowances(): every matter's, read once.
+        if (static::$offsetAllowances !== null) {
+            return static::$offsetAllowances[$this->matter_id] ?? 0.0;
         }
 
         return (float) static::query()

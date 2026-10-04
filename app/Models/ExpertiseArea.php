@@ -99,9 +99,45 @@ class ExpertiseArea extends Model
      */
     public function partiesCount(): int
     {
+        // Exact, now: what deleting an area is checked against.
         [$sql, $bindings] = Sql::jsonArrayHas('parties.role', ['field' => $this->key]);
 
         return Party::query()->whereRaw($sql, $bindings)->count();
+    }
+
+    /**
+     * Every area's experts in one pass over the parties' roles: a count
+     * query per area made the list run one query per row. Kept on the
+     * current request, so the next one counts afresh.
+     *
+     * @return array<string, int>
+     */
+    public static function partiesCounts(): array
+    {
+        $request = request();
+        if (is_array($cached = $request->attributes->get('expertise_area_counts'))) {
+            return $cached;
+        }
+
+        return tap((function (): array {
+            $counts = [];
+            foreach (Party::query()->whereNotNull('role')->pluck('role') as $roles) {
+                $roles = is_array($roles) ? $roles : (json_decode((string) $roles, true) ?: []);
+                // One object ({role, type, field}) — or, as older rows may
+                // hold, a list of them.
+                $fields = collect(array_key_exists('field', $roles) ? [$roles] : $roles)
+                    ->pluck('field')
+                    ->flatten()
+                    ->filter(fn ($field) => is_string($field) && $field !== '')
+                    ->unique();
+
+                foreach ($fields as $field) {
+                    $counts[$field] = ($counts[$field] ?? 0) + 1;
+                }
+            }
+
+            return $counts;
+        })(), fn (array $counts) => $request->attributes->set('expertise_area_counts', $counts));
     }
 
     private static function uniqueKey(string $name): string

@@ -105,15 +105,20 @@ class ReportPrintActionTest extends TestCase
         $this->assertLessThanOrEqual($few + 2, $many, "{$few} queries for 2 rows, {$many} for 12");
     }
 
-    public function test_report_tables_are_not_paginated(): void
+    public function test_long_reports_are_paged_and_still_print_whole(): void
     {
+        // A short one (a row per court): whole.
         $courtReport = Livewire::test(CourtWorkloadReport::class)->instance();
         $this->assertFalse($courtReport->getTable()->isPaginated());
 
-        $feesReport = Livewire::test(AssistantMatterFeesReport::class)->instance();
-        $this->assertFalse($feesReport->getTable()->isPaginated());
-
-        $agingReport = Livewire::test(FeeCollectionAgingReport::class)->instance();
-        $this->assertFalse($agingReport->getTable()->isPaginated());
+        // A row per matter: 50 a page — all at once made the assistants'
+        // fees report 33 MB and 5.6 s on the live server — with "All", which
+        // Print switches to, so the printout still has every row.
+        foreach ([AssistantMatterFeesReport::class, FeeCollectionAgingReport::class] as $report) {
+            $livewire = Livewire::test($report)->instance();
+            $this->assertTrue($livewire->getTable()->isPaginated(), $report);
+            $this->assertSame(50, $livewire->getTable()->getDefaultPaginationPageOption(), $report);
+            $this->assertTrue(ReportPrintAction::printsAllPages($livewire), $report);
+        }
     }
 }
