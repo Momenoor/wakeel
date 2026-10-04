@@ -14,6 +14,7 @@ use App\Filament\Shared\Actions\ForceSignOutActions;
 use App\Filament\Shared\ActivityLog\AuditDashboard;
 use App\Filament\Shared\Pages\SystemSettings;
 use App\Filament\Shared\Pages\SystemUpdates;
+use App\Filament\Shared\Pages\UserGuide;
 use App\Filament\Shared\Users\LastSeen;
 use App\Filament\Shared\Users\TranslateUsersPluginLabels;
 use App\Http\Middleware\CheckSystemOffline;
@@ -101,6 +102,7 @@ class MmsPanelProvider extends PanelProvider
             ->pages([
                 SystemSettings::class,
                 SystemUpdates::class,
+                UserGuide::class,
                 AuditDashboard::class,
             ])
             ->renderHook(

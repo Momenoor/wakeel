@@ -3525,7 +3525,19 @@
     "To: “:message”": "على: «:message»",
     ":name sent you a message": ":name أرسل لك رسالة",
     ":name sent you :count messages": ":name أرسل لك :count رسائل",
+    "User Guide": "دليل الاستخدام",
+    "Help": "المساعدة",
+    "Who can do this": "من يستطيع تنفيذ ذلك",
+    "Tips": "ملاحظات",
+    "Search this module…": "ابحث في هذا القسم…",
+    "No guide content yet.": "لا يوجد محتوى لهذا الدليل بعد.",
     "Payment": "دفعة",
     "Incentive line": "بند حافز",
-    "Incentive lines": "بنود الحوافز"
+    "Incentive lines": "بنود الحوافز",
+    "Discover the User Guide": "تعرّف على دليل الاستخدام",
+    "A section that explains every screen and action in the system, step by step with pictures — and who can do each one.": "قسم يشرح كل شاشة وإجراء في النظام خطوة بخطوة بالصور، ومن يستطيع تنفيذ كل منها.",
+    "Open the guide": "فتح الدليل",
+    "Skip": "تخطي",
+    "You can open the guide any time": "يمكنك فتح الدليل في أي وقت",
+    "From the side menu: Help → User Guide. Pick the section you need and follow the steps there.": "من القائمة الجانبية: المساعدة ← دليل الاستخدام. اختر القسم الذي تحتاجه واتبع الخطوات الموضحة فيه."
 }

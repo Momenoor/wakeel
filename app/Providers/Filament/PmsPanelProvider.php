@@ -11,6 +11,7 @@ use App\Filament\Pms\Pages\PMSSettings;
 use App\Filament\Shared\ActivityLog\AuditDashboard;
 use App\Filament\Shared\Pages\SystemSettings;
 use App\Filament\Shared\Pages\SystemUpdates;
+use App\Filament\Shared\Pages\UserGuide;
 use App\Filament\Shared\Users\TranslateUsersPluginLabels;
 use App\Http\Middleware\CheckSystemOffline;
 use App\Http\Middleware\EnsureLicenseIsValid;
@@ -97,6 +98,7 @@ class PmsPanelProvider extends PanelProvider
                 PMSSettings::class,
                 SystemSettings::class,
                 SystemUpdates::class,
+                UserGuide::class,
                 AuditDashboard::class,
             ])
             ->renderHook(

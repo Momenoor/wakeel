@@ -169,6 +169,18 @@ class AppServiceProvider extends ServiceProvider
             ->modelLabel(fn (Table $table): ?string => ModelLabels::singular($table->getModel()))
             ->pluralModelLabel(fn (Table $table): ?string => ModelLabels::plural($table->getModel())));
 
+        // The first page after signing in introduces the User Guide (a
+        // cookie remembers, per user, once it was opened or skipped). Not
+        // on the guide itself.
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::BODY_END,
+            fn (): string => auth()->check()
+                && session()->pull('wakeel.prompt_user_guide', false)
+                && ! request()->routeIs('filament.*.pages.user-guide')
+                    ? view('filament.partials.user-guide-intro')->render()
+                    : '',
+        );
+
         // A notification (in the bell, or a toast) opens what it is about
         // when clicked anywhere — not only on its small "View" button.
         FilamentView::registerRenderHook(
@@ -205,6 +217,8 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(Login::class, function (): void {
             if (app()->bound('session')) {
                 session()->put('wakeel.prompt_desktop_notifications', true);
+                // And introduces the User Guide, until it is opened or skipped.
+                session()->put('wakeel.prompt_user_guide', true);
             }
         });
 
