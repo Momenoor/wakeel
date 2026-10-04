@@ -25,6 +25,11 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
 
+        // Settings are kept in a static for the request; between tests that
+        // static outlived the database, and one test's setting (Word's font)
+        // turned up in the next.
+        \App\Models\Setting::clearCache();
+
         $connection = config('database.default');
         $database = config("database.connections.{$connection}.database");
 

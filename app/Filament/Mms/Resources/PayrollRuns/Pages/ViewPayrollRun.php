@@ -73,6 +73,7 @@ class ViewPayrollRun extends ViewRecord
                 $service = app(PayrollService::class);
 
                 $payslips = $service->generate($this->run());
+                $this->hasPayslips = null;
                 $skipped = $service->skippedEmployees($this->run());
 
                 // Who was left out, and why. An employee marked as staff but
@@ -159,8 +160,9 @@ class ViewPayrollRun extends ViewRecord
                 }
 
                 // Rebuilt so the payslips carry exactly the chosen tickets.
-                if ($this->run()->payslips()->exists()) {
+                if ($this->hasPayslips()) {
                     app(PayrollService::class)->generate($this->run());
+                    $this->hasPayslips = null;
                 }
 
                 Notification::make()
@@ -279,7 +281,7 @@ class ViewPayrollRun extends ViewRecord
             ->icon('heroicon-o-document-text')
             ->color('gray')
             ->authorize('viewJournalVoucher')
-            ->visible(fn (): bool => $this->run()->payslips()->exists())
+            ->visible(fn (): bool => $this->hasPayslips())
             ->modalHeading(fn (): string => __('Journal Voucher — :period', ['period' => $this->run()->period]))
             ->modalContent(fn (): View => view('filament.payroll.journal-voucher', [
                 'voucher' => app(PayrollJournalVoucherService::class)->forRun($this->run()),
@@ -302,7 +304,7 @@ class ViewPayrollRun extends ViewRecord
             ->icon('heroicon-o-printer')
             ->color('gray')
             ->authorize('viewJournalVoucher')
-            ->visible(fn (): bool => $this->run()->payslips()->exists())
+            ->visible(fn (): bool => $this->hasPayslips())
             ->url(fn (): string => route('payroll.run.journal-voucher.print', $this->run()))
             ->openUrlInNewTab();
     }
@@ -319,7 +321,7 @@ class ViewPayrollRun extends ViewRecord
             ->icon('heroicon-o-printer')
             ->color('gray')
             ->authorize('viewJournalVoucher')
-            ->visible(fn (): bool => $this->run()->payslips()->exists())
+            ->visible(fn (): bool => $this->hasPayslips())
             ->url(fn (): string => route('payroll.run.salary-authorization-form.print', $this->run()))
             ->openUrlInNewTab();
     }
@@ -354,4 +356,15 @@ class ViewPayrollRun extends ViewRecord
         // the payslips table are all describing the previous state.
         $this->dispatchPayrollDataUpdated();
     }
+
+    /**
+     * Whether the run has payslips — asked by several buttons: looked up once
+     * per request (a private property starts afresh on each).
+     */
+    private function hasPayslips(): bool
+    {
+        return $this->hasPayslips ??= $this->run()->payslips()->exists();
+    }
+
+    private ?bool $hasPayslips = null;
 }

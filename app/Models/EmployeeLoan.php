@@ -88,6 +88,12 @@ class EmployeeLoan extends Model
      */
     public function hasDeductedInstallments(): bool
     {
+        // From the instalments when the list already loaded them (it does):
+        // a query per row otherwise.
+        if ($this->relationLoaded('installments')) {
+            return $this->installments->contains(fn ($installment) => $installment->payslip_id !== null);
+        }
+
         return $this->installments()->whereNotNull('payslip_id')->exists();
     }
 

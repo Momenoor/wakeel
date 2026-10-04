@@ -90,7 +90,12 @@ Route::get('/manifest.webmanifest', function () {
         'background_color' => '#ffffff',
         'theme_color' => '#1e3a8a',
         'icons' => [['src' => Branding::faviconUrl(), 'sizes' => 'any', 'type' => 'image/png']],
-    ], 200, ['Content-Type' => 'application/manifest+json']);
+    ], 200, [
+        'Content-Type' => 'application/manifest+json',
+        // Kept by the browser for a day: it was fetched again on every page,
+        // one more request queueing for the server at each page load.
+        'Cache-Control' => 'public, max-age=86400',
+    ]);
 })->name('manifest');
 
 if (config('modules.mms')) {

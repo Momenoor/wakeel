@@ -51,11 +51,27 @@ class InterfaceFont
         return self::chosen(self::ARABIC_SETTING);
     }
 
+    /**
+     * A font, loaded once per request — the fonts list asks for every row.
+     * By id: a new choice is loaded afresh.
+     */
+    private static function font(int $id): ?LetterFont
+    {
+        $fonts = request()->attributes->get('interface_fonts', []);
+
+        if (! array_key_exists($id, $fonts)) {
+            $fonts[$id] = LetterFont::find($id);
+            request()->attributes->set('interface_fonts', $fonts);
+        }
+
+        return $fonts[$id];
+    }
+
     private static function chosen(string $setting): ?LetterFont
     {
         try {
             $id = Setting::get($setting);
-            $font = filled($id) ? LetterFont::find($id) : null;
+            $font = filled($id) ? self::font((int) $id) : null;
 
             return $font && isset($font->pdfFiles()['R']) ? $font : null;
         } catch (Throwable) {

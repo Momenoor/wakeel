@@ -3,15 +3,19 @@
 namespace Tests\Feature;
 
 use App\Enums\FeeType;
+use App\Enums\LoanKind;
+use App\Enums\LoanStatus;
 use App\Enums\RequestType;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Models\Allocation;
+use App\Models\EmployeeLoan;
 use App\Models\Fee;
 use App\Models\Matter;
 use App\Models\MatterParty;
 use App\Models\MatterRequest;
 use App\Models\Party;
 use App\Models\User;
+use App\Services\MMS\LoanScheduleService;
 use Filament\Facades\Filament;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -83,5 +87,25 @@ class PageQueryRepeatsTest extends TestCase
         $queries = $this->queriesOf(route('filament.mms.pages.end-of-service-gratuity-closing-voucher'));
 
         $this->assertSame(1, collect($queries)->filter(fn (int $times, string $sql) => str_contains($sql, 'from "eosg_closing_vouchers" where "year"'))->sum());
+    }
+
+    public function test_the_loans_list_does_not_ask_each_loan_about_its_instalments(): void
+    {
+        foreach (range(1, 6) as $i) {
+            $loan = EmployeeLoan::create([
+                'party_id' => Party::factory()->create()->id,
+                'kind' => LoanKind::LOAN,
+                'principal' => 600,
+                'months' => 3,
+                'starts_on' => '2026-06-01',
+                'status' => LoanStatus::ACTIVE,
+            ]);
+            app(LoanScheduleService::class)->generateFor($loan);
+        }
+
+        $queries = $this->queriesOf(route('filament.mms.resources.employee-loans.index'));
+
+        // Each row's "already deducted?" from the instalments the list loads.
+        $this->assertSame(0, collect($queries)->filter(fn (int $times, string $sql) => str_contains($sql, 'from "loan_installments"') && str_contains($sql, '"payslip_id" is not null'))->sum());
     }
 }

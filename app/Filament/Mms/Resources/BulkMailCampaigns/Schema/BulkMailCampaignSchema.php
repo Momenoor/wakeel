@@ -150,9 +150,7 @@ class BulkMailCampaignSchema
             $tags[(string) $key] ??= (string) $key;
         }
 
-        $imported = collect($campaign?->recipients()->whereNotNull('placeholders')->limit(50)->pluck('placeholders'))
-            ->flatMap(fn ($placeholders) => array_keys((array) $placeholders))
-            ->unique();
+        $imported = static::importedPlaceholders($campaign);
 
         foreach ($imported as $key) {
             $tags[(string) $key] ??= (string) $key;
@@ -176,6 +174,30 @@ class BulkMailCampaignSchema
      * import brought in, and — with a matter chosen — every matter
      * placeholder next to its value for that matter.
      */
+    /**
+     * The columns the campaign's imported file brought in — read once per
+     * request (each editor and the guide asked for them).
+     *
+     * @return \Illuminate\Support\Collection<int, string>
+     */
+    private static function importedPlaceholders(?BulkMailCampaign $campaign): \Illuminate\Support\Collection
+    {
+        if (! $campaign) {
+            return collect();
+        }
+
+        $key = 'bulk_mail_placeholders_'.$campaign->getKey();
+
+        if (! request()->attributes->has($key)) {
+            request()->attributes->set($key, collect($campaign->recipients()->whereNotNull('placeholders')->limit(50)->pluck('placeholders'))
+                ->flatMap(fn ($placeholders) => array_keys((array) $placeholders))
+                ->unique()
+                ->values());
+        }
+
+        return request()->attributes->get($key);
+    }
+
     private static function placeholderGuide(?Matter $matter, ?BulkMailCampaign $campaign): HtmlString
     {
         $code = fn (string $key): string => '<code style="font-size:0.8em;padding:1px 4px;border-radius:4px;background:rgba(127,127,127,0.15)" dir="ltr">{{'.e($key).'}}</code>';
@@ -184,9 +206,7 @@ class BulkMailCampaignSchema
         $html = '<div style="font-weight:600;margin-bottom:4px">'.e(__('Recipient')).'</div>';
         $html .= $row('name', __('Recipient name')).$row('email', __('Recipient email'));
 
-        $imported = collect($campaign?->recipients()->whereNotNull('placeholders')->limit(50)->pluck('placeholders'))
-            ->flatMap(fn ($placeholders) => array_keys((array) $placeholders))
-            ->unique();
+        $imported = static::importedPlaceholders($campaign);
 
         foreach ($imported as $key) {
             $html .= $row($key, __('From the imported file'));
