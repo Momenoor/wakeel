@@ -183,7 +183,7 @@
             class="relative flex h-[32rem] w-[23rem] max-w-[calc(100vw-3rem)] origin-bottom-end flex-col overflow-hidden rounded-3xl border border-gray-950/5 bg-white shadow-2xl shadow-gray-950/20 dark:border-white/10 dark:bg-gray-900"
         >
             {{-- Switching conversation: seen at once, while the next one loads. --}}
-            <div wire:loading.delay.shortest.flex wire:target="selectConversation,backToList,startConversationWith" class="absolute inset-0 z-20 items-center justify-center bg-white/60 dark:bg-gray-900/60">
+            <div wire:loading.flex wire:target="selectConversation,backToList,startConversationWith" class="absolute inset-0 z-20 items-center justify-center bg-white/60 dark:bg-gray-900/60">
                 <x-filament::loading-indicator class="h-7 w-7 text-primary-600" />
             </div>
             {{-- Only while open: a closed popup's every refresh rendered the
@@ -218,7 +218,7 @@
 
             <div class="relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-gray-950/5 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900">
                 {{-- Switching conversation: seen at once, while the next one loads. --}}
-                <div wire:loading.delay.shortest.flex wire:target="selectConversation,backToList,startConversationWith" class="absolute inset-0 z-20 items-center justify-center bg-white/60 dark:bg-gray-900/60">
+                <div wire:loading.flex wire:target="selectConversation,backToList,startConversationWith" class="absolute inset-0 z-20 items-center justify-center bg-white/60 dark:bg-gray-900/60">
                     <x-filament::loading-indicator class="h-7 w-7 text-primary-600" />
                 </div>
                 @include('livewire.partials.chat-thread', ['isPopup' => false])

@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Http\Middleware\TrackPerformance;
 use AlizHarb\ActivityLog\ActivityLogPlugin;
 use App\Filament\Mms\Pages\Auth\CustomLogin;
 use App\Filament\Mms\Pages\Auth\CustomProfile;
@@ -10,6 +11,7 @@ use App\Filament\Pms\Pages\PmsDashboard;
 use App\Filament\Pms\Pages\PMSSettings;
 use App\Filament\Shared\ActivityLog\AuditDashboard;
 use App\Filament\Shared\Pages\SystemSettings;
+use App\Filament\Shared\Pages\Performance;
 use App\Filament\Shared\Pages\SystemUpdates;
 use App\Filament\Shared\Pages\UserGuide;
 use App\Filament\Shared\Users\TranslateUsersPluginLabels;
@@ -98,6 +100,7 @@ class PmsPanelProvider extends PanelProvider
                 PMSSettings::class,
                 SystemSettings::class,
                 SystemUpdates::class,
+                Performance::class,
                 UserGuide::class,
                 AuditDashboard::class,
             ])
@@ -117,6 +120,8 @@ class PmsPanelProvider extends PanelProvider
                 fn () => SystemSwitcher::render()
             )
             ->middleware([
+                // What each request cost (the Performance page): around all the rest.
+                TrackPerformance::class,
                 // Same ordering/rationale as MmsPanelProvider — this
                 // panel's middleware list runs independently of the app's
                 // `web` group.

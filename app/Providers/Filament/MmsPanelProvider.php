@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Http\Middleware\TrackPerformance;
 use AlizHarb\ActivityLog\ActivityLogPlugin;
 use AlizHarb\ActivityLog\RelationManagers\ActivitiesRelationManager;
 use App\Filament\Mms\Pages\AdminDashboard;
@@ -13,6 +14,7 @@ use App\Filament\Mms\Resources\Matters\Pages\ListMatters;
 use App\Filament\Shared\Actions\ForceSignOutActions;
 use App\Filament\Shared\ActivityLog\AuditDashboard;
 use App\Filament\Shared\Pages\SystemSettings;
+use App\Filament\Shared\Pages\Performance;
 use App\Filament\Shared\Pages\SystemUpdates;
 use App\Filament\Shared\Pages\UserGuide;
 use App\Filament\Shared\Users\LastSeen;
@@ -102,6 +104,7 @@ class MmsPanelProvider extends PanelProvider
             ->pages([
                 SystemSettings::class,
                 SystemUpdates::class,
+                Performance::class,
                 UserGuide::class,
                 AuditDashboard::class,
             ])
@@ -128,6 +131,8 @@ class MmsPanelProvider extends PanelProvider
                 fn () => SystemSwitcher::render()
             )
             ->middleware([
+                // What each request cost (the Performance page): around all the rest.
+                TrackPerformance::class,
                 // First, and ahead of everything session/auth-related — the
                 // panel's own middleware list runs independently of the app's
                 // `web` group, so the installer redirect has to be repeated
@@ -331,7 +336,11 @@ class MmsPanelProvider extends PanelProvider
                     return '';
                 }
 
-                return Blade::render("@livewire('chat-widget', ['mode' => 'popup'])");
+                // Loaded after the page, in the background: the page itself
+                // no longer waits for the conversations, unread counts and
+                // (when it was left open) a whole conversation on every
+                // request. A plain bubble stands in until then.
+                return Blade::render("@livewire('chat-widget', ['mode' => 'popup', 'lazy' => true])");
             }
         );
 

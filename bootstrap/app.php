@@ -5,6 +5,8 @@ use App\Http\Controllers\WhatsAppWebhookController;
 use App\Http\Middleware\EnsureLicenseIsValid;
 use App\Http\Middleware\RedirectIfInstalled;
 use App\Http\Middleware\RedirectToInstaller;
+use App\Http\Middleware\TrackPerformance;
+use App\Models\PerformanceSample;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -35,6 +37,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // chance to assume a working, migrated database exists.
         $middleware->web(prepend: [RedirectToInstaller::class]);
 
+        // What each request cost, for the Performance page — around all the
+        // rest, so it counts all of it.
+        $middleware->web(prepend: [TrackPerformance::class]);
+
         // Appended rather than prepended — only ever relevant once
         // RedirectToInstaller has already let an installed app through.
         $middleware->web(append: [EnsureLicenseIsValid::class]);
@@ -48,6 +54,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('mail:send-bulk-campaigns')->everyMinute()->withoutOverlapping();
         $schedule->command('pms:flag-overdue-installments')->everyMinute()->withoutOverlapping();
         $schedule->command('license:verify')->daily()->withoutOverlapping();
+        // The Performance page's records: the last 14 days kept.
+        $schedule->call(fn () => PerformanceSample::prune())->daily()->name('performance:prune');
 
         // The shared Outlook calendar: every 5 minutes for yesterday to six
         // months ahead (one or two Graph calls), and nightly for the past

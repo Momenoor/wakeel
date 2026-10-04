@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Events\NotificationsUpdated;
+use App\Http\Middleware\TrackPerformance;
 use App\Filament\Shared\Users\ImpersonateUserAction;
 use App\Models\CalendarEvent;
 use App\Models\Matter;
@@ -41,7 +42,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // One instance for the request: its terminate() reads what its
+        // handle() counted (Laravel otherwise makes a new one for each).
+        $this->app->singleton(TrackPerformance::class);
     }
 
     /**

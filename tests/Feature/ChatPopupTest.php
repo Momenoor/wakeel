@@ -166,4 +166,56 @@ class ChatPopupTest extends TestCase
             ->assertSet('isOpen', false)
             ->assertSet('activeConversationId', null);
     }
+
+    public function test_pages_load_the_chat_in_the_background_not_with_the_page(): void
+    {
+        Gate::before(fn () => true);
+        $me = User::factory()->create();
+        $conversation = ChatConversation::betweenUsers($me, User::factory()->create());
+        $this->message($conversation, $me, 'Not on the page itself');
+        $this->actingAs($me);
+        session(['chat.popup' => ['open' => true, 'conversation' => $conversation->id]]);
+
+        // The page carries only a bubble standing in, and the instruction to
+        // load the chat after it — not the conversations nor the open one.
+        $this->get(route('filament.mms.pages.user-guide'))
+            ->assertSuccessful()
+            ->assertSee('x-intersect="$wire.__lazyLoad', false)
+            ->assertDontSee('Not on the page itself');
+    }
+
+    public function test_a_background_check_with_nothing_new_sends_nothing_back(): void
+    {
+        $me = User::factory()->create();
+        $conversation = ChatConversation::betweenUsers($me, User::factory()->create());
+        $this->actingAs($me);
+
+        $popup = Livewire::test(ChatWidget::class, ['mode' => 'popup'])
+            ->call('setOpen', true)
+            ->call('selectConversation', $conversation->id)
+            ->call('checkForNewMessages');
+
+        $this->assertArrayNotHasKey('html', $popup->effects);
+    }
+
+    public function test_every_loading_indicator_is_hidden_until_something_loads(): void
+    {
+        // Livewire hides wire:loading elements before they are used with one
+        // style per exact spelling; any other spelling stays on screen for
+        // good — the chat's "loading" overlay did, after loading was done.
+        preg_match_all('/\[wire\\\\:(loading[^\]]*)\]/', \Livewire\Mechanisms\FrontendAssets\FrontendAssets::styles(), $hidden);
+        $hidden = array_unique(str_replace('\\', '', $hidden[1]));
+
+        $wrong = [];
+        foreach (\Symfony\Component\Finder\Finder::create()->files()->in(resource_path('views'))->name('*.blade.php') as $file) {
+            preg_match_all('/wire:(loading(?:\.[a-z-]+)*)(?=[\s>=])/', $file->getContents(), $found);
+            foreach (array_unique($found[1]) as $spelling) {
+                if (! in_array($spelling, $hidden, true) && ! str_starts_with($spelling, 'loading.remove') && ! str_starts_with($spelling, 'loading.attr') && ! str_starts_with($spelling, 'loading.class')) {
+                    $wrong[] = $file->getRelativePathname().': wire:'.$spelling;
+                }
+            }
+        }
+
+        $this->assertSame([], $wrong);
+    }
 }

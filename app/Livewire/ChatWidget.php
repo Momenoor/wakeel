@@ -172,7 +172,12 @@ class ChatWidget extends Component
             ->latest('id')
             ->first();
 
+        // Nothing new — the usual answer to the background check: nothing to
+        // redraw either. Every check redrew the open conversation (every 20
+        // seconds without Pusher), which kept the chat busy loading.
         if ($latest === null) {
+            $this->skipRender();
+
             return;
         }
 
@@ -846,6 +851,15 @@ class ChatWidget extends Component
      * @var list<int>
      */
     public array $onlineUserIds = [];
+
+    /**
+     * The bubble shown until the popup has loaded in the background — the
+     * same bubble, where it was left, without the chat behind it yet.
+     */
+    public function placeholder(): View
+    {
+        return view('livewire.partials.chat-placeholder');
+    }
 
     public function render(): View
     {
