@@ -116,7 +116,11 @@ class UserGuideTest extends TestCase
 
         $this->get(UserGuide::getUrl(['module' => 'matters']))
             ->assertSuccessful()
-            ->assertSee(Guide::module('matters')['title']);
+            ->assertSee(Guide::module('matters')['title'])
+            // On a phone, a dropdown of the sections instead of the list
+            // that filled the screen above the guide.
+            ->assertSee('id="wk-guide-picker"', false)
+            ->assertSee('<option value="matters" selected', false);
     }
 
     public function test_the_first_page_after_signing_in_introduces_the_guide(): void

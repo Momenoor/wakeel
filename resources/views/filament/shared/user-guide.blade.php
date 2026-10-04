@@ -15,7 +15,10 @@
         .wk-nav { position:sticky; top:5rem; display:flex; flex-direction:column; gap:.35rem; max-height:calc(100vh - 7rem); overflow-y:auto; padding-inline-end:.25rem; }
         .wk-nav h4 { margin:.85rem .5rem .1rem; font-size:.8em; font-weight:700; color:var(--g-mute); letter-spacing:.02em; }
         .wk-nav h4:first-child { margin-top:0; }
-        @media (max-width: 900px) { .wk-nav { position:static; } }
+        /* On a phone the list (forty sections, each with a line about it)
+           filled the screen above the guide: a dropdown instead. */
+        .wk-picker { display:none; width:100%; padding:.65rem .8rem; border-radius:.6rem; border:1px solid var(--g-line); background:var(--g-bg); color:var(--g-text); font-weight:600; margin-bottom:1rem; }
+        @media (max-width: 900px) { .wk-nav { display:none; } .wk-picker { display:block; } }
         .wk-nav button { display:flex; gap:.6rem; align-items:flex-start; width:100%; text-align:start; padding:.6rem .75rem; border-radius:.6rem; border:1px solid transparent; background:transparent; color:var(--g-text); cursor:pointer; }
         .wk-nav button:hover { background:var(--g-soft); }
         .wk-nav button.on { background:var(--g-accent-soft); border-color:var(--g-accent); }
@@ -66,6 +69,16 @@
         </nav>
 
         <div style="min-width:0">
+            <label class="sr-only" for="wk-guide-picker">{{ __('User Guide') }}</label>
+            <select id="wk-guide-picker" class="wk-picker" x-on:change="$wire.set('module', $event.target.value)">
+                @foreach (collect($modules)->groupBy(fn ($m) => $m['group'] ?? '') as $group => $items)
+                    @if ($group !== '')<optgroup label="{{ $group }}">@endif
+                    @foreach ($items as $m)
+                        <option value="{{ $m['id'] }}" @selected($m['id'] === $this->module)>{{ $m['title'] }}</option>
+                    @endforeach
+                    @if ($group !== '')</optgroup>@endif
+                @endforeach
+            </select>
             @if ($current)
                 <div class="wk-card">
                     <header style="cursor:default"><h2>{{ $current['title'] }}</h2></header>
