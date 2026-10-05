@@ -16,6 +16,7 @@
 @source '../../../../app/Helpers/**/*';
 @source '../../../../resources/views/filament/**/*';
 @source '../../../../resources/views/livewire/**/*';
+@source '../../../../resources/views/components/tip-banner.blade.php';
 
 /*
  * Panel styling previously lived in public/css/custom-css.css, a hand-written

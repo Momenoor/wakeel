@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Filament\Mms\Pages\AdminDashboard;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Parties\PartyResource;
+use App\Filament\Shared\Pages\UserGuide;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -59,5 +60,17 @@ class KeyboardShortcutsTest extends TestCase
 
         $this->travelTo('2026-10-20 00:00');
         $this->get(AdminDashboard::getUrl(panel: 'mms'))->assertDontSee(__('New keyboard shortcuts:'));
+    }
+
+    public function test_the_user_guide_is_announced_too_but_not_on_the_guide(): void
+    {
+        $this->travelTo('2026-10-19 23:00');
+        $this->get(AdminDashboard::getUrl(panel: 'mms'))
+            ->assertSee(__('Discover the User Guide'))
+            ->assertSee(UserGuide::getUrl(panel: 'mms'), false);
+        $this->get(UserGuide::getUrl(panel: 'mms'))->assertDontSee(__('Discover the User Guide'));
+
+        $this->travelTo('2026-10-20 00:00');
+        $this->get(AdminDashboard::getUrl(panel: 'mms'))->assertDontSee(__('Discover the User Guide'));
     }
 }
