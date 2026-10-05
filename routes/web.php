@@ -75,6 +75,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/fonts/letter/{font}/{weight}', LetterFontFileController::class)->name('letter-fonts.file');
 });
 
+// Public, no sign-in: the privacy policy (with the data deletion
+// instructions) and the terms of use — the addresses Meta asks for before
+// the WhatsApp app can be published.
+Route::view('/privacy', 'legal.privacy')->name('legal.privacy');
+Route::view('/terms', 'legal.terms')->name('legal.terms');
+
 // Lets phones add Wakeel to the home screen — which iPhone requires
 // before it will deliver push notifications.
 Route::get('/manifest.webmanifest', function () {
