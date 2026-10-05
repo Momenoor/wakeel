@@ -8,6 +8,7 @@ use App\Filament\Mms\Pages\AdminDashboard;
 use App\Filament\Mms\Pages\Auth\CustomLogin;
 use App\Filament\Mms\Pages\Auth\CustomProfile;
 use App\Filament\Mms\Pages\Chat;
+use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\Pages\ListMatters;
 use App\Filament\Mms\Support\SystemSwitcher;
 use App\Filament\Shared\Actions\ForceSignOutActions;
@@ -213,12 +214,20 @@ class MmsPanelProvider extends PanelProvider
             // so polling is only a slow safety net.
             ->databaseNotificationsPolling(filled(config('filament.broadcasting.echo')) ? '60s' : '10s')
             ->databaseTransactions()
-            // Ctrl/Cmd+K anywhere. Only resources that declare
+            // Ctrl+K anywhere. Only resources that declare
             // $isGloballySearchable themselves are searched — the rest
             // (settings, templates…) would only crowd the results.
+            // On the dashboard, N / Ctrl+Alt+N (create-shortcut) makes a new matter.
+            ->renderHook(
+                PanelsRenderHook::PAGE_START,
+                fn (): string => MatterResource::canCreate()
+                    ? '<a href="'.e(MatterResource::getUrl('create')).'" data-shortcut-create hidden></a>'
+                    : '',
+                scopes: AdminDashboard::class,
+            )
             ->globalSearch()
             ->globalSearchResourceOptIn()
-            ->globalSearchKeyBindings(['command+k', 'ctrl+k'])
+            ->globalSearchKeyBindings(['ctrl+k'])
             ->globalSearchFieldKeyBindingSuffix()
             ->globalSearchDebounce('400ms')
             ->maxContentWidth(Width::Full);

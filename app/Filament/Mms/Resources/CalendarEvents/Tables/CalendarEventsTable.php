@@ -135,6 +135,8 @@ class CalendarEventsTable
             ])
             ->headerActions([
                 CreateSingleCalendarEventAction::make('createSingle')
+                    // N / Ctrl+Alt+N on this list: a new event.
+                    ->extraAttributes(['data-shortcut-create' => 'true'], merge: true)
                     ->visible(fn () => auth()->user()->can('CreateSingle:CalendarEvent')),
                 CreateBulkCalendarEventAction::make('createBulk')
                     ->visible(fn () => auth()->user()->can('CreateBulk:CalendarEvent')),

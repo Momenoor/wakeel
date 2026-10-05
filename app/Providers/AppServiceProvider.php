@@ -3,8 +3,8 @@
 namespace App\Providers;
 
 use App\Events\NotificationsUpdated;
-use App\Http\Middleware\TrackPerformance;
 use App\Filament\Shared\Users\ImpersonateUserAction;
+use App\Http\Middleware\TrackPerformance;
 use App\Models\CalendarEvent;
 use App\Models\Matter;
 use App\Models\PushSubscription;
@@ -18,6 +18,7 @@ use App\Support\ModelLabels;
 use Carbon\Carbon;
 use Carbon\Translator as CarbonTranslator;
 use Filament\Actions\Action;
+use Filament\Actions\CreateAction;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Support\Assets\Js;
 use Filament\Support\Facades\FilamentAsset;
@@ -203,6 +204,11 @@ class AppServiceProvider extends ServiceProvider
                 .' notification.querySelector(".fi-no-notification-actions a[href]")?.click();'
                 .' });</script>',
         );
+
+        // N or Ctrl+Alt+N: the page's Create (each Create action is marked
+        // for it; the matters dashboard adds its own "new matter").
+        CreateAction::configureUsing(fn (CreateAction $action) => $action->extraAttributes(['data-shortcut-create' => 'true'], merge: true));
+        FilamentView::registerRenderHook(PanelsRenderHook::BODY_END, fn (): string => view('filament.partials.create-shortcut')->render());
 
         // ->aed(): an amount with the Dirham sign before it, in table columns,
         // detail entries and table totals (instead of money('AED')).

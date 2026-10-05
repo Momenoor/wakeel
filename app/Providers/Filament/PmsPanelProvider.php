@@ -178,12 +178,12 @@ class PmsPanelProvider extends PanelProvider
             // so polling is only a slow safety net.
             ->databaseNotificationsPolling(filled(config('filament.broadcasting.echo')) ? '60s' : '10s')
             ->databaseTransactions()
-            // Ctrl/Cmd+K anywhere. Only resources that declare
+            // Ctrl+K anywhere. Only resources that declare
             // $isGloballySearchable themselves are searched — the rest
             // (settings, templates…) would only crowd the results.
             ->globalSearch()
             ->globalSearchResourceOptIn()
-            ->globalSearchKeyBindings(['command+k', 'ctrl+k'])
+            ->globalSearchKeyBindings(['ctrl+k'])
             ->globalSearchFieldKeyBindingSuffix()
             ->globalSearchDebounce('400ms')
             ->maxContentWidth(Width::Full);
