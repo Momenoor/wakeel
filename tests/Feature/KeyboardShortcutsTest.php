@@ -50,4 +50,14 @@ class KeyboardShortcutsTest extends TestCase
             ->assertOk()
             ->assertSee('href="'.e(MatterResource::getUrl('create', panel: 'mms')).'" data-shortcut-create hidden', false);
     }
+
+    public function test_the_shortcuts_are_announced_for_two_weeks_only(): void
+    {
+        $this->travelTo('2026-10-19 23:00');
+        $this->get(AdminDashboard::getUrl(panel: 'mms'))->assertSee(__('New keyboard shortcuts:'));
+        $this->get(PartyResource::getUrl('index', panel: 'mms'))->assertSee('Ctrl+Alt+N');
+
+        $this->travelTo('2026-10-20 00:00');
+        $this->get(AdminDashboard::getUrl(panel: 'mms'))->assertDontSee(__('New keyboard shortcuts:'));
+    }
 }

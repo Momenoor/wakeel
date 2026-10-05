@@ -113,6 +113,11 @@ class MmsPanelProvider extends PanelProvider
                 PanelsRenderHook::CONTENT_START,
                 fn () => view('filament.shared.update-banner'),
             )
+            // The new keyboard shortcuts, for their first two weeks.
+            ->renderHook(
+                PanelsRenderHook::CONTENT_START,
+                fn () => view('filament.shared.shortcuts-tip'),
+            )
             // The matters' tab counts, kept current.
             ->renderHook(
                 PanelsRenderHook::PAGE_END,

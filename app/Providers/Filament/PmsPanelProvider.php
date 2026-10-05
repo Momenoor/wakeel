@@ -108,6 +108,11 @@ class PmsPanelProvider extends PanelProvider
                 PanelsRenderHook::CONTENT_START,
                 fn () => view('filament.shared.update-banner'),
             )
+            // The new keyboard shortcuts, for their first two weeks.
+            ->renderHook(
+                PanelsRenderHook::CONTENT_START,
+                fn () => view('filament.shared.shortcuts-tip'),
+            )
             ->navigationGroups([
                 NavigationGroup::make(fn () => __('Properties')),
                 NavigationGroup::make(fn () => __('Leasing')),

@@ -82,10 +82,14 @@ class TranslationCoverageTest extends TestCase
                 preg_match_all("/__\(\s*'((?:[^'\\\\]|\\\\.)*)'/", $contents, $single);
                 preg_match_all('/__\(\s*"((?:[^"\\\\]|\\\\.)*)"/', $contents, $double);
 
-                foreach ([$single[1], $double[1]] as $matches) {
-                    foreach ($matches as $match) {
-                        $keys[stripslashes($match)] ??= $relative;
-                    }
+                // As PHP reads them: in single quotes only \' and \\ are escapes
+                // (so 'C:\Windows\Fonts' keeps its backslashes).
+                foreach ($single[1] as $match) {
+                    $keys[strtr($match, ["\\'" => "'", '\\\\' => '\\'])] ??= $relative;
+                }
+
+                foreach ($double[1] as $match) {
+                    $keys[stripslashes($match)] ??= $relative;
                 }
             }
         }
