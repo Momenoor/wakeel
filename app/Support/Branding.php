@@ -41,13 +41,14 @@ class Branding
     }
 
     /**
-     * The light logo as a file on disk, for PDFs (mPDF reads files faster
-     * and more reliably than fetching the site's own URL).
+     * The logo as a file on disk, for PDFs and Word (mPDF reads files faster
+     * and more reliably than fetching the site's own URL) — the light one,
+     * or for a dark background the dark one (else the light one).
      */
-    public static function logoFile(): ?string
+    public static function logoFile(bool $dark = false): ?string
     {
-        $path = static::path(self::LOGO);
-        $file = $path !== null ? Storage::disk('public')->path($path) : public_path('images/logo.png');
+        $path = ($dark ? static::path(self::LOGO_DARK) : null) ?? static::path(self::LOGO);
+        $file = $path !== null ? Storage::disk('public')->path($path) : public_path($dark ? 'images/logo-dark.png' : 'images/logo.png');
 
         return is_file($file) ? $file : null;
     }
@@ -59,9 +60,14 @@ class Branding
         return $path !== null ? Storage::disk('public')->url($path) : asset('images/favicon.png');
     }
 
+    /**
+     * For the emails: their logo sits on a dark header (navy, or green / red
+     * for a decision), so the dark-background logo — then the light one, then
+     * the shipped dark one. The light logo alone could vanish into the header.
+     */
     public static function emailLogoUrl(): string
     {
-        $path = static::path(self::LOGO);
+        $path = static::path(self::LOGO_DARK) ?? static::path(self::LOGO);
 
         return $path !== null
             ? Storage::disk('public')->url($path)

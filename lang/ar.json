@@ -3576,5 +3576,6 @@
     "The number of parameters does not match the template approved in Meta.": "عدد المتغيرات لا يطابق القالب المعتمد في Meta.",
     "Meta has no approved template with this name and language — check the name and language in Wakeel → WhatsApp templates.": "لا يوجد في Meta قالب معتمد بهذا الاسم واللغة — راجع الاسم واللغة في وكيل ← قوالب واتساب.",
     "More than 24 hours since this person last wrote: only an approved template can be sent.": "مضى أكثر من 24 ساعة منذ آخر رسالة من هذا الشخص: لا يمكن إرسال سوى قالب معتمد.",
-    "This number cannot receive WhatsApp messages.": "هذا الرقم لا يستقبل رسائل واتساب."
+    "This number cannot receive WhatsApp messages.": "هذا الرقم لا يستقبل رسائل واتساب.",
+    "Logo for a dark background": "شعار للخلفية الداكنة"
 }

@@ -337,7 +337,8 @@ class LetterPdf
             'reference' => ($arabic ? 'المرجع: ' : 'Ref: ').e($values['reference']),
             'date' => ($arabic ? 'التاريخ: ' : 'Date: ').e($values['date']),
             'page_number' => '{PAGENO} / {nbpg}',
-            'logo' => ($logo = Branding::logoFile()) ? '<img src="'.e($logo).'" style="width: 100%;" />' : '',
+            // The dark-background logo where the letterhead puts it on a dark area.
+            'logo' => ($logo = Branding::logoFile(! empty($element['dark']))) ? '<img src="'.e($logo).'" style="width: 100%;" />' : '',
             'image' => ($image = $letterhead->file($element['content'] ?? null)) ? '<img src="'.e($image).'" style="width: 100%;" />' : '',
             'line' => '<div style="border-top: '.max(0.2, (float) ($element['font_size'] ?? 1) / 10).'mm solid '.e($element['color'] ?? '#111827').';"></div>',
             default => collect(preg_split('/\{\{\s*'.preg_quote(LetterComposer::SIGNATURES, '/').'\s*\}\}/u', (string) ($element['content'] ?? '')) ?: [])

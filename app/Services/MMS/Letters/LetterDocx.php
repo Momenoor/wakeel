@@ -403,7 +403,7 @@ class LetterDocx
             $type = $element['type'] ?? 'text';
             $mm = fn ($value) => Converter::cmToPoint(((float) $value) / 10);
             $file = match ($type) {
-                'logo' => Branding::logoFile(),
+                'logo' => Branding::logoFile(! empty($element['dark'])),
                 'image' => $letterhead->file($element['content'] ?? null),
                 default => null,
             };

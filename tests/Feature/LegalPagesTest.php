@@ -17,7 +17,6 @@ class LegalPagesTest extends TestCase
     public function test_the_privacy_policy_is_public_with_the_data_deletion_instructions(): void
     {
         Setting::set('company_name', 'JPA Emirates');
-        config(['mail.from.address' => 'info@example.test']);
 
         $this->get('/privacy')
             ->assertOk()
@@ -26,7 +25,7 @@ class LegalPagesTest extends TestCase
             ->assertSee('JPA Emirates')
             ->assertSee('WhatsApp Business')
             ->assertSee('id="data-deletion"', false)
-            ->assertSee('mailto:info@example.test', false);
+            ->assertSee('mailto:info@jpaemirates.com', false);
     }
 
     public function test_the_terms_are_public(): void

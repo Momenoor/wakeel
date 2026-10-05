@@ -3,7 +3,7 @@
 @php
     $company = (string) (\App\Models\Setting::get('company_name') ?: \App\Models\Setting::get('app_name', config('app.name')));
     $system = (string) \App\Models\Setting::get('app_name', config('app.name'));
-    $email = (string) config('mail.from.address');
+    $email = 'info@jpaemirates.com';
     $updated = '2026-10-05';
 @endphp
 

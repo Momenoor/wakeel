@@ -6,7 +6,7 @@
 @php
     $company = (string) (\App\Models\Setting::get('company_name') ?: \App\Models\Setting::get('app_name', config('app.name')));
     $system = (string) \App\Models\Setting::get('app_name', config('app.name'));
-    $email = (string) config('mail.from.address');
+    $email = 'info@jpaemirates.com';
 @endphp
 <!doctype html>
 <html lang="ar" dir="rtl">
@@ -38,7 +38,11 @@
 <body>
     <header>
         <div class="bar">
-            <img src="{{ \App\Support\Branding::logoUrl() }}" alt="{{ $company }}">
+            {{-- The dark-background logo when the page is dark. --}}
+            <picture>
+                <source media="(prefers-color-scheme: dark)" srcset="{{ \App\Support\Branding::logoUrl(dark: true) }}">
+                <img src="{{ \App\Support\Branding::logoUrl() }}" alt="{{ $company }}">
+            </picture>
             <strong>{{ $company }}</strong>
             <nav>
                 <a href="{{ route('legal.privacy') }}">سياسة الخصوصية · Privacy</a>

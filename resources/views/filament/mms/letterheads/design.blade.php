@@ -92,7 +92,7 @@
                         @elseif ($element['type'] === 'image' && filled($element['content'] ?? null))
                             <img src="{{ $this->record->url($element['content']) }}" style="width: 100%; display: block; pointer-events: none;" alt="">
                         @elseif ($element['type'] === 'logo')
-                            <img src="{{ \App\Support\Branding::logoUrl() }}" style="width: 100%; display: block; pointer-events: none;" alt="">
+                            <img src="{{ \App\Support\Branding::logoUrl(dark: ! empty($element['dark'])) }}" style="width: 100%; display: block; pointer-events: none;" alt="">
                         @else
                             {{ $this->label($element) }}
                         @endif
@@ -193,6 +193,14 @@
                                 </x-filament::input.wrapper>
                                 {{-- Built in PHP: literal double braces would end this Blade echo. --}}
                                 <span style="opacity: .65; font-size: .75rem;">{{ __('Placeholders work here, e.g. :example.', ['example' => '{'.'{matter.reference}'.'}']) }}</span>
+                            </label>
+                        @endif
+
+                        {{-- On a dark area of the letterhead's background: the dark-background logo. --}}
+                        @if ($selectedElement['type'] === 'logo')
+                            <label style="grid-column: span 2; display: flex; align-items: center; gap: .5rem; font-size: .85rem;">
+                                <input type="checkbox" wire:model.live="elements.{{ $selected }}.dark">
+                                {{ __('Logo for a dark background') }}
                             </label>
                         @endif
 
