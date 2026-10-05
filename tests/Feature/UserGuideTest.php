@@ -156,4 +156,26 @@ class UserGuideTest extends TestCase
 
         $this->assertSame('ar', Guide::locale());
     }
+
+    public function test_opening_another_section_goes_back_to_the_top(): void
+    {
+        $this->actingAs(User::factory()->create());
+        Filament::setCurrentPanel('mms');
+        $other = collect(Guide::modules('mms'))->pluck('id')->first(fn ($id) => $id !== 'matters');
+
+        \Livewire\Livewire::test(UserGuide::class, ['module' => 'matters'])
+            ->set('module', $other)
+            ->assertSet('module', $other)
+            ->tap(fn ($page) => $this->assertStringContainsString('window.scrollTo({ top: 0', json_encode($page->effects, JSON_UNESCAPED_SLASHES)));
+    }
+
+    public function test_every_page_opens_at_its_top(): void
+    {
+        $this->actingAs(User::factory()->create());
+        Filament::setCurrentPanel('mms');
+
+        $this->get(UserGuide::getUrl())
+            ->assertSuccessful()
+            ->assertSee('history.scrollRestoration = "manual"', false);
+    }
 }

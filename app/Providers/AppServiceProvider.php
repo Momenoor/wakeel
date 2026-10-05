@@ -99,6 +99,15 @@ class AppServiceProvider extends ServiceProvider
         // The font that draws the Dirham sign, on every panel page.
         FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): string => (string) Currency::fontLink());
 
+        // Every page opens at its top — the browser otherwise put a reloaded
+        // page, or one returned to, back where it was scrolled. A link to a
+        // place on a page (#…) still goes there.
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::HEAD_END,
+            fn (): string => '<script>if ("scrollRestoration" in history) { history.scrollRestoration = "manual"; }'
+                .' window.addEventListener("load", () => { if (! location.hash) { window.scrollTo(0, 0); } });</script>',
+        );
+
         // The system's font, when an uploaded one (Calibri …) is chosen for it.
         FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): string => InterfaceFont::css());
 

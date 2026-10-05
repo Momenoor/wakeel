@@ -54,6 +54,16 @@ class UserGuide extends Page
     }
 
     /**
+     * Another section of the guide opened (side list or, on a phone, the
+     * dropdown): read from its top — it is the same page, so the browser
+     * stayed where the last section had been scrolled to.
+     */
+    public function updatedModule(): void
+    {
+        $this->js('window.scrollTo({ top: 0, behavior: "instant" })');
+    }
+
+    /**
      * @return list<array<string, string>>
      */
     public function modules(): array
