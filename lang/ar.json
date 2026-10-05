@@ -3571,5 +3571,10 @@
     "Size KB": "الحجم (كيلوبايت)",
     "Slowest requests": "أبطأ الطلبات",
     "When": "متى",
-    "Export report": "تصدير التقرير"
+    "Export report": "تصدير التقرير",
+    "The template approved in Meta does not match its setup in Wakeel (header or parameters). For the minutes, the template in Meta must have a \"Document\" header; edit it in WhatsApp Manager, or set its header to match in Wakeel → WhatsApp templates.": "القالب المعتمد في Meta لا يطابق إعداده في وكيل (الترويسة أو المتغيرات). لإرسال المحضر يجب أن تكون ترويسة القالب في Meta من نوع \"مستند\" (Document)؛ عدّله في WhatsApp Manager، أو اجعل ترويسته مطابقة في وكيل ← قوالب واتساب.",
+    "The number of parameters does not match the template approved in Meta.": "عدد المتغيرات لا يطابق القالب المعتمد في Meta.",
+    "Meta has no approved template with this name and language — check the name and language in Wakeel → WhatsApp templates.": "لا يوجد في Meta قالب معتمد بهذا الاسم واللغة — راجع الاسم واللغة في وكيل ← قوالب واتساب.",
+    "More than 24 hours since this person last wrote: only an approved template can be sent.": "مضى أكثر من 24 ساعة منذ آخر رسالة من هذا الشخص: لا يمكن إرسال سوى قالب معتمد.",
+    "This number cannot receive WhatsApp messages.": "هذا الرقم لا يستقبل رسائل واتساب."
 }

@@ -156,6 +156,24 @@ class WhatsAppCloud
             ? trim(($error['message'] ?? '').' '.($error['error_data']['details'] ?? ''))
             : $response->body();
 
-        throw new RuntimeException('WhatsApp '.$response->status().': '.$message);
+        $hint = is_array($error) ? self::hint((int) ($error['code'] ?? 0)) : null;
+
+        throw new RuntimeException(($hint ? $hint.' — ' : '').'WhatsApp '.$response->status().': '.$message);
+    }
+
+    /**
+     * What Meta's commonest refusals mean, and what to do — before Meta's own
+     * text, which only names the mismatch.
+     */
+    private static function hint(int $code): ?string
+    {
+        return match ($code) {
+            132012 => __('The template approved in Meta does not match its setup in Wakeel (header or parameters). For the minutes, the template in Meta must have a "Document" header; edit it in WhatsApp Manager, or set its header to match in Wakeel → WhatsApp templates.'),
+            132000 => __('The number of parameters does not match the template approved in Meta.'),
+            132001 => __('Meta has no approved template with this name and language — check the name and language in Wakeel → WhatsApp templates.'),
+            131047 => __('More than 24 hours since this person last wrote: only an approved template can be sent.'),
+            131026 => __('This number cannot receive WhatsApp messages.'),
+            default => null,
+        };
     }
 }
