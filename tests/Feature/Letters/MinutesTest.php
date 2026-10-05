@@ -135,7 +135,7 @@ class MinutesTest extends TestCase
         // Under their capacity, each on a line.
         $this->assertStringContainsString('<p><strong>المدعي:</strong></p><p>السيد/ المهاد لخدمات صيانة السفن – رقم الهوية: <bdo dir="ltr">784-1998-6110217-8</bdo></p>', $html);
         $this->assertStringContainsString('<p><strong>وكيل المدعي:</strong></p><p>الأستاذ/ محمد عبد المقصود – رقم الهوية: <bdo dir="ltr">784-1987-8792411-1</bdo> – رقم الهاتف: <bdo dir="ltr">0501132801</bdo></p>', $html);
-        $this->assertStringContainsString('<p><strong>س:</strong> عن طبيعة العلاقة بين الطرفين؟</p><p><strong>ج:</strong> علاقة توريد عمالة.</p><p>عقب الحاضر بأن الرسالة مختلقة.</p>', $html);
+        $this->assertStringContainsString('<p><strong>س: عن طبيعة العلاقة بين الطرفين؟</strong></p><p><strong>ج:</strong> علاقة توريد عمالة.</p><p>عقب الحاضر بأن الرسالة مختلقة.</p>', $html);
         $this->assertStringContainsString('ينتهي يوم الاثنين الموافق 05/10/2026', $html);
         $this->assertStringStartsWith('%PDF', (new LetterPdf(MinutesService::composer($minutes->fresh())))->render());
 

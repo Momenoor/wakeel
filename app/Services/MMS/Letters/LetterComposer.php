@@ -550,7 +550,8 @@ class LetterComposer
 
     /**
      * The questions asked (س:) each with its answer (ج:), and the comments
-     * made between them, in their order.
+     * made between them, in their order. The question in bold, all of it,
+     * the answer plain under it.
      *
      * @param  list<array<string, mixed>>  $items
      */
@@ -563,7 +564,7 @@ class LetterComposer
             ->filter(fn ($item) => is_array($item) && filled($item['text'] ?? null))
             ->map(fn (array $item): string => ($item['type'] ?? 'question') === 'comment'
                 ? '<p>'.$text($item['text']).'</p>'
-                : '<p><strong>'.$q.'</strong> '.$text($item['text']).'</p><p><strong>'.$a.'</strong> '.$text($item['answer'] ?? '').'</p>')
+                : '<p><strong>'.$q.' '.$text($item['text']).'</strong></p><p><strong>'.$a.'</strong> '.$text($item['answer'] ?? '').'</p>')
             ->implode('');
     }
 
