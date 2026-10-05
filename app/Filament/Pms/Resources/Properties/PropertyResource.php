@@ -13,11 +13,26 @@ use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 use UnitEnum;
 
 class PropertyResource extends Resource
 {
     protected static ?string $model = Property::class;
+
+    protected static bool $isGloballySearchable = true;
+
+    protected static int $globalSearchResultsLimit = 10;
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['name', 'property_number', 'title_deed_number', 'plot_number'];
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        return array_filter([__('Property No.') => $record->property_number]);
+    }
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-building-office-2';
 

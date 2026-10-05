@@ -14,11 +14,37 @@ use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use UnitEnum;
 
 class QuotationResource extends Resource
 {
     protected static ?string $model = Quotation::class;
+
+    protected static bool $isGloballySearchable = true;
+
+    protected static int $globalSearchResultsLimit = 5;
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['party.name', 'units.unit_number'];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()->with('party')->latest('id');
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        return static::getModelLabel().' #'.$record->getKey().' — '.($record->party?->name ?? '');
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        return array_filter([__('Status') => $record->status?->getLabel()]);
+    }
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-document-currency-dollar';
 

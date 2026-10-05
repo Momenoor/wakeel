@@ -16,10 +16,22 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class PartyResource extends Resource
 {
     protected static ?string $model = Party::class;
+
+    protected static bool $isGloballySearchable = true;
+
+    protected static int $globalSearchResultsLimit = 10;
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        $phone = collect((array) $record->phone)->flatten()->filter()->first();
+
+        return array_filter([__('Phone') => is_scalar($phone) ? (string) $phone : null]);
+    }
 
     protected static string|null|BackedEnum $navigationIcon = 'heroicon-o-user-group';
 

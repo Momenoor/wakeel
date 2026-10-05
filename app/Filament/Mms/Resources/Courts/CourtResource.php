@@ -21,6 +21,10 @@ class CourtResource extends Resource
 {
     protected static ?string $model = Court::class;
 
+    protected static bool $isGloballySearchable = true;
+
+    protected static int $globalSearchResultsLimit = 5;
+
     protected static string|null|BackedEnum $navigationIcon = 'heroicon-o-building-library';
 
     protected static ?int $navigationSort = 22;

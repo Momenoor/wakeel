@@ -2,7 +2,6 @@
 
 namespace App\Providers\Filament;
 
-use App\Http\Middleware\TrackPerformance;
 use AlizHarb\ActivityLog\ActivityLogPlugin;
 use App\Filament\Mms\Pages\Auth\CustomLogin;
 use App\Filament\Mms\Pages\Auth\CustomProfile;
@@ -10,8 +9,8 @@ use App\Filament\Mms\Support\SystemSwitcher;
 use App\Filament\Pms\Pages\PmsDashboard;
 use App\Filament\Pms\Pages\PMSSettings;
 use App\Filament\Shared\ActivityLog\AuditDashboard;
-use App\Filament\Shared\Pages\SystemSettings;
 use App\Filament\Shared\Pages\Performance;
+use App\Filament\Shared\Pages\SystemSettings;
 use App\Filament\Shared\Pages\SystemUpdates;
 use App\Filament\Shared\Pages\UserGuide;
 use App\Filament\Shared\Users\TranslateUsersPluginLabels;
@@ -19,6 +18,7 @@ use App\Http\Middleware\CheckSystemOffline;
 use App\Http\Middleware\EnsureLicenseIsValid;
 use App\Http\Middleware\RedirectToInstaller;
 use App\Http\Middleware\TrackCurrentSystem;
+use App\Http\Middleware\TrackPerformance;
 use App\Http\Middleware\TrackUserLastSeen;
 use App\Support\Branding;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
@@ -178,7 +178,14 @@ class PmsPanelProvider extends PanelProvider
             // so polling is only a slow safety net.
             ->databaseNotificationsPolling(filled(config('filament.broadcasting.echo')) ? '60s' : '10s')
             ->databaseTransactions()
-            ->globalSearch(false)
+            // Ctrl/Cmd+K anywhere. Only resources that declare
+            // $isGloballySearchable themselves are searched — the rest
+            // (settings, templates…) would only crowd the results.
+            ->globalSearch()
+            ->globalSearchResourceOptIn()
+            ->globalSearchKeyBindings(['command+k', 'ctrl+k'])
+            ->globalSearchFieldKeyBindingSuffix()
+            ->globalSearchDebounce('400ms')
             ->maxContentWidth(Width::Full);
     }
 }

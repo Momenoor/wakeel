@@ -16,12 +16,38 @@ use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class EmployeeProfileResource extends Resource
 {
     use HasModuleGate;
 
     protected static ?string $model = EmployeeProfile::class;
+
+    protected static bool $isGloballySearchable = true;
+
+    protected static int $globalSearchResultsLimit = 5;
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['employee_no', 'display_name', 'party.name'];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()->with('party');
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        return (string) ($record->display_name ?: $record->party?->name ?: $record->employee_no);
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        return array_filter([__('Employee Number') => $record->employee_no]);
+    }
 
     public static function moduleGateKey(): string
     {

@@ -120,6 +120,8 @@ class CalendarEventsTable
                 Filter::make('upcoming')
                     ->label(__('Upcoming'))
                     ->query(fn (Builder $query) => $query->where('start_datetime', '>=', now()))
+                    // A past event opened from global search must still resolve.
+                    ->excludeWhenResolvingRecord()
                     ->default(),
                 SelectFilter::make('type')
                     ->label(__('Type'))

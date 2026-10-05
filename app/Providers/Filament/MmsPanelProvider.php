@@ -2,19 +2,18 @@
 
 namespace App\Providers\Filament;
 
-use App\Http\Middleware\TrackPerformance;
 use AlizHarb\ActivityLog\ActivityLogPlugin;
 use AlizHarb\ActivityLog\RelationManagers\ActivitiesRelationManager;
 use App\Filament\Mms\Pages\AdminDashboard;
 use App\Filament\Mms\Pages\Auth\CustomLogin;
 use App\Filament\Mms\Pages\Auth\CustomProfile;
 use App\Filament\Mms\Pages\Chat;
-use App\Filament\Mms\Support\SystemSwitcher;
 use App\Filament\Mms\Resources\Matters\Pages\ListMatters;
+use App\Filament\Mms\Support\SystemSwitcher;
 use App\Filament\Shared\Actions\ForceSignOutActions;
 use App\Filament\Shared\ActivityLog\AuditDashboard;
-use App\Filament\Shared\Pages\SystemSettings;
 use App\Filament\Shared\Pages\Performance;
+use App\Filament\Shared\Pages\SystemSettings;
 use App\Filament\Shared\Pages\SystemUpdates;
 use App\Filament\Shared\Pages\UserGuide;
 use App\Filament\Shared\Users\LastSeen;
@@ -23,6 +22,7 @@ use App\Http\Middleware\CheckSystemOffline;
 use App\Http\Middleware\EnsureLicenseIsValid;
 use App\Http\Middleware\RedirectToInstaller;
 use App\Http\Middleware\TrackCurrentSystem;
+use App\Http\Middleware\TrackPerformance;
 use App\Http\Middleware\TrackUserLastSeen;
 use App\Models\CalendarEvent;
 use App\Models\Setting;
@@ -213,7 +213,14 @@ class MmsPanelProvider extends PanelProvider
             // so polling is only a slow safety net.
             ->databaseNotificationsPolling(filled(config('filament.broadcasting.echo')) ? '60s' : '10s')
             ->databaseTransactions()
-            ->globalSearch(false)
+            // Ctrl/Cmd+K anywhere. Only resources that declare
+            // $isGloballySearchable themselves are searched — the rest
+            // (settings, templates…) would only crowd the results.
+            ->globalSearch()
+            ->globalSearchResourceOptIn()
+            ->globalSearchKeyBindings(['command+k', 'ctrl+k'])
+            ->globalSearchFieldKeyBindingSuffix()
+            ->globalSearchDebounce('400ms')
             ->maxContentWidth(Width::Full);
     }
 

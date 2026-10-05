@@ -15,12 +15,40 @@ use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use UnitEnum;
 
 class LeaseResource extends Resource
 {
     protected static ?string $model = Lease::class;
+
+    protected static bool $isGloballySearchable = true;
+
+    protected static int $globalSearchResultsLimit = 10;
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['government_contract_number', 'parties.name', 'units.unit_number', 'units.property.name'];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()->with(['leaseParties.party', 'units.property'])->latest('id');
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        return (string) ($record->primaryTenant()?->party?->name ?? static::getModelLabel().' #'.$record->getKey());
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        return array_filter([
+            __('Contract No.') => $record->government_contract_number,
+            __('Units') => $record->units->map(fn ($unit) => trim($unit->property?->name.' '.$unit->unit_number))->implode('، '),
+        ]);
+    }
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-document-check';
 

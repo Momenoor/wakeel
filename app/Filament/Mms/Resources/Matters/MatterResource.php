@@ -49,6 +49,59 @@ class MatterResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'number';
 
+    protected static bool $isGloballySearchable = true;
+
+    protected static int $globalSearchResultsLimit = 10;
+
+    /**
+     * Each word (a "/" splits too, so "123/2024" works) must match the
+     * matter's year or number, a main party, or the court.
+     */
+    protected static function applyGlobalSearchAttributeConstraints(Builder $query, string $search): void
+    {
+        $words = preg_split('/[\s\/\\\\-]+/u', trim($search), -1, PREG_SPLIT_NO_EMPTY);
+
+        foreach ($words as $word) {
+            $query->where(function (Builder $q) use ($word) {
+                if (is_numeric($word)) {
+                    $q->where('year', $word)
+                        ->orWhere('number', $word)
+                        ->orWhere('number', 'like', "%{$word}%");
+                } else {
+                    $q->where('number', 'like', "%{$word}%");
+                }
+
+                $q->orWhereHas('mainPartiesOnly.party', fn (Builder $p) => $p->where('name', 'like', "%{$word}%"))
+                    ->orWhereHas('court', fn (Builder $c) => $c->where('name', 'like', "%{$word}%"));
+            });
+        }
+    }
+
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        // The list's scoping, without its heavy eager loads or deleted matters.
+        return static::getEloquentQuery()
+            ->withoutTrashed()
+            ->setEagerLoads([])
+            ->with(['court', 'type', 'mainPartiesOnly.party'])
+            ->reorder()
+            ->latest('id');
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        return $record->year.'/'.$record->number;
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        return array_filter([
+            __('Court') => $record->court?->name,
+            __('Type') => $record->type?->name,
+            __('Parties') => $record->mainPartiesOnly->pluck('party.name')->filter()->take(3)->implode('، '),
+        ]);
+    }
+
     public static function form(Schema $schema): Schema
     {
         return MatterForm::configure($schema);
