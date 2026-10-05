@@ -9,6 +9,10 @@ use Filament\Widgets\ChartWidget;
 
 class AssistantMattersCountChartWidget extends ChartWidget
 {
+    // Every 2 minutes — Filament's default is every 5 seconds: each open
+    // dashboard kept the shared server busy all day.
+    protected ?string $pollingInterval = '120s';
+
     use HasWidgetShield;
 
     protected ?string $heading = 'Assistant Matters Count Chart';

@@ -33,6 +33,14 @@ use Illuminate\Support\Facades\DB;
  */
 class CollectionsAgingWidget extends ChartWidget
 {
+    // Every 2 minutes — Filament's default is every 5 seconds: each open
+    // dashboard kept the shared server busy all day.
+    protected ?string $pollingInterval = '120s';
+
+    // With the page, not as a request of its own after it: several at
+    // once queued on the shared server, each waiting about a second.
+    protected static bool $isLazy = false;
+
     use HasWidgetShield;
 
     protected static ?int $sort = 1;
@@ -74,7 +82,9 @@ class CollectionsAgingWidget extends ChartWidget
             ->leftJoinSub($received, 'paid', 'paid.matter_id', '=', 'owed.matter_id')
             ->whereNull('matters.deleted_at')
             ->selectRaw('owed.first_billed, (owed.owed - COALESCE(paid.received, 0)) as outstanding')
-            ->havingRaw('outstanding > 0.005')
+            // WHERE on the expression, not HAVING on its alias: the same rows,
+            // and portable (HAVING without GROUP BY is MySQL's own).
+            ->whereRaw('(owed.owed - COALESCE(paid.received, 0)) > 0.005')
             ->get();
 
         $buckets = [0.0, 0.0, 0.0, 0.0];

@@ -20,6 +20,10 @@ use Illuminate\Contracts\View\View;
  */
 class UnmatchedEventReferencesWidget extends TableWidget
 {
+    // With the page, not as a request of its own after it: several at
+    // once queued on the shared server, each waiting about a second.
+    protected static bool $isLazy = false;
+
     use HasWidgetShield {
         canView as shieldCanView;
     }

@@ -12,6 +12,14 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
 
 class MatterStatsWidget extends StatsOverviewWidget
 {
+    // Every 2 minutes — Filament's default is every 5 seconds: each open
+    // dashboard kept the shared server busy all day.
+    protected ?string $pollingInterval = '120s';
+
+    // With the page, not as a request of its own after it: several at
+    // once queued on the shared server, each waiting about a second.
+    protected static bool $isLazy = false;
+
     use HasWidgetShield;
 
     // 'full', not a fixed 2: that number was correct only back when the

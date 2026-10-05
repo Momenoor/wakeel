@@ -6,7 +6,7 @@
 
       - after anything done on the page (an action, a bulk action, a
         restore): the counts the records moved between;
-      - every 30 seconds, and when the tab comes back into view: what
+      - every minute, and when the tab comes back into view: what
         others changed meanwhile.
 
     Only while the page is on screen; the request is the counts alone, not
@@ -68,7 +68,7 @@
                 }
             }));
 
-            setInterval(refresh, 30000);
+            setInterval(refresh, 60000);
             document.addEventListener('visibilitychange', () => document.hidden || soon());
         };
 

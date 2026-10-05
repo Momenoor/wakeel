@@ -18,6 +18,10 @@ use Illuminate\Database\Eloquent\Builder;
  */
 class UpcomingSessionsWidget extends TableWidget
 {
+    // With the page, not as a request of its own after it: several at
+    // once queued on the shared server, each waiting about a second.
+    protected static bool $isLazy = false;
+
     use HasWidgetShield;
 
     protected static ?int $sort = 2;

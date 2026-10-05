@@ -10,6 +10,14 @@ use Flowframe\Trend\TrendValue;
 
 class MattersPerYearWidget extends ChartWidget
 {
+    // Every 2 minutes — Filament's default is every 5 seconds: each open
+    // dashboard kept the shared server busy all day.
+    protected ?string $pollingInterval = '120s';
+
+    // With the page, not as a request of its own after it: several at
+    // once queued on the shared server, each waiting about a second.
+    protected static bool $isLazy = false;
+
     use HasWidgetShield;
 
     // A third of the dashboard's row at 'xl' (2 of 6 columns), so this
