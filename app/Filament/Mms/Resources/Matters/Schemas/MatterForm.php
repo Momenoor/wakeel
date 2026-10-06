@@ -132,7 +132,7 @@ class MatterForm
                                                 return [];
                                             }
 
-                                            $type = Type::find($typeId);
+                                            $type = Type::remembered($typeId);
                                             if (! $type) {
                                                 return [];
                                             }
@@ -308,7 +308,7 @@ class MatterForm
                                                 // Named as the matter's type calls each side (المتنازع, الطاعن …).
                                                 Select::make('type')
                                                     ->label(__('Type'))
-                                                    ->options(fn (Get $get) => Type::sideOptions(Type::find($get('../../type_id'))))
+                                                    ->options(fn (Get $get) => Type::sideOptions(Type::remembered($get('../../type_id'))))
                                                     ->required()
                                                     ->live(onBlur: true) // onBlur reduces round-trips
                                                     ->afterStateUpdated(function (Set $set) {

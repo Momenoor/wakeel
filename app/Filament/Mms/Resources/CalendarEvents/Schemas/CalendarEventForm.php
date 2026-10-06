@@ -58,7 +58,8 @@ class CalendarEventForm
             Section::make(__('Event Details'))->schema([
                 Select::make('matter_id')
                     ->label(__('Matter'))
-                    ->relationship('matter', 'year')
+                    ->relationship('matter', 'year', fn ($query) => $query->with(['court', 'type']))
+                    // Each option names its court and type: loaded with the list, not one by one.
                     ->getOptionLabelFromRecordUsing(fn ($record) => $record?->year.'/'.$record?->number.' - '.($record?->court?->name ?? '').' - '.($record?->type?->name ?? ''))
                     ->placeholder(__('Select Matter'))
                     ->searchable()

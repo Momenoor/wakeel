@@ -88,6 +88,26 @@ class Type extends Model
      *
      * @return array<string, string>
      */
+    /**
+     * A type by id, read once a request — the matter form asks for it for
+     * every party row and again on each save (eleven queries for one).
+     */
+    public static function remembered(mixed $id): ?self
+    {
+        if (blank($id)) {
+            return null;
+        }
+
+        $key = 'type_remembered_'.$id;
+        $request = request();
+
+        if (! $request->attributes->has($key)) {
+            $request->attributes->set($key, static::find($id));
+        }
+
+        return $request->attributes->get($key);
+    }
+
     public static function sideOptions(?self $type): array
     {
         return collect(self::SIDES)->mapWithKeys(fn (string $side) => [$side => self::sideLabel($type, $side)])->all();

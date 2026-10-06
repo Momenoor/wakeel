@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Filament\Mms\Pages\AdminDashboard;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Parties\PartyResource;
+use App\Filament\Shared\Pages\SystemUpdates;
 use App\Filament\Shared\Pages\UserGuide;
 use App\Models\User;
 use Filament\Facades\Filament;
@@ -43,6 +44,16 @@ class KeyboardShortcutsTest extends TestCase
             ->assertOk()
             ->assertSee('data-shortcut-create', false)
             ->assertSee("event.code !== 'KeyN'", false);
+    }
+
+    public function test_ctrl_alt_u_opens_system_updates_for_those_who_may_update(): void
+    {
+        $this->get(AdminDashboard::getUrl(panel: 'mms'))
+            ->assertSee("event.code !== 'KeyU'", false)
+            ->assertSee(str_replace('/', chr(92).'/', SystemUpdates::getUrl(panel: 'mms')), false);
+
+        $this->actingAs(User::factory()->create());
+        $this->get(UserGuide::getUrl(panel: 'mms'))->assertOk()->assertDontSee("event.code !== 'KeyU'", false);
     }
 
     public function test_the_dashboard_shortcut_makes_a_new_matter(): void

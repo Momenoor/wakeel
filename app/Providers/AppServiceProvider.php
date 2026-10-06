@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use AlizHarb\ActivityLog\Support\AuditSchema;
 use App\Events\NotificationsUpdated;
 use App\Filament\Shared\Users\ImpersonateUserAction;
 use App\Http\Middleware\TrackPerformance;
@@ -12,6 +13,7 @@ use App\Models\Setting;
 use App\Models\User;
 use App\Services\MMS\Calendar\UnmatchedEventReferences;
 use App\Services\Push\WebPushSender;
+use App\Support\CachedAuditSchema;
 use App\Support\Currency;
 use App\Support\InterfaceFont;
 use App\Support\ModelLabels;
@@ -53,6 +55,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // The activity log's column checks, read once a day, not five
+        // queries a request (bound here: the package binds its own when
+        // registered, after this provider's register()).
+        $this->app->singleton(AuditSchema::class, CachedAuditSchema::class);
+
         // The language switcher's middleware calls App::setLocale() on every
         // request, which only changes __()/trans() — it never touches Carbon's
         // OWN locale. Filament's ->date()/->dateTime() column helpers format

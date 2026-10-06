@@ -14,6 +14,9 @@
         <kbd dir="ltr" class="{{ $kbd }}">N</kbd> {{ __('or') }} <kbd dir="ltr" class="{{ $kbd }}">Ctrl+Alt+N</kbd>
         {{ filament()->getId() === 'mms' ? __('add new (on the dashboard: a new matter)') : __('add new') }}
     </span>
+    @if (\App\Support\AppUpdate::canManage())
+        <span><kbd dir="ltr" class="{{ $kbd }}">Ctrl+Alt+U</kbd> {{ __('System Updates') }}</span>
+    @endif
 </x-tip-banner>
 
 @if (\App\Filament\Shared\Pages\UserGuide::canAccess() && ! request()->routeIs('filament.*.pages.user-guide'))

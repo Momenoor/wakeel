@@ -40,3 +40,17 @@
         create.click();
     });
 </script>
+
+{{-- Ctrl+Alt+U: System Updates, for those who may run them. --}}
+@if (\App\Support\AppUpdate::canManage())
+    <script>
+        document.addEventListener('keydown', (event) => {
+            if (event.code !== 'KeyU' || ! event.ctrlKey || ! event.altKey || event.shiftKey || event.metaKey || event.repeat) {
+                return;
+            }
+
+            event.preventDefault();
+            window.location.href = @js(\App\Filament\Shared\Pages\SystemUpdates::getUrl());
+        });
+    </script>
+@endif

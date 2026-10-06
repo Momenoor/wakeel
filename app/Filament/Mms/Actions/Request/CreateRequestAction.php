@@ -73,7 +73,20 @@ class CreateRequestAction extends Action
                 ->label(__('Request Type'))
                 ->options(RequestType::class)
                 ->required()
-                ->disableOptionWhen(fn (string $value, $record): bool => $record->requests()->where('type', $value)->whereNot('status', RequestStatus::REJECTED)->exists())
+                // A type already asked for (and not rejected) can't be asked
+                // again — the matter's open types read once, not one query a type.
+                ->disableOptionWhen(function (string $value, $record): bool {
+                    $key = 'matter_request_types_'.$record->getKey();
+                    $request = request();
+
+                    if (! $request->attributes->has($key)) {
+                        $request->attributes->set($key, $record->requests()->whereNot('status', RequestStatus::REJECTED)->pluck('type')
+                            ->map(fn ($type) => $type instanceof \BackedEnum ? (string) $type->value : (string) $type)
+                            ->all());
+                    }
+
+                    return in_array($value, $request->attributes->get($key), true);
+                })
                 ->live()
                 // The type's own fields (new difficulty, new date …) filled
                 // as they appear — Filament's way for fields that depend on

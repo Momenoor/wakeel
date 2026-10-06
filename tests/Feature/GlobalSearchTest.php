@@ -2,15 +2,19 @@
 
 namespace Tests\Feature;
 
+use App\Enums\RequestStatus;
+use App\Enums\RequestType;
 use App\Filament\Mms\Resources\CalendarEvents\CalendarEventResource;
 use App\Filament\Mms\Resources\CalendarEvents\Pages\ListCalendarEvents;
 use App\Filament\Mms\Resources\Courts\CourtResource;
 use App\Filament\Mms\Resources\LetterTemplates\LetterTemplateResource;
+use App\Filament\Mms\Resources\MatterRequests\MatterRequestResource;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Types\TypeResource;
 use App\Models\CalendarEvent;
 use App\Models\Court;
 use App\Models\Matter;
+use App\Models\MatterRequest;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -86,6 +90,35 @@ class GlobalSearchTest extends TestCase
             ->assertHasNoErrors();
 
         $this->assertTrue($page->instance()->getMountedAction()?->getRecord()?->is($event));
+    }
+
+    public function test_it_finds_a_matter_request_by_its_matter_kind_or_requester(): void
+    {
+        $matter = Matter::factory()->create(['number' => '4321', 'year' => 2024]);
+        $requester = User::factory()->create(['name' => 'Requesting Expert']);
+        $request = MatterRequest::create([
+            'matter_id' => $matter->id,
+            'request_by' => $requester->id,
+            'type' => RequestType::CHANGE_DIFFICULTY,
+            'status' => RequestStatus::PENDING,
+            'comment' => 'Harder than it looked',
+        ]);
+        MatterRequest::create([
+            'matter_id' => Matter::factory()->create(['number' => '999', 'year' => 2023])->id,
+            'request_by' => auth()->id(),
+            'type' => RequestType::REVIEW_REPORT,
+            'status' => RequestStatus::PENDING,
+            'comment' => 'Another one',
+        ]);
+
+        $title = RequestType::CHANGE_DIFFICULTY->getLabel().' — 2024/4321';
+
+        foreach (['4321/2024', 'Requesting', 'Harder', RequestType::CHANGE_DIFFICULTY->getLabel()] as $search) {
+            $results = MatterRequestResource::getGlobalSearchResults($search);
+            $this->assertSame([$title], $results->pluck('title')->all(), $search);
+        }
+
+        $this->assertSame(MatterRequestResource::getUrl('view', ['record' => $request]), MatterRequestResource::getGlobalSearchResults('4321')->first()->url);
     }
 
     public function test_it_finds_a_matter_by_number_and_year_or_its_court(): void
