@@ -7,6 +7,7 @@ use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Support\RichEditorDirection;
 use App\Models\Attachment;
 use App\Models\CalendarEvent;
+use App\Models\EmailTemplate;
 use App\Models\Letterhead;
 use App\Models\LetterTemplate;
 use App\Models\MatterMinutes;
@@ -455,12 +456,14 @@ class MinutesRelationManager extends RelationManager
             ->visible(fn (MatterMinutes $record): bool => $record->isFinal() && $this->canChange())
             ->fillForm(function (MatterMinutes $record): array {
                 $arabic = MinutesService::composer($record)->isArabic();
+                $template = EmailTemplate::default(EmailTemplate::MINUTES_SIGNATURE, $arabic ? 'ar' : 'en');
 
                 return [
                     'recipients' => MinutesSender::recipients($record),
                     'sender' => array_key_first(SenderMailer::options()),
-                    'subject' => MinutesSender::defaultSubject($arabic),
-                    'body' => MinutesSender::defaultBody($arabic),
+                    'email_template_id' => $template?->getKey(),
+                    'subject' => $template?->subject ?? MinutesSender::defaultSubject($arabic),
+                    'body' => $template?->body ?? MinutesSender::defaultBody($arabic),
                     'whatsapp_template_id' => WhatsAppTemplate::default(WhatsAppTemplate::MINUTES_SIGNATURE)?->getKey(),
                 ];
             })
@@ -481,6 +484,19 @@ class MinutesRelationManager extends RelationManager
                     ->collapsible()
                     ->schema([
                         Select::make('sender')->label(__('Send from'))->options(SenderMailer::options()),
+                        // From Templates → Email templates ("Minutes for
+                        // signature"); another one chosen starts the email again.
+                        Select::make('email_template_id')
+                            ->label(__('Email template'))
+                            ->options(fn () => EmailTemplate::options(EmailTemplate::MINUTES_SIGNATURE))
+                            ->placeholder(__('The standard email'))
+                            ->live()
+                            ->afterStateUpdated(function (?string $state, Set $set) use ($record): void {
+                                $template = filled($state) ? EmailTemplate::find($state) : null;
+                                $arabic = MinutesService::composer($record)->isArabic();
+                                $set('subject', $template?->subject ?? MinutesSender::defaultSubject($arabic));
+                                $set('body', $template?->body ?? MinutesSender::defaultBody($arabic));
+                            }),
                         TextInput::make('subject')->label(__('Subject'))->required()->maxLength(255),
                         RichEditor::make('body')
                             ->label(__('Email'))

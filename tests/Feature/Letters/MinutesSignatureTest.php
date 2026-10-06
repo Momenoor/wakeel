@@ -7,6 +7,7 @@ use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager;
 use App\Filament\Mms\Resources\WhatsAppTemplates\Pages\ManageWhatsAppTemplates;
 use App\Models\Attachment;
+use App\Models\EmailTemplate;
 use App\Models\LetterTemplate;
 use App\Models\Matter;
 use App\Models\MatterMinutes;
@@ -17,6 +18,7 @@ use App\Models\Party;
 use App\Models\Setting;
 use App\Models\User;
 use App\Models\WhatsAppTemplate;
+use App\Services\MMS\Letters\MinutesSender;
 use App\Services\MMS\Letters\MinutesService;
 use App\Services\WhatsAppCloud;
 use Filament\Facades\Filament;
@@ -149,6 +151,29 @@ class MinutesSignatureTest extends TestCase
         $deliveries = $this->minutes->deliveries()->orderBy('channel')->get();
         $this->assertSame([MinutesDelivery::EMAIL, MinutesDelivery::WHATSAPP], $deliveries->pluck('channel')->all());
         $this->assertSame('wamid.sent1', $deliveries[1]->message_id);
+    }
+
+    public function test_the_email_starts_from_the_minutes_email_template(): void
+    {
+        // The migration's Arabic template, edited, is what goes out.
+        $template = EmailTemplate::default(EmailTemplate::MINUTES_SIGNATURE, 'ar');
+        $this->assertNotNull($template);
+        $this->assertNull(EmailTemplate::default(EmailTemplate::LETTER), 'not offered for letters');
+        $template->update(['subject' => 'للتوقيع: محضر {{minutes.number}}', 'body' => '<p>عزيزي {{recipient.name}}، مرفق المحضر.</p>']);
+
+        Livewire::test(MinutesRelationManager::class, ['ownerRecord' => $this->minutes->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('sendForSignature', $this->minutes)
+            ->assertSet('mountedActions.0.data.email_template_id', $template->id)
+            ->assertSet('mountedActions.0.data.subject', 'للتوقيع: محضر {{minutes.number}}')
+            // No template chosen: the standard email again.
+            ->setTableActionData(['email_template_id' => null])
+            ->assertSet('mountedActions.0.data.subject', MinutesSender::defaultSubject(true))
+            ->setTableActionData(['email_template_id' => $template->id, 'sender' => 'iflas'])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+
+        $this->assertSame('للتوقيع: محضر 1', $this->sent[0]->getSubject());
+        $this->assertStringContainsString('عزيزي الأستاذ/ محمد عبد المقصود، مرفق المحضر.', $this->sent[0]->getHtmlBody());
     }
 
     public function test_the_webhook_is_verified_with_its_token_and_signed_calls_only(): void

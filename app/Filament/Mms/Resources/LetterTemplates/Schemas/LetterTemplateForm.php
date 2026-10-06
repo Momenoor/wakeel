@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Resources\LetterTemplates\Schemas;
 use App\Enums\LetterTemplateCategories;
 use App\Filament\Support\LiveMergeTags;
 use App\Filament\Support\RichEditorDirection;
+use App\Models\EmailTemplate;
 use App\Models\Letterhead;
 use App\Models\LetterItem;
 use App\Services\MMS\Letters\Blocks\SavedSignatureBlock;
@@ -83,7 +84,7 @@ class LetterTemplateForm
                             ->preload(),
                         Select::make('email_template_id')
                             ->label(__('Covering email'))
-                            ->relationship('emailTemplate', 'name', fn ($query) => $query->where('is_active', true))
+                            ->relationship('emailTemplate', 'name', fn ($query) => $query->where('is_active', true)->where('purpose', EmailTemplate::LETTER))
                             ->placeholder(__('The default covering email'))
                             ->helperText(__('Chosen when a letter from this template is sent by email; can be changed when sending.'))
                             ->preload(),

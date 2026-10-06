@@ -161,7 +161,7 @@ class LettersRelationManager extends RelationManager
                     ->afterStateUpdated(fn (Get $get, Set $set) => self::redraft($record, $get, $set)),
                 Select::make('email_template_id')
                     ->label(__('Covering email'))
-                    ->options(fn () => EmailTemplate::query()->where('is_active', true)->orderBy('name')->pluck('name', 'id'))
+                    ->options(fn () => EmailTemplate::options(EmailTemplate::LETTER))
                     ->placeholder(__('A short standard note'))
                     ->live()
                     ->afterStateUpdated(fn (Get $get, Set $set) => self::redraft($record, $get, $set))

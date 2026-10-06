@@ -9,6 +9,7 @@ use App\Filament\Support\RichEditorDirection;
 use App\Models\EmailTemplate;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterMailer;
+use App\Services\MMS\Letters\MinutesSender;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -19,16 +20,18 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 
 /**
- * Covering emails for sending letters: subject and body with the letter's
- * placeholders, plus {{recipient.name}} when each recipient gets their own
- * email.
+ * Emails to send from: a letter's covering email, or the email sending
+ * minutes for signature — subject and body with the letters' placeholders,
+ * plus {{recipient.name}} when each recipient gets their own email.
  */
 class EmailTemplateResource extends Resource
 {
@@ -73,6 +76,22 @@ class EmailTemplateResource extends Resource
     {
         return $schema->components([
             TextInput::make('name')->label(__('Name'))->required(),
+            // Where it is offered: a letter's covering email, or sending
+            // minutes for signature (which then starts from it).
+            Select::make('purpose')
+                ->label(__('Used for'))
+                ->options(EmailTemplate::purposes())
+                ->default(EmailTemplate::LETTER)
+                ->required()
+                ->live()
+                ->afterStateUpdated(function (?string $state, Get $get, Set $set): void {
+                    $arabic = $get('locale') !== 'en';
+                    [$subject, $body] = $state === EmailTemplate::MINUTES_SIGNATURE
+                        ? [MinutesSender::defaultSubject($arabic), MinutesSender::defaultBody($arabic)]
+                        : ['{{reference}} — {{subject}}', LetterMailer::defaultCoverNote($arabic)];
+                    $set('subject', $subject);
+                    $set('body', $body);
+                }),
             Select::make('locale')
                 ->label(__('Language'))
                 ->options(['ar' => __('Arabic'), 'en' => __('English')])
@@ -109,9 +128,16 @@ class EmailTemplateResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('name')->label(__('Name'))->weight('bold')->searchable(),
+                TextColumn::make('purpose')
+                    ->label(__('Used for'))
+                    ->formatStateUsing(fn (?string $state): string => EmailTemplate::purposes()[$state] ?? (string) $state)
+                    ->badge(),
                 TextColumn::make('subject')->label(__('Subject'))->wrap(),
                 IconColumn::make('is_default')->label(__('Default'))->boolean(),
                 IconColumn::make('is_active')->label(__('Active'))->boolean(),
+            ])
+            ->filters([
+                SelectFilter::make('purpose')->label(__('Used for'))->options(EmailTemplate::purposes()),
             ])
             ->recordActions([
                 EditAction::make()->modalWidth('4xl'),
