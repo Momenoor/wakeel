@@ -91,7 +91,7 @@ class MailSenderResource extends Resource
                         ->label(__('Email address'))
                         ->email()
                         ->required()
-                        ->placeholder('noreply@jpaemirates.com')
+                        ->placeholder('noreply@example.com')
                         ->live(onBlur: true)
                         ->afterStateUpdated(function ($state, Get $get, Set $set) {
                             if (blank($state) || ! filter_var($state, FILTER_VALIDATE_EMAIL)) {
@@ -159,7 +159,7 @@ class MailSenderResource extends Resource
                 ->columns(2)
                 ->columnSpanFull()
                 ->schema([
-                    TextInput::make('host')->label(__('SMTP Host'))->placeholder('mail.jpaemirates.com')->required($smtp),
+                    TextInput::make('host')->label(__('SMTP Host'))->placeholder('mail.example.com')->required($smtp),
                     TextInput::make('port')->label(__('SMTP Port'))->numeric()->default(587)->required($smtp),
                     Select::make('encryption')
                         ->label(__('Encryption'))

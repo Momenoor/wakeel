@@ -15,6 +15,7 @@ use App\Services\MMS\Calendar\UnmatchedEventReferences;
 use App\Services\Push\WebPushSender;
 use App\Support\CachedAuditSchema;
 use App\Support\Currency;
+use App\Support\Integrations;
 use App\Support\InterfaceFont;
 use App\Support\ModelLabels;
 use Carbon\Carbon;
@@ -55,6 +56,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // This office's own Microsoft 365, Pusher, cron link and WhatsApp
+        // (System Settings → Integrations), over .env — first, before
+        // anything sends, broadcasts or queues.
+        Integrations::apply();
+
         // The activity log's column checks, read once a day, not five
         // queries a request (bound here: the package binds its own when
         // registered, after this provider's register()).

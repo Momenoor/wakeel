@@ -9,6 +9,7 @@ use App\Models\Setting;
 use App\Services\Installer\EnvironmentFileWriter;
 use App\Support\Branding;
 use App\Support\CompanyContact;
+use App\Support\Integrations;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
@@ -68,6 +69,9 @@ class SystemSettings extends Page
             'app_name' => Setting::get('app_name', config('app.name', 'JPA Emirates')),
             'company_name' => Setting::get('company_name', 'JPA Auditing & Accounting'),
             ...collect(CompanyContact::KEYS)->mapWithKeys(fn (string $key): array => [$key => Setting::get($key)])->all(),
+            'leave_request_recipients' => (array) Setting::get('leave_request_recipients', []),
+            // Integrations: saved secrets stay on the server (empty here).
+            ...collect(Integrations::KEYS)->mapWithKeys(fn (string $key): array => [$key => in_array($key, Integrations::SECRETS, true) ? null : Integrations::get($key)])->all(),
             // app_timezone_display is a Placeholder — it reads config('app.timezone')
             // directly in the schema and carries no state of its own.
             'app_locale' => Setting::get('app_locale', 'ar'),
@@ -191,8 +195,9 @@ class SystemSettings extends Page
         ];
 
         Branding::save($state);
+        Integrations::save($state);
 
-        foreach (Arr::except($state, Branding::KEYS) as $key => $value) {
+        foreach (Arr::except($state, [...Branding::KEYS, ...Integrations::KEYS]) as $key => $value) {
             $group = $groupMap[$key] ?? 'general';
             Setting::set($key, $value, $group);
         }

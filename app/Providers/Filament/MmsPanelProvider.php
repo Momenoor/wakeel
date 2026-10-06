@@ -217,7 +217,7 @@ class MmsPanelProvider extends PanelProvider
             ->databaseNotifications()
             // With Pusher, new notifications arrive live (NotificationsUpdated),
             // so polling is only a slow safety net.
-            ->databaseNotificationsPolling(filled(config('filament.broadcasting.echo')) ? '60s' : '10s')
+            ->databaseNotificationsPolling(fn (): string => filled(config('filament.broadcasting.echo')) ? '60s' : '10s')
             ->databaseTransactions()
             // Ctrl+K anywhere. Only resources that declare
             // $isGloballySearchable themselves are searched — the rest

@@ -9,6 +9,7 @@ use App\Services\MMS\SenderMailer;
 use App\Support\ScreenPermissions;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -243,7 +244,7 @@ class SystemSettingsForm
                                     TextInput::make('mail_from_name')
                                         ->visible(fn (Get $get): bool => blank($get('mail_sender_key')))
                                         ->label(__('Sender Name'))
-                                        ->placeholder('JPA Emirates')
+                                        ->placeholder(__('Your office name'))
                                         ->required(),
                                 ]),
                         ]),
@@ -260,6 +261,13 @@ class SystemSettingsForm
                                         ->label(__('Default Notify by Email for New Users'))
                                         ->default(true),
 
+                                    // Who hears of a new leave request (email + bell).
+                                    TagsInput::make('leave_request_recipients')
+                                        ->label(__('Leave requests are sent to'))
+                                        ->placeholder(__('Add an email address'))
+                                        ->nestedRecursiveRules(['email'])
+                                        ->helperText(__('Empty: everyone who can approve leave requests.')),
+
                                     Toggle::make('default_notify_by_whatsapp')
                                         ->label(__('Default Notify by WhatsApp for New Users'))
                                         ->default(false),
@@ -274,6 +282,8 @@ class SystemSettingsForm
                                         ->visible(fn (Get $get): bool => (bool) $get('show_system_announcement')),
                                 ]),
                         ]),
+
+                    IntegrationsSettingsTab::make(),
                 ]),
         ]);
     }

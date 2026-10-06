@@ -11,6 +11,7 @@ use App\Models\EmployeeProfile;
 use App\Models\EmployeeSalaryComponent;
 use App\Models\LeaveRequest;
 use App\Models\Party;
+use App\Models\Setting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
@@ -24,6 +25,14 @@ use Tests\TestCase;
 class LeaveRequestEmailActionTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Who hears of a new request: set in System Settings.
+        Setting::set('leave_request_recipients', ['redha@jpaemirates.com', 'expert@jpaemirates.com', 'momen.noor@jpaemirates.com', 'info@jpaemirates.com']);
+    }
 
     private function employee(): Party
     {

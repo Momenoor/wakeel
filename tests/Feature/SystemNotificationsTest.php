@@ -14,6 +14,7 @@ use App\Models\Matter;
 use App\Models\MatterParty;
 use App\Models\Party;
 use App\Models\PushSubscription;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\MMS\LeaveRequestService;
 use App\Services\MMS\NewMatterNotification;
@@ -149,7 +150,9 @@ class SystemNotificationsTest extends TestCase
 
     public function test_the_office_is_told_about_a_new_leave_request(): void
     {
-        $office = User::factory()->create(['email' => 'redha@jpaemirates.com']);
+        // Whoever System Settings names (else those who approve leave).
+        Setting::set('leave_request_recipients', ['hr@office.test']);
+        $office = User::factory()->create(['email' => 'hr@office.test']);
         $someoneElse = User::factory()->create();
 
         $this->leaveRequest(User::factory()->create());

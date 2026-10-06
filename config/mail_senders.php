@@ -1,7 +1,11 @@
 <?php
 
 return [
-    'senders' => [
+    // The original office's own mailboxes, kept here from before Mail
+    // Senders existed: present only where their password is set in .env,
+    // so no other office ever sees them. Every office adds its own
+    // mailboxes under Settings → Mail senders (cPanel or Microsoft 365).
+    'senders' => array_filter([
         'iflas' => [
             'username' => 'iflas@jpaemirates.com',
             'address' => 'iflas@jpaemirates.com',
@@ -345,7 +349,7 @@ return [
                 HTML,
         ],
         // Add more senders as needed
-    ],
+    ], fn (array $sender): bool => filled($sender['password'] ?? null)),
     'default_daily_limit' => 60,
     'retry_attempts' => 3,
     'retry_delay_minutes' => 30,
