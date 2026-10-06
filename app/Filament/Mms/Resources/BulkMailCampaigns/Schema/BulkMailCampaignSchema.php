@@ -9,6 +9,7 @@ use App\Models\BulkMailCampaign;
 use App\Models\Matter;
 use App\Services\MMS\BulkMailPlaceholders;
 use App\Services\MMS\SenderMailer;
+use App\Support\CompanyContact;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\RichEditor;
@@ -19,6 +20,7 @@ use Filament\Forms\Components\Toggle;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Illuminate\Support\Collection;
 use Illuminate\Support\HtmlString;
 
 class BulkMailCampaignSchema
@@ -166,7 +168,8 @@ class BulkMailCampaignSchema
             }
         }
 
-        return $tags;
+        // The office's own details, in any campaign.
+        return $tags + CompanyContact::catalog();
     }
 
     /**
@@ -178,9 +181,9 @@ class BulkMailCampaignSchema
      * The columns the campaign's imported file brought in — read once per
      * request (each editor and the guide asked for them).
      *
-     * @return \Illuminate\Support\Collection<int, string>
+     * @return Collection<int, string>
      */
-    private static function importedPlaceholders(?BulkMailCampaign $campaign): \Illuminate\Support\Collection
+    private static function importedPlaceholders(?BulkMailCampaign $campaign): Collection
     {
         if (! $campaign) {
             return collect();

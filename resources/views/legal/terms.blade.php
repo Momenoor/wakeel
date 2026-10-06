@@ -1,9 +1,8 @@
 @extends('legal.layout', ['title' => 'شروط الاستخدام · Terms of Use'])
 
 @php
-    $company = (string) (\App\Models\Setting::get('company_name') ?: \App\Models\Setting::get('app_name', config('app.name')));
+    $company = \App\Support\CompanyContact::name();
     $system = (string) \App\Models\Setting::get('app_name', config('app.name'));
-    $email = 'info@jpaemirates.com';
     $updated = '2026-10-05';
 @endphp
 
@@ -43,7 +42,7 @@
         <p>تخضع هذه الشروط لقوانين دولة الإمارات العربية المتحدة.</p>
 
         <h2>التواصل معنا</h2>
-        <p>{{ $company }} — <a href="mailto:{{ $email }}">{{ $email }}</a></p>
+        @include('legal.contact', ['arabic' => true])
     </article>
 
     <article lang="en" dir="ltr">
@@ -81,6 +80,6 @@
         <p>These terms are governed by the laws of the United Arab Emirates.</p>
 
         <h2>Contact</h2>
-        <p>{{ $company }} — <a href="mailto:{{ $email }}">{{ $email }}</a></p>
+        @include('legal.contact', ['arabic' => false])
     </article>
 @endsection

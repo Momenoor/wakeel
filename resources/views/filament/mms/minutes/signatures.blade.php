@@ -43,6 +43,16 @@
                         @elseif ($delivery->onedrive_error)
                             <div style="opacity: .7; font-size: .8em;">{{ __('Not in OneDrive:') }} {{ $delivery->onedrive_error }}</div>
                         @endif
+                        {{-- What they wrote back instead of (or with) the file. --}}
+                        @foreach ($delivery->replies ?? [] as $reply)
+                            <div dir="auto" style="margin-top: .35rem; padding: .35rem .5rem; border-radius: .5rem; background: rgba(107,114,128,.1); white-space: pre-line;">
+                                <span style="opacity: .65; font-size: .8em;">{{ __('Their reply') }} · {{ \Illuminate\Support\Carbon::parse($reply['at'] ?? null)->timezone(config('app.timezone'))->format('d/m/Y H:i') }}</span>
+                                <div>{{ $reply['text'] ?? '' }}</div>
+                            </div>
+                        @endforeach
+                        @if ($delivery->text_reply_sent_at)
+                            <div style="opacity: .65; font-size: .8em;">{{ __('Answered with how to send the signed copy') }} · {{ $delivery->text_reply_sent_at->format('d/m/Y H:i') }}</div>
+                        @endif
                         @if ($delivery->channel === \App\Models\MinutesDelivery::EMAIL && $delivery->status !== \App\Models\MinutesDelivery::SIGNED)
                             <div style="opacity: .65; font-size: .8em;">{{ __('A copy signed by email is added by hand, under the matter\'s attachments.') }}</div>
                         @endif

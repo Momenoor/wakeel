@@ -8,6 +8,7 @@ use App\Models\MatterLetter;
 use App\Models\Setting;
 use App\Services\Installer\EnvironmentFileWriter;
 use App\Support\Branding;
+use App\Support\CompanyContact;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
@@ -66,6 +67,7 @@ class SystemSettings extends Page
 
             'app_name' => Setting::get('app_name', config('app.name', 'JPA Emirates')),
             'company_name' => Setting::get('company_name', 'JPA Auditing & Accounting'),
+            ...collect(CompanyContact::KEYS)->mapWithKeys(fn (string $key): array => [$key => Setting::get($key)])->all(),
             // app_timezone_display is a Placeholder — it reads config('app.timezone')
             // directly in the schema and carries no state of its own.
             'app_locale' => Setting::get('app_locale', 'ar'),
@@ -163,6 +165,9 @@ class SystemSettings extends Page
 
             'app_name' => 'general',
             'company_name' => 'general',
+            'company_phone' => 'general',
+            'company_whatsapp' => 'general',
+            'company_email' => 'general',
             'app_locale' => 'general',
             'currency_code' => 'general',
             'records_per_page' => 'general',

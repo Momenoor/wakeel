@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Model;
  * value of each of its {{parameters}} — which may hold the system's own
  * {{placeholders}}. Its text here is for the preview; Meta sends its own.
  */
-#[Fillable('name', 'purpose', 'meta_name', 'language', 'header', 'body', 'parameters', 'acknowledgement', 'is_active', 'is_default')]
+#[Fillable('name', 'purpose', 'meta_name', 'language', 'header', 'body', 'parameters', 'acknowledgement', 'text_reply', 'is_active', 'is_default')]
 class WhatsAppTemplate extends Model
 {
     /** Minutes sent to the attendees to sign and send back. */

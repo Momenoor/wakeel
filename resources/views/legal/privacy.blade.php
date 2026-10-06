@@ -1,9 +1,9 @@
 @extends('legal.layout', ['title' => 'سياسة الخصوصية · Privacy Policy'])
 
 @php
-    $company = (string) (\App\Models\Setting::get('company_name') ?: \App\Models\Setting::get('app_name', config('app.name')));
+    $company = \App\Support\CompanyContact::name();
     $system = (string) \App\Models\Setting::get('app_name', config('app.name'));
-    $email = 'info@jpaemirates.com';
+    $email = \App\Support\CompanyContact::email();
     $updated = '2026-10-05';
 @endphp
 
@@ -54,7 +54,7 @@
         <p>لحذف بياناتكم، بما فيها رسائل واتساب المحفوظة لدينا، أرسلوا طلبًا إلى <a href="mailto:{{ $email }}">{{ $email }}</a> متضمنًا اسمكم ورقم الهاتف أو البريد الإلكتروني المستخدم في التواصل معنا. نؤكد استلام الطلب وننفذه خلال 30 يومًا، إلا ما يوجب القانون الاحتفاظ به، ونبلغكم بذلك.</p>
 
         <h2>التواصل معنا</h2>
-        <p>{{ $company }} — <a href="mailto:{{ $email }}">{{ $email }}</a></p>
+        @include('legal.contact', ['arabic' => true])
     </article>
 
     <article lang="en" dir="ltr">
@@ -103,6 +103,6 @@
         <p>To have your data deleted — including WhatsApp messages we hold — email <a href="mailto:{{ $email }}">{{ $email }}</a> with your name and the phone number or email address used to contact us. We confirm receipt and complete the request within 30 days, except for data the law requires us to keep, and let you know.</p>
 
         <h2>Contact</h2>
-        <p>{{ $company }} — <a href="mailto:{{ $email }}">{{ $email }}</a></p>
+        @include('legal.contact', ['arabic' => false])
     </article>
 @endsection

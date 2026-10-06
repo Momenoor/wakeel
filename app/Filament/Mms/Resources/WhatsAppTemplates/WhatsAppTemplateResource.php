@@ -104,8 +104,15 @@ class WhatsAppTemplateResource extends Resource
                 ->columnSpanFull(),
             Textarea::make('acknowledgement')
                 ->label(__('Reply when the signed copy arrives'))
-                ->helperText(__('Sent once, when the first signed copy comes back. Leave empty to send nothing.'))
-                ->rows(2)
+                ->helperText(__('Sent once, when the first signed copy comes back. Leave empty to send nothing.').' '.__('Placeholders work here: :examples', ['examples' => '{{recipient.name}}, {{minutes.number}}, {{matter.reference}}, {{company.phone}}, {{company.whatsapp}}, {{company.email}}']))
+                ->rows(3)
+                ->extraInputAttributes(['dir' => 'auto'])
+                ->columnSpanFull(),
+            // A text instead of the file: how to send it, and how to reach us.
+            Textarea::make('text_reply')
+                ->label(__('Reply when a text arrives instead of the signed copy'))
+                ->helperText(__('Sent once for each minutes, to an attendee who writes back without the file. Leave empty to send nothing.').' '.__('Placeholders work here: :examples', ['examples' => '{{recipient.name}}, {{minutes.number}}, {{matter.reference}}, {{company.phone}}, {{company.whatsapp}}, {{company.email}}']))
+                ->rows(5)
                 ->extraInputAttributes(['dir' => 'auto'])
                 ->columnSpanFull(),
             Toggle::make('is_default')->label(__('Default')),

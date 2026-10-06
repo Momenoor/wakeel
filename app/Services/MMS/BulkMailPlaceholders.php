@@ -6,6 +6,7 @@ use App\Models\BulkMailCampaign;
 use App\Models\BulkMailRecipient;
 use App\Models\Matter;
 use App\Models\MatterParty;
+use App\Support\CompanyContact;
 use BackedEnum;
 use Carbon\CarbonInterface;
 use Filament\Support\Contracts\HasLabel;
@@ -130,6 +131,7 @@ class BulkMailPlaceholders
         $email = is_array($recipient->email) ? implode('; ', $recipient->email) : (string) $recipient->email;
 
         return [
+            ...CompanyContact::values(),
             ...self::forMatter($campaign->matter),
             ...array_map(fn ($value) => self::format($value), $recipient->placeholders ?? []),
             'name' => (string) $recipient->name,

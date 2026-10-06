@@ -75,6 +75,27 @@ class SystemSettingsForm
                                         ->label(__('Company / Organization Name'))
                                         ->maxLength(255),
 
+                                    // How to reach the office: on the privacy policy and
+                                    // terms, and as {{company.phone}} / {{company.whatsapp}} /
+                                    // {{company.email}} in letters, emails and WhatsApp.
+                                    TextInput::make('company_phone')
+                                        ->label(__('Company phone'))
+                                        ->tel()
+                                        ->extraInputAttributes(['dir' => 'ltr'])
+                                        ->maxLength(50),
+
+                                    TextInput::make('company_whatsapp')
+                                        ->label(__('Company WhatsApp'))
+                                        ->tel()
+                                        ->extraInputAttributes(['dir' => 'ltr'])
+                                        ->maxLength(50),
+
+                                    TextInput::make('company_email')
+                                        ->label(__('Company email'))
+                                        ->email()
+                                        ->extraInputAttributes(['dir' => 'ltr'])
+                                        ->maxLength(255),
+
                                     Select::make('app_locale')
                                         ->label(__('Default Language'))
                                         ->options([

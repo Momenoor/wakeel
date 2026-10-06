@@ -10,6 +10,7 @@ use App\Models\MatterParty;
 use App\Models\Type;
 use App\Services\MMS\BulkMailPlaceholders;
 use App\Services\MMS\Letters\Blocks\SignatureBlock;
+use App\Support\CompanyContact;
 use App\Support\RichHtml;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -151,6 +152,7 @@ class LetterComposer
     public function values(): array
     {
         $values = [
+            ...CompanyContact::values(),
             ...BulkMailPlaceholders::forMatter($this->matter),
             'reference' => (string) $this->reference,
             'date' => $this->date->format('d/m/Y'),
@@ -723,6 +725,7 @@ class LetterComposer
             'meeting.day' => __('Meeting date').' — '.__('weekday'),
             'meeting.time' => __('Meeting time'),
             ...BulkMailPlaceholders::matterCatalog(),
+            ...CompanyContact::catalog(),
         ];
 
         foreach ($inputs ?? $template?->inputs ?? [] as $input) {

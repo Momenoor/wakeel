@@ -71,6 +71,9 @@ class SystemSettingsTest extends TestCase
             ->fillForm([
                 'app_name' => 'My Custom System',
                 'company_name' => 'Custom Company',
+                'company_phone' => '+971 4 328 7778',
+                'company_whatsapp' => '+971 56 107 5965',
+                'company_email' => 'office@example.ae',
                 'currency_code' => 'USD',
                 'app_locale' => 'en',
                 'app_offline' => true,
@@ -87,6 +90,9 @@ class SystemSettingsTest extends TestCase
 
         $this->assertSame('My Custom System', Setting::get('app_name'));
         $this->assertSame('Custom Company', Setting::get('company_name'));
+        $this->assertSame('+971 4 328 7778', Setting::get('company_phone'));
+        $this->assertSame('+971 56 107 5965', Setting::get('company_whatsapp'));
+        $this->assertSame('office@example.ae', Setting::get('company_email'));
         $this->assertSame('USD', Setting::get('currency_code'));
         $this->assertSame('en', Setting::get('app_locale'));
         $this->assertTrue(Setting::get('app_offline'));

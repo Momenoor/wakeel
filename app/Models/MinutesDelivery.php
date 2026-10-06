@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * they send it back signed, the copies received (filed with the matter and
  * in its OneDrive folder).
  */
-#[Fillable('matter_minutes_id', 'party_id', 'name', 'channel', 'address', 'message_id', 'status', 'error', 'sent_at', 'signed_at', 'signed_attachments', 'received_message_ids', 'onedrive_url', 'onedrive_error', 'sent_by')]
+#[Fillable('matter_minutes_id', 'party_id', 'name', 'channel', 'address', 'message_id', 'status', 'error', 'sent_at', 'signed_at', 'signed_attachments', 'received_message_ids', 'replies', 'text_reply_sent_at', 'onedrive_url', 'onedrive_error', 'sent_by')]
 class MinutesDelivery extends Model
 {
     public const EMAIL = 'email';
@@ -31,6 +31,9 @@ class MinutesDelivery extends Model
             'signed_at' => 'datetime',
             'signed_attachments' => 'array',
             'received_message_ids' => 'array',
+            // Texts sent back instead of the signed copy: [{text, at}].
+            'replies' => 'array',
+            'text_reply_sent_at' => 'datetime',
         ];
     }
 

@@ -3587,5 +3587,15 @@
     "Dismiss": "إخفاء",
     "Enlarge": "تكبير",
     "Letters (covering email)": "الخطابات (البريد المرافق)",
-    "The standard email": "البريد المعتاد"
+    "The standard email": "البريد المعتاد",
+    "Company name": "اسم الشركة",
+    "Company phone": "هاتف الشركة",
+    "Company WhatsApp": "واتساب الشركة",
+    "Company email": "البريد الإلكتروني للشركة",
+    ":name replied to minutes (:number) of :matter": "ردّ :name على المحضر (:number) في الدعوى :matter",
+    "Their reply": "ردّهم",
+    "Answered with how to send the signed copy": "أُرسل لهم الرد بطريقة إرسال النسخة الموقّعة",
+    "Reply when a text arrives instead of the signed copy": "الرد عند وصول رسالة نصية بدلاً من النسخة الموقّعة",
+    "Sent once for each minutes, to an attendee who writes back without the file. Leave empty to send nothing.": "يُرسل مرة واحدة لكل محضر، للحاضر الذي يرد برسالة دون الملف. اتركه فارغاً لعدم الإرسال.",
+    "Placeholders work here: :examples": "يمكن استخدام المتغيرات هنا: :examples"
 }

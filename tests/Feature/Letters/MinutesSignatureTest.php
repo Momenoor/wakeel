@@ -21,6 +21,7 @@ use App\Models\WhatsAppTemplate;
 use App\Services\MMS\Letters\MinutesSender;
 use App\Services\MMS\Letters\MinutesService;
 use App\Services\WhatsAppCloud;
+use App\Support\CompanyContact;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -241,6 +242,60 @@ class MinutesSignatureTest extends TestCase
             ->assertTableColumnStateSet('signed', '1 / 1', $this->minutes)
             ->mountTableAction('signatures', $this->minutes)
             ->assertMountedActionModalSee('https://od/signed/file.pdf');
+    }
+
+    public function test_a_text_sent_back_instead_is_kept_told_and_answered_once(): void
+    {
+        $this->send();
+
+        Setting::set(CompanyContact::PHONE, '+971 4 328 7778', 'general');
+        Setting::set(CompanyContact::WHATSAPP, '+971 56 107 5965', 'general');
+        Setting::set(CompanyContact::EMAIL, 'info@jpaemirates.com', 'general');
+        Setting::set(WhatsAppCloud::APP_SECRET, encrypt('app-secret'), 'whatsapp');
+
+        $post = function (string $id, string $text) {
+            $payload = json_encode(['entry' => [['changes' => [['value' => ['messages' => [[
+                'from' => '971501132801', 'id' => $id, 'type' => 'text', 'timestamp' => '1791000000',
+                'context' => ['id' => 'wamid.sent1'],
+                'text' => ['body' => $text],
+            ]]]]]]]]);
+
+            return $this->call('POST', '/webhooks/whatsapp', [], [], [], [
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_X_HUB_SIGNATURE_256' => 'sha256='.hash_hmac('sha256', $payload, 'app-secret'),
+            ], $payload);
+        };
+
+        $sentBefore = count($this->whatsapp);
+        $post('wamid.text1', 'سأرسله موقعاً غداً')->assertOk();
+
+        $delivery = $this->minutes->deliveries()->where('channel', MinutesDelivery::WHATSAPP)->sole();
+        $this->assertSame(MinutesDelivery::SENT, $delivery->status);
+        $this->assertSame('سأرسله موقعاً غداً', $delivery->replies[0]['text']);
+        $this->assertNotNull($delivery->text_reply_sent_at);
+
+        // Answered: how to send it, and the office's contact details filled in.
+        $answer = $this->whatsapp[$sentBefore];
+        $this->assertSame('text', $answer['type']);
+        $this->assertStringContainsString('محضر اجتماع الخبرة رقم (1) في الدعوى رقم 3153/2026', $answer['text']['body']);
+        $this->assertStringContainsString('+971 4 328 7778', $answer['text']['body']);
+        $this->assertStringContainsString('+971 56 107 5965', $answer['text']['body']);
+        $this->assertStringContainsString('info@jpaemirates.com', $answer['text']['body']);
+        $this->assertStringNotContainsString('{{', $answer['text']['body']);
+
+        // The sender is told what they wrote.
+        $told = User::findOrFail($delivery->sent_by)->notifications()->sole();
+        $this->assertStringContainsString('سأرسله موقعاً غداً', $told->data['body']);
+
+        // Another text: kept, but not answered again; Meta's resend ignored.
+        $post('wamid.text2', 'وعندي ملاحظة على البند 3')->assertOk();
+        $post('wamid.text2', 'وعندي ملاحظة على البند 3')->assertOk();
+        $this->assertCount(2, $delivery->fresh()->replies);
+        $this->assertCount($sentBefore + 1, $this->whatsapp);
+
+        Livewire::test(MinutesRelationManager::class, ['ownerRecord' => $this->minutes->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('signatures', $this->minutes)
+            ->assertMountedActionModalSee('وعندي ملاحظة على البند 3');
     }
 
     public function test_whatsapp_templates_and_the_webhook_settings_screen(): void

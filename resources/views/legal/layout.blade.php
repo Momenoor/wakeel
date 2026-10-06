@@ -4,9 +4,8 @@
     Meta's app review reads the English.
 --}}
 @php
-    $company = (string) (\App\Models\Setting::get('company_name') ?: \App\Models\Setting::get('app_name', config('app.name')));
+    $company = \App\Support\CompanyContact::name();
     $system = (string) \App\Models\Setting::get('app_name', config('app.name'));
-    $email = 'info@jpaemirates.com';
 @endphp
 <!doctype html>
 <html lang="ar" dir="rtl">
