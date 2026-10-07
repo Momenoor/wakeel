@@ -147,8 +147,8 @@ class MinutesSignatureTest extends TestCase
         $this->assertSame('minutes_for_signature', $message['template']['name']);
         $this->assertSame(['type' => 'document', 'document' => ['id' => 'media-1', 'filename' => MinutesService::fileName($this->minutes).'.pdf']], $message['template']['components'][0]['parameters'][0]);
         $this->assertSame(
-            // The bare name: Meta's template adds its own "السادة/ … المحترمين".
-            ['name' => 'محمد عبد المقصود', 'minutes_number' => '1', 'matter_number' => '3153/2026', 'meeting_date' => '30/09/2026'],
+            // "إلى {{name}}،" in Meta: the greeting that agrees with the title.
+            ['name' => 'الأستاذ/ محمد عبد المقصود المحترم', 'minutes_number' => '1', 'matter_number' => '3153/2026', 'meeting_date' => '30/09/2026'],
             collect($message['template']['components'][1]['parameters'])->pluck('text', 'parameter_name')->all(),
         );
 
@@ -178,6 +178,27 @@ class MinutesSignatureTest extends TestCase
 
         $this->assertSame('للتوقيع: محضر 1', $this->sent[0]->getSubject());
         $this->assertStringContainsString('عزيزي محمد عبد المقصود، مرفق المحضر.', $this->sent[0]->getHtmlBody());
+    }
+
+    public function test_the_original_offices_template_switches_to_the_agreeing_greeting(): void
+    {
+        $template = WhatsAppTemplate::default(WhatsAppTemplate::MINUTES_SIGNATURE);
+        $template->update([
+            'body' => "السادة/ {{name}} المحترمين،\nتحية طيبة وبعد،",
+            'parameters' => [['name' => 'name', 'value' => '{{recipient.name}}'], ['name' => 'minutes_number', 'value' => '{{minutes.number}}']],
+        ]);
+        $migration = require database_path('migrations/2020_01_01_000133_whatsapp_minutes_greets_with_salutation.php');
+
+        // Another office: its template in Meta isn't changed — nor is it here.
+        config(['app.url' => 'https://office.example.com']);
+        $migration->up();
+        $this->assertSame('{{recipient.name}}', $template->fresh()->parameters[0]['value']);
+
+        config(['app.url' => 'https://new.jpaemirates.com']);
+        $migration->up();
+        $template->refresh();
+        $this->assertSame("إلى {{name}}،\nتحية طيبة وبعد،", $template->body);
+        $this->assertSame([['name' => 'name', 'value' => '{{recipient.salutation}}'], ['name' => 'minutes_number', 'value' => '{{minutes.number}}']], $template->parameters);
     }
 
     public function test_the_webhook_is_verified_with_its_token_and_signed_calls_only(): void

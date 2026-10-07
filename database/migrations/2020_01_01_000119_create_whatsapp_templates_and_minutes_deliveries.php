@@ -14,7 +14,7 @@ use Spatie\Permission\PermissionRegistrar;
  */
 return new class extends Migration
 {
-    public const MINUTES_BODY = "السادة/ {{name}} المحترمين،\nتحية طيبة وبعد،\nنرفق لكم محضر اجتماع الخبرة رقم ({{minutes_number}}) في الدعوى رقم {{matter_number}}، المنعقد بتاريخ {{meeting_date}}.\nنرجو التكرم بمراجعة المحضر وتوقيعه، ثم إعادة إرساله إلينا موقّعاً بالرد على هذه الرسالة نفسها (ملف PDF، أو صورة واضحة لكل صفحة).\nمع خالص الشكر والتقدير.";
+    public const MINUTES_BODY = "إلى {{name}}،\nتحية طيبة وبعد،\nنرفق لكم محضر اجتماع الخبرة رقم ({{minutes_number}}) في الدعوى رقم {{matter_number}}، المنعقد بتاريخ {{meeting_date}}.\nنرجو التكرم بمراجعة المحضر وتوقيعه، ثم إعادة إرساله إلينا موقّعاً بالرد على هذه الرسالة نفسها (ملف PDF، أو صورة واضحة لكل صفحة).\nمع خالص الشكر والتقدير.";
 
     public function up(): void
     {
@@ -83,7 +83,8 @@ return new class extends Migration
             'header' => 'document',
             'body' => self::MINUTES_BODY,
             'parameters' => json_encode([
-                ['name' => 'name', 'value' => '{{recipient.name}}'],
+                // "الأستاذة/ … المحترمة": the title and the honorific that agrees.
+                ['name' => 'name', 'value' => '{{recipient.salutation}}'],
                 ['name' => 'minutes_number', 'value' => '{{minutes.number}}'],
                 ['name' => 'matter_number', 'value' => '{{matter.reference}}'],
                 ['name' => 'meeting_date', 'value' => '{{meeting.date}}'],
