@@ -139,6 +139,32 @@ class LetterEmailTest extends TestCase
         $this->assertStringContainsString('السادة/ مكتب المزروعي', $this->sent[1]->getHtmlBody());
     }
 
+    public function test_an_inbox_shared_by_recipients_gets_the_letter_once(): void
+    {
+        // The party and its lawyer's office share an address (spelt differently);
+        // a third has only that same address.
+        $letter = app(LetterIssuer::class)->issue($this->letter->template, $this->letter->matter, [
+            ['name' => 'منى أحمد', 'role' => 'المدعي', 'emails' => ['mona@example.com', 'Shared@Law.ae']],
+            ['name' => 'مكتب المزروعي', 'role' => 'وكيل المدعي', 'emails' => ['shared@law.ae', 'shared@law.ae', 'b@law.ae']],
+            ['name' => 'شريك', 'role' => null, 'emails' => ['SHARED@law.ae']],
+        ], []);
+
+        // Separately: each inbox in one email only; the third, already reached, isn't sent again.
+        app(LetterMailer::class)->send($letter, 'iflas', LetterMailer::ATTACHMENT, null, ['pdf'], separate: true, cc: ['b@law.ae', 'cc@jpa.ae']);
+
+        $this->assertCount(2, $this->sent);
+        $this->assertSame(['mona@example.com', 'Shared@Law.ae'], array_map(fn ($a) => $a->getAddress(), $this->sent[0]->getTo()));
+        $this->assertSame(['b@law.ae'], array_map(fn ($a) => $a->getAddress(), $this->sent[1]->getTo()));
+        // Not copied where it is already addressed.
+        $this->assertSame(['cc@jpa.ae'], array_map(fn ($a) => $a->getAddress(), $this->sent[1]->getCc()));
+        $this->assertSame(3, $letter->recipients()->where('delivery_status', LetterStatus::SENT->value)->count());
+
+        // Together: one email, each inbox once.
+        $this->sent = [];
+        app(LetterMailer::class)->send($letter, 'iflas', LetterMailer::ATTACHMENT, null, ['pdf']);
+        $this->assertSame(['mona@example.com', 'Shared@Law.ae', 'b@law.ae'], array_map(fn ($a) => $a->getAddress(), $this->sent[0]->getTo()));
+    }
+
     public function test_a_failed_send_is_recorded_per_recipient(): void
     {
         config(['mail.mailers.smtp.transport' => 'smtp', 'mail_senders.senders.iflas.host' => '127.0.0.1', 'mail_senders.senders.iflas.port' => 9, 'mail.mailers.smtp.timeout' => 2]);

@@ -31,6 +31,7 @@ use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\TimePicker;
@@ -540,7 +541,7 @@ class MinutesRelationManager extends RelationManager
                     ->columns(12)
                     ->schema([
                         TextInput::make('name')->label(__('Name'))->required()->columnSpan(3),
-                        TextInput::make('email')->label(__('Email'))->email()->columnSpan(3),
+                        TagsInput::make('emails')->label(__('Emails'))->nestedRecursiveRules(['email'])->columnSpan(3),
                         TextInput::make('phone')->label('WhatsApp')->tel()->columnSpan(2),
                         Toggle::make('by_email')->label(__('By email'))->inline(false)->columnSpan(2),
                         Toggle::make('by_whatsapp')->label(__('By WhatsApp'))->inline(false)->columnSpan(2),

@@ -361,7 +361,11 @@ class MinutesTest extends TestCase
         // The lawyer stands for the company, as its agent.
         $attendees = array_values($page->get('mountedActions.0.data.attendees'));
         $this->assertEquals($company->id, $attendees[1]['represents']);
-        $this->assertSame([$company->id => 'المهاد لخدمات صيانة السفن — المدعي'], MinutesService::mainParties($minutes));
+        // The main parties and their representatives can be stood for.
+        $this->assertSame([
+            $company->id => 'السادة/ المهاد لخدمات صيانة السفن - المدعي',
+            $this->lawyer->id => 'الأستاذ/ محمد عبد المقصود - وكيل المدعي',
+        ], MinutesService::mainParties($minutes));
 
         // Picked from the parties: name and latest contact filled in; standing
         // for the company as its employee — the capacity follows.
@@ -407,8 +411,50 @@ class MinutesTest extends TestCase
 
         $recipients = collect(MinutesSender::recipients($minutes));
 
-        $this->assertEqualsCanonicalizing(['salem@almehad.ae', 'info@almehad.ae', 'lawyer@firm.ae'], $recipients->pluck('email')->all());
-        $this->assertSame('السادة/ المهاد لخدمات صيانة السفن', $recipients->firstWhere('email', 'info@almehad.ae')['name']);
+        $this->assertEqualsCanonicalizing(['salem@almehad.ae', 'info@almehad.ae', 'lawyer@firm.ae'], $recipients->pluck('emails')->flatten()->all());
+        $this->assertSame('السادة/ المهاد لخدمات صيانة السفن', $recipients->first(fn ($r) => in_array('info@almehad.ae', $r['emails'], true))['name']);
+    }
+
+    public function test_someone_attending_for_the_lawyer_is_listed_so_and_the_minutes_reach_the_party(): void
+    {
+        $company = Party::where('name', 'المهاد لخدمات صيانة السفن')->sole();
+        $company->update(['email' => ['info@almehad.ae']]);
+        $this->lawyer->update(['name' => 'مكتب محمد البنا للمحاماة', 'email' => ['office@albanna.ae']]);
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
+
+        $this->assertSame('حاضر عن (السادة/ مكتب محمد البنا للمحاماة - وكيل المدعي)', MinutesService::capacityFor($minutes, $this->lawyer->id, 'present_for'));
+        $this->assertArrayHasKey('present_for', MinutesService::attendeeRoles());
+
+        // Only مؤمن attended, for the lawyer's office: the office and its party still get the minutes.
+        $minutes->update(['attendees' => [
+            ['present' => true, 'title' => 'الأستاذ/', 'name' => 'مؤمن', 'email' => 'momen@albanna.ae', 'represents' => $this->lawyer->id, 'as' => 'present_for',
+                'capacity' => 'حاضر عن (السادة/ مكتب محمد البنا للمحاماة - وكيل المدعي)'],
+        ]]);
+
+        $this->assertEqualsCanonicalizing(['momen@albanna.ae', 'office@albanna.ae', 'info@almehad.ae'], collect(MinutesSender::recipients($minutes))->pluck('emails')->flatten()->all());
+        $this->assertStringContainsString('حاضر عن (السادة/ مكتب محمد البنا للمحاماة - وكيل المدعي)', MinutesService::composer($minutes)->bodyHtml());
+    }
+
+    public function test_the_minutes_go_to_every_email_and_number_once(): void
+    {
+        $company = Party::where('name', 'المهاد لخدمات صيانة السفن')->sole();
+        $company->update(['email' => ['old@almehad.ae', 'Shared@Office.ae'], 'phone' => ['0501234567']]);
+        $this->lawyer->update(['email' => ['shared@office.ae', 'lawyer@firm.ae'], 'phone' => ['+971 50 123 4567']]);
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT, 'attendees' => [
+                ['present' => true, 'name' => $company->name, 'party_id' => $company->id],
+                ['present' => true, 'name' => $this->lawyer->name, 'party_id' => $this->lawyer->id, 'represents' => $company->id],
+            ]]);
+
+        $rows = MinutesSender::recipients($minutes);
+
+        // All the company's emails, its latest first; the lawyer's shared one isn't repeated, nor the same number.
+        $this->assertSame(['Shared@Office.ae', 'old@almehad.ae'], $rows[0]['emails']);
+        $this->assertSame(['lawyer@firm.ae'], $rows[1]['emails']);
+        $this->assertSame('0501234567', $rows[0]['phone']);
+        $this->assertNull($rows[1]['phone']);
+        $this->assertFalse($rows[1]['by_whatsapp']);
     }
 
     public function test_a_contact_given_again_becomes_the_latest_without_a_duplicate(): void

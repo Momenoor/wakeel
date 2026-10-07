@@ -3635,5 +3635,6 @@
     "Tick who attended. Pick an attendee from the parties and the main party they stand for; ID numbers, phones and emails typed here are kept on their party — and the phone and email on the main party too — for next time.": "حدّد من حضر. اختر الحاضر من الأطراف والطرف الأصيل الذي يمثّله؛ أرقام الهوية والهواتف والبريد المدخلة هنا تُحفظ في ملف الطرف — والهاتف والبريد في ملف الطرف الأصيل أيضاً — للمرات القادمة.",
     "Recipient — title, name and honorific (الأستاذة/ … المحترمة)": "المرسل إليه — اللقب والاسم والتحية (الأستاذة/ … المحترمة)",
     "Recipient — title (السادة/، الأستاذ/ …)": "المرسل إليه — اللقب (السادة/، الأستاذ/ …)",
-    "Recipient — honorific (المحترم، المحترمة، المحترمين)": "المرسل إليه — التحية (المحترم، المحترمة، المحترمين)"
+    "Recipient — honorific (المحترم، المحترمة، المحترمين)": "المرسل إليه — التحية (المحترم، المحترمة، المحترمين)",
+    "Attending for": "حاضر عن"
 }

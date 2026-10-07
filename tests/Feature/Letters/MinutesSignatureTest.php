@@ -122,7 +122,7 @@ class MinutesSignatureTest extends TestCase
             ->assertSet('mountedActions.0.data.whatsapp_template_id', WhatsAppTemplate::default(WhatsAppTemplate::MINUTES_SIGNATURE)->id)
             ->assertSet('mountedActions.0.data.recipients', fn (array $rows) => array_values($rows) == [[
                 'name' => 'الأستاذ/ محمد عبد المقصود', 'party_id' => $this->minutes->attendees[0]['party_id'],
-                'email' => 'm@law.ae', 'phone' => '0501132801', 'by_email' => true, 'by_whatsapp' => true,
+                'emails' => ['m@law.ae'], 'phone' => '0501132801', 'by_email' => true, 'by_whatsapp' => true,
             ]])
             ->setTableActionData(['sender' => 'iflas'])
             ->callMountedTableAction()

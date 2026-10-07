@@ -11,6 +11,7 @@ use App\Services\MMS\BulkMailPlaceholders;
 use App\Services\MMS\EmailPdf;
 use App\Services\MMS\SenderMailer;
 use App\Services\MMS\SentFolder;
+use App\Support\Addresses;
 use App\Support\Honorific;
 use App\Support\RichHtml;
 use Illuminate\Support\Collection;
@@ -79,13 +80,28 @@ class LetterMailer
             ...self::attachedFiles($attachments),
         ];
         $groups = $separate ? $withEmail->map(fn ($r) => collect([$r])) : collect([$withEmail]);
+        $cc = Addresses::emails($cc);
+        // Every inbox once: a party and its representative (or two parties)
+        // sharing an address get one email, not one each.
+        $reached = [];
 
         foreach ($groups as $group) {
-            $to = $group->flatMap(fn (MatterLetterRecipient $r) => $this->emails($r))->unique()->values()->all();
+            $to = Addresses::without(Addresses::emails($group->flatMap(fn (MatterLetterRecipient $r) => $this->emails($r))), $reached);
+
+            if ($to === [] && $reached !== []) {
+                // All of theirs had it already, in an earlier email.
+                $group->each(fn (MatterLetterRecipient $r) => $r->update(['delivery_status' => LetterStatus::SENT, 'delivered_at' => now(), 'failure_reason' => null]));
+                $result['sent'] += max(1, $group->count());
+
+                continue;
+            }
+
+            $reached = [...$reached, ...$to];
+            $groupCc = Addresses::without($cc, $to);
             $email = $this->email($composer, $mode, $template, $separate ? $group->first() : null, $files, $subject, $body);
 
             try {
-                $sent = SenderMailer::using($sender, fn () => Mail::to($to ?: $cc)->cc($to ? $cc : [])->send($email));
+                $sent = SenderMailer::using($sender, fn () => Mail::to($to ?: $groupCc)->cc($to ? $groupCc : [])->send($email));
 
                 $group->each(fn (MatterLetterRecipient $r) => $r->update([
                     'delivery_status' => LetterStatus::SENT,
@@ -98,8 +114,8 @@ class LetterMailer
 
                 // Kept with the matter, as it went — once the page has
                 // answered: a PDF takes a moment, and an email each adds up.
-                $keepTo = $to ?: $cc;
-                $keepCc = $to ? $cc : [];
+                $keepTo = $to ?: $groupCc;
+                $keepCc = $to ? $groupCc : [];
                 $userId = auth()->id();
                 defer(fn () => $this->keepOnMatter($letter, $email, $sender, $group, $keepTo, $keepCc, $userId));
             } catch (\Throwable $e) {

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\LetterStatus;
+use App\Support\Addresses;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
@@ -36,7 +37,7 @@ class MatterLetterRecipient extends Model
             ...collect($this->representatives ?? [])->flatMap(fn (array $representative): array => (array) ($representative['emails'] ?? []))->all(),
         ];
 
-        return array_values(array_unique(array_filter($emails, fn ($email): bool => filter_var($email, FILTER_VALIDATE_EMAIL) !== false)));
+        return Addresses::emails($emails);
     }
 
     public function letter(): BelongsTo

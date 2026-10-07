@@ -164,17 +164,32 @@ class MinutesService
     }
 
     /**
-     * The matter's main parties an attendee can stand for: party id =>
-     * "name — side" (المدعي, المدعى عليه …).
+     * Whom an attendee can stand for: the matter's main parties and their
+     * representatives — party id => "السادة/ name - capacity" (المدعي,
+     * وكيل المدعي …).
      *
      * @return array<int, string>
      */
     public static function mainParties(MatterMinutes $minutes): array
     {
         return collect(LetterComposer::candidates($minutes->matter, self::arabic($minutes)))
-            ->filter(fn (array $c): bool => blank($c['of'] ?? null) && filled($c['party_id'] ?? null))
-            ->mapWithKeys(fn (array $c): array => [(int) $c['party_id'] => trim($c['name'].($c['role'] ? ' — '.$c['role'] : ''))])
+            ->filter(fn (array $c): bool => filled($c['party_id'] ?? null))
+            ->unique('party_id')
+            ->mapWithKeys(fn (array $c): array => [(int) $c['party_id'] => self::standsForLabel($minutes, $c)])
             ->all();
+    }
+
+    /**
+     * "السادة/ مكتب محمد البنا للمحاماة - وكيل المدعي".
+     *
+     * @param  array<string, mixed>  $candidate
+     */
+    private static function standsForLabel(MatterMinutes $minutes, array $candidate): string
+    {
+        $arabic = self::arabic($minutes);
+        $title = self::isCompany((string) $candidate['name']) ? ($arabic ? 'السادة/' : 'Messrs.') : ($arabic ? 'الأستاذ/' : 'Mr.');
+
+        return trim($title.' '.$candidate['name'].(filled($candidate['role'] ?? null) ? ' - '.$candidate['role'] : ''));
     }
 
     /**
@@ -185,6 +200,7 @@ class MinutesService
     public static function attendeeRoles(): array
     {
         return [
+            'present_for' => __('Attending for'),
             'lawyer' => __('Lawyer'),
             'legal_consultant' => __('Legal consultant'),
             'employee' => __('Employee'),
@@ -204,8 +220,14 @@ class MinutesService
         }
 
         $arabic = self::arabic($minutes);
-        $side = collect(LetterComposer::candidates($minutes->matter, $arabic))
-            ->first(fn (array $c): bool => blank($c['of'] ?? null) && (int) ($c['party_id'] ?? 0) === (int) $represents)['role'] ?? null;
+        $candidate = collect(LetterComposer::candidates($minutes->matter, $arabic))
+            ->first(fn (array $c): bool => (int) ($c['party_id'] ?? 0) === (int) $represents);
+        $side = $candidate['role'] ?? null;
+
+        // "حاضر عن (السادة/ مكتب محمد البنا للمحاماة - وكيل المدعي)".
+        if ($as === 'present_for' && $candidate) {
+            return ($arabic ? 'حاضر عن' : 'Attending for').' ('.self::standsForLabel($minutes, $candidate).')';
+        }
 
         $how = $arabic
             ? ['lawyer' => 'محامٍ', 'legal_consultant' => 'مستشار قانوني', 'employee' => 'موظف', 'agent' => 'وكيل'][$as] ?? 'ممثل'

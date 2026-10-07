@@ -11,6 +11,7 @@ use App\Services\MMS\BulkMailPlaceholders;
 use App\Services\MMS\SenderMailer;
 use App\Services\WhatsAppCloud;
 use App\Services\WhatsAppService;
+use App\Support\Addresses;
 use App\Support\Honorific;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -27,7 +28,7 @@ class MinutesSender
     public function __construct(private readonly WhatsAppCloud $whatsapp) {}
 
     /**
-     * @param  list<array{name?: string, party_id?: ?int, email?: ?string, phone?: ?string, by_email?: bool, by_whatsapp?: bool}>  $recipients
+     * @param  list<array{name?: string, party_id?: ?int, emails?: list<string>, email?: ?string, phone?: ?string, by_email?: bool, by_whatsapp?: bool}>  $recipients
      * @return array{sent: int, failed: int, errors: list<string>}
      */
     public function send(
@@ -45,14 +46,20 @@ class MinutesSender
         $pdf = $this->pdf($minutes, $composer);
         $fileName = MinutesService::fileName($minutes).'.pdf';
         $mediaId = null;
+        // Each inbox and WhatsApp number once, however many recipients share it.
+        $emailed = [];
+        $messaged = [];
 
         foreach ($recipients as $recipient) {
             $name = trim((string) ($recipient['name'] ?? ''));
             // "الأستاذة/ موزة …": the bare name, its title and the honorific that agrees.
             $personal = [...$values, ...Honorific::values($name, $composer->isArabic())];
 
-            if (! empty($recipient['by_email']) && filled($recipient['email'] ?? null) && $senderKey) {
-                $this->attempt($minutes, $recipient, MinutesDelivery::EMAIL, trim((string) $recipient['email']), $userId, $result, function () use ($senderKey, $subject, $body, $personal, $composer, $pdf, $fileName, $recipient) {
+            $emails = Addresses::without(Addresses::emails([...(array) ($recipient['emails'] ?? []), $recipient['email'] ?? null]), $emailed);
+
+            if (! empty($recipient['by_email']) && $emails !== [] && $senderKey) {
+                $emailed = [...$emailed, ...$emails];
+                $this->attempt($minutes, $recipient, MinutesDelivery::EMAIL, Str::limit(implode(', ', $emails), 250, ''), $userId, $result, function () use ($senderKey, $subject, $body, $personal, $composer, $pdf, $fileName, $emails) {
                     $email = new LetterEmail(
                         BulkMailPlaceholders::apply((string) ($subject ?: self::defaultSubject($composer->isArabic())), array_map('strip_tags', $personal)),
                         BulkMailPlaceholders::apply((string) ($body ?: self::defaultBody($composer->isArabic())), $personal, escape: true),
@@ -61,13 +68,16 @@ class MinutesSender
                         [['name' => $fileName, 'data' => $pdf, 'mime' => 'application/pdf']],
                     );
 
-                    SenderMailer::using(SenderMailer::sender($senderKey), fn () => Mail::to(trim((string) $recipient['email']))->send($email));
+                    SenderMailer::using(SenderMailer::sender($senderKey), fn () => Mail::to($emails)->send($email));
 
                     return null;
                 });
             }
 
-            if (! empty($recipient['by_whatsapp']) && $template && ($phone = WhatsAppService::formatWhatsAppNumber($recipient['phone'] ?? null))) {
+            $phone = WhatsAppService::formatWhatsAppNumber($recipient['phone'] ?? null);
+
+            if (! empty($recipient['by_whatsapp']) && $template && $phone && ! in_array($phone, $messaged, true)) {
+                $messaged[] = $phone;
                 $this->attempt($minutes, $recipient, MinutesDelivery::WHATSAPP, $phone, $userId, $result, function () use ($template, $phone, $personal, $pdf, $fileName, &$mediaId) {
                     if ($template->header === 'document' && $mediaId === null) {
                         $file = tempnam(sys_get_temp_dir(), 'minutes');
@@ -138,8 +148,9 @@ class MinutesSender
      * Who to send to: the attendees marked present — and, for every main
      * party someone attended for (itself, its lawyer, an agent or an
      * employee), that party and all its representatives too, present or
-     * not. Each with their email and phone: the ones typed at the meeting,
-     * else their party's latest.
+     * not. Each with all their emails (the one typed at the meeting first)
+     * and their phone (typed, else their party's latest) — an inbox or a
+     * number on an earlier line isn't repeated.
      *
      * @return list<array{name: string, party_id: ?int, email: ?string, phone: ?string, by_email: bool, by_whatsapp: bool}>
      */
@@ -160,7 +171,9 @@ class MinutesSender
         }
 
         $attendedFor = $present
-            ->map(fn (array $a): ?int => filled($a['represents'] ?? null) ? (int) $a['represents'] : ($mainOf[(int) ($a['party_id'] ?? 0)] ?? null))
+            ->map(fn (array $a): ?int => filled($a['represents'] ?? null)
+                ? ($mainOf[(int) $a['represents']] ?? (int) $a['represents'])
+                : ($mainOf[(int) ($a['party_id'] ?? 0)] ?? null))
             ->filter()
             ->unique()
             ->all();
@@ -181,18 +194,32 @@ class MinutesSender
         $rows = $present->concat($absent->values());
         $parties = Party::query()->whereIn('id', $rows->pluck('party_id')->filter())->get()->keyBy('id');
 
+        // Every email of theirs (the one typed at the meeting first); an
+        // inbox or a WhatsApp number already on an earlier line isn't
+        // repeated — a party and its lawyer sharing one get it once.
+        $emailed = [];
+        $messaged = [];
+
         return $rows
-            ->map(function (array $a) use ($parties): array {
+            ->map(function (array $a) use ($parties, &$emailed, &$messaged): array {
                 $party = filled($a['party_id'] ?? null) ? $parties->get($a['party_id']) : null;
-                $email = filled($a['email'] ?? null) ? trim((string) $a['email']) : $party?->latestEmail();
+                $emails = Addresses::without(Addresses::emails([$a['email'] ?? null, ...array_reverse(Addresses::emails($party?->email ?? []))]), $emailed);
+                $emailed = [...$emailed, ...$emails];
+
                 $phone = filled($a['phone'] ?? null) ? trim((string) $a['phone']) : $party?->latestPhone();
+                if (filled($phone) && in_array(Addresses::phoneKey($phone), $messaged, true)) {
+                    $phone = null;
+                }
+                if (filled($phone)) {
+                    $messaged[] = Addresses::phoneKey($phone);
+                }
 
                 return [
                     'name' => trim(trim((string) ($a['title'] ?? '')).' '.trim((string) $a['name'])),
                     'party_id' => $party?->getKey(),
-                    'email' => $email,
+                    'emails' => $emails,
                     'phone' => $phone,
-                    'by_email' => filled($email),
+                    'by_email' => $emails !== [],
                     'by_whatsapp' => filled($phone),
                 ];
             })
