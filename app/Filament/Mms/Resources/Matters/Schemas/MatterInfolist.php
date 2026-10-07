@@ -578,16 +578,31 @@ class MatterInfolist
                             ->label(__('Name'))
                             ->icon('heroicon-o-user-circle')
                             ->weight(FontWeight::SemiBold)
-                            ->columnSpan(5)
+                            ->columnSpan(3)
                             ->grow(),
+                        // The party's latest phone and email.
+                        TextEntry::make('party_contact')
+                            ->label(__('Contact'))
+                            ->state(fn ($record): ?string => $record?->party?->contactLine())
+                            ->placeholder('—')
+                            ->extraAttributes(['dir' => 'ltr', 'style' => 'text-align: start;'])
+                            ->copyable()
+                            ->columnSpan(2),
                         RepeatableEntry::make('representatives')
                             ->label(__('Representatives'))
-                            ->columns(1)
+                            ->columns(5)
                             ->columnSpanFull()
                             ->visible(fn ($record) => $record?->representatives?->isNotEmpty())
                             ->schema([
                                 TextEntry::make('party.name')->label(__('Name'))
                                     ->icon('heroicon-o-user')->columnSpan(3),
+                                TextEntry::make('party_contact')
+                                    ->label(__('Contact'))
+                                    ->state(fn ($record): ?string => $record?->party?->contactLine())
+                                    ->placeholder('—')
+                                    ->extraAttributes(['dir' => 'ltr', 'style' => 'text-align: start;'])
+                                    ->copyable()
+                                    ->columnSpan(2),
                             ]),
                     ]),
             ]);

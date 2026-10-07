@@ -18,6 +18,7 @@ use App\Services\MMS\BulkMailPlaceholders;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterDocx;
 use App\Services\MMS\Letters\LetterPdf;
+use App\Services\MMS\Letters\MinutesSender;
 use App\Services\MMS\Letters\MinutesService;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -342,9 +343,93 @@ class MinutesTest extends TestCase
 
         $company->refresh();
         $this->assertSame('784-1998-6110217-8', $company->extra['id_number']);
-        $this->assertSame(['042223333', '0567778899'], $company->phone);
+        // Each the latest as it came: its own, its lawyer's (who stands for it), the one added by hand.
+        $this->assertSame(['0567778899', '+971 50 113 2801', '042223333'], $company->phone);
         $this->assertSame(['0501132801'], $this->lawyer->fresh()->phone);
         $this->assertSame(0, Party::where('name', 'زائر')->count());
+    }
+
+    public function test_an_attendee_is_picked_linked_to_the_party_they_stand_for_and_their_contact_kept_on_both(): void
+    {
+        $company = Party::where('name', 'المهاد لخدمات صيانة السفن')->sole();
+        $employee = Party::factory()->create(['name' => 'سالم الموظف', 'phone' => ['0501111111'], 'email' => ['old@salem.ae', 'salem@company.ae']]);
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
+
+        $page = $this->minutesPage()->mountTableAction('recordMeeting', $minutes);
+
+        // The lawyer stands for the company, as its agent.
+        $attendees = array_values($page->get('mountedActions.0.data.attendees'));
+        $this->assertEquals($company->id, $attendees[1]['represents']);
+        $this->assertSame([$company->id => 'المهاد لخدمات صيانة السفن — المدعي'], MinutesService::mainParties($minutes));
+
+        // Picked from the parties: name and latest contact filled in; standing
+        // for the company as its employee — the capacity follows.
+        $page->set('mountedActions.0.data.attendees.new', ['present' => true])
+            ->set('mountedActions.0.data.attendees.new.party_id', $employee->id)
+            ->assertSet('mountedActions.0.data.attendees.new.name', 'سالم الموظف')
+            ->assertSet('mountedActions.0.data.attendees.new.phone', '0501111111')
+            ->assertSet('mountedActions.0.data.attendees.new.email', 'salem@company.ae')
+            ->set('mountedActions.0.data.attendees.new.represents', $company->id)
+            ->set('mountedActions.0.data.attendees.new.as', 'employee')
+            ->assertSet('mountedActions.0.data.attendees.new.capacity', 'موظف عن المدعي')
+            // A new mobile and email typed at the meeting.
+            ->set('mountedActions.0.data.attendees.new.phone', '0559998888')
+            ->set('mountedActions.0.data.attendees.new.email', 'salem.new@company.ae')
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+
+        $saved = collect($minutes->fresh()->attendees)->firstWhere('party_id', $employee->id);
+        $this->assertEquals(['represents' => $company->id, 'as' => 'employee', 'capacity' => 'موظف عن المدعي'], array_intersect_key($saved, array_flip(['represents', 'as', 'capacity'])));
+
+        // Kept on the attendee's party and on the party they stand for — as the latest.
+        $this->assertSame('0559998888', $employee->fresh()->latestPhone());
+        $this->assertSame('salem.new@company.ae', $employee->fresh()->latestEmail());
+        $this->assertSame('0559998888', $company->fresh()->latestPhone());
+        $this->assertSame('salem.new@company.ae', $company->fresh()->latestEmail());
+    }
+
+    public function test_the_minutes_go_to_the_party_and_its_representatives_when_only_its_employee_attended(): void
+    {
+        $company = Party::where('name', 'المهاد لخدمات صيانة السفن')->sole();
+        $company->update(['email' => ['info@almehad.ae']]);
+        $this->lawyer->update(['email' => ['lawyer@firm.ae']]);
+        // A party no one attended for: not sent to.
+        MatterParty::create(['matter_id' => $this->matter->id, 'role' => 'party', 'type' => 'defendant',
+            'party_id' => Party::factory()->create(['name' => 'Absent Co', 'email' => ['absent@co.ae']])->id]);
+
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT, 'attendees' => [
+                ['present' => false, 'name' => $company->name, 'party_id' => $company->id],
+                ['present' => false, 'name' => $this->lawyer->name, 'party_id' => $this->lawyer->id, 'represents' => $company->id],
+                ['present' => true, 'title' => 'السيد/', 'name' => 'سالم الموظف', 'email' => 'salem@almehad.ae', 'represents' => $company->id, 'as' => 'employee'],
+            ]]);
+
+        $recipients = collect(MinutesSender::recipients($minutes));
+
+        $this->assertEqualsCanonicalizing(['salem@almehad.ae', 'info@almehad.ae', 'lawyer@firm.ae'], $recipients->pluck('email')->all());
+        $this->assertSame('السادة/ المهاد لخدمات صيانة السفن', $recipients->firstWhere('email', 'info@almehad.ae')['name']);
+    }
+
+    public function test_a_contact_given_again_becomes_the_latest_without_a_duplicate(): void
+    {
+        $party = Party::factory()->create(['phone' => ['0501111111', '0502222222'], 'email' => ['A@x.ae', 'b@x.ae']]);
+
+        $party->addContact('+971 50 111 1111', 'a@x.ae');
+
+        $this->assertSame(['0502222222', '0501111111'], $party->fresh()->phone);
+        $this->assertSame(['b@x.ae', 'a@x.ae'], $party->fresh()->email);
+        $this->assertSame('0501111111 · a@x.ae', $party->fresh()->contactLine());
+    }
+
+    public function test_the_matter_shows_each_partys_latest_phone_and_email(): void
+    {
+        $company = Party::where('name', 'المهاد لخدمات صيانة السفن')->sole();
+        $company->update(['phone' => ['0401111111', '0402222222'], 'email' => ['old@almehad.ae', 'info@almehad.ae']]);
+
+        Livewire::test(ViewMatter::class, ['record' => $this->matter->getRouteKey()])
+            ->assertSee('0402222222 · info@almehad.ae')
+            ->assertDontSee('0401111111 · ');
     }
 
     public function test_the_title_reads_right_in_word(): void

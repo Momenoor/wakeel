@@ -133,21 +133,57 @@ class MinutesSender
     }
 
     /**
-     * Who to send to: the attendees marked present, with their email (from
-     * their party) and phone.
+     * Who to send to: the attendees marked present — and, for every main
+     * party someone attended for (itself, its lawyer, an agent or an
+     * employee), that party and all its representatives too, present or
+     * not. Each with their email and phone: the ones typed at the meeting,
+     * else their party's latest.
      *
      * @return list<array{name: string, party_id: ?int, email: ?string, phone: ?string, by_email: bool, by_whatsapp: bool}>
      */
     public static function recipients(MatterMinutes $minutes): array
     {
-        $parties = Party::query()->whereIn('id', collect($minutes->attendees ?? [])->pluck('party_id')->filter())->get()->keyBy('id');
-
-        return collect($minutes->attendees ?? [])
+        $arabic = (($minutes->template?->locale) ?: 'ar') !== 'en';
+        $candidates = LetterComposer::candidates($minutes->matter, $arabic);
+        $present = collect($minutes->attendees ?? [])
             ->filter(fn ($a) => is_array($a) && ! empty($a['present']) && filled($a['name'] ?? null))
+            ->values();
+
+        // The main parties attended for.
+        $mainOf = [];
+        foreach ($candidates as $c) {
+            if (filled($c['party_id'] ?? null)) {
+                $mainOf[(int) $c['party_id']] ??= filled($c['of'] ?? null) ? (int) ($candidates[$c['of']]['party_id'] ?? 0) : (int) $c['party_id'];
+            }
+        }
+
+        $attendedFor = $present
+            ->map(fn (array $a): ?int => filled($a['represents'] ?? null) ? (int) $a['represents'] : ($mainOf[(int) ($a['party_id'] ?? 0)] ?? null))
+            ->filter()
+            ->unique()
+            ->all();
+
+        // …with everyone of theirs who wasn't there.
+        $sentTo = $present->pluck('party_id')->filter()->map(fn ($id) => (int) $id)->all();
+        $absent = collect($candidates)
+            ->filter(fn (array $c): bool => filled($c['party_id'] ?? null)
+                && in_array($mainOf[(int) $c['party_id']] ?? null, $attendedFor, true)
+                && ! in_array((int) $c['party_id'], $sentTo, true))
+            ->unique('party_id')
+            ->map(fn (array $c): array => [
+                'title' => MinutesService::isCompany((string) $c['name']) ? ($arabic ? 'السادة/' : 'Messrs.') : ($arabic ? 'الأستاذ/' : 'Mr.'),
+                'name' => $c['name'],
+                'party_id' => $c['party_id'],
+            ]);
+
+        $rows = $present->concat($absent->values());
+        $parties = Party::query()->whereIn('id', $rows->pluck('party_id')->filter())->get()->keyBy('id');
+
+        return $rows
             ->map(function (array $a) use ($parties): array {
                 $party = filled($a['party_id'] ?? null) ? $parties->get($a['party_id']) : null;
-                $email = collect((array) ($party?->email ?? []))->filter()->first();
-                $phone = $a['phone'] ?? collect((array) ($party?->phone ?? []))->filter()->first();
+                $email = filled($a['email'] ?? null) ? trim((string) $a['email']) : $party?->latestEmail();
+                $phone = filled($a['phone'] ?? null) ? trim((string) $a['phone']) : $party?->latestPhone();
 
                 return [
                     'name' => trim(trim((string) ($a['title'] ?? '')).' '.trim((string) $a['name'])),

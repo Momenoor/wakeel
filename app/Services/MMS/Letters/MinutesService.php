@@ -6,7 +6,6 @@ use App\Models\Letterhead;
 use App\Models\LetterTemplate;
 use App\Models\MatterMinutes;
 use App\Models\Party;
-use App\Services\WhatsAppService;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -94,7 +93,11 @@ class MinutesService
                 'capacity' => $a['capacity'] ?? null,
                 'id_number' => $a['id_number'] ?? null,
                 'phone' => $a['phone'] ?? null,
+                'email' => filled($a['email'] ?? null) ? trim((string) $a['email']) : null,
                 'party_id' => filled($a['party_id'] ?? null) ? (int) $a['party_id'] : null,
+                // The main party they stand for, and how (lawyer, employee …).
+                'represents' => filled($a['represents'] ?? null) ? (int) $a['represents'] : null,
+                'as' => filled($a['as'] ?? null) ? (string) $a['as'] : null,
             ], array_filter((array) ($data['attendees'] ?? []), 'is_array'))),
             'items' => array_values(array_map(fn (array $item): array => [
                 'type' => ($item['type'] ?? 'question') === 'comment' ? 'comment' : 'question',
@@ -133,21 +136,86 @@ class MinutesService
      */
     public static function attendeeCandidates(MatterMinutes $minutes): array
     {
-        $arabic = (($minutes->template?->locale) ?: 'ar') !== 'en';
-        $parties = Party::query()->whereIn('id', collect(LetterComposer::candidates($minutes->matter, $arabic))->pluck('party_id')->filter())->get()->keyBy('id');
+        $arabic = self::arabic($minutes);
+        $candidates = LetterComposer::candidates($minutes->matter, $arabic);
+        $parties = Party::query()->whereIn('id', collect($candidates)->pluck('party_id')->filter())->get()->keyBy('id');
 
-        return collect(LetterComposer::candidates($minutes->matter, $arabic))
+        return collect($candidates)
             ->map(fn (array $c): array => [
                 'present' => false,
                 'title' => self::isCompany($c['name']) ? ($arabic ? 'السادة/' : 'Messrs.') : ($arabic ? 'الأستاذ/' : 'Mr.'),
                 'name' => $c['name'],
                 'capacity' => $c['role'],
                 'id_number' => $parties->get($c['party_id'])?->extra['id_number'] ?? null,
-                'phone' => $c['phones'][0] ?? null,
+                'phone' => $parties->get($c['party_id'])?->latestPhone(),
+                'email' => $parties->get($c['party_id'])?->latestEmail(),
                 'party_id' => $c['party_id'],
+                // A representative stands for their party; a party for itself.
+                'represents' => filled($c['of'] ?? null) && filled($candidates[$c['of']]['party_id'] ?? null) ? (int) $candidates[$c['of']]['party_id'] : null,
+                'as' => filled($c['of'] ?? null) ? 'agent' : null,
             ])
             ->values()
             ->all();
+    }
+
+    private static function arabic(MatterMinutes $minutes): bool
+    {
+        return (($minutes->template?->locale) ?: 'ar') !== 'en';
+    }
+
+    /**
+     * The matter's main parties an attendee can stand for: party id =>
+     * "name — side" (المدعي, المدعى عليه …).
+     *
+     * @return array<int, string>
+     */
+    public static function mainParties(MatterMinutes $minutes): array
+    {
+        return collect(LetterComposer::candidates($minutes->matter, self::arabic($minutes)))
+            ->filter(fn (array $c): bool => blank($c['of'] ?? null) && filled($c['party_id'] ?? null))
+            ->mapWithKeys(fn (array $c): array => [(int) $c['party_id'] => trim($c['name'].($c['role'] ? ' — '.$c['role'] : ''))])
+            ->all();
+    }
+
+    /**
+     * How an attendee stands for a main party.
+     *
+     * @return array<string, string>
+     */
+    public static function attendeeRoles(): array
+    {
+        return [
+            'lawyer' => __('Lawyer'),
+            'legal_consultant' => __('Legal consultant'),
+            'employee' => __('Employee'),
+            'agent' => __('Agent'),
+        ];
+    }
+
+    /**
+     * The capacity an attendee is listed under: "محامٍ عن المدعي",
+     * "موظف عن المدعى عليه" … from whom they stand for and how. Null when
+     * they stand for no one (their capacity stays as typed).
+     */
+    public static function capacityFor(MatterMinutes $minutes, mixed $represents, ?string $as): ?string
+    {
+        if (blank($represents)) {
+            return null;
+        }
+
+        $arabic = self::arabic($minutes);
+        $side = collect(LetterComposer::candidates($minutes->matter, $arabic))
+            ->first(fn (array $c): bool => blank($c['of'] ?? null) && (int) ($c['party_id'] ?? 0) === (int) $represents)['role'] ?? null;
+
+        $how = $arabic
+            ? ['lawyer' => 'محامٍ', 'legal_consultant' => 'مستشار قانوني', 'employee' => 'موظف', 'agent' => 'وكيل'][$as] ?? 'ممثل'
+            : ['lawyer' => 'Lawyer', 'legal_consultant' => 'Legal consultant', 'employee' => 'Employee', 'agent' => 'Agent'][$as] ?? 'Representative';
+
+        if (blank($side)) {
+            return $how;
+        }
+
+        return $arabic ? $how.' عن '.$side : $how.' for the '.$side;
     }
 
     /**
@@ -163,11 +231,12 @@ class MinutesService
     }
 
     /**
-     * The ID numbers and phones typed at the meeting, kept on the parties
-     * for next time: the ID replaces the one known, a new phone goes first
-     * among theirs (one they have already, however written, isn't added
-     * again). An attendee added by hand counts when named as one of the
-     * matter's parties.
+     * The ID numbers, phones and emails typed at the meeting, kept on the
+     * parties for next time: the ID replaces the one known; a phone or email
+     * becomes the party's latest (Party::addContact) — the attendee's own
+     * party's, and the main party's they stand for. An attendee added by
+     * hand counts when picked from the parties, or named as one of the
+     * matter's.
      */
     public static function rememberContactDetails(MatterMinutes $minutes): void
     {
@@ -183,7 +252,8 @@ class MinutesService
 
             $id = trim((string) ($attendee['id_number'] ?? ''));
             $phone = trim((string) ($attendee['phone'] ?? ''));
-            if ($id === '' && $phone === '') {
+            $email = trim((string) ($attendee['email'] ?? ''));
+            if ($id === '' && $phone === '' && $email === '') {
                 continue;
             }
 
@@ -191,24 +261,19 @@ class MinutesService
             $party = Party::find(filled($attendee['party_id'] ?? null)
                 ? $attendee['party_id']
                 : $byName->get(self::nameKey((string) ($attendee['name'] ?? '')))?->getKey());
-            if (! $party) {
-                continue;
+
+            if ($party) {
+                if ($id !== '' && ($party->extra['id_number'] ?? null) !== $id) {
+                    $party->update(['extra' => [...((array) ($party->extra ?? [])), 'id_number' => $id]]);
+                }
+
+                $party->addContact($phone, $email);
             }
 
-            $changes = [];
-
-            if ($id !== '' && ($party->extra['id_number'] ?? null) !== $id) {
-                $changes['extra'] = [...((array) ($party->extra ?? [])), 'id_number' => $id];
-            }
-
-            $phones = array_values(array_filter((array) ($party->phone ?? []), 'filled'));
-            $known = array_map(fn ($p) => self::phoneKey((string) $p), $phones);
-            if ($phone !== '' && ! in_array(self::phoneKey($phone), $known, true)) {
-                $changes['phone'] = [$phone, ...$phones];
-            }
-
-            if ($changes !== []) {
-                $party->update($changes);
+            // …and the main party they stand for.
+            $main = filled($attendee['represents'] ?? null) ? Party::find($attendee['represents']) : null;
+            if ($main && ! $main->is($party)) {
+                $main->addContact($phone, $email);
             }
         }
     }
@@ -217,12 +282,6 @@ class MinutesService
     private static function nameKey(string $name): string
     {
         return mb_strtolower(preg_replace('/\s+/u', ' ', trim($name)) ?? '');
-    }
-
-    /** A phone compared as its international digits: 050…, +97150…, 0097150… are one. */
-    private static function phoneKey(string $phone): string
-    {
-        return WhatsAppService::formatWhatsAppNumber($phone) ?? preg_replace('/\D+/', '', $phone) ?? '';
     }
 
     /**

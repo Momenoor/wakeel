@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\WhatsAppService;
 use App\Support\Sql;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -315,5 +316,75 @@ class Party extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /**
+     * The phone added last — the party form and the minutes both add new
+     * ones at the end.
+     */
+    public function latestPhone(): ?string
+    {
+        return self::latest($this->phone);
+    }
+
+    public function latestEmail(): ?string
+    {
+        return self::latest($this->email);
+    }
+
+    /**
+     * "0501234567 · name@example.com" — the latest of each, for showing
+     * beside the party's name.
+     */
+    public function contactLine(): ?string
+    {
+        return collect([$this->latestPhone(), $this->latestEmail()])->filter()->implode(' · ') ?: null;
+    }
+
+    /**
+     * A phone and/or email given for this party (at a meeting, …): added as
+     * the latest. One they have already — however written — is moved to the
+     * end rather than added twice. Saved only when something changed.
+     */
+    public function addContact(?string $phone = null, ?string $email = null): void
+    {
+        $changes = [];
+
+        if (filled($phone = trim((string) $phone))) {
+            $phones = self::values($this->phone);
+            $key = fn (string $p): string => WhatsAppService::formatWhatsAppNumber($p) ?? (preg_replace('/\D+/', '', $p) ?? '');
+            $others = array_values(array_filter($phones, fn (string $p): bool => $key($p) !== $key($phone)));
+            $kept = array_values(array_filter($phones, fn (string $p): bool => $key($p) === $key($phone)));
+
+            if (end($phones) === false || $key((string) end($phones)) !== $key($phone)) {
+                $changes['phone'] = [...$others, $kept[0] ?? $phone];
+            }
+        }
+
+        if (filled($email = trim((string) $email)) && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $emails = self::values($this->email);
+            $others = array_values(array_filter($emails, fn (string $e): bool => mb_strtolower($e) !== mb_strtolower($email)));
+
+            if (end($emails) === false || mb_strtolower((string) end($emails)) !== mb_strtolower($email)) {
+                $changes['email'] = [...$others, $email];
+            }
+        }
+
+        if ($changes !== []) {
+            $this->update($changes);
+        }
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function values(mixed $value): array
+    {
+        return collect(is_array($value) ? $value : [$value])->flatten()->map(fn ($v) => trim((string) $v))->filter()->values()->all();
+    }
+
+    private static function latest(mixed $value): ?string
+    {
+        return collect(self::values($value))->last();
     }
 }

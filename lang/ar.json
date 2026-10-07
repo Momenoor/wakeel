@@ -3622,5 +3622,15 @@
     "Your office name": "اسم مكتبكم",
     "Leave requests are sent to": "تُرسل طلبات الإجازة إلى",
     "Add an email address": "أضف بريداً إلكترونياً",
-    "Empty: everyone who can approve leave requests.": "إن تُرك فارغاً: كل من يملك صلاحية اعتماد طلبات الإجازة."
+    "Empty: everyone who can approve leave requests.": "إن تُرك فارغاً: كل من يملك صلاحية اعتماد طلبات الإجازة.",
+    "Agent": "وكيل",
+    "As": "بصفة",
+    "From the parties": "من الأطراف",
+    "Lawyer": "محامٍ",
+    "Legal consultant": "مستشار قانوني",
+    "No phone or email yet": "لا يوجد هاتف أو بريد بعد",
+    "Not in the system": "غير مسجل في النظام",
+    "Represents": "يمثّل",
+    "Themselves": "نفسه",
+    "Tick who attended. Pick an attendee from the parties and the main party they stand for; ID numbers, phones and emails typed here are kept on their party — and the phone and email on the main party too — for next time.": "حدّد من حضر. اختر الحاضر من الأطراف والطرف الأصيل الذي يمثّله؛ أرقام الهوية والهواتف والبريد المدخلة هنا تُحفظ في ملف الطرف — والهاتف والبريد في ملف الطرف الأصيل أيضاً — للمرات القادمة."
 }

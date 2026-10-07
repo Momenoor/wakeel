@@ -12,6 +12,7 @@ use App\Models\Letterhead;
 use App\Models\LetterTemplate;
 use App\Models\MatterMinutes;
 use App\Models\MinutesDelivery;
+use App\Models\Party;
 use App\Models\WhatsAppTemplate;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\MinutesSender;
@@ -274,7 +275,7 @@ class MinutesRelationManager extends RelationManager
                             ->columnSpanFull(),
                     ]),
                 Section::make(__('Attendance'))
-                    ->description(__('Tick who attended. ID numbers typed here are remembered for next time.'))
+                    ->description(__('Tick who attended. Pick an attendee from the parties and the main party they stand for; ID numbers, phones and emails typed here are kept on their party — and the phone and email on the main party too — for next time.'))
                     ->schema([
                         Repeater::make('attendees')
                             ->hiddenLabel()
@@ -288,11 +289,59 @@ class MinutesRelationManager extends RelationManager
                                     ->options(['السادة/' => 'السادة/', 'الأستاذ/' => 'الأستاذ/', 'الأستاذة/' => 'الأستاذة/', 'السيد/' => 'السيد/', 'السيدة/' => 'السيدة/', 'Messrs.' => 'Messrs.', 'Mr.' => 'Mr.', 'Ms.' => 'Ms.'])
                                     ->placeholder('—')
                                     ->columnSpan(2),
-                                TextInput::make('name')->label(__('Name'))->required()->columnSpan(3),
-                                TextInput::make('capacity')->label(__('Capacity'))->columnSpan(2),
-                                TextInput::make('id_number')->label(__('ID number'))->columnSpan(2),
-                                TextInput::make('phone')->label(__('Phone'))->columnSpan(2),
-                                Hidden::make('party_id'),
+                                // Linked to a party in the system: their name,
+                                // ID, latest phone and email filled in.
+                                Select::make('party_id')
+                                    ->label(__('From the parties'))
+                                    ->placeholder(__('Not in the system'))
+                                    ->searchable()
+                                    ->getSearchResultsUsing(fn (string $search): array => Party::query()
+                                        ->where('name', 'like', '%'.$search.'%')
+                                        ->orderBy('name')
+                                        ->limit(20)
+                                        ->pluck('name', 'id')
+                                        ->all())
+                                    ->getOptionLabelUsing(fn ($value): ?string => Party::query()->whereKey($value)->value('name'))
+                                    ->live()
+                                    ->afterStateUpdated(function ($state, $old, Get $get, Set $set) use ($record): void {
+                                        // Only a party newly picked fills the line in — not one
+                                        // already on it (its name there), whose phone may have
+                                        // just been typed.
+                                        $party = filled($state) && (string) $state !== (string) $old ? Party::find($state) : null;
+                                        if (! $party || trim((string) $get('name')) === trim((string) $party->name)) {
+                                            return;
+                                        }
+
+                                        $set('name', $party->name);
+                                        $set('title', $get('title') ?: (MinutesService::isCompany((string) $party->name)
+                                            ? ((($record->template?->locale) ?: 'ar') !== 'en' ? 'السادة/' : 'Messrs.')
+                                            : ((($record->template?->locale) ?: 'ar') !== 'en' ? 'الأستاذ/' : 'Mr.')));
+                                        $set('id_number', $party->extra['id_number'] ?? $get('id_number'));
+                                        $set('phone', $party->latestPhone() ?? $get('phone'));
+                                        $set('email', $party->latestEmail() ?? $get('email'));
+                                    })
+                                    ->columnSpan(4),
+                                TextInput::make('name')->label(__('Name'))->required()->columnSpan(5),
+                                // Whom they stand for, and how: the capacity
+                                // follows ("محامٍ عن المدعي"), still editable.
+                                Select::make('represents')
+                                    ->label(__('Represents'))
+                                    ->options(fn (): array => MinutesService::mainParties($record))
+                                    ->placeholder(__('Themselves'))
+                                    ->live()
+                                    ->afterStateUpdated(fn ($old, Get $get, Set $set) => self::followCapacity($record, $get, $set, $old, $get('as')))
+                                    ->columnSpan(4),
+                                Select::make('as')
+                                    ->label(__('As'))
+                                    ->options(MinutesService::attendeeRoles())
+                                    ->placeholder('—')
+                                    ->live()
+                                    ->afterStateUpdated(fn ($old, Get $get, Set $set) => self::followCapacity($record, $get, $set, $get('represents'), $old))
+                                    ->columnSpan(2),
+                                TextInput::make('capacity')->label(__('Capacity'))->columnSpan(3),
+                                TextInput::make('id_number')->label(__('ID number'))->columnSpan(3),
+                                TextInput::make('phone')->label(__('Phone'))->tel()->extraInputAttributes(['dir' => 'ltr'])->columnSpan(4),
+                                TextInput::make('email')->label(__('Email'))->email()->extraInputAttributes(['dir' => 'ltr'])->columnSpan(5),
                             ]),
                     ]),
                 Section::make(__('Questions and answers'))
@@ -338,6 +387,22 @@ class MinutesRelationManager extends RelationManager
 
                 Notification::make()->success()->title(__('Minutes (:number) saved', ['number' => $record->number]))->send();
             });
+    }
+
+    /**
+     * Whom an attendee stands for, or how, changed: their capacity follows
+     * ("موظف عن المدعي") — unless it was written by hand (it is then neither
+     * empty nor what the earlier choice made).
+     */
+    private static function followCapacity(MatterMinutes $record, Get $get, Set $set, mixed $oldRepresents, ?string $oldAs): void
+    {
+        $capacity = trim((string) $get('capacity'));
+        $before = MinutesService::capacityFor($record, $oldRepresents, $oldAs);
+        $now = MinutesService::capacityFor($record, $get('represents'), $get('as'));
+
+        if ($now !== null && $now !== $capacity && ($capacity === '' || $capacity === $before)) {
+            $set('capacity', $now);
+        }
     }
 
     /**

@@ -317,7 +317,7 @@ class MatterForm
                                                         $set('representatives', []);
                                                     }),
 
-                                                // No ->live() — nothing downstream reads party_id changes
+                                                // Live: the party's latest phone and email show under it.
                                                 Select::make('party_id')
                                                     ->label(__('Party Name'))
                                                     ->relationship('party', 'name', function ($query) {
@@ -338,6 +338,8 @@ class MatterForm
                                                     ->searchable()
                                                     // Not preloaded: found by typing. 50 names fetched for every row of
                                                     // the form (thousands of parties) made each open of a matter slow.
+                                                    ->live()
+                                                    ->helperText(fn (Get $get): ?string => self::contactLine($get('party_id')))
                                                     ->columnSpan(2)
                                                     ->required(),
 
@@ -375,8 +377,8 @@ class MatterForm
                                                             })
                                                             ->afterStateUpdated(function (Get $get, Set $set) {
                                                                 $party = Party::find($get('party_id'));
-                                                                $set('party_email', $party->email);
-                                                                $set('party_phone', $party->phone);
+                                                                $set('party_email', $party?->latestEmail());
+                                                                $set('party_phone', $party?->latestPhone());
                                                             })
                                                             ->live(onBlur: true)
                                                             // Not preloaded: found by typing. 50 names fetched for every row of
@@ -385,8 +387,18 @@ class MatterForm
                                                             ->searchable()
                                                             ->disableOptionsWhenSelectedInSiblingRepeaterItems()
                                                             ->columnSpanFull(),
-                                                        TextInput::make('party_email')->disabled(),
-                                                        TextInput::make('party_phone')->disabled(),
+                                                        // The representative's latest email and phone — shown, not saved
+                                                        // here (they're kept on the party).
+                                                        TextInput::make('party_email')
+                                                            ->disabled()
+                                                            ->dehydrated(false)
+                                                            ->afterStateHydrated(fn (TextInput $component, Get $get) => $component->state(Party::find($get('party_id'))?->latestEmail()))
+                                                            ->extraInputAttributes(['dir' => 'ltr']),
+                                                        TextInput::make('party_phone')
+                                                            ->disabled()
+                                                            ->dehydrated(false)
+                                                            ->afterStateHydrated(fn (TextInput $component, Get $get) => $component->state(Party::find($get('party_id'))?->latestPhone()))
+                                                            ->extraInputAttributes(['dir' => 'ltr']),
                                                         Hidden::make('role')->default('representative'),
 
                                                         Hidden::make('type')
@@ -569,5 +581,21 @@ class MatterForm
                             ->columnSpan(2),
                     ])->columnSpanFull(),
             ]);
+    }
+
+    /**
+     * "📞 0501234567 · ✉ name@example.com" — a party's latest phone and email,
+     * under its name on the form.
+     */
+    private static function contactLine(mixed $partyId): ?string
+    {
+        if (blank($partyId)) {
+            return null;
+        }
+
+        $party = Party::query()->find($partyId, ['id', 'phone', 'email']);
+        $parts = array_filter(['📞 '.($party?->latestPhone() ?? ''), '✉ '.($party?->latestEmail() ?? '')], fn (string $part): bool => mb_strlen($part) > 2);
+
+        return $parts !== [] ? implode(' · ', $parts) : __('No phone or email yet');
     }
 }
