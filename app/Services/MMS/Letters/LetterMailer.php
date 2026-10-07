@@ -11,6 +11,7 @@ use App\Services\MMS\BulkMailPlaceholders;
 use App\Services\MMS\EmailPdf;
 use App\Services\MMS\SenderMailer;
 use App\Services\MMS\SentFolder;
+use App\Support\Honorific;
 use App\Support\RichHtml;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -256,7 +257,7 @@ class LetterMailer
     {
         $values = [
             ...$composer->values(),
-            'recipient.name' => (string) ($recipient?->name ?? ''),
+            ...Honorific::values((string) ($recipient?->name ?? ''), $composer->isArabic()),
             'recipient.role' => (string) ($recipient?->role ?? ''),
         ];
 

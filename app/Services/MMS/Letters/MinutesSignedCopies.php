@@ -11,6 +11,7 @@ use App\Services\MMS\BulkMailPlaceholders;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\WhatsAppCloud;
 use App\Services\WhatsAppService;
+use App\Support\Honorific;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Log;
@@ -174,7 +175,8 @@ class MinutesSignedCopies
     {
         try {
             $minutes = $delivery->minutes;
-            $values = [...MinutesService::composer($minutes)->values(), 'recipient.name' => $delivery->name];
+            $composer = MinutesService::composer($minutes);
+            $values = [...$composer->values(), ...Honorific::values($delivery->name, $composer->isArabic())];
             $values = array_map(fn ($value) => trim(html_entity_decode(strip_tags((string) $value))), $values);
 
             $this->whatsapp->sendText($delivery->address, BulkMailPlaceholders::apply($text, $values));

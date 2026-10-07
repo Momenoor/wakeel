@@ -11,6 +11,7 @@ use App\Services\MMS\BulkMailPlaceholders;
 use App\Services\MMS\SenderMailer;
 use App\Services\WhatsAppCloud;
 use App\Services\WhatsAppService;
+use App\Support\Honorific;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -47,7 +48,8 @@ class MinutesSender
 
         foreach ($recipients as $recipient) {
             $name = trim((string) ($recipient['name'] ?? ''));
-            $personal = [...$values, 'recipient.name' => $name];
+            // "الأستاذة/ موزة …": the bare name, its title and the honorific that agrees.
+            $personal = [...$values, ...Honorific::values($name, $composer->isArabic())];
 
             if (! empty($recipient['by_email']) && filled($recipient['email'] ?? null) && $senderKey) {
                 $this->attempt($minutes, $recipient, MinutesDelivery::EMAIL, trim((string) $recipient['email']), $userId, $result, function () use ($senderKey, $subject, $body, $personal, $composer, $pdf, $fileName, $recipient) {
@@ -208,7 +210,7 @@ class MinutesSender
     public static function defaultBody(bool $arabic): string
     {
         return $arabic
-            ? '<p>السادة/ {{recipient.name}} المحترمين،</p><p>تحية طيبة وبعد،</p>'
+            ? '<p>{{recipient.salutation}}،</p><p>تحية طيبة وبعد،</p>'
                 .'<p>نرفق لكم محضر اجتماع الخبرة رقم ({{minutes.number}}) في الدعوى رقم {{matter.reference}}، المنعقد بتاريخ {{meeting.date}}.</p>'
                 .'<p>نرجو التكرم بمراجعة المحضر وتوقيعه، ثم إعادة إرساله إلينا موقّعاً.</p><p>مع خالص الشكر والتقدير.</p>'
             : '<p>Dear {{recipient.name}},</p>'

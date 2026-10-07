@@ -11,6 +11,7 @@ use App\Models\Type;
 use App\Services\MMS\BulkMailPlaceholders;
 use App\Services\MMS\Letters\Blocks\SignatureBlock;
 use App\Support\CompanyContact;
+use App\Support\Honorific;
 use App\Support\RichHtml;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -318,11 +319,16 @@ class LetterComposer
         $emails = fn (array $list, array $phones = []): string => collect([...$list, ...$phones])->filter(fn ($line) => filled($line))->map(fn ($line) => '<p class="recipient-email" dir="ltr">'.e((string) $line).'</p>')->implode('');
         $line = fn (string $text): string => '<p class="recipient"><strong>'.$text.'</strong></p>';
         $addressee = function (array $recipient, string $after = '') use ($arabic, &$first): string {
-            $prefix = $arabic ? ($first ? 'السادة/ ' : 'والسادة/ ') : ($first ? 'Messrs. ' : 'And Messrs. ');
+            ['title' => $title, 'name' => $name] = Honorific::split((string) $recipient['name']);
+            // "السادة/ … المحترمين", or the name's own title and the honorific
+            // that agrees ("الأستاذة/ … المحترمة") — the party alone; with
+            // their representative it stays plural.
+            $title = $arabic && $after === '' && isset(Honorific::ARABIC[$title ?? '']) ? $title : ($arabic ? 'السادة/' : 'Messrs.');
+            $prefix = ($first ? '' : ($arabic ? 'و' : 'And ')).$title.' ';
             $first = false;
             $role = filled($recipient['role'] ?? null) ? ' ('.e($recipient['role']).')' : '';
 
-            return $prefix.e($recipient['name']).$role.$after.($arabic ? ' المحترمين' : '');
+            return $prefix.e($name).$role.$after.($arabic ? ' '.Honorific::suffix($title) : '');
         };
         // The same representatives: the same people, in any order.
         $key = fn (array $recipient): string => collect($recipient['representatives'] ?? [])
@@ -364,7 +370,11 @@ class LetterComposer
             $by = $arabic ? ($group->count() > 1 ? 'ووكيلهم' : 'ووكيله').' السادة/ ' : 'Represented by Messrs. ';
 
             foreach ($representatives as $rep) {
-                $html .= $line($by.e($rep['name']).($arabic ? ' المحترمين' : '')).$emails($rep['emails'] ?? [], $rep['phones'] ?? []);
+                ['title' => $title, 'name' => $name] = Honorific::split((string) $rep['name']);
+                $repLine = $arabic && isset(Honorific::ARABIC[$title ?? '']) && $title !== 'السادة/'
+                    ? str_replace('السادة/ ', $title.' ', $by).e($name).' '.Honorific::suffix($title)
+                    : $by.e($name).($arabic ? ' المحترمين' : '');
+                $html .= $line($repLine).$emails($rep['emails'] ?? [], $rep['phones'] ?? []);
             }
         }
 
@@ -462,6 +472,8 @@ class LetterComposer
             'attendee.capacity' => trim((string) ($a['capacity'] ?? '')),
             'attendee.id_number' => trim((string) ($a['id_number'] ?? '')),
             'attendee.phone' => trim((string) ($a['phone'] ?? '')),
+            // المحترم / المحترمة / المحترمين, agreeing with the title.
+            'attendee.suffix' => isset(Honorific::ARABIC[trim((string) ($a['title'] ?? ''))]) ? Honorific::ARABIC[trim((string) $a['title'])] : '',
         ];
 
         // The ID and phone written left to right — in an Arabic line

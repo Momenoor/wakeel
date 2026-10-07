@@ -19,6 +19,7 @@ use App\Services\MMS\Letters\MinutesSender;
 use App\Services\MMS\Letters\MinutesService;
 use App\Services\MMS\SenderMailer;
 use App\Services\WhatsAppCloud;
+use App\Support\Honorific;
 use App\Support\ScreenPermissions;
 use Carbon\Carbon;
 use Filament\Actions\Action;
@@ -587,7 +588,7 @@ class MinutesRelationManager extends RelationManager
                                 return $template
                                     ? new HtmlString('<div dir="auto" style="white-space: pre-line;">'.e($template->preview($template->parameterValues([
                                         ...MinutesService::composer($record)->values(),
-                                        'recipient.name' => (string) ($first['name'] ?? ''),
+                                        ...Honorific::values((string) ($first['name'] ?? ''), MinutesService::composer($record)->isArabic()),
                                     ]))).'</div>')
                                     : '—';
                             }),

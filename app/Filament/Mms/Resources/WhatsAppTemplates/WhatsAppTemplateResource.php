@@ -97,7 +97,7 @@ class WhatsAppTemplateResource extends Resource
                 ->helperText(new HtmlString(e(__('Each parameter in the text, and what fills it — fixed text, or placeholders such as :examples.', ['examples' => '{{recipient.name}}, {{minutes.number}}, {{matter.reference}}, {{meeting.date}}']))))
                 ->schema([
                     TextInput::make('name')->label(__('Parameter'))->regex('/^[a-z0-9_]+$/')->required(),
-                    TextInput::make('value')->label(__('Filled with'))->required()->datalist(array_map(fn (string $key) => '{{'.$key.'}}', ['recipient.name', ...array_keys(LetterComposer::catalog())])),
+                    TextInput::make('value')->label(__('Filled with'))->required()->datalist(array_map(fn (string $key) => '{{'.$key.'}}', ['recipient.name', 'recipient.salutation', 'recipient.title', 'recipient.suffix', ...array_keys(LetterComposer::catalog())])),
                 ])
                 ->columns(2)
                 ->addActionLabel(__('Add parameter'))

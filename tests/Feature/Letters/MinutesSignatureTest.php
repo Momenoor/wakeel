@@ -136,7 +136,9 @@ class MinutesSignatureTest extends TestCase
         $this->assertCount(1, $this->sent);
         $this->assertSame('m@law.ae', $this->sent[0]->getTo()[0]->getAddress());
         $this->assertStringContainsString('محضر اجتماع الخبرة رقم (1)', $this->sent[0]->getSubject());
-        $this->assertStringContainsString('السادة/ الأستاذ/ محمد عبد المقصود المحترمين', $this->sent[0]->getHtmlBody());
+        // Greeted once, with the honorific that agrees with the title.
+        $this->assertStringContainsString('الأستاذ/ محمد عبد المقصود المحترم،', $this->sent[0]->getHtmlBody());
+        $this->assertStringNotContainsString('السادة/ الأستاذ/', $this->sent[0]->getHtmlBody());
         $this->assertCount(1, $this->sent[0]->getAttachments());
 
         // The approved template, the PDF in its header, its parameters by name.
@@ -145,7 +147,8 @@ class MinutesSignatureTest extends TestCase
         $this->assertSame('minutes_for_signature', $message['template']['name']);
         $this->assertSame(['type' => 'document', 'document' => ['id' => 'media-1', 'filename' => MinutesService::fileName($this->minutes).'.pdf']], $message['template']['components'][0]['parameters'][0]);
         $this->assertSame(
-            ['name' => 'الأستاذ/ محمد عبد المقصود', 'minutes_number' => '1', 'matter_number' => '3153/2026', 'meeting_date' => '30/09/2026'],
+            // The bare name: Meta's template adds its own "السادة/ … المحترمين".
+            ['name' => 'محمد عبد المقصود', 'minutes_number' => '1', 'matter_number' => '3153/2026', 'meeting_date' => '30/09/2026'],
             collect($message['template']['components'][1]['parameters'])->pluck('text', 'parameter_name')->all(),
         );
 
@@ -174,7 +177,7 @@ class MinutesSignatureTest extends TestCase
             ->assertHasNoTableActionErrors();
 
         $this->assertSame('للتوقيع: محضر 1', $this->sent[0]->getSubject());
-        $this->assertStringContainsString('عزيزي الأستاذ/ محمد عبد المقصود، مرفق المحضر.', $this->sent[0]->getHtmlBody());
+        $this->assertStringContainsString('عزيزي محمد عبد المقصود، مرفق المحضر.', $this->sent[0]->getHtmlBody());
     }
 
     public function test_the_webhook_is_verified_with_its_token_and_signed_calls_only(): void

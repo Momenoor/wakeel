@@ -10,6 +10,7 @@ use App\Models\EmailTemplate;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterMailer;
 use App\Services\MMS\Letters\MinutesSender;
+use App\Support\Honorific;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -68,6 +69,7 @@ class EmailTemplateResource extends Resource
         return [
             ...LetterComposer::catalog(),
             'recipient.name' => __('Recipient name (separate emails)'),
+            ...Honorific::catalog(),
             'recipient.role' => __('Recipient capacity (separate emails)'),
         ];
     }
