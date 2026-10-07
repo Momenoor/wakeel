@@ -321,6 +321,12 @@ class MinutesRelationManager extends RelationManager
                                         $set('id_number', $party->extra['id_number'] ?? $get('id_number'));
                                         $set('phone', $party->latestPhone() ?? $get('phone'));
                                         $set('email', $party->latestEmail() ?? $get('email'));
+
+                                        // Picked as the very party they stood for: they stand for themselves.
+                                        if ((int) $get('represents') === (int) $party->getKey()) {
+                                            $set('represents', null);
+                                            $set('as', null);
+                                        }
                                     })
                                     ->columnSpan(4),
                                 TextInput::make('name')->label(__('Name'))->required()->columnSpan(5),
@@ -328,7 +334,8 @@ class MinutesRelationManager extends RelationManager
                                 // follows ("محامٍ عن المدعي"), still editable.
                                 Select::make('represents')
                                     ->label(__('Represents'))
-                                    ->options(fn (): array => MinutesService::mainParties($record))
+                                    // Not themselves: one can't stand for oneself.
+                                    ->options(fn (Get $get): array => array_diff_key(MinutesService::mainParties($record), filled($get('party_id')) ? [(int) $get('party_id') => true] : []))
                                     ->placeholder(__('Themselves'))
                                     ->live()
                                     ->afterStateUpdated(fn ($old, Get $get, Set $set) => self::followCapacity($record, $get, $set, $old, $get('as')))

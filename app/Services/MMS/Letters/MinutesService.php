@@ -96,7 +96,8 @@ class MinutesService
                 'email' => filled($a['email'] ?? null) ? trim((string) $a['email']) : null,
                 'party_id' => filled($a['party_id'] ?? null) ? (int) $a['party_id'] : null,
                 // The main party they stand for, and how (lawyer, employee …).
-                'represents' => filled($a['represents'] ?? null) ? (int) $a['represents'] : null,
+                // Never themselves.
+                'represents' => filled($a['represents'] ?? null) && (int) $a['represents'] !== (int) ($a['party_id'] ?? 0) ? (int) $a['represents'] : null,
                 'as' => filled($a['as'] ?? null) ? (string) $a['as'] : null,
             ], array_filter((array) ($data['attendees'] ?? []), 'is_array'))),
             'items' => array_values(array_map(fn (array $item): array => [

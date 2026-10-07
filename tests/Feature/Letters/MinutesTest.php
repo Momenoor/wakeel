@@ -457,6 +457,29 @@ class MinutesTest extends TestCase
         $this->assertFalse($rows[1]['by_whatsapp']);
     }
 
+    public function test_an_attendee_cannot_represent_themselves(): void
+    {
+        $company = Party::where('name', 'المهاد لخدمات صيانة السفن')->sole();
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
+
+        $page = $this->minutesPage()->mountTableAction('recordMeeting', $minutes);
+
+        // Standing for the company, then picked as the company: they stand for themselves.
+        $page->set('mountedActions.0.data.attendees.new', ['present' => true, 'name' => 'زائر'])
+            ->set('mountedActions.0.data.attendees.new.represents', $company->id)
+            ->set('mountedActions.0.data.attendees.new.as', 'employee')
+            ->set('mountedActions.0.data.attendees.new.party_id', $company->id)
+            ->assertSet('mountedActions.0.data.attendees.new.represents', null)
+            ->assertSet('mountedActions.0.data.attendees.new.as', null);
+
+        // And never saved so, however it arrives.
+        MinutesService::saveRecorded($minutes, ['attendees' => [
+            ['present' => true, 'name' => $company->name, 'party_id' => $company->id, 'represents' => $company->id],
+        ]]);
+        $this->assertNull($minutes->fresh()->attendees[0]['represents']);
+    }
+
     public function test_a_contact_given_again_becomes_the_latest_without_a_duplicate(): void
     {
         $party = Party::factory()->create(['phone' => ['0501111111', '0502222222'], 'email' => ['A@x.ae', 'b@x.ae']]);
