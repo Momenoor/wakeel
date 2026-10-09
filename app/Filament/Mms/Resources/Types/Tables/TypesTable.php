@@ -104,6 +104,7 @@ class TypesTable
                         ->deselectRecordsAfterCompletion(),
                     BulkAction::make('assignConfig')
                         ->label(__('Assign Incentive Config'))
+                        ->icon('heroicon-o-calculator')
                         ->schema([
                             Select::make('incentive_config_id')
                                 ->label(__('Incentive Configuration'))

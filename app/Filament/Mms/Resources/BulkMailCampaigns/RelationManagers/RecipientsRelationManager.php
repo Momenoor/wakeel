@@ -198,6 +198,7 @@ class RecipientsRelationManager extends RelationManager
                     DeleteBulkAction::make(),
                     BulkAction::make('retry_failed')
                         ->label(__('bulk_mail.actions.retry_failed'))
+                        ->icon('heroicon-o-arrow-path')
                         ->action(function (Collection $records) {
                             $records->each(function ($record) {
                                 if ($record->status === BulkMailRecipientStatus::Failed) {
@@ -213,6 +214,7 @@ class RecipientsRelationManager extends RelationManager
                         }),
                     BulkAction::make('resend')
                         ->label(__('bulk_mail.actions.resend'))
+                        ->icon('heroicon-o-paper-airplane')
                         ->requiresConfirmation()
                         ->action(fn (Collection $records) => $records
                             ->filter(fn ($record) => in_array($record->status, [BulkMailRecipientStatus::Sent, BulkMailRecipientStatus::Failed]))
