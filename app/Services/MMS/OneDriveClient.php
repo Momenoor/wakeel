@@ -82,6 +82,49 @@ class OneDriveClient
     }
 
     /**
+     * The folders directly inside a folder (by id), or the user's OneDrive
+     * root — every page of them.
+     *
+     * @return list<array{id: string, name: string, webUrl: string}>
+     */
+    public function childFolders(string $user, ?string $folderId = null): array
+    {
+        $drive = "/users/{$this->user($user)}/drive";
+        $uri = ($folderId === null ? "{$drive}/root" : "{$drive}/items/".rawurlencode($folderId)).'/children?$select=id,name,webUrl,folder&$top=200';
+        $folders = [];
+
+        while ($uri !== null) {
+            $response = $this->request('get', $uri);
+
+            foreach ((array) $response->json('value') as $item) {
+                if (isset($item['folder'])) {
+                    $folders[] = ['id' => (string) $item['id'], 'name' => (string) $item['name'], 'webUrl' => (string) ($item['webUrl'] ?? '')];
+                }
+            }
+
+            // The next page, as a path under the API root.
+            $next = $response->json('@odata.nextLink');
+            $uri = is_string($next) && str_starts_with($next, self::GRAPH) ? substr($next, strlen(self::GRAPH)) : null;
+        }
+
+        return $folders;
+    }
+
+    /**
+     * Renames a file or folder — its contents untouched. Fails (409) when
+     * the folder it is in has one of that name already.
+     *
+     * @return array{id: string, webUrl: string}
+     */
+    public function rename(string $user, string $itemId, string $name): array
+    {
+        return $this->item($this->request('patch', "/users/{$this->user($user)}/drive/items/".rawurlencode($itemId), [
+            'name' => $name,
+            '@microsoft.graph.conflictBehavior' => 'fail',
+        ]));
+    }
+
+    /**
      * Deletes a file or folder — OneDrive keeps it in the user's recycle
      * bin, from where it can be restored.
      */
@@ -157,6 +200,7 @@ class OneDriveClient
         $response = match ($method) {
             'get' => $http->get(self::GRAPH.$uri),
             'delete' => $http->delete(self::GRAPH.$uri),
+            'patch' => $http->patch(self::GRAPH.$uri, $body),
             default => $http->post(self::GRAPH.$uri, $body),
         };
 

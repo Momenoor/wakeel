@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Pages;
 
+use App\Filament\Mms\Pages\Concerns\ReviewsOneDriveFolders;
 use App\Filament\Shared\Clusters\Settings;
 use App\Models\Setting;
 use App\Services\MMS\MatterOneDriveFolders;
@@ -16,21 +17,30 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\EmbeddedSchema;
+use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Concerns\InteractsWithTable;
+use Filament\Tables\Contracts\HasTable;
 use Illuminate\Support\HtmlString;
 use Throwable;
 
 /**
  * Matter folders in the assistants' OneDrive: on or off, and the standard
  * subfolders each new matter folder gets. Changing the list affects only
- * folders made afterwards — existing ones are never touched.
+ * folders made afterwards. The active matters' existing folders are
+ * reviewed below, and standardised only when the office decides so.
  */
-class OneDriveSettings extends Page
+class OneDriveSettings extends Page implements HasTable
 {
+    use InteractsWithTable;
+    use ReviewsOneDriveFolders {
+        ReviewsOneDriveFolders::table insteadof InteractsWithTable;
+    }
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCloud;
 
     protected static ?int $navigationSort = 13;
@@ -164,6 +174,14 @@ class OneDriveSettings extends Page
                             ->keyBindings(['mod+s']),
                     ])->key('form-actions'),
                 ]),
+
+            // The active matters' existing folders: found by number and
+            // year, standardised one decision at a time (ReviewsOneDriveFolders).
+            Section::make(__("Existing matters' folders"))
+                ->description(__("Active matters' folders in the assistants' OneDrive, found by matter number and year. Decide one by one: Apply renames the folder and its subfolders to the standard and links it to the matter (or makes it, when none was found); Skip leaves it as it is. Nothing is deleted or moved."))
+                ->icon(Heroicon::OutlinedFolderOpen)
+                ->headerActions([$this->scanAction()])
+                ->schema([EmbeddedTable::make()]),
         ]);
     }
 
