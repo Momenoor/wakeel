@@ -33,14 +33,15 @@ class CreateBulkCalendarEventAction extends Action
             ->modalHeading(__('Create Bulk Calendar Event'))
             ->icon('heroicon-o-rectangle-stack')
             ->form([
+                // Read when the form opens — not on every load of the page.
                 Select::make('matter_type_id')
                     ->label(__('Matter Type'))
-                    ->options(Type::pluck('name', 'id'))
+                    ->options(fn () => Type::pluck('name', 'id'))
                     ->required()
                     ->live(),
                 Select::make('court_id')
                     ->label(__('Court'))
-                    ->options(Court::pluck('name', 'id'))
+                    ->options(fn () => Court::pluck('name', 'id'))
                     ->required()
                     ->live(),
                 CheckboxList::make('matter_ids')
@@ -51,7 +52,10 @@ class CreateBulkCalendarEventAction extends Action
                             return [];
                         }
 
+                        // That type's matters at that court (the court was asked
+                        // for, then every court's were listed).
                         return Matter::where('type_id', $typeId)
+                            ->when($get('court_id'), fn ($query, $courtId) => $query->where('court_id', $courtId))
                             ->get()
                             ->mapWithKeys(fn ($m) => [$m->id => "{$m->number}/{$m->year}"])
                             ->toArray();
@@ -92,16 +96,20 @@ class CreateBulkCalendarEventAction extends Action
 
                         return "{$matterNumbers} ({$courtName}) ({$typeName}) (جلسات المحكمة)";
                     }),
+                // Only with Microsoft 365 set up (System Settings → Integrations).
                 Toggle::make('sync_to_outlook')
                     ->label(__('Sync to Outlook Calendar'))
-                    ->default(true)
+                    ->default(fn (): bool => app(OutlookCalendarService::class)->isConfigured())
+                    ->visible(fn (): bool => app(OutlookCalendarService::class)->isConfigured())
                     ->live(),
                 Toggle::make('is_teams_meeting')
                     ->label(__('Create Teams Meeting'))
                     ->default(false)
-                    ->visible(fn (callable $get) => $get('sync_to_outlook')),
+                    ->visible(fn (callable $get) => app(OutlookCalendarService::class)->isConfigured() && $get('sync_to_outlook')),
             ])
             ->action(function (array $data, OutlookCalendarService $outlookService) {
+                $toOutlook = ! empty($data['sync_to_outlook']) && $outlookService->isConfigured();
+                $teams = $toOutlook && ! empty($data['is_teams_meeting']);
                 $matters = Matter::whereIn('id', $data['matter_ids'])->get();
                 $matterNumbers = $matters->map(fn ($m) => "{$m->number}/{$m->year}")->join(', ');
                 $courtName = Court::find($data['court_id'])?->name;
@@ -112,10 +120,11 @@ class CreateBulkCalendarEventAction extends Action
                 $event = CalendarEvent::create([
                     'title' => $title,
                     'start_datetime' => $data['start_datetime'],
-                    'end_datetime' => $data['end_datetime'],
-                    'location' => $data['location'],
+                    'end_datetime' => $data['end_datetime'] ?? null,
+                    'location' => $data['location'] ?? null,
                     'type' => 'bulk',
                     'created_by' => Auth::id(),
+                    'is_teams_meeting' => $teams,
                 ]);
 
                 // syncWithoutDetaching, not attach: the event may already be
@@ -126,21 +135,20 @@ class CreateBulkCalendarEventAction extends Action
                 // Update next_session_date on ALL selected matters
                 Matter::whereIn('id', $data['matter_ids'])->update(['next_session_date' => $data['start_datetime']]);
 
-                if ($data['sync_to_outlook']) {
+                if ($toOutlook) {
                     try {
-                        $userEmail = config('services.outlook.user_email');
                         $outlookEvent = $outlookService->createEvent([
                             'title' => $title,
                             'start_datetime' => $data['start_datetime'],
-                            'end_datetime' => $data['end_datetime'],
-                            'location' => $data['location'],
-                            'is_teams_meeting' => $data['is_teams_meeting'] ?? false,
-                        ], $userEmail);
+                            'end_datetime' => $data['end_datetime'] ?? null,
+                            'location' => $data['location'] ?? null,
+                            'is_teams_meeting' => $teams,
+                        ]);
 
                         $event->update([
                             'outlook_event_id' => $outlookEvent['id'],
                             'synced_to_outlook' => true,
-                            'online_meeting_url' => $outlookEvent['onlineMeeting']['joinUrl'] ?? $outlookEvent['webLink'] ?? null,
+                            'online_meeting_url' => $teams ? OutlookCalendarService::teamsLink($outlookEvent) : null,
                         ]);
                     } catch (\Exception $e) {
                         Notification::make()

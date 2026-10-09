@@ -3,10 +3,12 @@
 namespace App\Filament\Mms\Resources\CalendarEvents\Schemas;
 
 use App\Filament\Mms\Actions\Calendar\CalendarMatterActions;
+use App\Filament\Mms\Concerns\HasMultiWordSearch;
 use App\Filament\Support\RichEditorDirection;
 use App\Models\CalendarEvent;
 use App\Models\Matter;
 use App\Services\MMS\Calendar\EventMatterLinker;
+use App\Services\MMS\OutlookCalendarService;
 use App\Support\MatterSearch;
 use Carbon\Carbon;
 use Filament\Actions\Action;
@@ -23,6 +25,8 @@ use Illuminate\Support\Str;
 
 class CalendarEventForm
 {
+    use HasMultiWordSearch;
+
     public static function configure(Schema $schema): Schema
     {
         return $schema->components(self::getFormSchema());
@@ -54,122 +58,142 @@ class CalendarEventForm
     public static function getFormSchema(?int $matterId = null): array
     {
         return [
+            Section::make(__('Event Details'))
+                ->schema([
+                    Select::make('matter_id')
+                        ->label(__('Matter'))
+                        ->relationship('matter', 'year', fn ($query) => $query->with(['court', 'type']))
+                        ->getOptionLabelFromRecordUsing(
+                            fn ($record) => $record?->year.'/'.$record?->number.' - '.($record?->court?->name ?? '').' - '.($record?->type?->name ?? '')
+                        )
+                        ->placeholder(__('Select Matter'))
+                        ->searchable()
+                        ->getSearchResultsUsing(function (string $search) {
+                            $query = Matter::with(['court', 'type']);
+                            $tokens = static::splitSearch($search);
 
-            Section::make(__('Event Details'))->schema([
-                Select::make('matter_id')
-                    ->label(__('Matter'))
-                    ->relationship('matter', 'year', fn ($query) => $query->with(['court', 'type']))
-                    // Each option names its court and type: loaded with the list, not one by one.
-                    ->getOptionLabelFromRecordUsing(fn ($record) => $record?->year.'/'.$record?->number.' - '.($record?->court?->name ?? '').' - '.($record?->type?->name ?? ''))
-                    ->placeholder(__('Select Matter'))
-                    ->searchable()
-                    ->preload()
-                    // An event for several matters shows them all under
-                    // "Linked matters" instead.
-                    ->hidden(fn ($record) => $record instanceof Matter
-                        || ($record instanceof CalendarEvent && $record->matters()->count() > 1))
-                    ->disabled(fn ($record) => $record instanceof Matter)
-                    ->live()
-                    ->afterStateUpdated(function (?int $state, Set $set) {
-                        if (! $state) {
-                            return;
-                        }
-                        $matter = Matter::with(['court', 'type', 'mainPartiesOnly.party', 'expertsOnly.party'])
-                            ->find($state);
-                        if (! $matter) {
-                            return;
-                        }
+                            if (count($tokens) === 2 && is_numeric($tokens[0]) && is_numeric($tokens[1])) {
+                                $query->where(function ($q) use ($tokens) {
+                                    foreach ($tokens as $token) {
+                                        $q->where(function ($inner) use ($token) {
+                                            $inner->orWhere('year', $token)
+                                                ->orWhere('number', $token)
+                                                ->orWhere('number', '0'.$token);
+                                        });
+                                    }
+                                });
+                            } else {
+                                $query->where(function ($q) use ($search) {
+                                    $q->where('year', 'like', "%{$search}%")
+                                        ->orWhere('number', 'like', "%{$search}%")
+                                        ->orWhereHas('court', fn ($q) => $q->where('name', 'like', "%{$search}%"))
+                                        ->orWhereHas('type', fn ($q) => $q->where('name', 'like', "%{$search}%"));
+                                });
+                            }
 
-                        $set('title', $matter->year.'/'.$matter->number
-                            .' — '.($matter->court?->name ?? '')
-                            .' — '.($matter->type?->name ?? ''));
-                        $set('location', 'Microsoft Teams - '.$matter->court?->name ?? 'Microsoft Teams');
+                            return $query->limit(50)
+                                ->get()
+                                ->pluck('full_label', 'id');
+                        })
+                        ->preload()
+                        ->hidden(fn ($record) => $record instanceof Matter
+                            || ($record instanceof CalendarEvent && $record->matters()->count() > 1))
+                        ->disabled(fn ($record) => $record instanceof Matter)
+                        ->live()
+                        ->afterStateUpdated(function (?int $state, Set $set, Get $get) {
+                            if (! $state) {
+                                return;
+                            }
 
-                        //                        if ($matter->next_session_date) {
-                        //                            $set('start_at', Carbon::parse($matter->next_session_date)->format('Y-m-d H:i:s'));
-                        //                            $set('end_at', Carbon::parse($matter->next_session_date)->addHour()->format('Y-m-d H:i:s'));
-                        //                        }
+                            $matter = Matter::with(['court', 'type', 'mainPartiesOnly.party', 'expertsOnly.party'])
+                                ->find($state);
 
-                        $set('description', self::buildDescription($matter));
-                    })
-                    ->columnSpanFull(),
+                            if (! $matter) {
+                                return;
+                            }
 
-                TextInput::make('title')
-                    ->label(__('Title'))
-                    ->required()
-                    ->columnSpanFull(),
+                            $courtName = $matter->court?->name ?? '';
+                            $typeName = $matter->type?->name ?? '';
 
-                // Every matter the event is for — one or several — editable
-                // here as well as through "Link matters" on the calendar.
-                CalendarMatterActions::mattersField(fn (Get $get): ?string => $get('title'))
-                    ->relationship('matters', 'number')
-                    ->getSearchResultsUsing(fn (string $search): array => MatterSearch::options($search))
-                    ->getOptionLabelsUsing(fn (array $values): array => MatterSearch::labels($values))
-                    ->saveRelationshipsUsing(function (CalendarEvent $record, $state): void {
-                        $record->matters()->sync($state ?? []);
-                        app(EventMatterLinker::class)->tidy($record->fresh());
-                    })
-                    ->visibleOn('edit')
-                    ->columnSpanFull(),
+                            $set('title', $matter->year.'/'.$matter->number.' — '.$courtName.' — '.$typeName);
+                            // "Microsoft Teams - …" only when a Teams meeting will be made.
+                            $set('location', self::willMakeTeams($get) ? 'Microsoft Teams - '.($courtName ?: 'Microsoft Teams') : $courtName);
+                            $set('description', self::buildDescription($matter));
+                        })
+                        ->columnSpanFull(),
+                    TextInput::make('title')
+                        ->label(__('Title'))
+                        ->required()
+                        ->columnSpanFull(),
 
-                DateTimePicker::make('start_datetime')
-                    ->label(__('Start At'))
-                    ->seconds(false)
-                    ->required()
-                    ->timezone(config('app.timezone'))
-                    ->minutesStep(15)
-                    ->live(onBlur: true)
-                    ->afterStateUpdated(fn (Set $set, ?string $state) => $set('end_datetime', $state ? Carbon::parse($state)->addHour()->format('Y-m-d H:i:s') : null)
-                    ),
+                    // Every matter the event is for — one or several — editable
+                    // here as well as through "Link matters" on the calendar.
+                    CalendarMatterActions::mattersField(fn (Get $get): ?string => $get('title'))
+                        ->relationship('matters', 'number')
+                        ->getSearchResultsUsing(fn (string $search): array => MatterSearch::options($search))
+                        ->getOptionLabelsUsing(fn (array $values): array => MatterSearch::labels($values))
+                        ->saveRelationshipsUsing(function (CalendarEvent $record, $state): void {
+                            $record->matters()->sync($state ?? []);
+                            app(EventMatterLinker::class)->tidy($record->fresh());
+                        })
+                        ->visibleOn('edit')
+                        ->columnSpanFull(),
 
-                DateTimePicker::make('end_datetime')
-                    ->label(__('End At'))
-                    ->seconds(false)
-                    ->minutesStep(15)
-                    ->timezone(config('app.timezone'))
-                    ->afterOrEqual('start_datetime')
-                    ->required(),
+                    DateTimePicker::make('start_datetime')
+                        ->label(__('Start At'))
+                        ->seconds(false)
+                        ->required()
+                        ->timezone(config('app.timezone'))
+                        ->minutesStep(15)
+                        ->live(onBlur: true)
+                        ->afterStateUpdated(fn (Set $set, ?string $state) => $set('end_datetime', $state ? Carbon::parse($state)->addHour()->format('Y-m-d H:i:s') : null)
+                        ),
 
-                Toggle::make('is_all_day')
-                    ->label(__('All Day'))
-                    ->default(false)
-                    ->columnSpanFull(),
+                    DateTimePicker::make('end_datetime')
+                        ->label(__('End At'))
+                        ->seconds(false)
+                        ->minutesStep(15)
+                        ->timezone(config('app.timezone'))
+                        ->afterOrEqual('start_datetime')
+                        ->required(),
 
-                TextInput::make('location')
-                    ->label(__('Location'))
-                    ->columnSpanFull(),
+                    Toggle::make('is_all_day')
+                        ->label(__('All Day'))
+                        ->default(false)
+                        ->columnSpanFull(),
 
-                RichEditor::make('description')
-                    ->label(__('Description'))
-                    ->extraInputAttributes(['dir' => 'auto'], merge: true)->tap(RichEditorDirection::apply(...))
-                    ->columnSpanFull(),
+                    TextInput::make('location')
+                        ->label(__('Location'))
+                        ->columnSpanFull(),
 
-                Toggle::make('update_next_session_date')
-                    ->label(__("Update matter's next session date"))
-                    ->default(true)
-                    ->disabled(fn (Get $get) => empty($get('matter_id'))),
+                    RichEditor::make('description')
+                        ->label(__('Description'))
+                        ->extraInputAttributes(['dir' => 'auto'], merge: true)->tap(RichEditorDirection::apply(...))
+                        ->columnSpanFull(),
 
-                Toggle::make('sync_to_outlook')
-                    ->label(__('Sync to Outlook Calendar'))
-                    ->default(true),
+                    // These act when the event is made — not on editing it.
+                    Toggle::make('update_next_session_date')
+                        ->label(__("Update matter's next session date"))
+                        ->default(true)
+                        ->hidden(fn ($record) => $record instanceof CalendarEvent)
+                        ->disabled(fn (Get $get) => empty($get('matter_id'))),
 
-            ])->columns(2),
+                    // Only with Microsoft 365 set up (System Settings → Integrations).
+                    Toggle::make('sync_to_outlook')
+                        ->label(__('Sync to Outlook Calendar'))
+                        ->default(fn (): bool => self::outlookOn())
+                        ->hidden(fn ($record) => $record instanceof CalendarEvent || ! self::outlookOn())
+                        ->live()
+                        ->afterStateUpdated(fn (Get $get, Set $set) => self::teamsLocation($get, $set)), ])->columns(2),
 
-            Section::make(__('Online Meeting'))->schema([
-                Toggle::make('is_teams_meeting')
-                    ->label(__('Create Teams Meeting'))
-                    ->default(true)
-                    ->live(onBlur: true)
-                    ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                        $location = $get('location');
-                        if (! $state) {
-                            $location = Str::of($location)->remove('Microsoft Teams - ');
-                        } else {
-                            $location = 'Microsoft Teams - '.$location;
-                        }
-                        $set('location', $location);
-                    })
-                    ->helperText(__('Creates a Microsoft Teams meeting link with this event')),
+            Section::make(__('Online Meeting'))->schema([Toggle::make('is_teams_meeting')
+                ->label(__('Create Teams Meeting'))
+                ->default(true)
+                // A Teams meeting is made with the Outlook event: not without it.
+                ->hidden(fn ($record, Get $get) => $record instanceof CalendarEvent || ! self::outlookOn() || ! $get('sync_to_outlook'))
+                ->live()
+                ->afterStateUpdated(fn (Get $get, Set $set) => self::teamsLocation($get, $set))
+                ->helperText(__('Creates a Microsoft Teams meeting link with this event')),
 
                 TextInput::make('online_meeting_url')
                     ->label(__('Teams Meeting URL'))
@@ -185,9 +209,29 @@ class CalendarEventForm
                             ->tooltip(__('Join Meeting'))
                             ->url(fn ($state) => $state)
                             ->openUrlInNewTab()
-                    ),
-            ]),
+                    ), ])
+                ->hidden(fn ($record, Get $get) => ! ($record instanceof CalendarEvent ? filled($record->online_meeting_url) : self::outlookOn() && $get('sync_to_outlook'))), ];
+    }
 
-        ];
+    private static function outlookOn(): bool
+    {
+        return app(OutlookCalendarService::class)->isConfigured();
+    }
+
+    /** Whether saving this form makes a Teams meeting. */
+    private static function willMakeTeams(Get $get): bool
+    {
+        return self::outlookOn() && (bool) $get('sync_to_outlook') && (bool) $get('is_teams_meeting');
+    }
+
+    /**
+     * The location names Teams exactly when a meeting will be made: the
+     * "Microsoft Teams - " prefix added or taken off as the switches change.
+     */
+    private static function teamsLocation(Get $get, Set $set): void
+    {
+        $place = trim((string) Str::of((string) $get('location'))->replace('Microsoft Teams - ', '')->replace('Microsoft Teams', ''));
+
+        $set('location', self::willMakeTeams($get) ? 'Microsoft Teams - '.($place !== '' ? $place : 'Microsoft Teams') : $place);
     }
 }

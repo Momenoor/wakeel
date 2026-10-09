@@ -71,8 +71,11 @@ class OutlookCalendarService
             ],
         ];
 
-        if (! empty($eventData['is_teams_meeting'])) {
-            $payload['isOnlineMeeting'] = true;
+        // Said either way: left out, a mailbox set to add an online meeting
+        // to every meeting gave a Teams one to events asked for without.
+        $payload['isOnlineMeeting'] = ! empty($eventData['is_teams_meeting']);
+
+        if ($payload['isOnlineMeeting']) {
             $payload['onlineMeetingProvider'] = 'teamsForBusiness';
         }
 
@@ -92,6 +95,20 @@ class OutlookCalendarService
         }
 
         return $response->json();
+    }
+
+    /**
+     * The Teams link of an event Outlook made — only a real online meeting
+     * has one. (Its webLink opens the event in Outlook; it was kept as a
+     * "Teams meeting URL" for events with no meeting at all.)
+     *
+     * @param  array<string, mixed>  $outlookEvent
+     */
+    public static function teamsLink(array $outlookEvent): ?string
+    {
+        $url = $outlookEvent['onlineMeeting']['joinUrl'] ?? null;
+
+        return ! empty($outlookEvent['isOnlineMeeting']) && filled($url) ? (string) $url : null;
     }
 
     /**

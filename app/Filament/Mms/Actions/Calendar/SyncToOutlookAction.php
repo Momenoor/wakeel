@@ -21,7 +21,8 @@ class SyncToOutlookAction extends Action
 
         $this->label(__('Sync to Outlook'))
             ->icon('heroicon-o-arrow-path')
-            ->visible(fn ($record) => ($record instanceof CalendarEvent && ! $record->synced_to_outlook) || ($record instanceof Matter && $record->calendarEvents()->where('synced_to_outlook', false)->exists()))
+            ->visible(fn ($record) => app(OutlookCalendarService::class)->isConfigured()
+                && (($record instanceof CalendarEvent && ! $record->synced_to_outlook) || ($record instanceof Matter && $record->calendarEvents()->where('synced_to_outlook', false)->exists())))
             ->action(function ($record, OutlookCalendarService $outlookService) {
                 if ($record instanceof Matter) {
                     $record = $record->calendarEvents()->where('synced_to_outlook', false)->latest()->first();
@@ -43,7 +44,8 @@ class SyncToOutlookAction extends Action
                     $record->update([
                         'outlook_event_id' => $outlookEvent['id'],
                         'synced_to_outlook' => true,
-                        'online_meeting_url' => $outlookEvent['onlineMeeting']['joinUrl'] ?? $outlookEvent['webLink'] ?? null,
+                        // A Teams link only for a meeting asked for and made.
+                        'online_meeting_url' => $record->is_teams_meeting ? OutlookCalendarService::teamsLink($outlookEvent) : null,
                     ]);
 
                     Notification::make()

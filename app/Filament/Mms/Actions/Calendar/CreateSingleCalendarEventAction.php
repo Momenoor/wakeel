@@ -7,6 +7,7 @@ use App\Models\CalendarEvent;
 use App\Services\MMS\OutlookCalendarService;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 
 class CreateSingleCalendarEventAction extends Action
@@ -25,29 +26,39 @@ class CreateSingleCalendarEventAction extends Action
             ->icon('heroicon-o-calendar')
             ->schema(CalendarEventForm::getFormSchema())
             ->action(function (array $data, OutlookCalendarService $outlookService) {
-                $data['type'] = 'single';
-                $data['created_by'] = Auth::id();
-                $event = CalendarEvent::create($data);
+                // To Outlook only when it is set up and asked for; a Teams
+                // meeting only with it, and only when asked for.
+                $toOutlook = ! empty($data['sync_to_outlook']) && $outlookService->isConfigured();
+                $teams = $toOutlook && ! empty($data['is_teams_meeting']);
 
-                if (isset($data['update_next_session_date']) && $event->matter_id) {
+                $event = CalendarEvent::create([
+                    ...Arr::except($data, ['sync_to_outlook', 'online_meeting_url']),
+                    'type' => 'single',
+                    'created_by' => Auth::id(),
+                    'is_teams_meeting' => $teams,
+                    'update_next_session_date' => ! empty($data['update_next_session_date']),
+                ]);
+
+                // Only when ticked (it was done whenever the field was sent).
+                if (! empty($data['update_next_session_date']) && $event->matter_id) {
                     $event->matter->update(['next_session_date' => $data['start_datetime']]);
                 }
 
-                if ($data['sync_to_outlook']) {
+                if ($toOutlook) {
                     try {
                         $outlookEvent = $outlookService->createEvent([
                             'title' => $data['title'],
-                            'description' => $data['description'],
+                            'description' => $data['description'] ?? null,
                             'start_datetime' => $data['start_datetime'],
-                            'end_datetime' => $data['end_datetime'],
-                            'location' => $data['location'],
-                            'is_teams_meeting' => $data['is_teams_meeting'] ?? false,
+                            'end_datetime' => $data['end_datetime'] ?? null,
+                            'location' => $data['location'] ?? null,
+                            'is_teams_meeting' => $teams,
                         ]);
 
                         $event->update([
                             'outlook_event_id' => $outlookEvent['id'],
                             'synced_to_outlook' => true,
-                            'online_meeting_url' => $outlookEvent['onlineMeeting']['joinUrl'] ?? $outlookEvent['webLink'] ?? null,
+                            'online_meeting_url' => $teams ? OutlookCalendarService::teamsLink($outlookEvent) : null,
                         ]);
                     } catch (\Exception $e) {
                         Notification::make()
