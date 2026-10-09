@@ -4,9 +4,12 @@ namespace App\Filament\Mms\Resources\Matters\Pages;
 
 use App\Enums\MatterCollectionStatus;
 use App\Enums\MatterLevel;
+use App\Filament\Mms\Actions\Calendar\CreateSingleCalendarEventAction;
 use App\Filament\Mms\Actions\Calendar\SyncToOutlookAction;
+use App\Filament\Mms\Resources\CalendarEvents\Schemas\CalendarEventForm;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Helpers\FileUploadHelper;
+use App\Models\Matter;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -50,6 +53,12 @@ class ViewMatter extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            CreateSingleCalendarEventAction::make('createCalendarEvent')
+                ->label(__('Create Calendar Event'))
+                ->icon('heroicon-o-calendar-days')
+                ->color('gray')
+                ->visible(fn () => auth()->user()->can('CreateSingle:CalendarEvent'))
+                ->fillForm(fn (Matter $record): array => CalendarEventForm::forMatter($record)),
             SyncToOutlookAction::make(),
             Action::make('initial_report')
                 ->label(__('Initial Report'))

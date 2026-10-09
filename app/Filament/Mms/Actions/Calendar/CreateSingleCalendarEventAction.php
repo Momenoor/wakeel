@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Actions\Calendar;
 
 use App\Filament\Mms\Resources\CalendarEvents\Schemas\CalendarEventForm;
 use App\Models\CalendarEvent;
+use App\Models\Matter;
 use App\Services\MMS\OutlookCalendarService;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -25,7 +26,11 @@ class CreateSingleCalendarEventAction extends Action
             ->modalHeading(__('Create Single Calendar Event'))
             ->icon('heroicon-o-calendar')
             ->schema(CalendarEventForm::getFormSchema())
-            ->action(function (array $data, OutlookCalendarService $outlookService) {
+            ->action(function (array $data, OutlookCalendarService $outlookService, $record = null) {
+                if ($record instanceof Matter) {
+                    $data['matter_id'] = $record->getKey();
+                }
+
                 // To Outlook only when it is set up and asked for; a Teams
                 // meeting only with it, and only when asked for.
                 $toOutlook = ! empty($data['sync_to_outlook']) && $outlookService->isConfigured();

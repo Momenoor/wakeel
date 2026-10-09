@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Filament\Mms\Resources\CalendarEvents\Pages\ListCalendarEvents;
+use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Models\CalendarEvent;
 use App\Models\Court;
 use App\Models\Matter;
@@ -161,6 +162,31 @@ class CalendarEventCreationTest extends TestCase
                 && $field->getOptionLabel() === $label)
             // Picking it fills the title.
             ->assertSet('mountedActions.0.data.title', '2025/639 — محكمة دبي — عمالي');
+    }
+
+    public function test_an_event_is_made_from_the_matter_page_with_the_matter_filled_in_and_linked(): void
+    {
+        $court = Court::factory()->create(['name' => 'محكمة دبي']);
+        $type = Type::factory()->create(['name' => 'عمالي']);
+        $matter = Matter::factory()->create(['number' => '639', 'year' => '2025', 'court_id' => $court->id, 'type_id' => $type->id]);
+
+        Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])
+            ->mountAction('createCalendarEvent')
+            ->assertSet('mountedActions.0.data.matter_id', $matter->id)
+            ->assertSet('mountedActions.0.data.title', '2025/639 — محكمة دبي — عمالي')
+            ->assertSet('mountedActions.0.data.location', 'Microsoft Teams - محكمة دبي')
+            ->set('mountedActions.0.data.start_datetime', '2026-10-20 10:00:00')
+            ->set('mountedActions.0.data.end_datetime', '2026-10-20 11:00:00')
+            ->set('mountedActions.0.data.sync_to_outlook', false)
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        $event = CalendarEvent::sole();
+        $this->assertSame($matter->id, $event->matter_id);
+        $this->assertSame('2025/639 — محكمة دبي — عمالي', $event->title);
+        $this->assertContains($matter->id, $event->matters()->pluck('matters.id')->all());
+        // The matter's next session date follows, as ticked by default.
+        $this->assertSame('2026-10-20', $matter->fresh()->next_session_date?->format('Y-m-d'));
     }
 
     public function test_a_bulk_event_lists_the_courts_matters_and_makes_no_meeting_unasked(): void

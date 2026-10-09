@@ -3,7 +3,9 @@
 namespace App\Filament\Mms\Resources\Matters\Pages;
 
 use App\Filament\Mms\Actions\Calendar\CreateSingleCalendarEventAction;
+use App\Filament\Mms\Resources\CalendarEvents\Schemas\CalendarEventForm;
 use App\Filament\Mms\Resources\Matters\MatterResource;
+use App\Models\Matter;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
@@ -35,10 +37,12 @@ class EditMatter extends EditRecord
                 ->modalHeading(__('Would you like to create a calendar event for this session date?'))
                 ->requiresConfirmation()
                 ->color('primary')
-                ->fillForm(fn (array $arguments) => [
-                    'matter_id' => $arguments['matter_id'] ?? $this->record->id,
-                    'start_datetime' => $arguments['start_datetime'] ?? $this->pendingSessionDate,
-                ]),
+                // The matter filled in — title, place, description, and the
+                // switches as a blank form has them.
+                ->fillForm(fn (array $arguments) => CalendarEventForm::forMatter(
+                    Matter::find($arguments['matter_id'] ?? null) ?? $this->record,
+                    $arguments['start_datetime'] ?? $this->pendingSessionDate,
+                )),
             ViewAction::make(),
             DeleteAction::make(),
             ForceDeleteAction::make()

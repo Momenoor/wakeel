@@ -76,20 +76,15 @@ class CalendarEventForm
                                 return;
                             }
 
-                            $matter = Matter::with(['court', 'type', 'mainPartiesOnly.party', 'expertsOnly.party'])
-                                ->find($state);
+                            $matter = Matter::find($state);
 
                             if (! $matter) {
                                 return;
                             }
 
-                            $courtName = $matter->court?->name ?? '';
-                            $typeName = $matter->type?->name ?? '';
-
-                            $set('title', $matter->year.'/'.$matter->number.' — '.$courtName.' — '.$typeName);
-                            // "Microsoft Teams - …" only when a Teams meeting will be made.
-                            $set('location', self::willMakeTeams($get) ? 'Microsoft Teams - '.($courtName ?: 'Microsoft Teams') : $courtName);
-                            $set('description', self::buildDescription($matter));
+                            foreach (self::prefill($matter, self::willMakeTeams($get)) as $field => $value) {
+                                $set($field, $value);
+                            }
                         })
                         ->columnSpanFull(),
                     TextInput::make('title')
@@ -99,15 +94,26 @@ class CalendarEventForm
 
                     // Every matter the event is for — one or several — editable
                     // here as well as through "Link matters" on the calendar.
+                    // Read and saved here, not through ->relationship(): the same form
+                    // opens on a matter's page, whose record has no "matters".
                     CalendarMatterActions::mattersField(fn (Get $get): ?string => $get('title'))
-                        ->relationship('matters', 'number')
                         ->getSearchResultsUsing(fn (string $search): array => MatterSearch::options($search))
                         ->getOptionLabelsUsing(fn (array $values): array => MatterSearch::labels($values))
-                        ->saveRelationshipsUsing(function (CalendarEvent $record, $state): void {
+                        ->afterStateHydrated(fn (Select $component, $record) => $record instanceof CalendarEvent
+                            ? $component->state($record->matters()->pluck('matters.id')->map(fn ($id) => (int) $id)->all())
+                            : null)
+                        ->dehydrated(false)
+                        ->saveRelationshipsUsing(function ($record, $state): void {
+                            if (! $record instanceof CalendarEvent) {
+                                return;
+                            }
+
                             $record->matters()->sync($state ?? []);
                             app(EventMatterLinker::class)->tidy($record->fresh());
                         })
-                        ->visibleOn('edit')
+                        // Editing an event only — not a new one opened from a matter's page,
+                        // whose form is on the matter (no "matters" relation there).
+                        ->visible(fn ($record): bool => $record instanceof CalendarEvent)
                         ->columnSpanFull(),
 
                     DateTimePicker::make('start_datetime')
@@ -182,6 +188,55 @@ class CalendarEventForm
                             ->openUrlInNewTab()
                     ), ])
                 ->hidden(fn ($record, Get $get) => ! ($record instanceof CalendarEvent ? filled($record->online_meeting_url) : self::outlookOn() && $get('sync_to_outlook'))), ];
+    }
+
+    /**
+     * The event's title, place and description from its matter — as when
+     * the matter is picked, or the form opens on the matter's own page.
+     * The place names Teams when a Teams meeting will be made.
+     *
+     * @return array{title: string, location: string, description: string}
+     */
+    public static function prefill(Matter $matter, ?bool $teams = null): array
+    {
+        return self::fillFor($matter, $teams);
+    }
+
+    /**
+     * A new event for this matter, as the form opens: the matter, its
+     * title, place and description, and the switches as a blank form has
+     * them (filling the form replaces its defaults).
+     *
+     * @return array<string, mixed>
+     */
+    public static function forMatter(Matter $matter, mixed $start = null): array
+    {
+        return [
+            'matter_id' => $matter->getKey(),
+            ...self::fillFor($matter),
+            'start_datetime' => $start,
+            'end_datetime' => $start ? Carbon::parse($start)->addHour()->format('Y-m-d H:i:s') : null,
+            'is_all_day' => false,
+            'update_next_session_date' => true,
+            'sync_to_outlook' => self::outlookOn(),
+            'is_teams_meeting' => true,
+        ];
+    }
+
+    /**
+     * @return array{title: string, location: string, description: string}
+     */
+    private static function fillFor(Matter $matter, ?bool $teams = null): array
+    {
+        $matter->loadMissing(['court', 'type', 'mainPartiesOnly.party', 'expertsOnly.party']);
+        $courtName = $matter->court?->name ?? '';
+        $teams ??= self::outlookOn();
+
+        return [
+            'title' => $matter->year.'/'.$matter->number.' — '.$courtName.' — '.($matter->type?->name ?? ''),
+            'location' => $teams ? 'Microsoft Teams - '.($courtName ?: 'Microsoft Teams') : $courtName,
+            'description' => self::buildDescription($matter),
+        ];
     }
 
     private static function outlookOn(): bool
