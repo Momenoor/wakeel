@@ -3,7 +3,6 @@
 namespace App\Filament\Mms\Resources\CalendarEvents\Schemas;
 
 use App\Filament\Mms\Actions\Calendar\CalendarMatterActions;
-use App\Filament\Mms\Concerns\HasMultiWordSearch;
 use App\Filament\Support\RichEditorDirection;
 use App\Models\CalendarEvent;
 use App\Models\Matter;
@@ -25,8 +24,6 @@ use Illuminate\Support\Str;
 
 class CalendarEventForm
 {
-    use HasMultiWordSearch;
-
     public static function configure(Schema $schema): Schema
     {
         return $schema->components(self::getFormSchema());
@@ -60,42 +57,16 @@ class CalendarEventForm
         return [
             Section::make(__('Event Details'))
                 ->schema([
+                    // Found as everywhere else (MatterSearch): "639/2025" or
+                    // 2025/639, the number, or words of its court, type or
+                    // parties — each result with its court, type and parties.
                     Select::make('matter_id')
                         ->label(__('Matter'))
-                        ->relationship('matter', 'year', fn ($query) => $query->with(['court', 'type']))
-                        ->getOptionLabelFromRecordUsing(
-                            fn ($record) => $record?->year.'/'.$record?->number.' - '.($record?->court?->name ?? '').' - '.($record?->type?->name ?? '')
-                        )
                         ->placeholder(__('Select Matter'))
                         ->searchable()
-                        ->getSearchResultsUsing(function (string $search) {
-                            $query = Matter::with(['court', 'type']);
-                            $tokens = static::splitSearch($search);
-
-                            if (count($tokens) === 2 && is_numeric($tokens[0]) && is_numeric($tokens[1])) {
-                                $query->where(function ($q) use ($tokens) {
-                                    foreach ($tokens as $token) {
-                                        $q->where(function ($inner) use ($token) {
-                                            $inner->orWhere('year', $token)
-                                                ->orWhere('number', $token)
-                                                ->orWhere('number', '0'.$token);
-                                        });
-                                    }
-                                });
-                            } else {
-                                $query->where(function ($q) use ($search) {
-                                    $q->where('year', 'like', "%{$search}%")
-                                        ->orWhere('number', 'like', "%{$search}%")
-                                        ->orWhereHas('court', fn ($q) => $q->where('name', 'like', "%{$search}%"))
-                                        ->orWhereHas('type', fn ($q) => $q->where('name', 'like', "%{$search}%"));
-                                });
-                            }
-
-                            return $query->limit(50)
-                                ->get()
-                                ->pluck('full_label', 'id');
-                        })
-                        ->preload()
+                        ->searchPrompt(__('Type the matter number (639/2025), or a court, type or party name'))
+                        ->getSearchResultsUsing(fn (string $search): array => MatterSearch::options($search))
+                        ->getOptionLabelUsing(fn ($value): ?string => filled($value) ? (MatterSearch::labels([$value])[(int) $value] ?? null) : null)
                         ->hidden(fn ($record) => $record instanceof Matter
                             || ($record instanceof CalendarEvent && $record->matters()->count() > 1))
                         ->disabled(fn ($record) => $record instanceof Matter)

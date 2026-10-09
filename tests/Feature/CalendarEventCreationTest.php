@@ -6,8 +6,11 @@ use App\Filament\Mms\Resources\CalendarEvents\Pages\ListCalendarEvents;
 use App\Models\CalendarEvent;
 use App\Models\Court;
 use App\Models\Matter;
+use App\Models\MatterParty;
+use App\Models\Party;
 use App\Models\Type;
 use App\Models\User;
+use App\Support\MatterSearch;
 use Filament\Actions\Testing\TestAction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -133,6 +136,31 @@ class CalendarEventCreationTest extends TestCase
 
         $this->createSingle(['matter_id' => $matter->id, 'sync_to_outlook' => false, 'update_next_session_date' => true]);
         $this->assertSame('2026-10-20', $matter->fresh()->next_session_date?->format('Y-m-d'));
+    }
+
+    public function test_the_matter_is_found_by_its_number_court_type_or_party(): void
+    {
+        $court = Court::factory()->create(['name' => 'محكمة دبي']);
+        $type = Type::factory()->create(['name' => 'عمالي']);
+        $matter = Matter::factory()->create(['number' => '639', 'year' => '2025', 'court_id' => $court->id, 'type_id' => $type->id]);
+        $party = Party::factory()->create(['name' => 'شركة المهاد']);
+        MatterParty::create(['matter_id' => $matter->id, 'role' => 'party', 'type' => 'plaintiff', 'party_id' => $party->id]);
+        Matter::factory()->create(['number' => '640', 'year' => '2024']);
+
+        $label = '639/2025 — محكمة دبي — عمالي — شركة المهاد';
+
+        foreach (['639/2025', '2025/639', '٦٣٩/٢٠٢٥', '639 دبي', 'عمالي 2025', 'المهاد'] as $search) {
+            $this->assertSame([$matter->id => $label], MatterSearch::options($search), $search);
+        }
+
+        // In the form: results named, and the chosen one shown by its label.
+        Livewire::test(ListCalendarEvents::class)
+            ->mountAction(TestAction::make('createSingle')->table())
+            ->set('mountedActions.0.data.matter_id', $matter->id)
+            ->assertFormFieldExists('matter_id', fn ($field) => $field->getSearchResults('639/2025') === [$matter->id => $label]
+                && $field->getOptionLabel() === $label)
+            // Picking it fills the title.
+            ->assertSet('mountedActions.0.data.title', '2025/639 — محكمة دبي — عمالي');
     }
 
     public function test_a_bulk_event_lists_the_courts_matters_and_makes_no_meeting_unasked(): void
