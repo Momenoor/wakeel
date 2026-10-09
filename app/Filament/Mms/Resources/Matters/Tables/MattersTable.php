@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Resources\Matters\Tables;
 
 use App\Enums\MatterCollectionStatus;
 use App\Filament\Mms\Concerns\HasMultiWordSearch;
+use App\Models\Court;
 use App\Models\Party;
 use App\Models\Type;
 use Carbon\Carbon;
@@ -30,9 +31,13 @@ class MattersTable
 {
     use HasMultiWordSearch;
 
+    private const DIGITS = ['٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4', '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9'];
+
     public static function configure(Table $table): Table
     {
         return $table
+            // One search for the whole table (search()), not one per column.
+            ->searchUsing(fn (Builder $query, string $search) => static::search($query, $search))
             ->striped()
             ->extraAttributes([
                 'class' => 'custom-compact-table [&_td]:py-1 [&_th]:py-1 [&_table]:text-sm [&_table]:w-full',
@@ -491,5 +496,115 @@ class MattersTable
                 ForceDeleteAction::make()->iconButton()
                     ->visible(fn ($record) => $record->trashed() && auth()->user()->can('ForceDelete:Matter')),
             ]);
+    }
+
+    /**
+     * The matters list's search box. The text is split into words on spaces
+     * and / - : _ \ | + (searchWords()), then:
+     *
+     *  - numbers: one is found in the number, the year or a fee amount; two
+     *    or more are the reference — (number contains any of them) AND (year
+     *    contains any of them) — so "571/2009" and "2009/571" find that
+     *    matter, not one whose fee or party happens to hold 2009;
+     *  - words: each belongs to the field it is found in (court, type,
+     *    party). Words of the same field are OR'd ("دبي الشارقة": either
+     *    court), different fields AND'd ("دبي المهاد": Dubai matters of
+     *    المهاد). A word found in no field finds nothing.
+     *
+     * "Found" is always "contains".
+     */
+    public static function search(Builder $query, string $search): Builder
+    {
+        $words = self::searchWords($search);
+        $numbers = array_values(array_filter($words, fn (string $w): bool => preg_match('/^\d[\d,.]*$/', $w) === 1));
+        $texts = array_values(array_diff($words, $numbers));
+
+        if (count($numbers) === 1) {
+            $like = '%'.$numbers[0].'%';
+            $amount = '%'.str_replace(',', '', $numbers[0]).'%';
+
+            $query->where(fn (Builder $q) => $q
+                ->where('number', 'like', $like)
+                ->orWhere('year', 'like', $like)
+                ->orWhereHas('fees', fn (Builder $f) => $f->where('amount', 'like', $amount)));
+        } elseif (count($numbers) > 1) {
+            foreach (['number', 'year'] as $column) {
+                $query->where(function (Builder $q) use ($column, $numbers) {
+                    foreach ($numbers as $number) {
+                        $q->orWhere($column, 'like', '%'.$number.'%');
+                    }
+                });
+            }
+        }
+
+        // Each word to the fields it is found in; a word in one field only
+        // joins that field's OR, one in several is its own OR across them.
+        $fields = [
+            'court' => fn (string $w): bool => Court::query()->where('name', 'like', '%'.$w.'%')->exists(),
+            'type' => fn (string $w): bool => Type::query()->where('name', 'like', '%'.$w.'%')->exists(),
+            'party' => fn (string $w): bool => Party::query()->where('name', 'like', '%'.$w.'%')->exists(),
+        ];
+        $only = ['court' => [], 'type' => [], 'party' => []];
+        $several = [];
+
+        foreach ($texts as $word) {
+            $in = array_keys(array_filter($fields, fn (callable $found): bool => $found($word)));
+
+            match (count($in)) {
+                0 => $query->whereRaw('1 = 0'),
+                1 => $only[$in[0]][] = $word,
+                default => $several[] = [$word, $in],
+            };
+        }
+
+        foreach ($only as $field => $fieldWords) {
+            if ($fieldWords !== []) {
+                $query->where(fn (Builder $q) => self::fieldContains($q, $field, $fieldWords));
+            }
+        }
+
+        foreach ($several as [$word, $in]) {
+            $query->where(function (Builder $q) use ($word, $in) {
+                foreach ($in as $field) {
+                    $q->orWhere(fn (Builder $q) => self::fieldContains($q, $field, [$word]));
+                }
+            });
+        }
+
+        return $query;
+    }
+
+    /**
+     * The field contains any of the words.
+     *
+     * @param  list<string>  $words
+     */
+    private static function fieldContains(Builder $query, string $field, array $words): void
+    {
+        $any = function (Builder $q) use ($words): void {
+            $q->where(function (Builder $q) use ($words) {
+                foreach ($words as $word) {
+                    $q->orWhere('name', 'like', '%'.$word.'%');
+                }
+            });
+        };
+
+        match ($field) {
+            'court' => $query->whereHas('court', $any),
+            'type' => $query->whereHas('type', $any),
+            'party' => $query->whereHas('matterParties.party', $any),
+        };
+    }
+
+    /**
+     * The search split into its words.
+     *
+     * @return list<string>
+     */
+    public static function searchWords(string $search): array
+    {
+        $words = preg_split('~[\s/\-:_\\\\|+–]+~u', strtr($search, self::DIGITS), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        return array_values(array_filter($words, fn (string $word): bool => ! in_array(mb_strtolower($word), ['لسنة', 'لعام', 'سنة', 'of'], true)));
     }
 }
