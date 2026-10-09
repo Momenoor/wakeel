@@ -3665,5 +3665,8 @@
     "Standard name": "الاسم المعتمد",
     "Standardise the folder of :matter": "توحيد مجلد الدعوى :matter",
     "That folder is no longer among those found — scan again.": "لم يعد هذا المجلد ضمن ما عُثر عليه — أعد الفحص.",
-    "What will be done": "ما سيتم تنفيذه"
+    "What will be done": "ما سيتم تنفيذه",
+    ":assistant has :names — no new folder was made. Decide whether to standardise and link it.": "لدى :assistant المجلد :names — لم يُنشأ مجلد جديد. قرّر إن كان يُوحَّد ويُربط بالدعوى.",
+    "A OneDrive folder for :matter is already there": "يوجد مجلد OneDrive للدعوى :matter بالفعل",
+    "A folder for this matter is already in OneDrive (:names) — decide in Settings → OneDrive Folders.": "يوجد مجلد لهذه الدعوى في OneDrive بالفعل (:names) — قرّر من الإعدادات ← مجلدات OneDrive."
 }

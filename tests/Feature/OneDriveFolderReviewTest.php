@@ -223,6 +223,43 @@ class OneDriveFolderReviewTest extends TestCase
         $this->assertSame(OneDriveFolderReview::DONE, OneDriveFolderReview::where('matter_id', $matter->id)->value('status'));
     }
 
+    public function test_a_new_matters_folder_found_already_waits_for_a_decision_instead_of_a_duplicate(): void
+    {
+        $matter = $this->matter('3052', '2021');
+        $this->add('f1', 'DSI Case 3052_2021');
+        $folder = MatterOneDriveFolder::create(['matter_id' => $matter->id, 'party_id' => $this->assistant->id,
+            'folder_name' => MatterOneDriveFolders::folderName($matter), 'status' => MatterOneDriveFolder::PENDING]);
+
+        app(MatterOneDriveFolders::class)->create($folder);
+
+        // No second folder; the one there waits in the review.
+        $this->assertSame([], $this->changes);
+        $folder->refresh();
+        $this->assertSame(MatterOneDriveFolder::PENDING, $folder->status);
+        $this->assertStringContainsString('DSI Case 3052_2021', $folder->error);
+        $this->assertSame(OneDriveFolderReview::FOUND, OneDriveFolderReview::where('matter_id', $matter->id)->value('status'));
+        // Whoever manages OneDrive is told.
+        $this->assertSame(1, auth()->user()->notifications()->count());
+
+        // Applied from the review: renamed and linked.
+        app(OneDriveFolderReviewer::class)->apply(OneDriveFolderReview::where('matter_id', $matter->id)->sole(), 'f1');
+        $this->assertSame(MatterOneDriveFolder::CREATED, $folder->fresh()->status);
+        $this->assertSame('f1', $folder->fresh()->drive_item_id);
+    }
+
+    public function test_a_new_matter_with_no_folder_gets_one_and_its_review_is_done(): void
+    {
+        $matter = $this->matter('77', '2024');
+        $folder = MatterOneDriveFolder::create(['matter_id' => $matter->id, 'party_id' => $this->assistant->id,
+            'folder_name' => MatterOneDriveFolders::folderName($matter), 'status' => MatterOneDriveFolder::PENDING]);
+
+        app(MatterOneDriveFolders::class)->create($folder);
+
+        $this->assertContains('make 2024-77 - خبرة - محاكم دبي', $this->changes);
+        $this->assertSame(MatterOneDriveFolder::CREATED, $folder->fresh()->status);
+        $this->assertSame(OneDriveFolderReview::DONE, OneDriveFolderReview::where('matter_id', $matter->id)->value('status'));
+    }
+
     public function test_a_standard_name_taken_already_is_not_overwritten(): void
     {
         $this->matter('3052', '2021');

@@ -113,8 +113,7 @@ class OneDriveFolderReviewer
             $summary['assistants']++;
 
             try {
-                $base = $this->client->findFolder($assistant->onedrive_email, (string) $assistant->onedrive_path);
-                $folders = $base === null && filled($assistant->onedrive_path) ? [] : $this->client->childFolders($assistant->onedrive_email, $base['id'] ?? null);
+                $folders = $this->foldersOf($assistant);
             } catch (\Throwable $e) {
                 $summary['errors'][] = $assistant->name.': '.$e->getMessage();
 
@@ -128,37 +127,77 @@ class OneDriveFolderReviewer
                 ->pluck('drive_item_id', 'matter_id');
 
             foreach ($matters as $matter) {
-                $standard = MatterOneDriveFolders::folderName($matter);
-                $candidates = array_values(array_filter($folders, fn (array $f): bool => $f['id'] === ($linked[$matter->getKey()] ?? null)
-                    || self::matches($f['name'], $matter->number, $matter->year)));
-
-                $status = match (true) {
-                    count($candidates) === 1 && $candidates[0]['name'] === $standard && $candidates[0]['id'] === ($linked[$matter->getKey()] ?? null) => OneDriveFolderReview::STANDARD,
-                    count($candidates) === 1 => OneDriveFolderReview::FOUND,
-                    count($candidates) > 1 => OneDriveFolderReview::MULTIPLE,
-                    default => OneDriveFolderReview::MISSING,
-                };
-
-                $review = OneDriveFolderReview::firstOrNew(['matter_id' => $matter->getKey(), 'party_id' => $assistant->getKey()]);
-
-                // What was decided stays decided.
-                if (in_array($review->status, [OneDriveFolderReview::DONE, OneDriveFolderReview::SKIPPED], true)) {
-                    $review->fill(['candidates' => $candidates, 'standard_name' => $standard, 'scanned_at' => now()])->save();
-                } else {
-                    $review->fill([
-                        'status' => $status,
-                        'candidates' => $candidates,
-                        'standard_name' => $standard,
-                        'error' => null,
-                        'scanned_at' => now(),
-                    ])->save();
-                }
-
+                $this->record($matter, $assistant, $folders, $linked[$matter->getKey()] ?? null);
                 $summary['rows']++;
             }
         }
 
         return $summary;
+    }
+
+    /**
+     * The same look for one matter and one assistant — before a new
+     * matter's folder is made, so one already there isn't duplicated.
+     */
+    public function check(Matter $matter, Party $assistant): OneDriveFolderReview
+    {
+        $linked = MatterOneDriveFolder::query()
+            ->where('matter_id', $matter->getKey())
+            ->where('party_id', $assistant->getKey())
+            ->value('drive_item_id');
+
+        return $this->record($matter, $assistant, $this->foldersOf($assistant), $linked);
+    }
+
+    /**
+     * The folders in the assistant's matters folder (the path on their
+     * profile; their OneDrive root without one). None when the path isn't
+     * there yet.
+     *
+     * @return list<array{id: string, name: string, webUrl: string}>
+     */
+    private function foldersOf(Party $assistant): array
+    {
+        $base = $this->client->findFolder($assistant->onedrive_email, (string) $assistant->onedrive_path);
+
+        return $base === null && filled($assistant->onedrive_path) ? [] : $this->client->childFolders($assistant->onedrive_email, $base['id'] ?? null);
+    }
+
+    /**
+     * What is there for this matter, kept as its review row. A row already
+     * decided keeps its decision.
+     *
+     * @param  list<array{id: string, name: string, webUrl: string}>  $folders
+     */
+    private function record(Matter $matter, Party $assistant, array $folders, ?string $linkedId): OneDriveFolderReview
+    {
+        $standard = MatterOneDriveFolders::folderName($matter);
+        $candidates = array_values(array_filter($folders, fn (array $f): bool => $f['id'] === $linkedId
+            || self::matches($f['name'], $matter->number, $matter->year)));
+
+        $status = match (true) {
+            count($candidates) === 1 && $candidates[0]['name'] === $standard && $candidates[0]['id'] === $linkedId => OneDriveFolderReview::STANDARD,
+            count($candidates) === 1 => OneDriveFolderReview::FOUND,
+            count($candidates) > 1 => OneDriveFolderReview::MULTIPLE,
+            default => OneDriveFolderReview::MISSING,
+        };
+
+        $review = OneDriveFolderReview::firstOrNew(['matter_id' => $matter->getKey(), 'party_id' => $assistant->getKey()]);
+
+        // What was decided stays decided.
+        if (in_array($review->status, [OneDriveFolderReview::DONE, OneDriveFolderReview::SKIPPED], true)) {
+            $review->fill(['candidates' => $candidates, 'standard_name' => $standard, 'scanned_at' => now()])->save();
+        } else {
+            $review->fill([
+                'status' => $status,
+                'candidates' => $candidates,
+                'standard_name' => $standard,
+                'error' => null,
+                'scanned_at' => now(),
+            ])->save();
+        }
+
+        return $review;
     }
 
     /**

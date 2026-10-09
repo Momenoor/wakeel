@@ -2,14 +2,20 @@
 
 namespace App\Services\MMS;
 
+use App\Filament\Mms\Pages\OneDriveSettings;
 use App\Jobs\CreateMatterOneDriveFolder;
 use App\Models\Matter;
 use App\Models\MatterOneDriveFolder;
 use App\Models\MatterParty;
+use App\Models\OneDriveFolderReview;
 use App\Models\Party;
 use App\Models\Setting;
+use App\Models\User;
+use Filament\Actions\Action;
+use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 
 /**
  * A folder for each matter in its assistant's OneDrive:
@@ -134,9 +140,35 @@ class MatterOneDriveFolders
     /**
      * Creates the folder and its standard subfolders in the assistant's
      * OneDrive. Folders already there are reused, never emptied.
+     *
+     * First it looks for the matter's folder under another name (by its
+     * number and year, as the review does): one found is not duplicated —
+     * the folder waits for the office's decision in the review (OneDrive
+     * Folders page), and those who manage OneDrive are told.
      */
     public function create(MatterOneDriveFolder $folder): void
     {
+        $folder->loadMissing(['matter', 'party']);
+        $review = null;
+
+        if ($folder->matter && $folder->party && filled($folder->party->onedrive_email)) {
+            $review = app(OneDriveFolderReviewer::class)->check($folder->matter, $folder->party);
+            $candidates = $review->candidates ?? [];
+            $onlyTheStandardOne = count($candidates) === 1 && $candidates[0]['name'] === self::clean($folder->folder_name);
+
+            if ($candidates !== [] && ! $onlyTheStandardOne) {
+                $folder->update([
+                    'status' => MatterOneDriveFolder::PENDING,
+                    'error' => __('A folder for this matter is already in OneDrive (:names) — decide in Settings → OneDrive Folders.', [
+                        'names' => collect($candidates)->pluck('name')->implode('، '),
+                    ]),
+                ]);
+                $this->tellManagers($folder, $candidates);
+
+                return;
+            }
+        }
+
         $item = $this->makeFolder($folder->party, $folder->folder_name);
 
         $folder->update([
@@ -145,6 +177,46 @@ class MatterOneDriveFolders
             'web_url' => $item['webUrl'],
             'error' => null,
         ]);
+
+        $review?->update([
+            'status' => OneDriveFolderReview::DONE,
+            'drive_item_id' => $item['id'],
+            'web_url' => $item['webUrl'],
+            'log' => [['action' => $review->candidates ? 'keep' : 'create', 'from' => null, 'to' => $folder->folder_name]],
+            'decided_at' => now(),
+        ]);
+    }
+
+    /**
+     * Those who manage the OneDrive folders hear that a new matter's folder
+     * is waiting for them.
+     *
+     * @param  list<array{id: string, name: string, webUrl: string}>  $candidates
+     */
+    private function tellManagers(MatterOneDriveFolder $folder, array $candidates): void
+    {
+        try {
+            $managers = User::query()->get()->filter(fn (User $user): bool => $user->can('View:OneDriveSettings'));
+
+            if ($managers->isEmpty()) {
+                return;
+            }
+
+            Notification::make()
+                ->warning()
+                ->icon('heroicon-o-folder-open')
+                ->title(__('A OneDrive folder for :matter is already there', ['matter' => $folder->matter?->number.'/'.$folder->matter?->year]))
+                ->body(__(':assistant has :names — no new folder was made. Decide whether to standardise and link it.', [
+                    'assistant' => $folder->party?->name,
+                    'names' => collect($candidates)->pluck('name')->implode('، '),
+                ]))
+                ->actions([
+                    Action::make('review')->label('Review')->translateLabel(false)->url(OneDriveSettings::getUrl(panel: 'mms'))->markAsRead(),
+                ])
+                ->sendToDatabase($managers);
+        } catch (\Throwable $e) {
+            Log::info('OneDrive folder notice not sent', ['folder' => $folder->getKey(), 'error' => $e->getMessage()]);
+        }
     }
 
     /**
