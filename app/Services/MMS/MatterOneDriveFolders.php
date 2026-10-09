@@ -10,6 +10,7 @@ use App\Models\MatterParty;
 use App\Models\OneDriveFolderReview;
 use App\Models\Party;
 use App\Models\Setting;
+use App\Models\Type;
 use App\Models\User;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -57,14 +58,26 @@ class MatterOneDriveFolders
     }
 
     /**
-     * The standard subfolders, one per line; "a/b" makes b inside a.
+     * The standard subfolders, one per line; "a/b" makes b inside a — the
+     * matter type's own structure when it has one, else the default.
      *
      * @return list<string>
      */
-    public static function subfolders(): array
+    public static function subfolders(Matter|Type|null $for = null): array
+    {
+        $type = $for instanceof Matter ? $for->loadMissing('type')->type : $for;
+        $own = $type instanceof Type ? self::lines((string) $type->onedrive_subfolders) : [];
+
+        return $own !== [] ? $own : self::lines((string) Setting::get(self::SUBFOLDERS, ''));
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function lines(string $text): array
     {
         return array_values(array_filter(
-            array_map('trim', preg_split('/\R/u', (string) Setting::get(self::SUBFOLDERS, '')) ?: []),
+            array_map('trim', preg_split('/\R/u', $text) ?: []),
             fn (string $line): bool => $line !== '',
         ));
     }
@@ -169,7 +182,7 @@ class MatterOneDriveFolders
             }
         }
 
-        $item = $this->makeFolder($folder->party, $folder->folder_name);
+        $item = $this->makeFolder($folder->party, $folder->folder_name, self::subfolders($folder->matter));
 
         $folder->update([
             'status' => MatterOneDriveFolder::CREATED,
@@ -223,9 +236,10 @@ class MatterOneDriveFolders
      * A folder with the standard subfolders in the assistant's OneDrive,
      * under the path on their profile. Folders already there are reused.
      *
+     * @param  ?list<string>  $subfolders  the matter type's structure (the default when null)
      * @return array{id: string, webUrl: string}
      */
-    public function makeFolder(?Party $party, string $name): array
+    public function makeFolder(?Party $party, string $name, ?array $subfolders = null): array
     {
         if (! $party instanceof Party || blank($party->onedrive_email)) {
             throw new \RuntimeException(__('No OneDrive account on :name\'s profile.', ['name' => $party?->name ?? '—']));
@@ -234,7 +248,7 @@ class MatterOneDriveFolders
         $parent = $this->client->ensureFolder($party->onedrive_email, (string) $party->onedrive_path);
         $item = $this->client->ensureFolder($party->onedrive_email, self::clean($name), $parent['id']);
 
-        foreach (self::subfolders() as $subfolder) {
+        foreach ($subfolders ?? self::subfolders() as $subfolder) {
             $path = implode('/', array_map([self::class, 'clean'], OneDriveClient::segments($subfolder)));
 
             if ($path !== '') {

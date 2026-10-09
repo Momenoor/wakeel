@@ -3668,5 +3668,16 @@
     "What will be done": "ما سيتم تنفيذه",
     ":assistant has :names — no new folder was made. Decide whether to standardise and link it.": "لدى :assistant المجلد :names — لم يُنشأ مجلد جديد. قرّر إن كان يُوحَّد ويُربط بالدعوى.",
     "A OneDrive folder for :matter is already there": "يوجد مجلد OneDrive للدعوى :matter بالفعل",
-    "A folder for this matter is already in OneDrive (:names) — decide in Settings → OneDrive Folders.": "يوجد مجلد لهذه الدعوى في OneDrive بالفعل (:names) — قرّر من الإعدادات ← مجلدات OneDrive."
+    "A folder for this matter is already in OneDrive (:names) — decide in Settings → OneDrive Folders.": "يوجد مجلد لهذه الدعوى في OneDrive بالفعل (:names) — قرّر من الإعدادات ← مجلدات OneDrive.",
+    "Assign a structure to matter types": "تعيين هيكل لأنواع الدعاوى",
+    "Folder structure set for :count types": "تم تعيين هيكل المجلدات لـ :count نوع",
+    "Matter types with their own structure": "أنواع الدعاوى ذات الهيكل الخاص",
+    "None — every type uses the structure above.": "لا يوجد — كل الأنواع تستخدم الهيكل أعلاه.",
+    "One per line, in order. Use \"/\" for a folder inside another, e.g. \"02 المستندات/من المدعي\". Changes apply to folders made from now on.": "مجلد في كل سطر، بالترتيب. استخدم \"/\" لمجلد داخل آخر، مثل \"02 المستندات/من المدعي\". التغييرات تسري على المجلدات التي تُنشأ من الآن.",
+    "OneDrive folder structure": "هيكل مجلدات OneDrive",
+    "Set OneDrive folder structure": "تعيين هيكل مجلدات OneDrive",
+    "Subfolders": "المجلدات الفرعية",
+    "The default — a matter type can have its own (below, or on the type).": "هذا هو الافتراضي — ويمكن لكل نوع دعوى أن يكون له هيكله الخاص (أدناه، أو من صفحة النوع).",
+    "The subfolders of this type's matter folders in the assistants' OneDrive. Leave empty for the default structure (Settings → OneDrive Folders).": "المجلدات الفرعية لمجلدات دعاوى هذا النوع في OneDrive لدى المساعدين. اتركه فارغاً لاستخدام الهيكل الافتراضي (الإعدادات ← مجلدات OneDrive).",
+    "Use the default structure": "استخدام الهيكل الافتراضي"
 }

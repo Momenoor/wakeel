@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Filament\Mms\Pages\OneDriveSettings;
+use App\Filament\Mms\Resources\Types\Pages\ListTypes;
 use App\Models\Court;
 use App\Models\Matter;
 use App\Models\MatterOneDriveFolder;
@@ -258,6 +259,57 @@ class OneDriveFolderReviewTest extends TestCase
         $this->assertContains('make 2024-77 - خبرة - محاكم دبي', $this->changes);
         $this->assertSame(MatterOneDriveFolder::CREATED, $folder->fresh()->status);
         $this->assertSame(OneDriveFolderReview::DONE, OneDriveFolderReview::where('matter_id', $matter->id)->value('status'));
+    }
+
+    public function test_each_matter_type_can_have_its_own_folder_structure(): void
+    {
+        $own = $this->matter('77', '2024');
+        $own->type->update(['onedrive_subfolders' => "A تقارير\nB مراسلات"]);
+        $plain = Matter::factory()->create(['number' => '78', 'year' => '2024',
+            'type_id' => Type::factory()->create(['name' => 'تجاري'])->id, 'court_id' => $own->court_id]);
+        MatterParty::create(['matter_id' => $plain->id, 'role' => 'expert', 'type' => 'assistant', 'party_id' => $this->assistant->id]);
+
+        $this->assertSame(['A تقارير', 'B مراسلات'], MatterOneDriveFolders::subfolders($own->fresh()));
+        $this->assertSame(['01 المراسلات', '02 المستندات/من المدعي'], MatterOneDriveFolders::subfolders($plain));
+
+        foreach ([$own, $plain] as $matter) {
+            app(MatterOneDriveFolders::class)->create(MatterOneDriveFolder::create(['matter_id' => $matter->id, 'party_id' => $this->assistant->id,
+                'folder_name' => MatterOneDriveFolders::folderName($matter), 'status' => MatterOneDriveFolder::PENDING]));
+        }
+
+        $this->assertContains('make A تقارير', $this->changes);
+        $this->assertContains('make B مراسلات', $this->changes);
+        $this->assertContains('make 01 المراسلات', $this->changes);
+        // The type's structure, not also the default.
+        $this->assertSame(1, collect($this->changes)->filter(fn ($c) => $c === 'make 01 المراسلات')->count());
+
+        // The review plans with the type's structure too.
+        $this->add('f9', '2024-77 old');
+        app(OneDriveFolderReviewer::class)->scan();
+        $review = OneDriveFolderReview::where('matter_id', $own->id)->sole();
+        $this->assertSame(['create A تقارير', 'create B مراسلات'], collect(app(OneDriveFolderReviewer::class)->plan($review, null))->skip(1)->map(fn ($s) => $s['action'].' '.basename($s['to']))->values()->all());
+    }
+
+    public function test_a_structure_is_assigned_to_many_types_at_once(): void
+    {
+        [$a, $b, $c] = [Type::factory()->create(), Type::factory()->create(), Type::factory()->create(['onedrive_subfolders' => 'X'])];
+
+        Livewire::test(ListTypes::class)
+            ->selectTableRecords([$a->id, $b->id])
+            ->callAction(TestAction::make('oneDriveStructure')->table()->bulk(), ['structure' => "01 تقارير\n02 مراسلات"])
+            ->assertHasNoFormErrors();
+
+        $this->assertSame("01 تقارير\n02 مراسلات", $a->fresh()->onedrive_subfolders);
+        $this->assertSame("01 تقارير\n02 مراسلات", $b->fresh()->onedrive_subfolders);
+
+        // From the OneDrive Folders page: back to the default.
+        Livewire::test(OneDriveSettings::class)
+            ->callAction(TestAction::make('assignToTypes')->schemaComponent('type_structures'), ['types' => [$a->id, $c->id], 'use_default' => true])
+            ->assertHasNoFormErrors();
+
+        $this->assertNull($a->fresh()->onedrive_subfolders);
+        $this->assertNull($c->fresh()->onedrive_subfolders);
+        $this->assertSame("01 تقارير\n02 مراسلات", $b->fresh()->onedrive_subfolders);
     }
 
     public function test_a_standard_name_taken_already_is_not_overwritten(): void

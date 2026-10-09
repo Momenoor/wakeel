@@ -4,7 +4,9 @@ namespace App\Filament\Mms\Resources\Types\Tables;
 
 use App\Filament\Mms\Resources\Types\Schemas\TypeForm;
 use App\Models\LetterTemplate;
+use App\Models\Setting;
 use App\Models\Type;
+use App\Services\MMS\MatterOneDriveFolders;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -12,7 +14,9 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -78,6 +82,26 @@ class TypesTable
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
+                    // One OneDrive folder structure for all the types ticked.
+                    BulkAction::make('oneDriveStructure')
+                        ->label(__('Set OneDrive folder structure'))
+                        ->icon('heroicon-o-folder')
+                        ->schema([
+                            Toggle::make('use_default')
+                                ->label(__('Use the default structure'))
+                                ->live(),
+                            TypeForm::oneDriveStructureField('structure')
+                                ->default(fn (): string => (string) Setting::get(MatterOneDriveFolders::SUBFOLDERS, ''))
+                                ->hidden(fn (Get $get): bool => (bool) $get('use_default'))
+                                ->required(fn (Get $get): bool => ! $get('use_default')),
+                        ])
+                        ->action(function (Collection $records, array $data): void {
+                            $structure = ! empty($data['use_default']) ? null : (trim((string) ($data['structure'] ?? '')) ?: null);
+                            $records->each->update(['onedrive_subfolders' => $structure]);
+
+                            Notification::make()->success()->title(__('Folder structure set for :count types', ['count' => $records->count()]))->send();
+                        })
+                        ->deselectRecordsAfterCompletion(),
                     BulkAction::make('assignConfig')
                         ->label(__('Assign Incentive Config'))
                         ->schema([

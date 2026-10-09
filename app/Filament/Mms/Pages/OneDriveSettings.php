@@ -3,13 +3,16 @@
 namespace App\Filament\Mms\Pages;
 
 use App\Filament\Mms\Pages\Concerns\ReviewsOneDriveFolders;
+use App\Filament\Mms\Resources\Types\Schemas\TypeForm;
 use App\Filament\Shared\Clusters\Settings;
 use App\Models\Setting;
+use App\Models\Type;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\OneDriveClient;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -102,9 +105,38 @@ class OneDriveSettings extends Page implements HasTable
                             ->helperText(__('Matters created before the feature was switched on are not touched.')),
                         Textarea::make('subfolders')
                             ->label(__('Standard subfolders'))
-                            ->helperText(__('One per line, in order. Use "/" for a folder inside another, e.g. "02 المستندات/من المدعي". Changes apply to folders made from now on; existing folders stay as they are.'))
+                            ->helperText(__('One per line, in order. Use "/" for a folder inside another, e.g. "02 المستندات/من المدعي". Changes apply to folders made from now on; existing folders stay as they are.').' '.__('The default — a matter type can have its own (below, or on the type).'))
                             ->rows(10)
                             ->extraInputAttributes(['dir' => 'auto']),
+                        Placeholder::make('type_structures')
+                            ->label(__('Matter types with their own structure'))
+                            ->content(fn (): string => Type::query()->whereNotNull('onedrive_subfolders')->where('onedrive_subfolders', '!=', '')->orderBy('name')->pluck('name')->implode('، ') ?: __('None — every type uses the structure above.'))
+                            ->hintAction(
+                                Action::make('assignToTypes')
+                                    ->label(__('Assign a structure to matter types'))
+                                    ->icon(Heroicon::OutlinedFolder)
+                                    ->fillForm(fn (Get $get): array => ['structure' => $get('subfolders')])
+                                    ->schema([
+                                        Select::make('types')
+                                            ->label(__('Matter types'))
+                                            ->options(fn () => Type::query()->orderBy('name')->pluck('name', 'id'))
+                                            ->multiple()
+                                            ->searchable()
+                                            ->required(),
+                                        Toggle::make('use_default')
+                                            ->label(__('Use the default structure'))
+                                            ->live(),
+                                        TypeForm::oneDriveStructureField('structure')
+                                            ->hidden(fn (Get $get): bool => (bool) $get('use_default'))
+                                            ->required(fn (Get $get): bool => ! $get('use_default')),
+                                    ])
+                                    ->action(function (array $data): void {
+                                        $structure = ! empty($data['use_default']) ? null : (trim((string) ($data['structure'] ?? '')) ?: null);
+                                        Type::query()->whereIn('id', $data['types'] ?? [])->update(['onedrive_subfolders' => $structure]);
+
+                                        Notification::make()->success()->title(__('Folder structure set for :count types', ['count' => count($data['types'] ?? [])]))->send();
+                                    }),
+                            ),
                         TextInput::make('signed_minutes')
                             ->label(__('Signed minutes subfolder'))
                             ->helperText(__('Signed minutes sent back on WhatsApp are saved here, inside the matter\'s folder (made when missing). Use "/" for a folder inside another.'))

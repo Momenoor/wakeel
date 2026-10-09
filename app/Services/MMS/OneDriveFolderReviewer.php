@@ -212,7 +212,7 @@ class OneDriveFolderReviewer
         if ($folderId === null) {
             return [
                 ['action' => 'create', 'from' => null, 'to' => $standard],
-                ...array_map(fn (string $sub) => ['action' => 'create', 'from' => null, 'to' => $standard.'/'.$sub], $this->standardSubfolders()),
+                ...array_map(fn (string $sub) => ['action' => 'create', 'from' => null, 'to' => $standard.'/'.$sub], $this->standardSubfolders($review->matter)),
             ];
         }
 
@@ -225,7 +225,7 @@ class OneDriveFolderReviewer
             ? ['action' => 'keep', 'from' => $folder['name'], 'to' => $standard]
             : ['action' => 'rename', 'from' => $folder['name'], 'to' => $standard]];
 
-        foreach ($this->subfolderSteps($review->party, $folderId) as $step) {
+        foreach ($this->subfolderSteps($review->party, $folderId, $review->matter) as $step) {
             $steps[] = [...$step, 'from' => $step['from'] !== null ? $standard.'/'.$step['from'] : null, 'to' => $standard.'/'.$step['to']];
         }
 
@@ -248,7 +248,7 @@ class OneDriveFolderReviewer
             }
 
             if ($folderId === null) {
-                $item = $this->folders->makeFolder($party, $review->standard_name);
+                $item = $this->folders->makeFolder($party, $review->standard_name, MatterOneDriveFolders::subfolders($review->matter));
                 $log[] = ['action' => 'create', 'from' => null, 'to' => $review->standard_name];
             } else {
                 $folder = collect($review->candidates ?? [])->firstWhere('id', $folderId)
@@ -266,7 +266,7 @@ class OneDriveFolderReviewer
                     $log[] = ['action' => 'rename', 'from' => $folder['name'], 'to' => $review->standard_name];
                 }
 
-                foreach ($this->subfolderSteps($party, $folder['id']) as $step) {
+                foreach ($this->subfolderSteps($party, $folder['id'], $review->matter) as $step) {
                     if ($step['action'] === 'rename') {
                         $this->client->rename($user, (string) $step['id'], $step['to']);
                     }
@@ -309,9 +309,9 @@ class OneDriveFolderReviewer
      *
      * @return list<array{action: string, id: ?string, from: ?string, to: string, path: string}>
      */
-    private function subfolderSteps(?Party $party, string $folderId): array
+    private function subfolderSteps(?Party $party, string $folderId, ?Matter $matter = null): array
     {
-        $standard = $this->standardSubfolders();
+        $standard = $this->standardSubfolders($matter);
         if ($standard === [] || ! $party) {
             return [];
         }
@@ -358,11 +358,11 @@ class OneDriveFolderReviewer
     /**
      * @return list<string>
      */
-    private function standardSubfolders(): array
+    private function standardSubfolders(?Matter $matter = null): array
     {
         return array_values(array_unique(array_filter(array_map(
             fn (string $line): string => implode('/', array_map([MatterOneDriveFolders::class, 'clean'], OneDriveClient::segments($line))),
-            MatterOneDriveFolders::subfolders(),
+            MatterOneDriveFolders::subfolders($matter),
         ))));
     }
 

@@ -2,8 +2,11 @@
 
 namespace App\Filament\Mms\Resources\Types\Schemas;
 
+use App\Models\Setting;
 use App\Models\Type;
+use App\Services\MMS\MatterOneDriveFolders;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
@@ -47,7 +50,26 @@ class TypeForm
                     ->columnSpanFull()
                     ->columns(3)
                     ->schema(self::capacityFields()),
+                Section::make(__('OneDrive folder structure'))
+                    ->description(__('The subfolders of this type\'s matter folders in the assistants\' OneDrive. Leave empty for the default structure (Settings → OneDrive Folders).'))
+                    ->columnSpanFull()
+                    ->collapsed()
+                    ->schema([self::oneDriveStructureField()]),
             ]);
+    }
+
+    /**
+     * The subfolders, one per line — also for the types table's bulk
+     * action and the OneDrive Folders page.
+     */
+    public static function oneDriveStructureField(string $name = 'onedrive_subfolders'): Textarea
+    {
+        return Textarea::make($name)
+            ->label(__('Subfolders'))
+            ->helperText(__('One per line, in order. Use "/" for a folder inside another, e.g. "02 المستندات/من المدعي". Changes apply to folders made from now on.'))
+            ->placeholder(fn (): string => Setting::get(MatterOneDriveFolders::SUBFOLDERS, ''))
+            ->rows(8)
+            ->extraInputAttributes(['dir' => 'auto']);
     }
 
     /**

@@ -56,6 +56,7 @@ class Type extends Model
         'exclude_from_incentive_count',
         'incentive_config_id',
         'party_capacities',
+        'onedrive_subfolders',
     ];
 
     /**
