@@ -46,6 +46,9 @@ trait ReviewsOneDriveFolders
                     ->placeholder(__('All assistants')),
             ])
             ->action(function (array $data): void {
+                // Each assistant's OneDrive is asked over the network: room for many.
+                @set_time_limit(300);
+
                 $assistant = filled($data['party_id'] ?? null) ? Party::find($data['party_id']) : null;
                 $summary = app(OneDriveFolderReviewer::class)->scan($assistant);
 
@@ -100,9 +103,11 @@ trait ReviewsOneDriveFolders
                     ->options(Review::statuses())
                     ->multiple()
                     ->default(Review::OPEN),
+                // Only those with OneDrive — not every party (thousands) sent
+                // with each request of the page.
                 SelectFilter::make('party_id')
                     ->label(__('Assistant'))
-                    ->relationship('party', 'name'),
+                    ->options(fn () => MatterOneDriveFolders::assistantsWithOneDrive()->pluck('name', 'id')),
             ])
             ->recordActions([
                 $this->applyAction(),

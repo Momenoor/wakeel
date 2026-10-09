@@ -593,7 +593,15 @@ class MatterForm
             return null;
         }
 
-        $party = Party::query()->find($partyId, ['id', 'phone', 'email']);
+        // Asked for on every redraw of every party row: read once a request.
+        $key = 'party_contact_'.$partyId;
+        $request = request();
+
+        if (! $request->attributes->has($key)) {
+            $request->attributes->set($key, Party::query()->find($partyId, ['id', 'phone', 'email']));
+        }
+
+        $party = $request->attributes->get($key);
         $parts = array_filter(['📞 '.($party?->latestPhone() ?? ''), '✉ '.($party?->latestEmail() ?? '')], fn (string $part): bool => mb_strlen($part) > 2);
 
         return $parts !== [] ? implode(' · ', $parts) : __('No phone or email yet');

@@ -126,8 +126,14 @@ class OneDriveFolderReviewer
                 ->whereNotNull('drive_item_id')
                 ->pluck('drive_item_id', 'matter_id');
 
+            $reviews = OneDriveFolderReview::query()
+                ->where('party_id', $assistant->getKey())
+                ->whereIn('matter_id', $matters->modelKeys())
+                ->get()
+                ->keyBy('matter_id');
+
             foreach ($matters as $matter) {
-                $this->record($matter, $assistant, $folders, $linked[$matter->getKey()] ?? null);
+                $this->record($matter, $assistant, $folders, $linked[$matter->getKey()] ?? null, $reviews->get($matter->getKey()));
                 $summary['rows']++;
             }
         }
@@ -169,7 +175,7 @@ class OneDriveFolderReviewer
      *
      * @param  list<array{id: string, name: string, webUrl: string}>  $folders
      */
-    private function record(Matter $matter, Party $assistant, array $folders, ?string $linkedId): OneDriveFolderReview
+    private function record(Matter $matter, Party $assistant, array $folders, ?string $linkedId, ?OneDriveFolderReview $review = null): OneDriveFolderReview
     {
         $standard = MatterOneDriveFolders::folderName($matter);
         $candidates = array_values(array_filter($folders, fn (array $f): bool => $f['id'] === $linkedId
@@ -182,7 +188,7 @@ class OneDriveFolderReviewer
             default => OneDriveFolderReview::MISSING,
         };
 
-        $review = OneDriveFolderReview::firstOrNew(['matter_id' => $matter->getKey(), 'party_id' => $assistant->getKey()]);
+        $review ??= OneDriveFolderReview::firstOrNew(['matter_id' => $matter->getKey(), 'party_id' => $assistant->getKey()]);
 
         // What was decided stays decided.
         if (in_array($review->status, [OneDriveFolderReview::DONE, OneDriveFolderReview::SKIPPED], true)) {
