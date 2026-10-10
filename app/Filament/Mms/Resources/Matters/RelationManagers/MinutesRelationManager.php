@@ -130,6 +130,17 @@ class MinutesRelationManager extends RelationManager
             ]);
     }
 
+    /**
+     * The letterhead new minutes start with: the template's own, else the
+     * default one.
+     */
+    private static function letterheadFor(mixed $templateId): ?int
+    {
+        $own = filled($templateId) ? LetterTemplate::query()->whereKey($templateId)->value('letterhead_id') : null;
+
+        return $own ? (int) $own : Letterhead::default()?->getKey();
+    }
+
     private function canChange(): bool
     {
         return auth()->user()?->can('update', $this->getOwnerRecord()) ?? false;
@@ -153,8 +164,13 @@ class MinutesRelationManager extends RelationManager
                 $event = CalendarEvent::query()->where('matter_id', $matter->getKey())->where('start_datetime', '>=', now()->startOfDay())->orderBy('start_datetime')->first()
                     ?? CalendarEvent::query()->where('matter_id', $matter->getKey())->latest('start_datetime')->first();
 
+                // The default minutes template, and its letterhead (else the default one).
+                $templateId = LetterTemplate::query()->where('category', LetterTemplateCategories::MINUTES->value)->where('is_active', true)
+                    ->orderByDesc('is_default')->oldest('id')->value('id');
+
                 return [
-                    'letter_template_id' => LetterTemplate::query()->where('category', LetterTemplateCategories::MINUTES->value)->where('is_active', true)->value('id'),
+                    'letter_template_id' => $templateId,
+                    'letterhead_id' => self::letterheadFor($templateId),
                     'calendar_event_id' => $event?->getKey(),
                     'meeting_at' => $event?->start_datetime?->format('Y-m-d H:i:s'),
                     'questions' => [],
@@ -168,6 +184,9 @@ class MinutesRelationManager extends RelationManager
                             ->label(__('Template'))
                             ->options(fn () => LetterTemplate::query()->where('category', LetterTemplateCategories::MINUTES->value)->where('is_active', true)->orderBy('name')->pluck('name', 'id'))
                             ->required()
+                            ->live()
+                            // Another template: its letterhead.
+                            ->afterStateUpdated(fn ($state, Set $set) => $set('letterhead_id', self::letterheadFor($state)))
                             ->columnSpanFull(),
                         Select::make('calendar_event_id')
                             ->label(__('The meeting'))

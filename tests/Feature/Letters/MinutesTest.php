@@ -551,6 +551,25 @@ class MinutesTest extends TestCase
         $this->recordPage($minutes)->assertRedirect();
     }
 
+    public function test_new_minutes_start_with_the_templates_letterhead_else_the_default(): void
+    {
+        $default = Letterhead::create(['name' => 'Main', 'is_default' => true, 'elements' => Letterhead::defaultElements()]);
+        $own = Letterhead::create(['name' => 'Minutes paper', 'elements' => Letterhead::defaultElements()]);
+        $template = LetterTemplate::query()->where('category', 'minutes')->firstOrFail();
+        $template->update(['letterhead_id' => null, 'is_default' => true]);
+        $other = $template->replicate(['slug'])->fill(['name' => 'Other minutes', 'slug' => 'other-minutes', 'is_default' => false, 'letterhead_id' => $own->id]);
+        $other->save();
+
+        $this->minutesPage()
+            ->mountTableAction('newMinutes')
+            // The default template, with no letterhead of its own: the default letterhead.
+            ->assertSet('mountedActions.0.data.letter_template_id', $template->id)
+            ->assertSet('mountedActions.0.data.letterhead_id', $default->id)
+            // Another template: its own.
+            ->set('mountedActions.0.data.letter_template_id', $other->id)
+            ->assertSet('mountedActions.0.data.letterhead_id', $own->id);
+    }
+
     public function test_a_contact_given_again_becomes_the_latest_without_a_duplicate(): void
     {
         $party = Party::factory()->create(['phone' => ['0501111111', '0502222222'], 'email' => ['A@x.ae', 'b@x.ae']]);
