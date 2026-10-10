@@ -35,6 +35,10 @@ class PartyInfolist
                                             ->size(TextSize::Large)
                                             ->weight(FontWeight::Bold)
                                             ->columnSpanFull(),
+                                        TextEntry::make('legal_name')
+                                            ->label(__('Legal name'))
+                                            ->visible(fn ($record): bool => filled($record?->legal_name))
+                                            ->columnSpanFull(),
 
                                         IconEntry::make('black_list')
                                             ->label(__('Is Blacklisted'))

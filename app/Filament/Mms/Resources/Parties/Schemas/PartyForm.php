@@ -27,6 +27,13 @@ class PartyForm
                             ->required()
                             ->unique(ignoreRecord: true)
                             ->columnSpanFull(),
+                        // As it must appear in letters and templates — an assistant's
+                        // full registered name. Empty: the name above.
+                        TextInput::make('legal_name')
+                            ->label(__('Legal name'))
+                            ->helperText(__('As it must appear in letters and templates (e.g. an assistant\'s full registered name). Leave empty to use the name.'))
+                            ->maxLength(255)
+                            ->columnSpanFull(),
                         TagsInput::make('phone')
                             ->label(__('Phone'))
                             ->trim()

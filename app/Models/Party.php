@@ -28,6 +28,7 @@ class Party extends Model
 
     protected $fillable = [
         'name',
+        'legal_name',
         'phone',
         'fax',
         'address',
@@ -316,6 +317,15 @@ class Party extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /**
+     * The name as it must appear in letters and templates: the legal name,
+     * else the usual one.
+     */
+    public function legalName(): string
+    {
+        return trim((string) $this->legal_name) ?: (string) $this->name;
     }
 
     /**

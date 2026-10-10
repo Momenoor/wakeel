@@ -136,7 +136,7 @@ class MinutesTest extends TestCase
         // Under their capacity, each on a line.
         $this->assertStringContainsString('<p><strong>المدعي:</strong></p><p>السيد/ المهاد لخدمات صيانة السفن – رقم الهوية: <bdo dir="ltr">784-1998-6110217-8</bdo></p>', $html);
         $this->assertStringContainsString('<p><strong>وكيل المدعي:</strong></p><p>الأستاذ/ محمد عبد المقصود – رقم الهوية: <bdo dir="ltr">784-1987-8792411-1</bdo> – رقم الهاتف: <bdo dir="ltr">0501132801</bdo></p>', $html);
-        $this->assertStringContainsString('<p><strong>س: عن طبيعة العلاقة بين الطرفين؟</strong></p><p><strong>ج:</strong> علاقة توريد عمالة.</p><p>عقب الحاضر بأن الرسالة مختلقة.</p>', $html);
+        $this->assertStringContainsString('<p><strong>س عن طبيعة العلاقة بين الطرفين؟</strong></p><p><strong>ج</strong> علاقة توريد عمالة.</p><p>عقب الحاضر بأن الرسالة مختلقة.</p>', $html);
         $this->assertStringContainsString('ينتهي يوم الاثنين الموافق 05/10/2026', $html);
         $this->assertStringStartsWith('%PDF', (new LetterPdf(MinutesService::composer($minutes->fresh())))->render());
 
@@ -169,7 +169,7 @@ class MinutesTest extends TestCase
 
         $feed = $this->getJson(route('minutes.live.feed', $minutes))->assertOk();
         $this->assertNotSame($before, $feed->json('version'));
-        $this->assertStringContainsString('<strong>ج:</strong> علاقة توريد عمالة.', $feed->json('html'));
+        $this->assertStringContainsString('<strong>ج</strong> علاقة توريد عمالة.', $feed->json('html'));
         $this->assertStringNotContainsString('<img', $feed->json('html'));
         $this->assertFalse($feed->json('final'));
 
@@ -478,6 +478,26 @@ class MinutesTest extends TestCase
             ['present' => true, 'name' => $company->name, 'party_id' => $company->id, 'represents' => $company->id],
         ]]);
         $this->assertNull($minutes->fresh()->attendees[0]['represents']);
+    }
+
+    public function test_the_opening_says_الحاضر_or_الحاضرين_by_how_many_attended(): void
+    {
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT,
+            'opening' => 'عُقد الاجتماع بحضور {{if minutes.attendees.count > 1 ? الحاضرين : الحاضر}} أدناه.',
+            'attendees' => [
+                ['present' => true, 'name' => 'المهاد لخدمات صيانة السفن'],
+                ['present' => false, 'name' => 'محمد عبد المقصود'],
+            ]]);
+
+        $this->assertStringContainsString('بحضور الحاضر أدناه', MinutesService::composer($minutes)->bodyHtml());
+
+        $minutes->update(['attendees' => [
+            ['present' => true, 'name' => 'المهاد لخدمات صيانة السفن'],
+            ['present' => true, 'name' => 'محمد عبد المقصود'],
+        ]]);
+
+        $this->assertStringContainsString('بحضور الحاضرين أدناه', MinutesService::composer($minutes->fresh())->bodyHtml());
     }
 
     public function test_a_contact_given_again_becomes_the_latest_without_a_duplicate(): void

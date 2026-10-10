@@ -248,7 +248,7 @@ class MinutesService
     public static function isCompany(string $name): bool
     {
         return (bool) preg_match(
-            '/(^|[\s\-\(])(شركة|شركه|مؤسسة|مؤسسه|مجموعة|مكتب|بنك|مصرف|ذ\.?\s?م\.?\s?م|ش\.?\s?م\.?\s?[عخ]|م\.?\s?م\.?\s?ح|المحدودة|القابضة|للتجارة|للمقاولات|لخدمات|LLC|L\.L\.C|FZE|FZCO|FZ-?LLC|Ltd|Limited|Company|Co\.|Inc\.?|Corp|Group|Bank|PJSC|P\.J\.S\.C|PSC|Est\.|Establishment|Trading)($|[\s\.\,\-\)])/iu',
+            '/(^|[\s\-\(])(شركة|شركه|مؤسسة|مؤسسه|للمحاماة|مجموعة|مكتب|بنك|مصرف|ذ\.?\s?م\.?\s?م|ش\.?\s?م\.?\s?[عخ]|م\.?\s?م\.?\s?ح|المحدودة|القابضة|للتجارة|للمقاولات|لخدمات|LLC|L\.L\.C|FZE|FZCO|FZ-?LLC|Ltd|Limited|Company|Co\.|Inc\.?|Corp|Group|Bank|PJSC|P\.J\.S\.C|PSC|Est\.|Establishment|Trading)($|[\s\.\,\-\)])/iu',
             $name,
         );
     }

@@ -63,6 +63,10 @@ class BulkMailPlaceholders
             'matter.representatives' => __('Representatives'),
             'matter.experts' => __('Experts'),
             'matter.assistants' => __('Assistants'),
+            'matter.parties.count' => __('All parties').' — '.__('how many'),
+            'matter.plaintiffs.count' => __('Plaintiffs').' — '.__('how many'),
+            'matter.defendants.count' => __('Defendants').' — '.__('how many'),
+            'matter.experts.count' => __('Experts').' — '.__('how many'),
         ];
     }
 
@@ -112,7 +116,19 @@ class BulkMailPlaceholders
             'matter.parties' => $names($parties),
             'matter.representatives' => $names($parties->flatMap(fn (MatterParty $mp) => $mp->representatives)),
             'matter.experts' => $names($top->where('role', 'expert')->where('type', '!=', 'assistant')),
-            'matter.assistants' => $names($top->where('role', 'expert')->where('type', 'assistant')),
+            // Assistants by their legal name (else their name).
+            'matter.assistants' => $top->where('role', 'expert')->where('type', 'assistant')
+                ->map(fn (MatterParty $mp) => $mp->party?->legalName())
+                ->filter()
+                ->implode(', '),
+            // How many — for {{if matter.plaintiffs.count > 1 ? … : …}}.
+            'matter.plaintiffs.count' => (string) $parties->where('type', 'plaintiff')->count(),
+            'matter.defendants.count' => (string) $parties->where('type', 'defendant')->count(),
+            'matter.implicate_litigants.count' => (string) $parties->where('type', 'implicate-litigant')->count(),
+            'matter.parties.count' => (string) $parties->count(),
+            'matter.representatives.count' => (string) $parties->flatMap(fn (MatterParty $mp) => $mp->representatives)->count(),
+            'matter.experts.count' => (string) $top->where('role', 'expert')->where('type', '!=', 'assistant')->count(),
+            'matter.assistants.count' => (string) $top->where('role', 'expert')->where('type', 'assistant')->count(),
         ];
 
         // The matter type's own custom fields, e.g. {{matter.custom.Trustee}}.
@@ -150,6 +166,7 @@ class BulkMailPlaceholders
     public static function apply(string $text, array $values, bool $escape = false): string
     {
         $lookup = self::lookup($values);
+        $text = self::choices($text, $values);
         $text = self::conditionals($text, $values);
 
         // A switch that is on counts as filled for <<…>> parts, but prints
@@ -163,6 +180,94 @@ class BulkMailPlaceholders
 
             return $escape ? e($lookup[$key]) : $lookup[$key];
         }, $text) ?? $text);
+    }
+
+    /**
+     * Choices written {{if CONDITION ? WHEN TRUE : WHEN FALSE}} — each side
+     * may hold placeholders, or be empty. The condition compares a tag, or
+     * the count of a tag's items, with a number:
+     *
+     *   {{if minutes.attendees.count > 1 ? الحاضرين : الحاضر}}
+     *   {{if count(matter.plaintiffs) = 1 ? المدعي : المدعين}}
+     *   {{if matter.experts.count >= 2 ? الخبراء : الخبير}}
+     *
+     * = (or ==), !=, >, <, >=, <=; a tag alone is true when not empty. One
+     * whose tag isn't known here yet is left as it is, decided later.
+     *
+     * @param  array<string, string>  $values
+     */
+    public static function choices(string $text, array $values): string
+    {
+        if (! preg_match('/\{\{\s*if\b/iu', $text)) {
+            return $text;
+        }
+
+        $lookup = self::lookup($values);
+
+        return preg_replace_callback('/\{\{\s*if\s+(.+?)\s*[?؟]\s*(.*?)\s*:\s*(.*?)\s*\}\}/isu', function (array $m) use ($lookup): string {
+            // The editor writes > and < as &gt; &lt;.
+            $condition = trim(html_entity_decode(strip_tags($m[1]), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+
+            if (! preg_match('/^(count\s*\(\s*(.+?)\s*\)|[^<>=!]+?)\s*(?:(==|=|!=|>=|<=|>|<)\s*(-?[\d.]+))?$/iu', $condition, $c)) {
+                return $m[0];
+            }
+
+            $counting = stripos($c[1], 'count') === 0 && isset($c[2]) && $c[2] !== '';
+            $key = self::normalize($counting ? $c[2] : $c[1]);
+
+            if (! array_key_exists($key, $lookup)) {
+                return $m[0];
+            }
+
+            $value = $counting ? self::countOf($lookup[$key]) : self::numberOrText($lookup[$key]);
+            $operator = $c[3] ?? '';
+            $against = isset($c[4]) && $c[4] !== '' ? (float) $c[4] : null;
+
+            $true = match (true) {
+                $operator === '' => is_numeric($value) ? (float) $value != 0.0 : trim((string) $value) !== '',
+                ! is_numeric($value) => false,
+                $operator === '=' || $operator === '==' => (float) $value == $against,
+                $operator === '!=' => (float) $value != $against,
+                $operator === '>' => (float) $value > $against,
+                $operator === '<' => (float) $value < $against,
+                $operator === '>=' => (float) $value >= $against,
+                $operator === '<=' => (float) $value <= $against,
+                default => false,
+            };
+
+            return $true ? $m[2] : $m[3];
+        }, $text) ?? $text;
+    }
+
+    /**
+     * How many items a tag holds: a number as itself; a list — its rows,
+     * paragraphs or list items, else its parts between commas — counted.
+     */
+    public static function countOf(string $value): int
+    {
+        $plain = trim(html_entity_decode(strip_tags($value), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+
+        if ($plain === '') {
+            return 0;
+        }
+
+        if (is_numeric($plain)) {
+            return (int) $plain;
+        }
+
+        foreach (['/<tr\b/i', '/<li\b/i', '/<p\b/i'] as $tag) {
+            if (($n = preg_match_all($tag, $value)) > 0) {
+                // A table's heading row is not an item.
+                return $tag === '/<tr\b/i' && preg_match('/<th\b/i', $value) ? max(0, $n - 1) : $n;
+            }
+        }
+
+        return count(array_filter(array_map('trim', preg_split('/[,،;\n]+/u', $plain) ?: []), fn (string $part): bool => $part !== ''));
+    }
+
+    private static function numberOrText(string $value): string
+    {
+        return trim(html_entity_decode(strip_tags($value), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
     }
 
     /**

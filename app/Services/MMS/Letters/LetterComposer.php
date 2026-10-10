@@ -190,6 +190,10 @@ class LetterComposer
         $minutes = (array) ($this->inputs[self::MINUTES] ?? []);
         $values['minutes.number'] = (string) ($minutes['number'] ?? '');
         $values['minutes.attendees'] = self::attendeesHtml((array) ($minutes['attendees'] ?? []), (array) ($this->template->minutes_attendees ?? []), $this->isArabic());
+        // How many attended — {{if minutes.attendees.count > 1 ? الحاضرين : الحاضر}}.
+        $values['minutes.attendees.count'] = (string) collect($minutes['attendees'] ?? [])
+            ->filter(fn ($a) => is_array($a) && ! empty($a['present']) && filled($a['name'] ?? null))
+            ->count();
         $values['minutes.qa'] = $this->questionsHtml((array) ($minutes['items'] ?? []));
         $values[self::SIGNATURES] = $this->signaturesHtml();
         $ended = filled($minutes['ended_at'] ?? null) ? Carbon::parse($minutes['ended_at']) : null;
@@ -571,7 +575,7 @@ class LetterComposer
      */
     private function questionsHtml(array $items): string
     {
-        [$q, $a] = $this->isArabic() ? ['س:', 'ج:'] : ['Q:', 'A:'];
+        [$q, $a] = $this->isArabic() ? ['س', 'ج'] : ['Q', 'A'];
         $text = fn ($value): string => nl2br(e(trim((string) $value)), false);
 
         return collect($items)
@@ -727,6 +731,7 @@ class LetterComposer
             'meeting.link.url' => __('Teams meeting link').' — '.__('full address'),
             'minutes.number' => __('Minutes').' — '.__('number'),
             'minutes.attendees' => __('Minutes').' — '.__('attendees'),
+            'minutes.attendees.count' => __('Minutes').' — '.__('how many attended'),
             'minutes.qa' => __('Minutes').' — '.__('questions and answers'),
             'minutes.signatures' => __('Minutes').' — '.__('attendees\' signatures'),
             'minutes.opening' => __('Minutes').' — '.__('opening paragraph'),

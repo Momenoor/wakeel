@@ -179,7 +179,7 @@ class LetterTemplateForm
                 // Minutes: the wording their opening and closing start from,
                 // completed while recording the meeting.
                 Section::make(__('Opening and closing'))
-                    ->description(__('Put {{minutes.opening}} and {{minutes.closing}} where they belong in the wording below; this is the text they start from when the meeting is recorded, where it can be changed. Placeholders and <<…>> parts work here — e.g. << at {{minutes.end_time}}>>, the time the minutes are finalised.'))
+                    ->description(__('Put {{minutes.opening}} and {{minutes.closing}} where they belong in the wording below; this is the text they start from when the meeting is recorded, where it can be changed. Placeholders and <<…>> parts work here — e.g. << at {{minutes.end_time}}>>, the time the minutes are finalised.').' '.__('A choice by count: {{if minutes.attendees.count > 1 ? الحاضرين : الحاضر}} — or count(any.tag), with =, !=, >, <, >=, <=.'))
                     ->columnSpanFull()
                     ->visible(fn (Get $get) => self::isMinutes($get('category')))
                     ->schema([

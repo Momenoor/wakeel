@@ -3691,5 +3691,10 @@
     "The subfolders made in each of this type's matter folders in the assistants' OneDrive.": "المجلدات الفرعية التي تُنشأ في كل مجلد دعوى من هذا النوع في OneDrive لدى المساعدين.",
     "The usual name": "الاسم المعتاد",
     "This type's own structure": "هيكل خاص بهذا النوع",
-    "What each side is called in this type's matters — in letters, minutes and the matter page.": "اسم كل طرف في دعاوى هذا النوع — في الخطابات والمحاضر وصفحة الدعوى."
+    "What each side is called in this type's matters — in letters, minutes and the matter page.": "اسم كل طرف في دعاوى هذا النوع — في الخطابات والمحاضر وصفحة الدعوى.",
+    "A choice by count: {{if minutes.attendees.count > 1 ? الحاضرين : الحاضر}} — or count(any.tag), with =, !=, >, <, >=, <=.": "اختيار حسب العدد: {{if minutes.attendees.count > 1 ? الحاضرين : الحاضر}} — أو count(أي وسم)، مع =، !=، >، <، >=، <=.",
+    "how many": "العدد",
+    "how many attended": "عدد الحاضرين",
+    "Legal name": "الاسم القانوني",
+    "As it must appear in letters and templates (e.g. an assistant's full registered name). Leave empty to use the name.": "كما يجب أن يظهر في الخطابات والقوالب (مثل الاسم الكامل المسجل للمساعد). اتركه فارغاً لاستخدام الاسم."
 }

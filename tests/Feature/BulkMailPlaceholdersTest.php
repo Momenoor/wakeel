@@ -142,6 +142,23 @@ class BulkMailPlaceholdersTest extends TestCase
         $this->assertNotSame('', $values['matter.status']);
     }
 
+    public function test_assistants_are_named_by_their_legal_name_else_their_name(): void
+    {
+        $matter = Matter::factory()->create();
+        $withLegal = Party::factory()->create(['name' => 'Amr', 'legal_name' => 'عمرو محمد عبد الله']);
+        $without = Party::factory()->create(['name' => 'Nahla', 'legal_name' => null]);
+        foreach ([$withLegal, $without] as $party) {
+            MatterParty::create(['matter_id' => $matter->id, 'role' => 'expert', 'type' => 'assistant', 'party_id' => $party->id]);
+        }
+
+        $values = BulkMailPlaceholders::forMatter($matter->fresh());
+
+        $this->assertSame('عمرو محمد عبد الله, Nahla', $values['matter.assistants']);
+        $this->assertSame('2', $values['matter.assistants.count']);
+        $this->assertSame('عمرو محمد عبد الله', $withLegal->legalName());
+        $this->assertSame('Nahla', $without->legalName());
+    }
+
     public function test_parties_saved_with_parent_id_zero_count_as_top_level(): void
     {
         // How older (live) matters store top-level parties.
