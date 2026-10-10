@@ -4,6 +4,8 @@ namespace Tests\Feature\Letters;
 
 use App\Enums\LetterTemplateCategories;
 use App\Filament\Mms\Resources\LetterTemplates\Pages\EditLetterTemplate;
+use App\Filament\Mms\Resources\Matters\MatterResource;
+use App\Filament\Mms\Resources\Matters\Pages\RecordMinutes;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager;
 use App\Models\CalendarEvent;
@@ -21,6 +23,7 @@ use App\Services\MMS\Letters\LetterPdf;
 use App\Services\MMS\Letters\MinutesSender;
 use App\Services\MMS\Letters\MinutesService;
 use Filament\Facades\Filament;
+use Filament\Schemas\Components\Wizard;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Features\SupportTesting\Testable;
@@ -60,6 +63,12 @@ class MinutesTest extends TestCase
     private function minutesPage(): Testable
     {
         return Livewire::test(MinutesRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class]);
+    }
+
+    /** The Record the meeting page for these minutes. */
+    private function recordPage(MatterMinutes $minutes): Testable
+    {
+        return Livewire::test(RecordMinutes::class, ['record' => $this->matter->getRouteKey(), 'minutes' => $minutes->getKey()]);
     }
 
     public function test_a_ready_made_minutes_template_is_there(): void
@@ -105,9 +114,9 @@ class MinutesTest extends TestCase
             'status' => MatterMinutes::DRAFT,
         ]);
 
-        $page = $this->minutesPage()->mountTableAction('recordMeeting', $minutes);
+        $page = $this->recordPage($minutes);
         // Who may attend: the matter's parties and representatives, with what's known of them.
-        $attendees = array_values($page->get('mountedActions.0.data.attendees'));
+        $attendees = array_values($page->get('data.attendees'));
         $this->assertSame(['المهاد لخدمات صيانة السفن', 'محمد عبد المقصود'], array_column($attendees, 'name'));
         $this->assertSame('784-1987-8792411-1', $attendees[1]['id_number']);
         $this->assertSame('0501132801', $attendees[1]['phone']);
@@ -117,14 +126,14 @@ class MinutesTest extends TestCase
         $attendees[0]['title'] = 'السيد/';
         $attendees[0]['id_number'] = '784-1998-6110217-8';
 
-        $page->setTableActionData([
+        $page->fillForm([
             'attendees' => $attendees,
             'items' => [
                 ['type' => 'question', 'text' => 'عن طبيعة العلاقة بين الطرفين؟', 'answer' => 'علاقة توريد عمالة.'],
                 ['type' => 'comment', 'text' => 'عقب الحاضر بأن الرسالة مختلقة.', 'answer' => null],
             ],
             'inputs' => ['documents_deadline' => '2026-10-05', 'memos_deadline' => '2026-10-07'],
-        ])->callMountedTableAction()->assertHasNoTableActionErrors();
+        ])->call('save')->assertHasNoFormErrors();
 
         // The ID number typed is remembered for next time.
         $this->assertSame('784-1998-6110217-8', Party::where('name', 'المهاد لخدمات صيانة السفن')->sole()->extra['id_number']);
@@ -155,15 +164,15 @@ class MinutesTest extends TestCase
             'status' => MatterMinutes::DRAFT,
         ]);
 
-        $page = $this->minutesPage()->mountTableAction('recordMeeting', $minutes)
-            ->assertMountedActionModalSee('Open the live view');
+        $page = $this->recordPage($minutes)
+            ->assertSee('Open the live view');
 
         $before = $this->getJson(route('minutes.live.feed', $minutes))->assertOk()->json('version');
 
         // Typed, not yet saved: the live bar's autosave keeps it.
-        $items = array_values($page->get('mountedActions.0.data.items'));
+        $items = array_values($page->get('data.items'));
         $items[0]['answer'] = 'علاقة توريد عمالة.';
-        $page->set('mountedActions.0.data.items', $items)->call('autosaveMinutes');
+        $page->set('data.items', $items)->call('autosaveMinutes');
 
         $this->assertSame('علاقة توريد عمالة.', $minutes->fresh()->items[0]['answer']);
 
@@ -188,7 +197,7 @@ class MinutesTest extends TestCase
         // Final: no more autosaving.
         $minutes->update(['status' => MatterMinutes::FINAL]);
         $items[0]['answer'] = 'تغيير بعد الاعتماد';
-        $page->set('mountedActions.0.data.items', $items)->call('autosaveMinutes');
+        $page->set('data.items', $items)->call('autosaveMinutes');
         $this->assertSame('علاقة توريد عمالة.', $minutes->fresh()->items[0]['answer']);
 
         // Someone who can't see the matter can't watch it.
@@ -253,14 +262,14 @@ class MinutesTest extends TestCase
         $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => $template->id, 'number' => 1,
             'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
 
-        $page = $this->minutesPage()->mountTableAction('recordMeeting', $minutes)
-            ->assertSet('mountedActions.0.data.opening', $template->minutes_opening)
-            ->assertSet('mountedActions.0.data.closing', $template->minutes_closing);
+        $page = $this->recordPage($minutes)
+            ->assertSet('data.opening', $template->minutes_opening)
+            ->assertSet('data.closing', $template->minutes_closing);
 
-        $page->setTableActionData([
+        $page->fillForm([
             'opening' => "افتتح الاجتماع الساعة {{meeting.time}}<< عبر الرابط {{meeting.link}}>>.\nبحضور كل من:",
             'closing' => 'وأقفل المحضر<< في تمام الساعة {{minutes.end_time}}>>.',
-        ])->callMountedTableAction()->assertHasNoTableActionErrors();
+        ])->call('save')->assertHasNoFormErrors();
 
         // Not finalised: no link, no end time — those parts are left out.
         $html = MinutesService::composer($minutes->fresh())->bodyHtml();
@@ -328,8 +337,8 @@ class MinutesTest extends TestCase
         $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
             'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
 
-        $page = $this->minutesPage()->mountTableAction('recordMeeting', $minutes);
-        $attendees = array_values($page->get('mountedActions.0.data.attendees'));
+        $page = $this->recordPage($minutes);
+        $attendees = array_values($page->get('data.attendees'));
         // The company: an ID and a phone it didn't have.
         $attendees[0] = [...$attendees[0], 'present' => true, 'id_number' => '784-1998-6110217-8', 'phone' => '0567778899'];
         // The lawyer: their own number, written another way — not added twice.
@@ -339,7 +348,7 @@ class MinutesTest extends TestCase
         // Not a party of the matter: nothing to update.
         $attendees[] = ['present' => true, 'title' => 'السيد/', 'name' => 'زائر', 'id_number' => '784-2000-0000000-0', 'party_id' => null];
 
-        $page->setTableActionData(['attendees' => $attendees])->callMountedTableAction()->assertHasNoTableActionErrors();
+        $page->fillForm(['attendees' => $attendees])->call('save')->assertHasNoFormErrors();
 
         $company->refresh();
         $this->assertSame('784-1998-6110217-8', $company->extra['id_number']);
@@ -356,10 +365,10 @@ class MinutesTest extends TestCase
         $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
             'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
 
-        $page = $this->minutesPage()->mountTableAction('recordMeeting', $minutes);
+        $page = $this->recordPage($minutes);
 
         // The lawyer stands for the company, as its agent.
-        $attendees = array_values($page->get('mountedActions.0.data.attendees'));
+        $attendees = array_values($page->get('data.attendees'));
         $this->assertEquals($company->id, $attendees[1]['represents']);
         // The main parties and their representatives can be stood for.
         $this->assertSame([
@@ -369,19 +378,19 @@ class MinutesTest extends TestCase
 
         // Picked from the parties: name and latest contact filled in; standing
         // for the company as its employee — the capacity follows.
-        $page->set('mountedActions.0.data.attendees.new', ['present' => true])
-            ->set('mountedActions.0.data.attendees.new.party_id', $employee->id)
-            ->assertSet('mountedActions.0.data.attendees.new.name', 'سالم الموظف')
-            ->assertSet('mountedActions.0.data.attendees.new.phone', '0501111111')
-            ->assertSet('mountedActions.0.data.attendees.new.email', 'salem@company.ae')
-            ->set('mountedActions.0.data.attendees.new.represents', $company->id)
-            ->set('mountedActions.0.data.attendees.new.as', 'employee')
-            ->assertSet('mountedActions.0.data.attendees.new.capacity', 'موظف عن المدعي')
+        $page->set('data.attendees.new', ['present' => true])
+            ->set('data.attendees.new.party_id', $employee->id)
+            ->assertSet('data.attendees.new.name', 'سالم الموظف')
+            ->assertSet('data.attendees.new.phone', '0501111111')
+            ->assertSet('data.attendees.new.email', 'salem@company.ae')
+            ->set('data.attendees.new.represents', $company->id)
+            ->set('data.attendees.new.as', 'employee')
+            ->assertSet('data.attendees.new.capacity', 'موظف عن المدعي')
             // A new mobile and email typed at the meeting.
-            ->set('mountedActions.0.data.attendees.new.phone', '0559998888')
-            ->set('mountedActions.0.data.attendees.new.email', 'salem.new@company.ae')
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->set('data.attendees.new.phone', '0559998888')
+            ->set('data.attendees.new.email', 'salem.new@company.ae')
+            ->call('save')
+            ->assertHasNoFormErrors();
 
         $saved = collect($minutes->fresh()->attendees)->firstWhere('party_id', $employee->id);
         $this->assertEquals(['represents' => $company->id, 'as' => 'employee', 'capacity' => 'موظف عن المدعي'], array_intersect_key($saved, array_flip(['represents', 'as', 'capacity'])));
@@ -463,15 +472,15 @@ class MinutesTest extends TestCase
         $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
             'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
 
-        $page = $this->minutesPage()->mountTableAction('recordMeeting', $minutes);
+        $page = $this->recordPage($minutes);
 
         // Standing for the company, then picked as the company: they stand for themselves.
-        $page->set('mountedActions.0.data.attendees.new', ['present' => true, 'name' => 'زائر'])
-            ->set('mountedActions.0.data.attendees.new.represents', $company->id)
-            ->set('mountedActions.0.data.attendees.new.as', 'employee')
-            ->set('mountedActions.0.data.attendees.new.party_id', $company->id)
-            ->assertSet('mountedActions.0.data.attendees.new.represents', null)
-            ->assertSet('mountedActions.0.data.attendees.new.as', null);
+        $page->set('data.attendees.new', ['present' => true, 'name' => 'زائر'])
+            ->set('data.attendees.new.represents', $company->id)
+            ->set('data.attendees.new.as', 'employee')
+            ->set('data.attendees.new.party_id', $company->id)
+            ->assertSet('data.attendees.new.represents', null)
+            ->assertSet('data.attendees.new.as', null);
 
         // And never saved so, however it arrives.
         MinutesService::saveRecorded($minutes, ['attendees' => [
@@ -498,6 +507,48 @@ class MinutesTest extends TestCase
         ]]);
 
         $this->assertStringContainsString('بحضور الحاضرين أدناه', MinutesService::composer($minutes->fresh())->bodyHtml());
+    }
+
+    public function test_the_meeting_is_recorded_on_a_page_in_three_steps(): void
+    {
+        $template = LetterTemplate::query()->where('category', 'minutes')->firstOrFail();
+        // The template puts one item with the attendees; the other keeps the default (the last step).
+        $template->update(['inputs' => collect($template->inputs)->map(fn (array $input) => $input['key'] === 'documents_deadline' ? [...$input, 'step' => 1] : $input)->all()]);
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => $template->id,
+            'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
+
+        // From the minutes tab: to the page.
+        $this->minutesPage()->assertTableActionHasUrl('recordMeeting', RecordMinutes::getUrl(['record' => $this->matter, 'minutes' => $minutes]), $minutes);
+
+        $page = $this->recordPage($minutes)
+            ->assertOk()
+            ->assertActionHasLabel('save', __('Save'))
+            ->assertSee(__('Attendees and opening'))
+            ->assertSee(__('Questions and answers'))
+            ->assertSee(__('Other items and closing'));
+
+        // Each item in its step.
+        $wizard = collect($page->instance()->form->getFlatComponents(withHidden: true))->first(fn ($c) => $c instanceof Wizard);
+        $fieldsOf = fn (int $step): array => collect($wizard->getChildSchema()->getComponents()[$step - 1]->getChildSchema()->getFlatFields(withHidden: true))
+            ->map(fn ($field) => str($field->getStatePath(isAbsolute: false))->afterLast('.')->toString())->values()->all();
+        $this->assertContains('documents_deadline', $fieldsOf(1));
+        $this->assertNotContains('memos_deadline', $fieldsOf(1));
+        $this->assertContains('memos_deadline', $fieldsOf(3));
+        $this->assertContains('items', $fieldsOf(2));
+
+        // Save: kept, and still on the page.
+        $page->set('data.items', [['type' => 'question', 'text' => 'سؤال', 'answer' => 'جواب']])
+            ->call('save')
+            ->assertHasNoFormErrors()
+            ->assertNoRedirect();
+        $this->assertSame('جواب', $minutes->fresh()->items[0]['answer']);
+
+        // Save and close: back to the matter's minutes.
+        $page->call('saveAndClose')->assertRedirect(MatterResource::getUrl('view', ['record' => $this->matter, 'relation' => 1]));
+
+        // Finalised: not recorded any more.
+        $minutes->update(['status' => MatterMinutes::FINAL]);
+        $this->recordPage($minutes)->assertRedirect();
     }
 
     public function test_a_contact_given_again_becomes_the_latest_without_a_duplicate(): void

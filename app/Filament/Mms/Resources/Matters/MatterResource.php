@@ -132,6 +132,8 @@ class MatterResource extends Resource
             'create' => CreateMatter::route('/create'),
             'view' => ViewMatter::route('/{record}'),
             'edit' => EditMatter::route('/{record}/edit'),
+            // Recording a meeting's minutes, in steps.
+            'record-minutes' => Pages\RecordMinutes::route('/{record}/minutes/{minutes}/record'),
         ];
     }
 

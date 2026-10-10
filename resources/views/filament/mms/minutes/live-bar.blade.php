@@ -1,7 +1,7 @@
 {{--
-    At the top of "Record the meeting": what's typed is saved every few
-    seconds (MinutesRelationManager::autosaveMinutes, which doesn't redraw
-    the window) so the live view the attendees watch keeps up.
+    At the top of the Record the meeting page: what's typed is saved every few
+    seconds (RecordMinutes::autosaveMinutes, which doesn't redraw
+    the page) so the live view the attendees watch keeps up.
 --}}
 <div
     x-data="{

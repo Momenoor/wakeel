@@ -3696,5 +3696,14 @@
     "how many": "العدد",
     "how many attended": "عدد الحاضرين",
     "Legal name": "الاسم القانوني",
-    "As it must appear in letters and templates (e.g. an assistant's full registered name). Leave empty to use the name.": "كما يجب أن يظهر في الخطابات والقوالب (مثل الاسم الكامل المسجل للمساعد). اتركه فارغاً لاستخدام الاسم."
+    "As it must appear in letters and templates (e.g. an assistant's full registered name). Leave empty to use the name.": "كما يجب أن يظهر في الخطابات والقوالب (مثل الاسم الكامل المسجل للمساعد). اتركه فارغاً لاستخدام الاسم.",
+    "1 — with the attendees": "1 — مع الحاضرين",
+    "2 — with the questions": "2 — مع الأسئلة",
+    "3 — with the closing": "3 — مع الختام",
+    "Attendees and opening": "الحاضرون والافتتاح",
+    "Back to the minutes": "العودة إلى المحاضر",
+    "Other items and closing": "بنود أخرى والختام",
+    "Save and close": "حفظ وإغلاق",
+    "Shows in step": "تظهر في الخطوة",
+    "These minutes are finalised — reopen them to change them.": "هذا المحضر معتمد — أعد فتحه لتعديله."
 }

@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\LetterTemplates\Schemas;
 
 use App\Enums\LetterTemplateCategories;
+use App\Filament\Mms\Resources\Matters\Schemas\MinutesRecordForm;
 use App\Filament\Support\LiveMergeTags;
 use App\Filament\Support\RichEditorDirection;
 use App\Models\EmailTemplate;
@@ -157,6 +158,17 @@ class LetterTemplateForm
                                 Toggle::make('required')
                                     ->label(__('Required'))
                                     ->inline(false),
+                                // Minutes: which step of Record the meeting it shows in.
+                                Select::make('step')
+                                    ->label(__('Shows in step'))
+                                    ->options([
+                                        1 => __('1 — with the attendees'),
+                                        2 => __('2 — with the questions'),
+                                        3 => __('3 — with the closing'),
+                                    ])
+                                    ->default(MinutesRecordForm::DEFAULT_STEP)
+                                    ->placeholder(__('3 — with the closing'))
+                                    ->visible(fn (Get $get) => self::isMinutes($get('../../category')) && $get('type') !== 'items'),
                                 TagsInput::make('options')
                                     ->label(__('Choices'))
                                     ->visible(fn (Get $get) => $get('type') === 'select')
