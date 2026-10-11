@@ -22,8 +22,9 @@
         </div>
 
         @if ($folder?->isCreated())
-            {{-- Where we are: back up by any part of the path. --}}
+            {{-- Where we are: back up by any part of the path — a spinner while OneDrive is read. --}}
             <nav class="flex flex-wrap items-center gap-1 text-sm" aria-label="{{ __('Folder') }}">
+                <x-filament::loading-indicator class="h-5 w-5 text-primary-500" wire:loading.delay />
                 <x-filament::link tag="button" wire:click="goTo(-1)" icon="heroicon-o-cloud" :color="$trail === [] ? 'gray' : 'primary'">
                     {{ $folder->folder_name }}
                 </x-filament::link>

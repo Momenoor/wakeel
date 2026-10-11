@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 
 use App\Enums\LetterTemplateCategories;
 use App\Filament\Concerns\HasRelationManagerPermission;
+use App\Filament\Concerns\RefreshesMatterPage;
 use App\Filament\Support\EmailSendFields;
 use App\Filament\Support\RichEditorDirection;
 use App\Models\CalendarEvent;
@@ -62,6 +63,7 @@ use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 class LettersRelationManager extends RelationManager
 {
     use HasRelationManagerPermission;
+    use RefreshesMatterPage;
 
     public static function viewPermission(): string
     {

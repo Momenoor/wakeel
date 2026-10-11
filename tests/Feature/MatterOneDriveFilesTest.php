@@ -51,6 +51,9 @@ class MatterOneDriveFilesTest extends TestCase
     /** @var list<array{method: string, url: string, data: array}> */
     private array $changes = [];
 
+    /** How many times a folder was read from OneDrive. */
+    private int $listings = 0;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -108,6 +111,7 @@ class MatterOneDriveFilesTest extends TestCase
             }
 
             preg_match('#/items/([^/?:]+)(/children)?#', $url, $m);
+            $this->listings += isset($m[2]) ? 1 : 0;
 
             return isset($m[2])
                 ? Http::response(['value' => array_map(fn ($id) => $items[$id] + ['webUrl' => 'https://od/'.$id], $children[$m[1]] ?? [])])
@@ -135,6 +139,35 @@ class MatterOneDriveFilesTest extends TestCase
 
         // Back by the path.
         $page->call('goTo', -1)->assertSet('trail', [])->assertCanSeeTableRecords(['sub-id', 'file-id']);
+    }
+
+    public function test_the_folder_is_read_on_opening_the_matter_or_refresh_and_kept_meanwhile(): void
+    {
+        $page = $this->page()->assertCanSeeTableRecords(['sub-id', 'file-id']);
+        $this->assertSame(1, $this->listings);
+
+        // Browsing, searching, coming back: as kept.
+        $page->callTableAction('open', 'sub-id')->call('goTo', -1)->searchTable('report')->searchTable('');
+        $this->assertSame(2, $this->listings);
+
+        // Refresh: read again — each folder of it.
+        $page->callTableAction('refresh');
+        $this->assertSame(3, $this->listings);
+        $page->callTableAction('open', 'sub-id');
+        $this->assertSame(4, $this->listings);
+
+        // The matter opened again: afresh.
+        $this->page();
+        $this->assertSame(5, $this->listings);
+    }
+
+    public function test_a_change_here_tells_the_matter_page(): void
+    {
+        Storage::fake('local');
+
+        $this->page()
+            ->callTableAction('newFolder', data: ['name' => 'جديد'])
+            ->assertDispatched('matter-changed');
     }
 
     public function test_a_file_is_downloaded_by_its_short_lived_link(): void

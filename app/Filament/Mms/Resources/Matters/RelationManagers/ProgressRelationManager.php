@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 
 use App\Enums\ProgressType;
 use App\Filament\Concerns\HasRelationManagerPermission;
+use App\Filament\Concerns\RefreshesMatterPage;
 use App\Models\MatterEmail;
 use App\Models\MatterProgress;
 use App\Services\MMS\MatterReplyCollector;
@@ -36,6 +37,7 @@ use Illuminate\Database\Eloquent\Model;
 class ProgressRelationManager extends RelationManager
 {
     use HasRelationManagerPermission;
+    use RefreshesMatterPage;
 
     protected static string $relationship = 'progress';
 

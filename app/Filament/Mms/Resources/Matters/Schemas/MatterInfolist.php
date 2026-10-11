@@ -893,8 +893,10 @@ class MatterInfolist
             // Its folders as a file manager — each assistant's, with how
             // one not yet made is going.
             ->schema([
+                // After the page: OneDrive takes a moment (a spinner meanwhile).
                 Livewire::make(MatterOneDriveFiles::class, fn ($record) => ['matter' => $record])
-                    ->key('matter-onedrive-files'),
+                    ->key('matter-onedrive-files')
+                    ->lazy(),
             ]);
     }
 

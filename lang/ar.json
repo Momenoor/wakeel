@@ -3796,5 +3796,6 @@
     ":count replies kept.": "حُفظت :count ردود.",
     "Microsoft 365 refused to read :mailbox: the app registration needs the Mail.Read application permission, with admin consent.": "رفض Microsoft 365 قراءة :mailbox: يحتاج تسجيل التطبيق إلى صلاحية التطبيق Mail.Read مع موافقة المسؤول.",
     "Outgoing email": "بريد صادر",
-    "By email and WhatsApp": "بالبريد الإلكتروني وواتساب"
+    "By email and WhatsApp": "بالبريد الإلكتروني وواتساب",
+    "Reading OneDrive…": "جارٍ قراءة OneDrive…"
 }

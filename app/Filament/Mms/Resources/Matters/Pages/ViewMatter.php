@@ -10,6 +10,7 @@ use App\Filament\Mms\Resources\CalendarEvents\Schemas\CalendarEventForm;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Helpers\FileUploadHelper;
 use App\Models\Matter;
+use App\Support\MatterEvents;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -27,6 +28,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Attributes\On;
 
 class ViewMatter extends ViewRecord
 {
@@ -39,6 +41,17 @@ class ViewMatter extends ViewRecord
     protected function resolveRecord(int|string $key): Model
     {
         return parent::resolveRecord($key)->loadMissing(['requests.attachments', 'requests.requestBy']);
+    }
+
+    /**
+     * Something done in one of its tables (letters, minutes, progress,
+     * OneDrive): the matter read again — the tabs' counts and the sections
+     * as they now are.
+     */
+    #[On(MatterEvents::CHANGED)]
+    public function matterChanged(): void
+    {
+        $this->record = $this->resolveRecord($this->record->getKey());
     }
 
     /**

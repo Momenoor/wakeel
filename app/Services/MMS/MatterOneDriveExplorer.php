@@ -4,6 +4,7 @@ namespace App\Services\MMS;
 
 use App\Models\MatterOneDriveFolder;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 /**
@@ -14,8 +15,12 @@ use RuntimeException;
  */
 class MatterOneDriveExplorer
 {
-    /** A folder's listing, kept for a moment: the page asks for it as it's searched and sorted. */
-    private const LISTING_SECONDS = 30;
+    /**
+     * A folder's listings, kept — read again when the matter is opened or
+     * Refresh is pressed (refresh(): a new version of them all), at the
+     * latest after this long.
+     */
+    private const LISTING_SECONDS = 3600;
 
     /** @var array<int, string> the matter folder's own place, by folder */
     private array $roots = [];
@@ -32,18 +37,29 @@ class MatterOneDriveExplorer
     {
         $itemId = $this->inside($folder, $itemId);
 
-        $items = Cache::remember($this->listingKey($folder, $itemId), self::LISTING_SECONDS,
-            fn (): array => $this->client->children($this->user($folder), $itemId));
+        $items = $this->children($folder, $itemId);
 
         usort($items, fn (array $a, array $b): int => [$b['folder'], mb_strtolower($a['name'])] <=> [$a['folder'], mb_strtolower($b['name'])]);
 
         return $items;
     }
 
-    /** The folder read afresh next time, not from the moment's copy. */
-    public function refresh(MatterOneDriveFolder $folder, ?string $itemId = null): void
+    /** Every listing of the folder read afresh next time — a new version of them. */
+    public function refresh(MatterOneDriveFolder $folder): void
     {
-        $this->forget($folder, filled($itemId) ? $itemId : (string) $folder->drive_item_id);
+        Cache::forever($this->versionKey($folder), Str::random(10));
+    }
+
+    /**
+     * What's in a folder already known to be in the matter's — as kept,
+     * else read.
+     *
+     * @return list<array{id: string, name: string, webUrl: string, folder: bool, children: ?int, size: ?int, modified: ?string, mime: ?string}>
+     */
+    private function children(MatterOneDriveFolder $folder, string $itemId): array
+    {
+        return Cache::remember($this->listingKey($folder, $itemId), self::LISTING_SECONDS,
+            fn (): array => $this->client->children($this->user($folder), $itemId));
     }
 
     /** A link to download a file, good for a few minutes. */
@@ -85,7 +101,7 @@ class MatterOneDriveExplorer
         $files = collect($top)->reject(fn (array $i) => $i['folder'])->map(fn (array $i): array => ['id' => $i['id'], 'name' => $i['name'], 'where' => '']);
 
         foreach (collect($top)->filter(fn (array $i) => $i['folder'] && $i['children'] > 0)->take(15) as $sub) {
-            $files = $files->concat(collect($this->client->children($this->user($folder), $sub['id']))
+            $files = $files->concat(collect($this->children($folder, $sub['id']))
                 ->reject(fn (array $i) => $i['folder'])
                 ->map(fn (array $i): array => ['id' => $i['id'], 'name' => $i['name'], 'where' => $sub['name']]));
         }
@@ -225,7 +241,14 @@ class MatterOneDriveExplorer
 
     private function listingKey(MatterOneDriveFolder $folder, string $itemId): string
     {
-        return 'onedrive-listing:'.$folder->getKey().':'.md5($itemId);
+        $version = Cache::rememberForever($this->versionKey($folder), fn (): string => Str::random(10));
+
+        return 'onedrive-listing:'.$folder->getKey().':'.$version.':'.md5($itemId);
+    }
+
+    private function versionKey(MatterOneDriveFolder $folder): string
+    {
+        return 'onedrive-listing-version:'.$folder->getKey();
     }
 
     private function forget(MatterOneDriveFolder $folder, string $itemId): void

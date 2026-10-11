@@ -197,6 +197,22 @@ class MatterProgressTest extends TestCase
         $this->assertSame(0, $this->matter->progress()->count());
     }
 
+    public function test_the_matter_page_reads_the_matter_again_when_its_tables_change_it(): void
+    {
+        $page = Livewire::test(ViewMatter::class, ['record' => $this->matter->getRouteKey()]);
+        $this->assertSame(0, $page->instance()->getRecord()->letters_count);
+
+        // A step added in the Progress tab: the page told.
+        Livewire::test(ProgressRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->callTableAction(CreateAction::class, data: ['type' => ProgressType::SESSION->value, 'title' => 'جلسة', 'happened_at' => '2026-10-04 10:00:00'])
+            ->assertDispatched('matter-changed');
+
+        // Meanwhile a letter issued: the page, told, counts it.
+        $this->issueLetter();
+        $page->dispatch('matter-changed');
+        $this->assertSame(1, $page->instance()->getRecord()->letters_count);
+    }
+
     public function test_what_matters_already_have_is_filled_in_once(): void
     {
         $letter = $this->issueLetter();

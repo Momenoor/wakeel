@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 
 use App\Enums\LetterTemplateCategories;
 use App\Filament\Concerns\HasRelationManagerPermission;
+use App\Filament\Concerns\RefreshesMatterPage;
 use App\Filament\Mms\Resources\Matters\Pages\RecordMinutes;
 use App\Filament\Support\EmailSendFields;
 use App\Filament\Support\RichEditorDirection;
@@ -56,6 +57,7 @@ use Illuminate\Support\HtmlString;
 class MinutesRelationManager extends RelationManager
 {
     use HasRelationManagerPermission;
+    use RefreshesMatterPage;
 
     protected static string $relationship = 'minutes';
 

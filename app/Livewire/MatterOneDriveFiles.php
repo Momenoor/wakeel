@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Filament\Concerns\RefreshesMatterPage;
 use App\Models\Matter;
 use App\Models\MatterOneDriveFolder;
 use App\Services\MMS\MatterOneDriveExplorer;
@@ -39,7 +40,10 @@ use Throwable;
  */
 class MatterOneDriveFiles extends Component implements HasActions, HasSchemas, HasTable
 {
-    use InteractsWithActions;
+    use InteractsWithActions, RefreshesMatterPage {
+        // Anything done here tells the matter's page.
+        RefreshesMatterPage::afterActionCalled insteadof InteractsWithActions;
+    }
     use InteractsWithSchemas;
     use InteractsWithTable;
 
@@ -61,6 +65,17 @@ class MatterOneDriveFiles extends Component implements HasActions, HasSchemas, H
     {
         $this->matterId = $matter->getKey();
         $this->pickFolder();
+
+        // The matter opened: its OneDrive read afresh, then kept as you browse.
+        foreach ($this->folders()->filter(fn (MatterOneDriveFolder $f) => $f->isCreated()) as $folder) {
+            $this->explorer()->refresh($folder);
+        }
+    }
+
+    /** While OneDrive is read, the first time: a spinner where it will be. */
+    public function placeholder(): View
+    {
+        return view('livewire.matter-onedrive-files-loading');
     }
 
     /** One made, if any is: else the first (to show how it's going). */
@@ -190,7 +205,7 @@ class MatterOneDriveFiles extends Component implements HasActions, HasSchemas, H
                     ->color('gray')
                     ->action(function (): void {
                         if ($folder = $this->folder()) {
-                            $this->explorer()->refresh($folder, $this->current());
+                            $this->explorer()->refresh($folder);
                         }
                         $this->resetTable();
                     }),
