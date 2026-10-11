@@ -53,6 +53,12 @@ class PartyForm
                             ]),
                         TextInput::make('fax')
                             ->label(__('Fax')),
+                        // The company of an employee, the party an attendee came for.
+                        Select::make('parent_id')
+                            ->label(__('Belongs to'))
+                            ->relationship('parent', 'name', fn ($query, $record) => $query->when($record, fn ($q) => $q->whereKeyNot($record->getKey())))
+                            ->searchable()
+                            ->placeholder('—'),
                         CheckboxList::make('role.role')
                             ->label(__('Role'))
                             ->options(Party::roleOptions())

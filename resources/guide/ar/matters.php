@@ -66,7 +66,7 @@ return [
             'title' => 'عرض القضية وتبويباتها',
             'description' => 'صفحة القضية تلخص كل شيء: الشريط العلوي يعرض الحالة والمحكمة والنوع والجلسة القادمة والمساعدين. وتحته تبويبات: نظرة عامة، الجلسات والمواعيد، الأتعاب والحوافز، الطلبات والملاحظات، ملفات، الخطابات، المحاضر.',
             'roles' => [$admin, $withPermission],
-            'permissions' => ['View:Matter', 'View:MatterOverviewTab', 'View:MatterSessionsTab', 'View:MatterFeesTab', 'View:MatterRequestsTab', 'View:MatterFilesTab', 'View:MatterLettersTab', 'View:MatterMinutesTab'],
+            'permissions' => ['View:Matter', 'View:MatterOverviewTab', 'View:MatterSessionsTab', 'View:MatterFeesTab', 'View:MatterRequestsTab', 'View:MatterFilesTab', 'View:MatterLettersTab', 'View:MatterMinutesTab', 'View:MatterProgressTab'],
             'steps' => [
                 ['text' => 'من قائمة القضايا اضغط أيقونة العين في صف القضية، أو اضغط رقمها.', 'shot' => 'view-1'],
                 ['text' => 'أزرار الإجراءات أعلى الصفحة: المزامنة مع Outlook، تقديم التقرير المبدئي، تقديم التقرير النهائي، قضية تكميلية، تعديل، حذف. يظهر منها ما يسمح به دورك.', 'shot' => 'view-actions'],

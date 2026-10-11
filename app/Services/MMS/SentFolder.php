@@ -48,6 +48,12 @@ class SentFolder
         return $this->client($senderKey, $sender)->getFolder('Sent');
     }
 
+    /** The sender mailbox's inbox over IMAP, where replies arrive. */
+    public function inbox(string $senderKey, ?array $sender = null): Folder
+    {
+        return $this->client($senderKey, $sender)->getFolder('INBOX');
+    }
+
     /**
      * Every folder in the mailbox that may hold sent mail — a mail app picks
      * its own: "Sent", "Sent Items" (Outlook), "Sent Messages", "INBOX.Sent"

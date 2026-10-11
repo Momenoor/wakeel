@@ -4,7 +4,10 @@ namespace App\Filament\Mms\Actions\Request;
 
 use App\Enums\RequestStatus;
 use App\Enums\RequestType;
+use App\Filament\Support\OneDriveFilePicker;
 use App\Helpers\FileUploadHelper;
+use App\Models\Matter;
+use App\Services\MMS\MatterOneDriveExplorer;
 use App\Services\MMS\Requests\RequestServiceFactory;
 use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
@@ -15,6 +18,7 @@ use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class CreateRequestAction extends Action
 {
@@ -33,6 +37,10 @@ class CreateRequestAction extends Action
             ->modalHeading(__('Submit New Request'))
             ->successNotificationTitle(__('Request submitted successfully.'))
             ->action(function (array $data, $record, $component) {
+                // From OneDrive: fetched first — one that can't be had stops
+                // the request before anything is saved.
+                $fromOneDrive = OneDriveFilePicker::fetch($record, array_values((array) ($data['onedrive_files'] ?? [])));
+
                 $type = $data['type'];
                 $service = RequestServiceFactory::classFor($type);
                 $prepared = $service::prepareForCreation($data, $record);
@@ -45,18 +53,26 @@ class CreateRequestAction extends Action
                     'extra' => $prepared['extra'],
                 ]);
 
+                $attach = fn (string $path) => $request->attachments()->create([
+                    'name' => 'request-attachment-'.$request->id.'-'.basename($path),
+                    'path' => $path,
+                    'size' => Storage::disk('public')->size($path),
+                    'extension' => pathinfo($path, PATHINFO_EXTENSION),
+                    'type' => 'matter-request',
+                    'matter_id' => $record->id,
+                    'matter_request_id' => $request->id,
+                    'user_id' => auth()->id(),
+                ]);
+
                 foreach ($data['attachments'] ?? [] as $item) {
-                    $path = $item['path'];
-                    $request->attachments()->create([
-                        'name' => 'request-attachment-'.$request->id.'-'.basename($path),
-                        'path' => $path,
-                        'size' => Storage::disk('public')->size($path),
-                        'extension' => pathinfo($path, PATHINFO_EXTENSION),
-                        'type' => 'matter-request',
-                        'matter_id' => $record->id,
-                        'matter_request_id' => $request->id,
-                        'user_id' => auth()->id(),
-                    ]);
+                    $attach($item['path']);
+                }
+
+                // Kept with the request as they are now — like a file uploaded.
+                foreach ($fromOneDrive as $file) {
+                    $path = 'requests-attachments/'.Str::random(8).'-'.MatterOneDriveExplorer::cleanName($file['name']);
+                    Storage::disk('public')->put($path, $file['contents']);
+                    $attach($path);
                 }
 
                 $requestService = RequestServiceFactory::make($request);
@@ -114,8 +130,11 @@ class CreateRequestAction extends Action
                 ])
                 ->lazy()
                 ->defaultItems(fn (Get $get) => $get('type') && RequestServiceFactory::classFor($get('type'))::requiresAttachmentsOnCreate() ? 1 : 0)
-                ->required(fn (Get $get) => $get('type') && RequestServiceFactory::classFor($get('type'))::requiresAttachmentsOnCreate())
+                // Required by the type — unless one comes from OneDrive.
+                ->required(fn (Get $get) => $get('type') && RequestServiceFactory::classFor($get('type'))::requiresAttachmentsOnCreate() && blank($get('onedrive_files')))
                 ->collapsible(),
+            OneDriveFilePicker::field($this->getRecord() instanceof Matter ? $this->getRecord() : null)
+                ->helperText(__('Files from this matter\'s OneDrive folder, kept with the request as they are now.')),
         ]);
     }
 }

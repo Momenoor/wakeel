@@ -4,6 +4,7 @@ namespace App\Services\MMS;
 
 use App\Models\MailSender;
 use Illuminate\Support\Facades\Log;
+use Microsoft\Graph\Generated\Models\ODataErrors\ODataError;
 use RuntimeException;
 use Throwable;
 
@@ -91,14 +92,47 @@ class SenderMailer
         } catch (Throwable $e) {
             // Re-thrown: the caller decides what a failed send means (retry,
             // mark the recipient failed…). Swallowing it once let a failed
-            // send be recorded as sent.
-            Log::error('Sending through mailbox '.($sender['address'] ?? '?').' failed: '.$e->getMessage());
+            // send be recorded as sent. With the real reason: Microsoft's
+            // reason lies a level down ("Failed to send email: " and nothing).
+            $reason = self::reason($e, $sender);
+            Log::error('Sending through mailbox '.($sender['address'] ?? '?').' failed: '.$reason);
 
-            throw $e;
+            throw $reason === $e->getMessage() ? $e : new RuntimeException($reason, 0, $e);
         } finally {
             config($original);
             self::reset();
         }
+    }
+
+    /**
+     * Why a send failed, in words: the mail server's or Microsoft 365's own
+     * reason — found down the chain when the first says nothing — and, when
+     * Microsoft refused, what to set up.
+     *
+     * @param  array<string, mixed>  $sender
+     */
+    public static function reason(Throwable $e, array $sender = []): string
+    {
+        $messages = [];
+        $refused = false;
+
+        for ($each = $e; $each !== null; $each = $each->getPrevious()) {
+            if ($each instanceof ODataError) {
+                $code = (string) $each->getError()?->getCode();
+                $messages[] = trim($code.': '.$each->getError()?->getMessage(), ': ');
+                $refused = $refused || $each->getResponseStatusCode() === 403 || in_array($code, ['ErrorAccessDenied', 'Authorization_RequestDenied', 'AccessDenied'], true);
+            } else {
+                $messages[] = trim((string) preg_replace('/^Failed to send email:\s*$/', '', trim($each->getMessage())));
+            }
+        }
+
+        $reason = collect($messages)->filter()->unique()->implode(' — ') ?: class_basename($e);
+
+        if ($refused) {
+            $reason = __('Microsoft 365 refused to send from :address: the app registration needs the Mail.Send application permission, with admin consent.', ['address' => $sender['address'] ?? config('mail.from.address')]).' ('.$reason.')';
+        }
+
+        return $reason;
     }
 
     /**

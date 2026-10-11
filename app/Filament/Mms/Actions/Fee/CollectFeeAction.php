@@ -85,7 +85,7 @@ class CollectFeeAction extends Action
                 static::withAmount($record->type?->isNegative() ? __('Paid so far') : __('Collected so far'), abs(static::collectedAmount($record)))
                 .' · '.static::withAmount(__('Remaining balance'), abs(static::feeBalance($record)))
             ))
-            ->modalWidth('md')
+            ->modalWidth('xl')
             ->schema(fn ($record) => [
                 TextInput::make('amount')
                     ->label(static::amountLabel($record))                        // ✅ Amount to Pay / Amount to Collect

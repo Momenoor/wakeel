@@ -116,7 +116,7 @@ class LetterFontResource extends Resource
                 // in the font for its script, as Boutros.css does.
                 self::useFor('useForEnglish', InterfaceFont::SETTING, __('Use for English text'), fn () => InterfaceFont::current()),
                 self::useFor('useForArabic', InterfaceFont::ARABIC_SETTING, __('Use for Arabic text'), fn () => InterfaceFont::arabic()),
-                EditAction::make()->modalWidth('3xl'),
+                EditAction::make()->modalWidth('5xl'),
                 DeleteAction::make()
                     ->after(function (LetterFont $record): void {
                         foreach ([InterfaceFont::SETTING, InterfaceFont::ARABIC_SETTING] as $setting) {

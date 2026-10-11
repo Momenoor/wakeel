@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Letters;
 
+use App\Enums\ProgressType;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager;
@@ -22,9 +23,11 @@ use App\Services\MMS\Letters\MinutesSender;
 use App\Services\MMS\Letters\MinutesService;
 use App\Services\WhatsAppCloud;
 use App\Support\CompanyContact;
+use App\Support\EmailGrouping;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
@@ -123,6 +126,8 @@ class MinutesSignatureTest extends TestCase
             ->assertSet('mountedActions.0.data.recipients', fn (array $rows) => array_values($rows) == [[
                 'name' => 'الأستاذ/ محمد عبد المقصود', 'party_id' => $this->minutes->attendees[0]['party_id'],
                 'emails' => ['m@law.ae'], 'phone' => '0501132801', 'by_email' => true, 'by_whatsapp' => true,
+                // The party it goes with: its own.
+                'group' => $this->minutes->attendees[0]['party_id'],
             ]])
             ->setTableActionData(['sender' => 'iflas'])
             ->callMountedTableAction()
@@ -154,7 +159,94 @@ class MinutesSignatureTest extends TestCase
 
         $deliveries = $this->minutes->deliveries()->orderBy('channel')->get();
         $this->assertSame([MinutesDelivery::EMAIL, MinutesDelivery::WHATSAPP], $deliveries->pluck('channel')->all());
+
+        // By email and WhatsApp in the one send: one step, saying both.
+        $step = $this->minutes->matter->progress()->where('type', ProgressType::MINUTES_SENT)->sole();
+        $this->assertSame(__('By email and WhatsApp').' — الأستاذ/ محمد عبد المقصود', $step->details);
         $this->assertSame('wamid.sent1', $deliveries[1]->message_id);
+    }
+
+    public function test_the_matters_assistants_are_copied_in_on_the_minutes(): void
+    {
+        $assistant = Party::factory()->create(['name' => 'سارة', 'email' => ['sara@jpa.ae']]);
+        MatterParty::create(['matter_id' => $this->minutes->matter_id, 'role' => 'expert', 'type' => 'assistant', 'party_id' => $assistant->id]);
+        // The expert himself: not unless System Settings says so.
+        MatterParty::create(['matter_id' => $this->minutes->matter_id, 'role' => 'expert', 'type' => 'certified',
+            'party_id' => Party::factory()->create(['email' => ['expert@jpa.ae']])->id]);
+
+        Livewire::test(MinutesRelationManager::class, ['ownerRecord' => $this->minutes->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('sendForSignature', $this->minutes)
+            ->assertSet('mountedActions.0.data.cc', ['sara@jpa.ae'])
+            // One more, and the recipient's own (not copied to themselves).
+            ->setTableActionData(['sender' => 'iflas', 'cc' => ['sara@jpa.ae', 'boss@jpa.ae', 'm@law.ae']])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+
+        $this->assertSame(['m@law.ae'], array_map(fn ($a) => $a->getAddress(), $this->sent[0]->getTo()));
+        $this->assertSame(['sara@jpa.ae', 'boss@jpa.ae'], array_map(fn ($a) => $a->getAddress(), $this->sent[0]->getCc()));
+    }
+
+    public function test_the_minutes_go_to_each_one_by_party_or_to_all(): void
+    {
+        $company = Party::where('name', 'محمد عبد المقصود')->sole();
+        $lines = [
+            ['name' => 'الأستاذ/ محمد عبد المقصود', 'party_id' => $company->id, 'group' => $company->id, 'emails' => ['m@law.ae'], 'by_email' => true],
+            ['name' => 'السيد/ سالم الموظف', 'group' => $company->id, 'emails' => ['salem@co.ae'], 'by_email' => true],
+            ['name' => 'السيد/ زائر', 'emails' => ['visitor@x.ae'], 'by_email' => true],
+        ];
+        $to = fn (int $i): array => array_map(fn ($a) => $a->getAddress(), $this->sent[$i]->getTo());
+
+        app(MinutesSender::class)->send($this->minutes, $lines, 'iflas', grouping: EmailGrouping::SEPARATE);
+        $this->assertSame([['m@law.ae'], ['salem@co.ae'], ['visitor@x.ae']], [$to(0), $to(1), $to(2)]);
+
+        // By party: the company with who attended for it — greeted as the company.
+        $this->sent = [];
+        $result = app(MinutesSender::class)->send($this->minutes, $lines, 'iflas', grouping: EmailGrouping::BY_PARTY);
+        $this->assertSame([['m@law.ae', 'salem@co.ae'], ['visitor@x.ae']], [$to(0), $to(1)]);
+        $this->assertStringContainsString('محمد عبد المقصود', $this->sent[0]->getHtmlBody());
+        // Kept for each of them.
+        $this->assertSame(3, $result['sent']);
+
+        $this->sent = [];
+        app(MinutesSender::class)->send($this->minutes, $lines, 'iflas', grouping: EmailGrouping::ALL);
+        $this->assertCount(1, $this->sent);
+        $this->assertSame(['m@law.ae', 'salem@co.ae', 'visitor@x.ae'], $to(0));
+        $this->assertStringContainsString('أطراف الدعوى', $this->sent[0]->getHtmlBody());
+    }
+
+    public function test_the_email_templates_own_cc_is_added_to_the_minutes(): void
+    {
+        EmailTemplate::default(EmailTemplate::MINUTES_SIGNATURE, 'ar')->update(['cc' => ['minutes@jpa.ae']]);
+
+        Livewire::test(MinutesRelationManager::class, ['ownerRecord' => $this->minutes->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('sendForSignature', $this->minutes)
+            ->assertSet('mountedActions.0.data.cc', ['minutes@jpa.ae'])
+            ->setTableActionData(['sender' => 'iflas'])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+
+        $this->assertSame(['minutes@jpa.ae'], array_map(fn ($a) => $a->getAddress(), $this->sent[0]->getCc()));
+    }
+
+    public function test_more_files_go_with_the_minutes_by_email(): void
+    {
+        Storage::fake('local');
+
+        Livewire::test(MinutesRelationManager::class, ['ownerRecord' => $this->minutes->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('sendForSignature', $this->minutes)
+            ->setTableActionData([
+                'sender' => 'iflas',
+                'attachments' => [UploadedFile::fake()->create('مذكرة.pdf', 12, 'application/pdf')],
+            ])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+
+        $this->assertSame([MinutesService::fileName($this->minutes).'.pdf', 'مذكرة.pdf'],
+            array_map(fn ($part) => $part->getFilename(), $this->sent[0]->getAttachments()));
+        // By WhatsApp: the minutes only.
+        $this->assertCount(1, $this->whatsapp);
+        // The upload was for this send only.
+        $this->assertSame([], Storage::disk('local')->allFiles('minutes-attachments'));
     }
 
     public function test_the_email_starts_from_the_minutes_email_template(): void

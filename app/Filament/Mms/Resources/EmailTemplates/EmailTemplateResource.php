@@ -17,6 +17,7 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ReplicateAction;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
@@ -105,6 +106,14 @@ class EmailTemplateResource extends Resource
                 ->default('{{reference}} — {{subject}}')
                 ->required()
                 ->columnSpanFull(),
+            // Copied in whenever this email is chosen, besides the matter's experts.
+            TagsInput::make('cc')
+                ->label(__('CC'))
+                ->placeholder('name@example.com')
+                ->helperText(__('Copied in whenever this email is used, besides the matter\'s experts chosen in System Settings. Can still be changed when sending.'))
+                ->splitKeys(['Tab', ' ', ',', 'Enter'])
+                ->nestedRecursiveRules(['email'])
+                ->columnSpanFull(),
             RichEditor::make('body')
                 ->label(__('Email'))
                 ->default(fn () => LetterMailer::defaultCoverNote(true))
@@ -142,7 +151,7 @@ class EmailTemplateResource extends Resource
                 SelectFilter::make('purpose')->label(__('Used for'))->options(EmailTemplate::purposes()),
             ])
             ->recordActions([
-                EditAction::make()->modalWidth('4xl'),
+                EditAction::make()->modalWidth('6xl'),
                 ReplicateAction::make(),
                 DeleteAction::make(),
             ]);

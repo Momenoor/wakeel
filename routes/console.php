@@ -11,3 +11,8 @@ Artisan::command('inspire', function () {
 Schedule::command('mail:send-bulk-campaigns')
     ->dailyAt('08:00')
     ->timezone('Asia/Dubai');
+
+// Replies to the matters' emails, kept with them and in OneDrive.
+Schedule::command('mail:collect-replies')
+    ->everyTenMinutes()
+    ->withoutOverlapping();

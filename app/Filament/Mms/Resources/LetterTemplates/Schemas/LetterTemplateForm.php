@@ -102,6 +102,16 @@ class LetterTemplateForm
                             ->placeholder(__('All matter types'))
                             ->helperText(__('Issuing a letter on a matter offers only the templates for its type. Leave empty to offer this one for every type.'))
                             ->columnSpanFull(),
+                        // Picking one of these entities on a letter picks this template.
+                        Select::make('entities')
+                            ->label(__('External entities'))
+                            ->relationship('entities', 'name', fn ($query) => $query->withRole('external'))
+                            ->multiple()
+                            ->preload()
+                            ->searchable()
+                            ->helperText(__('Written to these entities (parties of the role "External entity"): adding one to a letter picks this template.'))
+                            ->visible(fn (Get $get) => ($get('category') instanceof LetterTemplateCategories ? $get('category') : LetterTemplateCategories::tryFrom((string) $get('category'))) !== LetterTemplateCategories::MINUTES)
+                            ->columnSpanFull(),
                         TextInput::make('subject')
                             ->label(__('Subject'))
                             ->required()

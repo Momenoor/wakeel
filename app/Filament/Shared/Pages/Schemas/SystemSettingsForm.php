@@ -154,11 +154,11 @@ class SystemSettingsForm
 
                                     // Who is copied in when a letter is emailed.
                                     CheckboxList::make('letter_cc_expert_types')
-                                        ->label(__('Copied in on letter emails'))
+                                        ->label(__('Copied in on letter and minutes emails'))
                                         ->options(fn () => Party::expertTypeOptions())
                                         ->default(MatterLetter::DEFAULT_CC_EXPERT_TYPES)
                                         ->columns(2)
-                                        ->helperText(__('The matter\'s experts of these kinds are put in CC whenever a letter is sent by email; the sender can still remove them. None ticked: no one.'))
+                                        ->helperText(__('The matter\'s experts of these kinds are put in CC whenever a letter or minutes are sent by email; the sender can still remove them. None ticked: no one.'))
                                         ->columnSpanFull(),
                                 ]),
 

@@ -5,7 +5,9 @@ namespace App\Services\MMS\Letters;
 use App\Models\Letterhead;
 use App\Models\LetterTemplate;
 use App\Models\MatterMinutes;
+use App\Models\MatterParty;
 use App\Models\Party;
+use App\Services\MMS\MatterProgressRecorder;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -159,6 +161,132 @@ class MinutesService
             ->all();
     }
 
+    /**
+     * Whom a meeting not yet recorded starts with: the previous meeting's
+     * attendees (the same ones present, standing for the same parties),
+     * their phone and email as known now — then any of the matter's parties
+     * since added. The first meeting: the parties (attendeeCandidates).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function startingAttendees(MatterMinutes $minutes): array
+    {
+        $candidates = self::attendeeCandidates($minutes);
+
+        $previous = MatterMinutes::query()
+            ->where('matter_id', $minutes->matter_id)
+            ->whereKeyNot($minutes->getKey())
+            ->where('id', '<', $minutes->getKey())
+            ->whereNotNull('attendees')
+            ->latest('id')
+            ->get()
+            ->first(fn (MatterMinutes $m): bool => collect($m->attendees)->contains(fn ($a) => is_array($a) && filled($a['name'] ?? null)));
+
+        if (! $previous) {
+            return $candidates;
+        }
+
+        $attendees = collect($previous->attendees)->filter(fn ($a) => is_array($a) && filled($a['name'] ?? null))->values();
+        $parties = Party::query()->whereIn('id', $attendees->pluck('party_id')->filter())->get()->keyBy('id');
+
+        $attendees = $attendees->map(function (array $a) use ($parties): array {
+            $party = filled($a['party_id'] ?? null) ? $parties->get((int) $a['party_id']) : null;
+
+            return [
+                'present' => (bool) ($a['present'] ?? false),
+                'title' => $a['title'] ?? null,
+                'name' => (string) $a['name'],
+                'capacity' => $a['capacity'] ?? null,
+                'id_number' => ($party?->extra['id_number'] ?? null) ?: ($a['id_number'] ?? null),
+                'phone' => $party?->latestPhone() ?: ($a['phone'] ?? null),
+                'email' => $party?->latestEmail() ?: ($a['email'] ?? null),
+                'party_id' => $party?->getKey() ?? (filled($a['party_id'] ?? null) ? (int) $a['party_id'] : null),
+                'represents' => $a['represents'] ?? null,
+                'as' => $a['as'] ?? null,
+            ];
+        });
+
+        $listed = $attendees->pluck('party_id')->filter()->map(fn ($id) => (int) $id)->all();
+        $added = collect($candidates)->filter(fn (array $c): bool => blank($c['party_id']) || ! in_array((int) $c['party_id'], $listed, true));
+
+        return $attendees->concat($added)->values()->all();
+    }
+
+    /**
+     * Each attendee kept with the matter: one added by hand becomes a party
+     * (the one of that name, else a new one of role "attendee", with the ID,
+     * phone and email typed), and whoever isn't yet the matter's is linked
+     * to it as an attendee — under the party they attended for. The party
+     * is written back on the attendee, so it's found next time.
+     */
+    public static function registerAttendees(MatterMinutes $minutes): void
+    {
+        $matter = $minutes->matter;
+        if (! $matter) {
+            return;
+        }
+
+        $matter->loadMissing('matterParties.party');
+        $rows = $matter->matterParties;
+        $byName = $rows->pluck('party')->filter()->keyBy(fn (Party $party) => self::nameKey((string) $party->name));
+        $changed = false;
+
+        $attendees = collect($minutes->attendees ?? [])->map(function ($attendee) use ($matter, &$rows, &$byName, &$changed) {
+            if (! is_array($attendee) || blank($name = trim((string) ($attendee['name'] ?? '')))) {
+                return $attendee;
+            }
+
+            $party = filled($attendee['party_id'] ?? null) ? Party::find($attendee['party_id']) : null;
+
+            if (! $party) {
+                $party = $byName->get(self::nameKey($name))
+                    ?? Party::query()->where('name', $name)->oldest('id')->first()
+                    ?? Party::create([
+                        'name' => $name,
+                        'role' => ['role' => ['attendee']],
+                        'extra' => filled($attendee['id_number'] ?? null) ? ['id_number' => trim((string) $attendee['id_number'])] : null,
+                    ]);
+
+                $attendee['party_id'] = $party->getKey();
+                $byName->put(self::nameKey($name), $party);
+                $changed = true;
+            }
+
+            $represents = filled($attendee['represents'] ?? null) && (int) $attendee['represents'] !== (int) $party->getKey()
+                ? (int) $attendee['represents'] : null;
+
+            // Whom they came for, their party's parent — one of no one yet, and
+            // no party, representative or expert in their own right (a lawyer
+            // stands for many).
+            if ($represents && blank($party->parent_id) && ! collect((array) ($party->role['role'] ?? []))->intersect(['party', 'representative', 'expert'])->isNotEmpty()) {
+                $party->update(['parent_id' => $represents]);
+            }
+
+            $under = $represents
+                ? $rows->first(fn (MatterParty $mp) => (int) $mp->party_id === $represents && $mp->role !== 'attendee')
+                : null;
+            $row = $rows->first(fn (MatterParty $mp) => (int) $mp->party_id === (int) $party->getKey());
+
+            if (! $row) {
+                $rows->push($matter->matterParties()->create([
+                    'party_id' => $party->getKey(),
+                    'role' => 'attendee',
+                    'type' => 'attendee',
+                    'parent_id' => $under?->getKey(),
+                ])->setRelation('party', $party));
+            } elseif ($row->role === 'attendee' && $under && (int) $row->parent_id !== (int) $under->getKey()) {
+                // Kept under whom they now came for.
+                $row->update(['parent_id' => $under->getKey()]);
+            }
+
+            return $attendee;
+        });
+
+        if ($changed) {
+            $minutes->update(['attendees' => $attendees->values()->all()]);
+        }
+    }
+
     private static function arabic(MatterMinutes $minutes): bool
     {
         return (($minutes->template?->locale) ?: 'ar') !== 'en';
@@ -194,25 +322,39 @@ class MinutesService
     }
 
     /**
-     * How an attendee stands for a main party.
+     * How an attendee stands for a main party: its agent or authorised by
+     * it. The choices of minutes recorded before stay readable — `$current`
+     * keeps the one a line has.
      *
      * @return array<string, string>
      */
-    public static function attendeeRoles(): array
+    public static function attendeeRoles(?string $current = null): array
     {
-        return [
-            'present_for' => __('Attending for'),
-            'lawyer' => __('Lawyer'),
-            'legal_consultant' => __('Legal consultant'),
-            'employee' => __('Employee'),
-            'agent' => __('Agent'),
+        $roles = [
+            'agent' => __('Agent for'),
+            'authorized' => __('Authorized for'),
         ];
+
+        if (filled($current) && ! isset($roles[$current]) && isset(self::EARLIER_ROLES[$current])) {
+            $roles[$current] = __(self::EARLIER_ROLES[$current]);
+        }
+
+        return $roles;
     }
 
+    /** The choices before: still read on minutes recorded with them. */
+    private const EARLIER_ROLES = [
+        'present_for' => 'Attending for',
+        'lawyer' => 'Lawyer',
+        'legal_consultant' => 'Legal consultant',
+        'employee' => 'Employee',
+    ];
+
     /**
-     * The capacity an attendee is listed under: "محامٍ عن المدعي",
-     * "موظف عن المدعى عليه" … from whom they stand for and how. Null when
-     * they stand for no one (their capacity stays as typed).
+     * The capacity an attendee is listed under — whom they stand for, by
+     * name and capacity: "وكيلاً عن (السادة/ المهاد للتجارة - المدعي)",
+     * "مفوضاً عن (…)". Null when they stand for no one (their capacity
+     * stays as typed).
      */
     public static function capacityFor(MatterMinutes $minutes, mixed $represents, ?string $as): ?string
     {
@@ -223,22 +365,12 @@ class MinutesService
         $arabic = self::arabic($minutes);
         $candidate = collect(LetterComposer::candidates($minutes->matter, $arabic))
             ->first(fn (array $c): bool => (int) ($c['party_id'] ?? 0) === (int) $represents);
-        $side = $candidate['role'] ?? null;
-
-        // "حاضر عن (السادة/ مكتب محمد البنا للمحاماة - وكيل المدعي)".
-        if ($as === 'present_for' && $candidate) {
-            return ($arabic ? 'حاضر عن' : 'Attending for').' ('.self::standsForLabel($minutes, $candidate).')';
-        }
 
         $how = $arabic
-            ? ['lawyer' => 'محامٍ', 'legal_consultant' => 'مستشار قانوني', 'employee' => 'موظف', 'agent' => 'وكيل'][$as] ?? 'ممثل'
-            : ['lawyer' => 'Lawyer', 'legal_consultant' => 'Legal consultant', 'employee' => 'Employee', 'agent' => 'Agent'][$as] ?? 'Representative';
+            ? ['authorized' => 'مفوضاً عن', 'present_for' => 'حاضر عن', 'lawyer' => 'محامٍ عن', 'legal_consultant' => 'مستشار قانوني عن', 'employee' => 'موظف عن'][$as] ?? 'وكيلاً عن'
+            : ['authorized' => 'Authorized for', 'present_for' => 'Attending for', 'lawyer' => 'Lawyer for', 'legal_consultant' => 'Legal consultant for', 'employee' => 'Employee for'][$as] ?? 'Agent for';
 
-        if (blank($side)) {
-            return $how;
-        }
-
-        return $arabic ? $how.' عن '.$side : $how.' for the '.$side;
+        return $candidate ? $how.' ('.self::standsForLabel($minutes, $candidate).')' : $how;
     }
 
     /**
@@ -344,6 +476,7 @@ class MinutesService
             ]);
 
             $minutes->update(['attachment_id' => $attachment->getKey()]);
+            MatterProgressRecorder::meetingHeld($minutes, $userId);
 
             return $minutes->fresh();
         });

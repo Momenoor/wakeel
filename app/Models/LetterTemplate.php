@@ -76,6 +76,29 @@ class LetterTemplate extends Model implements HasRichContent
     }
 
     /**
+     * The external entities this template is written to.
+     */
+    public function entities(): BelongsToMany
+    {
+        return $this->belongsToMany(Party::class, 'letter_template_party');
+    }
+
+    /**
+     * The template to start a letter to this entity from: an active one,
+     * for the matter's type, written to it.
+     */
+    public static function forEntity(int $partyId, ?int $typeId): ?self
+    {
+        return static::query()
+            ->forMatterType($typeId)
+            ->where('category', '!=', LetterTemplateCategories::MINUTES->value)
+            ->whereHas('entities', fn (Builder $q) => $q->whereKey($partyId))
+            ->orderByDesc('is_default')
+            ->orderBy('name')
+            ->first();
+    }
+
+    /**
      * Active templates usable for a matter of this type: those linked to
      * it, and those linked to no type at all.
      *

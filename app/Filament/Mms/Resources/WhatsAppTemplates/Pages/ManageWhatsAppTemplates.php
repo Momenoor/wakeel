@@ -20,7 +20,7 @@ class ManageWhatsAppTemplates extends ManageRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make()->modalWidth('4xl'),
+            CreateAction::make()->modalWidth('6xl'),
             $this->webhookAction(),
         ];
     }
@@ -37,7 +37,7 @@ class ManageWhatsAppTemplates extends ManageRecords
             ->icon(Heroicon::OutlinedLink)
             ->color('gray')
             ->visible(fn (): bool => auth()->user()?->can('View:WhatsAppSettings') ?? false)
-            ->modalWidth('2xl')
+            ->modalWidth('4xl')
             ->modalDescription(__('So that signed minutes sent back on WhatsApp are taken in: in the Meta app → WhatsApp → Configuration → Webhook, enter this callback URL and verify token, then subscribe to "messages".'))
             ->fillForm(fn (): array => [
                 'url' => route('webhooks.whatsapp'),

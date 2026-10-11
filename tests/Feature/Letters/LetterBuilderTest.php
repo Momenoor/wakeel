@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Letters;
 
+use App\Enums\ProgressType;
 use App\Filament\Mms\Resources\LetterFonts\Pages\ManageLetterFonts;
 use App\Filament\Mms\Resources\Letterheads\LetterheadResource;
 use App\Filament\Mms\Resources\Letterheads\Pages\DesignLetterhead;
@@ -32,13 +33,18 @@ use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterDocx;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterPdf;
+use App\Services\MMS\SentFolder;
+use App\Support\EmailGrouping;
 use App\Support\InterfaceFont;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\File;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Mail\Events\MessageSent;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
+use Mockery;
 use ReflectionMethod;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -306,13 +312,13 @@ class LetterBuilderTest extends TestCase
 
         $expected = [
             'recipients' => [$candidateIds[1]],
-            'extra_recipients' => [['name' => 'Court clerk', 'role' => 'Clerk', 'emails' => ['clerk@court.ae'], 'phones' => []]],
+            'extra_recipients' => [['name' => 'Court clerk', 'role' => 'Clerk', 'emails' => ['clerk@court.ae'], 'phones' => [], 'party_id' => null]],
         ];
 
         $page = Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class]);
         $page->mountTableAction('editLetter', $letter)
             ->assertSet('mountedActions.0.data.recipients', $expected['recipients'])
-            ->assertSet('mountedActions.0.data.extra_recipients', fn ($rows) => array_values($rows) === $expected['extra_recipients'])
+            ->assertSet('mountedActions.0.data.extra_recipients', fn ($rows) => array_values($rows) == $expected['extra_recipients'])
             // The matter's parties to tick, as when issuing; no "separate letters" here.
             ->assertMountedActionModalSee(['منى أحمد', 'مكتب المزروعي'])
             ->assertMountedActionModalDontSee('Issue a separate letter to each recipient');
@@ -381,6 +387,43 @@ class LetterBuilderTest extends TestCase
         $this->assertStringContainsString('Please send the documents for case 986.', $html);
         $this->assertStringContainsString('Attention: Mr. Ahmed Ali', $html);
         $this->assertStringStartsWith('%PDF', (new LetterPdf($composer))->render());
+    }
+
+    public function test_a_written_letter_is_issued_then_sent_from_its_send_screen_and_both_are_progress(): void
+    {
+        config([
+            'mail.mailers.smtp.transport' => 'array',
+            'mail_senders.senders.iflas' => ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls'],
+        ]);
+        $this->withoutDefer();
+        $this->app->instance(SentFolder::class, Mockery::spy(SentFolder::class));
+        $sent = [];
+        Event::listen(MessageSent::class, function (MessageSent $event) use (&$sent) {
+            $sent[] = $event->message;
+        });
+        $candidateIds = array_keys(LetterComposer::candidates($this->matter));
+
+        $page = Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('write')
+            ->setTableActionData(['subject' => 'طلب مستندات', 'recipients' => [$candidateIds[0]]])
+            // Issue and send by email.
+            ->callMountedTableAction(['send' => true])
+            ->assertHasNoTableActionErrors();
+
+        $letter = MatterLetter::sole();
+        // On to the letter's own Send by email screen — how to send, CC, files, OneDrive.
+        $page->assertSet('mountedActions.0.name', 'email')
+            ->assertSet('mountedActions.0.context.recordKey', (string) $letter->id)
+            ->assertSet('mountedActions.0.data.grouping', EmailGrouping::ALL)
+            ->setTableActionData(['sender' => 'iflas'])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+
+        // The party with its representative: all in one email, the default.
+        $this->assertSame(['mona@example.com', 'a@law.ae', 'b@law.ae'], array_map(fn ($a) => $a->getAddress(), $sent[0]->getTo()));
+        // A step once sent — none for the issuing.
+        $this->assertSame([ProgressType::LETTER_SENT], $this->matter->progress()->pluck('type')->all());
+        $this->assertSame('طلب مستندات', $this->matter->progress()->value('title'));
     }
 
     public function test_a_letter_can_be_deleted_from_the_matter_page(): void

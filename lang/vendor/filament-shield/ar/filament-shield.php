@@ -80,6 +80,7 @@ return [
         'view_matter_files_tab' => 'تبويب القضية: الملفات',
         'view_matter_letters_tab' => 'تبويب القضية: الخطابات',
         'view_matter_minutes_tab' => 'تبويب القضية: المحاضر',
+        'view_matter_progress_tab' => 'تبويب القضية: سير العمل',
         'view_matters_all_tab' => 'تبويب القضايا: الكل',
         'view_matters_in_progress_tab' => 'تبويب القضايا: قيد العمل',
         'view_matters_initial_prepared_tab' => 'تبويب القضايا: التقرير المبدئي',

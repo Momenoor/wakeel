@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Addresses;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
  * letters ({{reference}}, {{subject}}, {{matter.*}}, {{recipient.name}} …):
  * a letter's covering email, or the email sending minutes for signature.
  */
-#[Fillable('name', 'purpose', 'locale', 'subject', 'body', 'is_active', 'is_default')]
+#[Fillable('name', 'purpose', 'locale', 'subject', 'body', 'cc', 'is_active', 'is_default')]
 class EmailTemplate extends Model
 {
     /** The email a letter is attached to (or sent as). */
@@ -28,7 +29,32 @@ class EmailTemplate extends Model
         return [
             'is_active' => 'boolean',
             'is_default' => 'boolean',
+            'cc' => 'array',
         ];
+    }
+
+    /**
+     * A template's own CC list.
+     *
+     * @return list<string>
+     */
+    public static function ccOf(mixed $id): array
+    {
+        return filled($id) ? Addresses::emails((array) (static::query()->whereKey($id)->value('cc') ?? [])) : [];
+    }
+
+    /**
+     * Another template chosen: the CC list without the one before's, with
+     * the new one's — whatever was typed or kept stays.
+     *
+     * @param  list<string>  $cc
+     * @return list<string>
+     */
+    public static function swapCc(array $cc, mixed $before, mixed $now): array
+    {
+        $cc = Addresses::without(Addresses::emails($cc), self::ccOf($before));
+
+        return Addresses::emails([...$cc, ...self::ccOf($now)]);
     }
 
     protected static function booted(): void

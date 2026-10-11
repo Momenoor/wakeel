@@ -220,7 +220,7 @@ class MailSenderResource extends Resource
                             Notification::make()->danger()->title(__('The test email failed'))->body($e->getMessage())->persistent()->send();
                         }
                     }),
-                EditAction::make()->modalWidth('3xl'),
+                EditAction::make()->modalWidth('5xl'),
                 DeleteAction::make(),
             ]);
     }

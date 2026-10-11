@@ -24,6 +24,7 @@ use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Support\Assets\Js;
+use Filament\Support\Enums\Width;
 use Filament\Support\Facades\FilamentAsset;
 use Filament\Support\Facades\FilamentView;
 use Filament\Tables\Columns\Summarizers\Summarizer;
@@ -179,6 +180,11 @@ class AppServiceProvider extends ServiceProvider
         // when sending) and each reader sees it in their own language. A
         // label already translated has no key and stays as it is.
         Action::configureUsing(fn (Action $action) => $action->translateLabel());
+
+        // Roomier dialogs: a form opens wide, a confirmation a little wider
+        // than Filament's own. One that sets its own width keeps it.
+        Action::configureUsing(fn (Action $action) => $action
+            ->modalWidth(fn (Action $action): Width => $action->isConfirmationRequired() ? Width::Large : Width::SixExtraLarge));
 
         // An action outside a table (a page's Export, Import, Create …)
         // named its records by adding "s" to the singular — "تصدير

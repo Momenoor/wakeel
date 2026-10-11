@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 
 use App\Enums\LetterTemplateCategories;
 use App\Filament\Concerns\HasRelationManagerPermission;
+use App\Filament\Support\EmailSendFields;
 use App\Filament\Support\RichEditorDirection;
 use App\Models\CalendarEvent;
 use App\Models\EmailTemplate;
@@ -12,7 +13,7 @@ use App\Models\LetterItem;
 use App\Models\LetterTemplate;
 use App\Models\Matter;
 use App\Models\MatterLetter;
-use App\Models\MatterParty;
+use App\Models\Party;
 use App\Services\MMS\Letters\Blocks\SavedSignatureBlock;
 use App\Services\MMS\Letters\Blocks\SignatureBlock;
 use App\Services\MMS\Letters\LetterComposer;
@@ -20,13 +21,16 @@ use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterMailer;
 use App\Services\MMS\Letters\LetterMeeting;
 use App\Services\MMS\SenderMailer;
+use App\Support\Addresses;
+use App\Support\EmailGrouping;
 use App\Support\ScreenPermissions;
 use Carbon\Carbon;
+use Closure;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Repeater;
@@ -46,8 +50,8 @@ use Filament\Schemas\Components\Utilities\Set;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
+use Illuminate\Support\Str;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 /**
@@ -130,7 +134,7 @@ class LettersRelationManager extends RelationManager
             ->label(__('Send by email'))
             ->icon('heroicon-o-paper-airplane')
             ->color('success')
-            ->modalWidth('3xl')
+            ->modalWidth('5xl')
             ->modalSubmitActionLabel(__('Send'))
             ->fillForm(fn (MatterLetter $record) => [
                 // The mailbox this matter's letters last went from.
@@ -140,9 +144,10 @@ class LettersRelationManager extends RelationManager
                 'email_template_id' => self::coverEmail($record)?->getKey(),
                 'formats' => ['pdf'],
                 'recipients' => $record->recipients->pluck('id')->all(),
-                'separate' => false,
+                'grouping' => EmailGrouping::ALL,
                 // The matter's experts of the kinds System Settings names.
-                'cc' => self::ccEmails($record->matter),
+                // …and the covering email's own.
+                'cc' => EmailSendFields::startingCc($record->matter, self::coverEmail($record)?->getKey()),
                 ...app(LetterMailer::class)->draft($record, LetterMailer::ATTACHMENT, self::coverEmail($record)),
             ])
             ->schema(fn (MatterLetter $record) => [
@@ -164,7 +169,11 @@ class LettersRelationManager extends RelationManager
                     ->options(fn () => EmailTemplate::options(EmailTemplate::LETTER))
                     ->placeholder(__('A short standard note'))
                     ->live()
-                    ->afterStateUpdated(fn (Get $get, Set $set) => self::redraft($record, $get, $set))
+                    ->afterStateUpdated(function ($old, Get $get, Set $set) use ($record): void {
+                        self::redraft($record, $get, $set);
+                        // Its own CC in place of the one before's.
+                        $set('cc', EmailTemplate::swapCc((array) ($get('cc') ?? []), $old, $get('email_template_id')));
+                    })
                     ->visible(fn (Get $get) => $get('mode') === LetterMailer::ATTACHMENT),
                 CheckboxList::make('formats')
                     ->label(__('Attach as'))
@@ -178,26 +187,11 @@ class LettersRelationManager extends RelationManager
                     ->descriptions($record->recipients->mapWithKeys(fn ($r) => [$r->id => implode(' · ', $r->allEmails()) ?: __('No email')]))
                     ->bulkToggleable()
                     ->live(),
-                TagsInput::make('cc')
-                    ->label(__('CC'))
-                    ->placeholder('name@example.com')
-                    ->helperText(__('The matter\'s experts chosen in System Settings are copied in; remove any you don\'t want.'))
-                    ->nestedRecursiveRules(['email'])
-                    ->live(),
+                EmailSendFields::cc(),
                 // Files of this send's own, beside the letter — whichever way it goes.
-                FileUpload::make('attachments')
-                    ->label(__('More attachments'))
-                    ->helperText(__('Sent with the letter, for this email only.'))
-                    ->multiple()
-                    ->disk('local')
-                    ->directory('letter-attachments')
-                    ->storeFileNamesIn('attachment_names')
-                    ->maxSize(20480)
-                    ->live(),
-                Toggle::make('separate')
-                    ->label(__('A separate email to each recipient'))
-                    ->helperText(__('Each then sees only their own address, and {{recipient.name}} greets them by name.'))
-                    ->live(),
+                EmailSendFields::attachments('letter-attachments', __('Sent with the letter, for this email only.')),
+                EmailSendFields::oneDriveFiles($record->matter),
+                EmailSendFields::grouping(),
 
                 // This email's own wording: starts from the template, with the
                 // letter's details filled in; changed here, for this send only.
@@ -243,17 +237,13 @@ class LettersRelationManager extends RelationManager
                     $data['formats'] ?? [],
                     array_map('intval', $data['recipients'] ?? []),
                     array_values($data['cc'] ?? []),
-                    (bool) ($data['separate'] ?? false),
+                    EmailGrouping::from($data['grouping'] ?? EmailGrouping::ALL),
                     $data['subject'] ?? null,
                     ($data['mode'] ?? null) === LetterMailer::ATTACHMENT ? ($data['body'] ?? null) : null,
-                    array_map(fn (string $path): array => [
-                        'path' => Storage::disk('local')->path($path),
-                        'name' => (string) ($data['attachment_names'][$path] ?? basename($path)),
-                    ], array_values((array) ($data['attachments'] ?? []))),
+                    EmailSendFields::uploaded($data, $record->matter),
                 );
 
-                // Sent: the uploads were for this email only.
-                Storage::disk('local')->delete(array_values((array) ($data['attachments'] ?? [])));
+                EmailSendFields::forget($data);
 
                 $notification = Notification::make()
                     ->title(__('Sent: :sent, failed: :failed, without email: :skipped', [
@@ -298,33 +288,6 @@ class LettersRelationManager extends RelationManager
     }
 
     /**
-     * The emails of the matter's experts copied in on its letters — the
-     * kinds ticked in System Settings (the assistants, unless changed) —
-     * from their party, or the account they sign in with.
-     *
-     * @return list<string>
-     */
-    private static function ccEmails(?Matter $matter): array
-    {
-        $types = MatterLetter::ccExpertTypes();
-
-        if (! $matter || $types === []) {
-            return [];
-        }
-
-        return $matter->matterParties()
-            ->with('party.user')
-            ->where('role', 'expert')
-            ->whereIn('type', $types)
-            ->get()
-            ->flatMap(fn (MatterParty $assistant): array => array_filter((array) ($assistant->party?->email ?: $assistant->party?->user?->email)))
-            ->filter(fn ($email): bool => filter_var($email, FILTER_VALIDATE_EMAIL) !== false)
-            ->unique()
-            ->values()
-            ->all();
-    }
-
-    /**
      * The email as it will go out — to the first ticked recipient when each
      * gets their own.
      */
@@ -332,23 +295,27 @@ class LettersRelationManager extends RelationManager
     {
         $mode = (string) ($get('mode') ?: LetterMailer::ATTACHMENT);
         $ticked = $record->recipients->whereIn('id', array_map('intval', $get('recipients') ?? []))->values();
-        $separate = (bool) $get('separate');
+        $grouping = EmailGrouping::from($get('grouping') ?? EmailGrouping::ALL);
         $template = filled($get('email_template_id')) ? EmailTemplate::find($get('email_template_id')) : null;
         $body = $get('body');
+        // The first email as it will go: to all, or the first party or person.
+        $units = LetterMailer::emailGroups($ticked, $grouping);
+        $first = $units[0] ?? null;
 
         $preview = app(LetterMailer::class)->preview(
             $record,
             $mode,
             $template,
-            $separate ? $ticked->first() : null,
+            $first['greet'] ?? null,
             $get('subject'),
             $mode === LetterMailer::ATTACHMENT && is_string($body) ? $body : null,
+            $first['name'] ?? null,
         );
 
-        $addresses = fn ($recipient) => trim($recipient->name.' <'.implode(', ', $recipient->allEmails()).'>', ' <>');
-        $to = $separate
-            ? ($ticked->first() ? $addresses($ticked->first()).($ticked->count() > 1 ? ' — '.__('and a separate email to each of the other :count', ['count' => $ticked->count() - 1]) : '') : '')
-            : $ticked->map($addresses)->implode(' · ');
+        $addresses = fn (array $unit): string => trim(($unit['name'] ?? $unit['greet']?->name ?? '').' <'.implode(', ', $unit['emails']).'>', ' <>');
+        $to = $grouping === EmailGrouping::ALL
+            ? $ticked->map(fn ($recipient) => trim($recipient->name.' <'.implode(', ', $recipient->allEmails()).'>', ' <>'))->implode(' · ')
+            : ($first ? $addresses($first).(count($units) > 1 ? ' — '.__('and a separate email to each of the other :count', ['count' => count($units) - 1]) : '') : '');
 
         $name = LetterIssuer::fileName($record);
         $attachments = [
@@ -360,6 +327,8 @@ class LettersRelationManager extends RelationManager
                 fn ($file): string => $file instanceof TemporaryUploadedFile ? $file->getClientOriginalName() : basename((string) $file),
                 array_values((array) ($get('attachments') ?? [])),
             ),
+            // …and those from OneDrive.
+            ...EmailSendFields::oneDriveNames($record->matter, (array) ($get('onedrive_files') ?? [])),
         ];
 
         return new HtmlString(view('filament.mms.letters.email-preview', [
@@ -381,7 +350,7 @@ class LettersRelationManager extends RelationManager
             ->icon('heroicon-o-eye')
             ->color('gray')
             ->modalHeading(fn (MatterLetter $record) => __('Letter :reference', ['reference' => $record->reference]))
-            ->modalWidth('6xl')
+            ->modalWidth('7xl')
             ->modalContent(fn (MatterLetter $record) => view('filament.mms.letters.preview', [
                 // A fresh copy each time, so a change shows at once.
                 'url' => route('letters.pdf', $record).'?v='.$record->updated_at?->timestamp,
@@ -455,7 +424,7 @@ class LettersRelationManager extends RelationManager
             ->label(__('Edit'))
             ->icon('heroicon-o-pencil')
             ->modalHeading(fn (MatterLetter $record) => __('Edit letter :reference', ['reference' => $record->reference]))
-            ->modalWidth('4xl')
+            ->modalWidth('6xl')
             ->fillForm(fn (MatterLetter $record): array => [
                 'letter_date' => $record->letter_date?->toDateString(),
                 'letterhead_id' => $record->letterhead_id,
@@ -502,7 +471,10 @@ class LettersRelationManager extends RelationManager
      * one letter to all or one each (when issuing), and who it's for the
      * attention of.
      */
-    private static function recipientsSection(Matter $matter, bool $separately = true): Section
+    /**
+     * @param  (Closure(Party, Get, Set): void)|null  $onEntity  an external entity added: what else follows (its template)
+     */
+    private static function recipientsSection(Matter $matter, bool $separately = true, ?Closure $onEntity = null): Section
     {
         // Listed in the interface's language; the letter gets them in its own (issue()).
         $candidates = LetterComposer::candidates($matter, app()->getLocale() !== 'en');
@@ -531,6 +503,37 @@ class LettersRelationManager extends RelationManager
                     ->visible(fn (Get $get): bool => collect($candidates)->only(array_map('intval', $get('recipients') ?? []))->contains(fn (array $c): bool => $c['representatives'] !== []))
                     ->default([])
                     ->columns(2),
+                // Police, central bank …: added with their emails and phones.
+                Select::make('external_entity')
+                    ->label(__('Add an external entity'))
+                    ->placeholder(__('Police, central bank …'))
+                    ->options(fn (): array => Party::query()->withRole('external')->orderBy('name')->pluck('name', 'id')->all())
+                    ->searchable()
+                    ->dehydrated(false)
+                    ->live()
+                    ->afterStateUpdated(function ($state, Get $get, Set $set) use ($onEntity): void {
+                        $party = filled($state) ? Party::query()->withRole('external')->find($state) : null;
+                        $set('external_entity', null);
+
+                        if (! $party || collect($get('extra_recipients') ?? [])->contains(fn ($r) => (int) ($r['party_id'] ?? 0) === $party->getKey())) {
+                            return;
+                        }
+
+                        $set('extra_recipients', [
+                            ...($get('extra_recipients') ?? []),
+                            (string) Str::uuid() => [
+                                'name' => $party->name,
+                                'role' => null,
+                                'emails' => Addresses::emails((array) $party->email),
+                                'phones' => array_values(array_filter((array) $party->phone)),
+                                'party_id' => $party->getKey(),
+                            ],
+                        ]);
+
+                        if ($onEntity) {
+                            $onEntity($party, $get, $set);
+                        }
+                    }),
                 Repeater::make('extra_recipients')
                     ->label(__('Other recipients'))
                     ->addActionLabel(__('Add recipient'))
@@ -538,6 +541,8 @@ class LettersRelationManager extends RelationManager
                     ->live()
                     ->columns(3)
                     ->schema([
+                        // From the parties (an external entity), else typed.
+                        Hidden::make('party_id'),
                         TextInput::make('name')->label(__('Name'))->required(),
                         TextInput::make('role')->label(__('Capacity')),
                         TagsInput::make('emails')->label(__('Emails'))->nestedRecursiveRules(['email']),
@@ -582,6 +587,7 @@ class LettersRelationManager extends RelationManager
                 'role' => $r['role'] ?? null,
                 'emails' => array_values($r['emails'] ?? []),
                 'phones' => array_values($r['phones'] ?? []),
+                'party_id' => filled($r['party_id'] ?? null) ? (int) $r['party_id'] : null,
             ])->values()->all(),
         ];
     }
@@ -620,6 +626,8 @@ class LettersRelationManager extends RelationManager
                 'role' => $recipient->role,
                 'emails' => $recipient->emails ?: array_values(array_filter([$recipient->email])),
                 'phones' => $recipient->phones ?? [],
+                // An external entity stays one.
+                'party_id' => $recipient->recipient_id,
             ];
         }
 
@@ -630,10 +638,10 @@ class LettersRelationManager extends RelationManager
      * The letter's wording, as in the template editor: the same toolbar and
      * the same {{placeholders}} menu.
      *
-     * @param  \Closure(): array<string, string>  $mergeTags
-     * @param  \Closure(): bool  $arabic
+     * @param  Closure(): array<string, string>  $mergeTags
+     * @param  Closure(): bool  $arabic
      */
-    private static function bodyEditor(\Closure $mergeTags, \Closure $arabic): RichEditor
+    private static function bodyEditor(Closure $mergeTags, Closure $arabic): RichEditor
     {
         return RichEditor::make('body')
             ->hiddenLabel()
@@ -661,7 +669,7 @@ class LettersRelationManager extends RelationManager
             ->label(__('Write a letter'))
             ->icon('heroicon-o-document-plus')
             ->color('gray')
-            ->modalWidth('5xl')
+            ->modalWidth('7xl')
             ->modalSubmitActionLabel(__('Issue'))
             ->fillForm(fn (): array => [
                 'locale' => 'ar',
@@ -709,7 +717,9 @@ class LettersRelationManager extends RelationManager
                     ]),
                 ...$this->meetingFields(null, ownDateAndTime: true),
             ])
-            ->action(fn (array $data, Action $action) => $this->issueOrStop($data, $action));
+            // …or issued and then sent: the Send by email screen for it.
+            ->extraModalFooterActions(fn (Action $action): array => [self::issueAndSendButton($action)])
+            ->action(fn (array $data, Action $action, array $arguments) => $this->issueOrStop($data, $action, ! empty($arguments['send'])));
     }
 
     /**
@@ -728,10 +738,12 @@ class LettersRelationManager extends RelationManager
         return Action::make('issue')
             ->label(__('Issue letter'))
             ->icon('heroicon-o-pencil-square')
-            ->modalWidth('5xl')
+            ->modalWidth('7xl')
             ->modalSubmitActionLabel(__('Issue'))
             ->schema(fn () => $this->issueForm($this->getOwnerRecord()))
-            ->action(fn (array $data, Action $action) => $this->issueOrStop($data, $action));
+            // …or issued and then sent: the Send by email screen for it.
+            ->extraModalFooterActions(fn (Action $action): array => [self::issueAndSendButton($action)])
+            ->action(fn (array $data, Action $action, array $arguments) => $this->issueOrStop($data, $action, ! empty($arguments['send'])));
     }
 
     /**
@@ -740,10 +752,19 @@ class LettersRelationManager extends RelationManager
      *
      * @param  array<string, mixed>  $data
      */
-    private function issueOrStop(array $data, Action $action): void
+    private function issueOrStop(array $data, Action $action, bool $send = false): void
     {
         try {
-            $this->notifyIssued($this->issue($this->getOwnerRecord(), $data));
+            $letters = $this->issue($this->getOwnerRecord(), $data);
+            $this->notifyIssued($letters);
+
+            // To be sent: on to its Send by email screen — the same one as
+            // for any issued letter (how, CC, files, from OneDrive).
+            if ($send && count($letters) === 1) {
+                $this->replaceMountedAction('email', context: ['table' => true, 'recordKey' => (string) $letters[0]->getKey()]);
+            } elseif ($send) {
+                Notification::make()->info()->title(__('Several letters were issued: send each by email from the list.'))->send();
+            }
         } catch (\RuntimeException $e) {
             if (empty($data['create_meeting'])) {
                 throw $e;
@@ -752,6 +773,15 @@ class LettersRelationManager extends RelationManager
             Notification::make()->danger()->title(__('The Teams meeting could not be created'))->body($e->getMessage())->persistent()->send();
             $action->halt();
         }
+    }
+
+    /** Issue, then open the letter's Send by email screen. */
+    private static function issueAndSendButton(Action $action): Action
+    {
+        return $action->makeModalSubmitAction('issueAndSend', ['send' => true])
+            ->label(__('Issue and send by email'))
+            ->icon('heroicon-o-paper-airplane')
+            ->color('success');
     }
 
     /**
@@ -810,7 +840,15 @@ class LettersRelationManager extends RelationManager
                         ->columnSpan(3),
                 ]),
 
-            self::recipientsSection($matter),
+            // An external entity added: its template, when none is chosen yet.
+            self::recipientsSection($matter, onEntity: function (Party $party, Get $get, Set $set) use ($matter): void {
+                $template = blank($get('letter_template_id')) ? LetterTemplate::forEntity($party->getKey(), $matter->type_id) : null;
+
+                if ($template) {
+                    $set('letter_template_id', $template->getKey());
+                    $this->prefill($matter, $template, $set);
+                }
+            }),
 
             Section::make(__('Letter details'))
                 ->visible(fn (Get $get) => filled($get('letter_template_id')))

@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 use App\Enums\LetterTemplateCategories;
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Mms\Resources\Matters\Pages\RecordMinutes;
+use App\Filament\Support\EmailSendFields;
 use App\Filament\Support\RichEditorDirection;
 use App\Models\Attachment;
 use App\Models\CalendarEvent;
@@ -18,6 +19,7 @@ use App\Services\MMS\Letters\MinutesSender;
 use App\Services\MMS\Letters\MinutesService;
 use App\Services\MMS\SenderMailer;
 use App\Services\WhatsAppCloud;
+use App\Support\EmailGrouping;
 use App\Support\Honorific;
 use App\Support\ScreenPermissions;
 use Carbon\Carbon;
@@ -157,7 +159,7 @@ class MinutesRelationManager extends RelationManager
         return Action::make('newMinutes')
             ->label(__('New minutes'))
             ->icon('heroicon-o-clipboard-document-list')
-            ->modalWidth('4xl')
+            ->modalWidth('6xl')
             ->visible(fn (): bool => $this->canChange())
             ->fillForm(function () use ($matter): array {
                 // The matter's next meeting, else its latest.
@@ -254,7 +256,7 @@ class MinutesRelationManager extends RelationManager
             ->icon('heroicon-o-eye')
             ->color('gray')
             ->modalHeading(fn (MatterMinutes $record) => __('Minutes (:number)', ['number' => $record->number]))
-            ->modalWidth('6xl')
+            ->modalWidth('7xl')
             ->modalContent(fn (MatterMinutes $record) => view('filament.mms.letters.preview', [
                 'url' => route('minutes.pdf', $record).'?v='.$record->updated_at?->timestamp,
                 'title' => MinutesService::fileName($record),
@@ -309,7 +311,7 @@ class MinutesRelationManager extends RelationManager
             ->label(__('Send to attendees'))
             ->icon('heroicon-o-paper-airplane')
             ->color('success')
-            ->modalWidth('5xl')
+            ->modalWidth('7xl')
             ->modalSubmitActionLabel(__('Send'))
             ->visible(fn (MatterMinutes $record): bool => $record->isFinal() && $this->canChange())
             ->fillForm(function (MatterMinutes $record): array {
@@ -319,6 +321,9 @@ class MinutesRelationManager extends RelationManager
                 return [
                     'recipients' => MinutesSender::recipients($record),
                     'sender' => array_key_first(SenderMailer::options()),
+                    // …and the email template's own.
+                    'cc' => EmailSendFields::startingCc($record->matter, $template?->getKey()),
+                    'grouping' => EmailGrouping::SEPARATE,
                     'email_template_id' => $template?->getKey(),
                     'subject' => $template?->subject ?? MinutesSender::defaultSubject($arabic),
                     'body' => $template?->body ?? MinutesSender::defaultBody($arabic),
@@ -337,11 +342,15 @@ class MinutesRelationManager extends RelationManager
                         Toggle::make('by_email')->label(__('By email'))->inline(false)->columnSpan(2),
                         Toggle::make('by_whatsapp')->label(__('By WhatsApp'))->inline(false)->columnSpan(2),
                         Hidden::make('party_id'),
+                        // The main party it goes with (sent by party).
+                        Hidden::make('group'),
                     ]),
                 Section::make(__('Email'))
                     ->collapsible()
                     ->schema([
                         Select::make('sender')->label(__('Send from'))->options(SenderMailer::options()),
+                        EmailSendFields::grouping(),
+                        EmailSendFields::cc(),
                         // From Templates → Email templates ("Minutes for
                         // signature"); another one chosen starts the email again.
                         Select::make('email_template_id')
@@ -349,8 +358,10 @@ class MinutesRelationManager extends RelationManager
                             ->options(fn () => EmailTemplate::options(EmailTemplate::MINUTES_SIGNATURE))
                             ->placeholder(__('The standard email'))
                             ->live()
-                            ->afterStateUpdated(function (?string $state, Set $set) use ($record): void {
+                            ->afterStateUpdated(function (?string $state, $old, Get $get, Set $set) use ($record): void {
                                 $template = filled($state) ? EmailTemplate::find($state) : null;
+                                // Its own CC in place of the one before's.
+                                $set('cc', EmailTemplate::swapCc((array) ($get('cc') ?? []), $old, $state));
                                 $arabic = MinutesService::composer($record)->isArabic();
                                 $set('subject', $template?->subject ?? MinutesSender::defaultSubject($arabic));
                                 $set('body', $template?->body ?? MinutesSender::defaultBody($arabic));
@@ -362,6 +373,9 @@ class MinutesRelationManager extends RelationManager
                             ->toolbarButtons([['bold', 'italic', 'underline', 'link'], ['bulletList', 'orderedList'], ['undo', 'redo']])
                             ->tap(RichEditorDirection::apply(...))
                             ->extraInputAttributes(['dir' => MinutesService::composer($record)->isArabic() ? 'rtl' : 'ltr']),
+                        // Files of this send's own, beside the minutes.
+                        EmailSendFields::attachments('minutes-attachments', __('Sent by email with the minutes, for this send only.')),
+                        EmailSendFields::oneDriveFiles($record->matter),
                     ]),
                 Section::make('WhatsApp')
                     ->collapsible()
@@ -395,7 +409,12 @@ class MinutesRelationManager extends RelationManager
                     $data['body'] ?? null,
                     filled($data['whatsapp_template_id'] ?? null) ? WhatsAppTemplate::find($data['whatsapp_template_id']) : null,
                     auth()->id(),
+                    EmailSendFields::uploaded($data, $record->matter),
+                    array_values((array) ($data['cc'] ?? [])),
+                    $data['grouping'] ?? EmailGrouping::SEPARATE,
                 );
+
+                EmailSendFields::forget($data);
 
                 $notification = Notification::make()
                     ->title(__('Sent: :sent, failed: :failed', ['sent' => $result['sent'], 'failed' => $result['failed']]))
@@ -422,7 +441,7 @@ class MinutesRelationManager extends RelationManager
             ->icon('heroicon-o-check-badge')
             ->visible(fn (MatterMinutes $record): bool => $record->deliveries->isNotEmpty())
             ->modalHeading(fn (MatterMinutes $record) => __('Minutes (:number)', ['number' => $record->number]).' — '.__('Signatures'))
-            ->modalWidth('4xl')
+            ->modalWidth('6xl')
             ->modalContent(fn (MatterMinutes $record) => view('filament.mms.minutes.signatures', [
                 'deliveries' => $record->deliveries()->latest('id')->get(),
                 'attachments' => Attachment::query()->whereIn('id', $record->deliveries->flatMap(fn ($d) => $d->signed_attachments ?? []))->get()->keyBy('id'),

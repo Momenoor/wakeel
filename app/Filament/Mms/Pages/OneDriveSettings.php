@@ -85,6 +85,8 @@ class OneDriveSettings extends Page implements HasTable
             'enabled' => MatterOneDriveFolders::enabled(),
             'subfolders' => Setting::get(MatterOneDriveFolders::SUBFOLDERS, ''),
             'signed_minutes' => MatterOneDriveFolders::signedMinutesFolder(),
+            'sent_emails' => MatterOneDriveFolders::sentEmailsFolder(),
+            'received_emails' => MatterOneDriveFolders::receivedEmailsFolder(),
         ]);
     }
 
@@ -141,6 +143,14 @@ class OneDriveSettings extends Page implements HasTable
                             ->label(__('Signed minutes subfolder'))
                             ->helperText(__('Signed minutes sent back on WhatsApp are saved here, inside the matter\'s folder (made when missing). Use "/" for a folder inside another.'))
                             ->required()
+                            ->extraInputAttributes(['dir' => 'auto']),
+                        TextInput::make('sent_emails')
+                            ->label(__('Sent emails subfolder'))
+                            ->helperText(__('Every email sent from a matter — letters, minutes, bulk mail — is saved here as a PDF, inside the matter\'s folder (made when missing). Leave empty not to save them in OneDrive.'))
+                            ->extraInputAttributes(['dir' => 'auto']),
+                        TextInput::make('received_emails')
+                            ->label(__('Replies subfolder'))
+                            ->helperText(__('Replies to those emails, collected from the mailbox, are saved here as a PDF with every file they came with. Leave empty not to save them in OneDrive.'))
                             ->extraInputAttributes(['dir' => 'auto']),
                     ]),
 
@@ -231,6 +241,8 @@ class OneDriveSettings extends Page implements HasTable
         Setting::set(MatterOneDriveFolders::ENABLED, $enable, 'onedrive');
         Setting::set(MatterOneDriveFolders::SUBFOLDERS, trim((string) ($state['subfolders'] ?? '')), 'onedrive');
         Setting::set(MatterOneDriveFolders::SIGNED_MINUTES, trim((string) ($state['signed_minutes'] ?? '')), 'onedrive');
+        Setting::set(MatterOneDriveFolders::SENT_EMAILS, trim((string) ($state['sent_emails'] ?? '')), 'onedrive');
+        Setting::set(MatterOneDriveFolders::RECEIVED_EMAILS, trim((string) ($state['received_emails'] ?? '')), 'onedrive');
 
         Notification::make()->title(__('Settings saved successfully'))->success()->send();
     }

@@ -188,7 +188,7 @@ class PayslipsRelationManager extends RelationManager
             ]))
             ->modalSubmitAction(false)
             ->modalCancelActionLabel(__('Close'))
-            ->modalWidth('3xl')
+            ->modalWidth('5xl')
             // Nothing was deducted, so there is nothing to open.
             ->visible(fn (Payslip $record): bool => (float) $record->loan_deduction > 0)
             ->modalContent(fn (Payslip $record): View => view('filament.payroll.loan-breakdown', [

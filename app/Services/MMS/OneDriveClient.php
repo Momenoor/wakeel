@@ -111,6 +111,109 @@ class OneDriveClient
     }
 
     /**
+     * Everything directly inside a folder — folders and files, every page
+     * of them.
+     *
+     * @return list<array{id: string, name: string, webUrl: string, folder: bool, children: ?int, size: ?int, modified: ?string, mime: ?string}>
+     */
+    public function children(string $user, string $folderId): array
+    {
+        $uri = "/users/{$this->user($user)}/drive/items/".rawurlencode($folderId).'/children?$select=id,name,webUrl,folder,file,size,lastModifiedDateTime&$top=200';
+        $items = [];
+
+        while ($uri !== null) {
+            $response = $this->request('get', $uri);
+
+            foreach ((array) $response->json('value') as $item) {
+                $items[] = [
+                    'id' => (string) $item['id'],
+                    'name' => (string) $item['name'],
+                    'webUrl' => (string) ($item['webUrl'] ?? ''),
+                    'folder' => isset($item['folder']),
+                    'children' => isset($item['folder']) ? (int) ($item['folder']['childCount'] ?? 0) : null,
+                    'size' => isset($item['size']) ? (int) $item['size'] : null,
+                    'modified' => $item['lastModifiedDateTime'] ?? null,
+                    'mime' => $item['file']['mimeType'] ?? null,
+                ];
+            }
+
+            $next = $response->json('@odata.nextLink');
+            $uri = is_string($next) && str_starts_with($next, self::GRAPH) ? substr($next, strlen(self::GRAPH)) : null;
+        }
+
+        return $items;
+    }
+
+    /**
+     * One file or folder: its name, where it is ("/drive/root:/Work/…", the
+     * folder it is in), and — a file — a short-lived link to download it.
+     *
+     * @return array{id: string, name: string, webUrl: string, path: string, folder: bool, size: ?int, downloadUrl: ?string}
+     */
+    public function itemInfo(string $user, string $itemId): array
+    {
+        $response = $this->request('get', "/users/{$this->user($user)}/drive/items/".rawurlencode($itemId));
+
+        return [
+            'id' => (string) $response->json('id'),
+            'name' => (string) $response->json('name'),
+            'webUrl' => (string) $response->json('webUrl'),
+            'path' => (string) $response->json('parentReference.path'),
+            'folder' => $response->json('folder') !== null,
+            'size' => $response->json('size') !== null ? (int) $response->json('size') : null,
+            // A key with dots: not by json()'s dot path.
+            'downloadUrl' => ((array) $response->json())['@microsoft.graph.downloadUrl'] ?? null,
+        ];
+    }
+
+    /**
+     * Files and folders anywhere under a folder whose name (or text) has
+     * these words — the first page of what OneDrive finds.
+     *
+     * @return list<array{id: string, name: string, folder: bool, size: ?int, path: string}>
+     */
+    public function search(string $user, string $folderId, string $words): array
+    {
+        $query = str_replace("'", "''", trim($words));
+        $response = $this->request('get', "/users/{$this->user($user)}/drive/items/".rawurlencode($folderId)."/search(q='".rawurlencode($query)."')?\$top=50");
+
+        return array_map(fn (array $item): array => [
+            'id' => (string) $item['id'],
+            'name' => (string) $item['name'],
+            'folder' => isset($item['folder']),
+            'size' => isset($item['size']) ? (int) $item['size'] : null,
+            'path' => (string) ($item['parentReference']['path'] ?? ''),
+        ], (array) $response->json('value'));
+    }
+
+    /** A file's contents, by the short-lived link OneDrive gives for it. */
+    public function download(string $downloadUrl): string
+    {
+        $response = Http::timeout(120)->get($downloadUrl);
+
+        if (! $response->successful()) {
+            throw new RuntimeException('OneDrive '.$response->status().': '.__('the file could not be downloaded.'));
+        }
+
+        return $response->body();
+    }
+
+    /**
+     * A new folder inside a folder — named "name 1" when one of that name is
+     * there already.
+     *
+     * @return array{id: string, webUrl: string}
+     */
+    public function createFolder(string $user, string $parentId, string $name): array
+    {
+        return $this->item($this->request('post', "/users/{$this->user($user)}/drive/items/".rawurlencode($parentId).'/children', [
+            'name' => $name,
+            'folder' => new \stdClass,
+            '@microsoft.graph.conflictBehavior' => 'rename',
+        ]));
+    }
+
+    /**
      * Renames a file or folder — its contents untouched. Fails (409) when
      * the folder it is in has one of that name already.
      *

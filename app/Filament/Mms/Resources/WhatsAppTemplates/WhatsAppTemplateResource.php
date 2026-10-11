@@ -140,7 +140,7 @@ class WhatsAppTemplateResource extends Resource
                 IconColumn::make('is_active')->label(__('Active'))->boolean(),
             ])
             ->recordActions([
-                EditAction::make()->modalWidth('4xl'),
+                EditAction::make()->modalWidth('6xl'),
                 ReplicateAction::make(),
                 DeleteAction::make(),
             ]);

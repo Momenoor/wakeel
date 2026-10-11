@@ -8,6 +8,7 @@ use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\Pages\RecordMinutes;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager;
+use App\Filament\Mms\Resources\Matters\Schemas\MinutesRecordForm;
 use App\Models\CalendarEvent;
 use App\Models\Letterhead;
 use App\Models\LetterTemplate;
@@ -23,6 +24,7 @@ use App\Services\MMS\Letters\LetterPdf;
 use App\Services\MMS\Letters\MinutesSender;
 use App\Services\MMS\Letters\MinutesService;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\Select;
 use Filament\Schemas\Components\Wizard;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
@@ -345,7 +347,7 @@ class MinutesTest extends TestCase
         $attendees[1] = [...$attendees[1], 'present' => true, 'phone' => '+971 50 113 2801'];
         // Added by hand, named as the company: counted as it.
         $attendees[] = ['present' => true, 'title' => 'السادة/', 'name' => ' المهاد لخدمات صيانة السفن ', 'phone' => '042223333', 'party_id' => null];
-        // Not a party of the matter: nothing to update.
+        // Not a party of the matter: one now, with the ID typed.
         $attendees[] = ['present' => true, 'title' => 'السيد/', 'name' => 'زائر', 'id_number' => '784-2000-0000000-0', 'party_id' => null];
 
         $page->fillForm(['attendees' => $attendees])->call('save')->assertHasNoFormErrors();
@@ -355,7 +357,171 @@ class MinutesTest extends TestCase
         // Each the latest as it came: its own, its lawyer's (who stands for it), the one added by hand.
         $this->assertSame(['0567778899', '+971 50 113 2801', '042223333'], $company->phone);
         $this->assertSame(['0501132801'], $this->lawyer->fresh()->phone);
-        $this->assertSame(0, Party::where('name', 'زائر')->count());
+        $this->assertSame('784-2000-0000000-0', Party::where('name', 'زائر')->sole()->extra['id_number']);
+    }
+
+    public function test_an_attendee_added_by_hand_becomes_a_party_kept_with_the_matter(): void
+    {
+        $company = Party::where('name', 'المهاد لخدمات صيانة السفن')->sole();
+        $companyRow = MatterParty::where(['matter_id' => $this->matter->id, 'party_id' => $company->id])->sole();
+        $known = Party::factory()->create(['name' => 'خالد المعروف']);
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
+
+        $page = $this->recordPage($minutes);
+        $attendees = array_values($page->get('data.attendees'));
+        // New to the office, attending for the company.
+        $attendees[] = ['present' => true, 'title' => 'الأستاذ/', 'name' => 'مؤمن نور', 'phone' => '0502223344', 'email' => 'momen@example.ae',
+            'party_id' => null, 'represents' => $company->id, 'as' => 'authorized'];
+        // Already a party (of no matter here): that one, not another.
+        $attendees[] = ['present' => true, 'title' => 'الأستاذ/', 'name' => 'خالد المعروف', 'party_id' => null];
+
+        $page->fillForm(['attendees' => $attendees])->call('save')->assertHasNoFormErrors();
+
+        $new = Party::where('name', 'مؤمن نور')->sole();
+        $this->assertTrue(Party::query()->withRole('attendee')->whereKey($new->id)->exists());
+        $this->assertSame('0502223344', $new->latestPhone());
+        $this->assertSame('momen@example.ae', $new->latestEmail());
+        $this->assertSame(1, Party::where('name', 'خالد المعروف')->count());
+        // Belonging now to the party they attended for.
+        $this->assertSame($company->id, $new->parent_id);
+
+        // Linked to the matter as attendees — the first under the party they attended for.
+        $this->assertEquals(['attendee', 'attendee', $companyRow->id],
+            array_values(MatterParty::where(['matter_id' => $this->matter->id, 'party_id' => $new->id])->sole()->only(['role', 'type', 'parent_id'])));
+        $this->assertSame('attendee', MatterParty::where(['matter_id' => $this->matter->id, 'party_id' => $known->id])->sole()->role);
+        $this->assertEqualsCanonicalizing([$new->id, $known->id], $this->matter->attendeesOnly()->pluck('party_id')->all());
+
+        // Each found on the minutes and on the page — saving again adds no one.
+        $this->assertEqualsCanonicalizing([$new->id, $known->id], collect($minutes->fresh()->attendees)->whereIn('name', ['مؤمن نور', 'خالد المعروف'])->pluck('party_id')->all());
+        $page->call('save');
+        $this->assertSame(2, $this->matter->attendeesOnly()->count());
+        $this->assertSame(1, Party::where('name', 'مؤمن نور')->count());
+
+        // Not taken for the company's representative, nor one of the matter's parties.
+        $this->assertSame([$this->lawyer->id], collect(LetterComposer::candidates($this->matter->fresh()))->where('of', $companyRow->id)->pluck('party_id')->values()->all());
+        $this->assertCount(1, $this->matter->fresh()->mainPartiesOnly);
+    }
+
+    public function test_an_attendee_added_starts_as_present(): void
+    {
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
+
+        $page = $this->recordPage($minutes);
+        // The matter's parties as they were: not yet ticked.
+        $this->assertSame([false, false], array_column(array_values($page->get('data.attendees')), 'present'));
+
+        $page->call('mountAction', 'add', [], ['schemaComponent' => 'form.attendees']);
+        $added = collect($page->get('data.attendees'))->last();
+        $this->assertTrue($added['present']);
+    }
+
+    public function test_an_attendee_is_picked_from_every_party_by_name_contact_or_role(): void
+    {
+        $company = Party::where('name', 'المهاد لخدمات صيانة السفن')->sole();
+        $employee = Party::factory()->create(['name' => 'سالم الموظف', 'phone' => ['0507654321'], 'email' => ['salem@mahad.ae'],
+            'role' => ['role' => ['employee']], 'parent_id' => $company->id]);
+        $expert = Party::factory()->create(['name' => 'خبير حسابي', 'role' => ['role' => ['expert'], 'type' => ['certified']]]);
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
+
+        $found = fn (string $search): array => MinutesRecordForm::searchParties($search)->pluck('id')->all();
+        $this->assertSame([$employee->id], $found('7654321'));
+        $this->assertSame([$employee->id], $found('salem@mahad'));
+        $this->assertContains($employee->id, $found(__('Employee')));
+        $this->assertContains($expert->id, $found(__('Certified Expert')));
+        $this->assertNotContains($expert->id, $found(__('Employee')));
+
+        // Labelled with their roles and whom they belong to.
+        $this->assertSame('سالم الموظف — '.__('Employee').' (المهاد لخدمات صيانة السفن)', MinutesRecordForm::partyLabel($employee->load('parent')));
+
+        // Picked: standing for the party they belong to.
+        $this->recordPage($minutes)
+            ->set('data.attendees.new', ['present' => true])
+            ->set('data.attendees.new.party_id', $employee->id)
+            ->assertSet('data.attendees.new.represents', $company->id)
+            // Their agent unless said otherwise — then authorised.
+            ->assertSet('data.attendees.new.as', 'agent')
+            ->assertSet('data.attendees.new.capacity', 'وكيلاً عن (السادة/ المهاد لخدمات صيانة السفن - المدعي)')
+            ->set('data.attendees.new.as', 'authorized')
+            ->assertSet('data.attendees.new.capacity', 'مفوضاً عن (السادة/ المهاد لخدمات صيانة السفن - المدعي)');
+    }
+
+    public function test_the_matters_lines_pick_from_its_parties_and_a_line_added_from_all(): void
+    {
+        $company = Party::where('name', 'المهاد لخدمات صيانة السفن')->sole();
+        $outsider = Party::factory()->create(['name' => 'طرف من خارج الدعوى']);
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
+
+        $page = $this->recordPage($minutes)->set('data.attendees.new', ['present' => true]);
+        $key = array_key_first($page->get('data.attendees'));
+        $options = fn (string $line, ?string $search = null): array => array_keys($search === null
+            ? $page->instance()->form->getComponent('attendees')->getChildSchema($line)->getComponent(fn ($c) => $c instanceof Select && $c->getName() === 'party_id')->getOptions()
+            : $page->instance()->form->getComponent('attendees')->getChildSchema($line)->getComponent(fn ($c) => $c instanceof Select && $c->getName() === 'party_id')->getSearchResults($search));
+
+        // The company's line: the matter's parties only, also when searching.
+        $this->assertEqualsCanonicalizing([$company->id, $this->lawyer->id], $options($key));
+        $this->assertSame([], $options($key, 'خارج'));
+        // A line added: every party.
+        $this->assertContains($outsider->id, $options('new'));
+        $this->assertSame([$outsider->id], $options('new', 'خارج'));
+    }
+
+    public function test_a_lawyer_attending_for_a_party_is_not_made_to_belong_to_it(): void
+    {
+        $company = Party::where('name', 'المهاد لخدمات صيانة السفن')->sole();
+        $lawyer = Party::factory()->create(['name' => 'محامٍ آخر', 'role' => ['role' => ['representative']]]);
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
+
+        $page = $this->recordPage($minutes);
+        $attendees = array_values($page->get('data.attendees'));
+        $attendees[] = ['present' => true, 'name' => 'محامٍ آخر', 'party_id' => $lawyer->id, 'represents' => $company->id, 'as' => 'agent'];
+        $page->fillForm(['attendees' => $attendees])->call('save')->assertHasNoFormErrors();
+
+        $this->assertNull($lawyer->fresh()->parent_id);
+        // Still kept with the matter, under the party they came for.
+        $this->assertSame(MatterParty::where(['matter_id' => $this->matter->id, 'party_id' => $company->id])->value('id'),
+            MatterParty::where(['matter_id' => $this->matter->id, 'party_id' => $lawyer->id])->sole()->parent_id);
+    }
+
+    public function test_a_new_meeting_starts_with_the_previous_meetings_attendees(): void
+    {
+        $company = Party::where('name', 'المهاد لخدمات صيانة السفن')->sole();
+        $template = LetterTemplate::query()->where('category', 'minutes')->value('id');
+        $first = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => $template,
+            'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
+
+        $page = $this->recordPage($first);
+        $attendees = array_values($page->get('data.attendees'));
+        $attendees[1]['present'] = true;
+        $attendees[] = ['present' => true, 'title' => 'الأستاذ/', 'name' => 'مؤمن نور', 'phone' => '0502223344',
+            'party_id' => null, 'represents' => $company->id, 'as' => 'agent', 'capacity' => 'وكيلاً عن (السادة/ المهاد لخدمات صيانة السفن - المدعي)'];
+        $page->fillForm(['attendees' => $attendees])->call('save')->assertHasNoFormErrors();
+        $momen = Party::where('name', 'مؤمن نور')->sole();
+        // Since: his newer number, and a new party of the matter.
+        $momen->addContact('0509990000');
+        $defendant = Party::factory()->create(['name' => 'سعيد المدعى عليه']);
+        MatterParty::create(['matter_id' => $this->matter->id, 'role' => 'party', 'type' => 'defendant', 'party_id' => $defendant->id]);
+
+        $this->minutesPage()->callTableAction('newMinutes', data: ['meeting_at' => '2026-10-20 10:00:00']);
+        $second = MatterMinutes::query()->latest('id')->first();
+
+        $start = array_values($this->recordPage($second)->get('data.attendees'));
+        // As last time: the company not present, its lawyer and مؤمن present, for the same party.
+        $this->assertSame(['المهاد لخدمات صيانة السفن', 'محمد عبد المقصود', 'مؤمن نور', 'سعيد المدعى عليه'], array_column($start, 'name'));
+        $this->assertSame([false, true, true, false], array_map(fn ($a) => (bool) $a['present'], $start));
+        $this->assertEquals([$company->id, 'agent', $momen->id, '0509990000'], [$start[2]['represents'], $start[2]['as'], $start[2]['party_id'], $start[2]['phone']]);
+        $this->assertSame('وكيلاً عن (السادة/ المهاد لخدمات صيانة السفن - المدعي)', $start[2]['capacity']);
+
+        // …and changed as usual: saved as now marked.
+        $start[2]['present'] = false;
+        $this->recordPage($second)->fillForm(['attendees' => $start])->call('save')->assertHasNoFormErrors();
+        $this->assertSame([false, true, false, false], array_column($second->fresh()->attendees, 'present'));
+        // The first meeting as it was.
+        $this->assertTrue($first->fresh()->attendees[2]['present']);
     }
 
     public function test_an_attendee_is_picked_linked_to_the_party_they_stand_for_and_their_contact_kept_on_both(): void
@@ -384,8 +550,8 @@ class MinutesTest extends TestCase
             ->assertSet('data.attendees.new.phone', '0501111111')
             ->assertSet('data.attendees.new.email', 'salem@company.ae')
             ->set('data.attendees.new.represents', $company->id)
-            ->set('data.attendees.new.as', 'employee')
-            ->assertSet('data.attendees.new.capacity', 'موظف عن المدعي')
+            ->set('data.attendees.new.as', 'authorized')
+            ->assertSet('data.attendees.new.capacity', 'مفوضاً عن (السادة/ المهاد لخدمات صيانة السفن - المدعي)')
             // A new mobile and email typed at the meeting.
             ->set('data.attendees.new.phone', '0559998888')
             ->set('data.attendees.new.email', 'salem.new@company.ae')
@@ -393,7 +559,7 @@ class MinutesTest extends TestCase
             ->assertHasNoFormErrors();
 
         $saved = collect($minutes->fresh()->attendees)->firstWhere('party_id', $employee->id);
-        $this->assertEquals(['represents' => $company->id, 'as' => 'employee', 'capacity' => 'موظف عن المدعي'], array_intersect_key($saved, array_flip(['represents', 'as', 'capacity'])));
+        $this->assertEquals(['represents' => $company->id, 'as' => 'authorized', 'capacity' => 'مفوضاً عن (السادة/ المهاد لخدمات صيانة السفن - المدعي)'], array_intersect_key($saved, array_flip(['represents', 'as', 'capacity'])));
 
         // Kept on the attendee's party and on the party they stand for — as the latest.
         $this->assertSame('0559998888', $employee->fresh()->latestPhone());
@@ -415,7 +581,7 @@ class MinutesTest extends TestCase
             'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT, 'attendees' => [
                 ['present' => false, 'name' => $company->name, 'party_id' => $company->id],
                 ['present' => false, 'name' => $this->lawyer->name, 'party_id' => $this->lawyer->id, 'represents' => $company->id],
-                ['present' => true, 'title' => 'السيد/', 'name' => 'سالم الموظف', 'email' => 'salem@almehad.ae', 'represents' => $company->id, 'as' => 'employee'],
+                ['present' => true, 'title' => 'السيد/', 'name' => 'سالم الموظف', 'email' => 'salem@almehad.ae', 'represents' => $company->id, 'as' => 'authorized'],
             ]]);
 
         $recipients = collect(MinutesSender::recipients($minutes));
@@ -432,17 +598,21 @@ class MinutesTest extends TestCase
         $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
             'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
 
-        $this->assertSame('حاضر عن (السادة/ مكتب محمد البنا للمحاماة - وكيل المدعي)', MinutesService::capacityFor($minutes, $this->lawyer->id, 'present_for'));
-        $this->assertArrayHasKey('present_for', MinutesService::attendeeRoles());
+        $this->assertSame('وكيلاً عن (السادة/ مكتب محمد البنا للمحاماة - وكيل المدعي)', MinutesService::capacityFor($minutes, $this->lawyer->id, 'agent'));
+        $this->assertSame('مفوضاً عن (السادة/ مكتب محمد البنا للمحاماة - وكيل المدعي)', MinutesService::capacityFor($minutes, $this->lawyer->id, 'authorized'));
+        // Only these two — an earlier choice still read on its line.
+        $this->assertSame(['agent', 'authorized'], array_keys(MinutesService::attendeeRoles()));
+        $this->assertSame(['agent', 'authorized', 'employee'], array_keys(MinutesService::attendeeRoles('employee')));
+        $this->assertSame('موظف عن (السادة/ مكتب محمد البنا للمحاماة - وكيل المدعي)', MinutesService::capacityFor($minutes, $this->lawyer->id, 'employee'));
 
         // Only مؤمن attended, for the lawyer's office: the office and its party still get the minutes.
         $minutes->update(['attendees' => [
-            ['present' => true, 'title' => 'الأستاذ/', 'name' => 'مؤمن', 'email' => 'momen@albanna.ae', 'represents' => $this->lawyer->id, 'as' => 'present_for',
-                'capacity' => 'حاضر عن (السادة/ مكتب محمد البنا للمحاماة - وكيل المدعي)'],
+            ['present' => true, 'title' => 'الأستاذ/', 'name' => 'مؤمن', 'email' => 'momen@albanna.ae', 'represents' => $this->lawyer->id, 'as' => 'authorized',
+                'capacity' => 'مفوضاً عن (السادة/ مكتب محمد البنا للمحاماة - وكيل المدعي)'],
         ]]);
 
         $this->assertEqualsCanonicalizing(['momen@albanna.ae', 'office@albanna.ae', 'info@almehad.ae'], collect(MinutesSender::recipients($minutes))->pluck('emails')->flatten()->all());
-        $this->assertStringContainsString('حاضر عن (السادة/ مكتب محمد البنا للمحاماة - وكيل المدعي)', MinutesService::composer($minutes)->bodyHtml());
+        $this->assertStringContainsString('مفوضاً عن (السادة/ مكتب محمد البنا للمحاماة - وكيل المدعي)', MinutesService::composer($minutes)->bodyHtml());
     }
 
     public function test_the_minutes_go_to_every_email_and_number_once(): void
@@ -477,7 +647,7 @@ class MinutesTest extends TestCase
         // Standing for the company, then picked as the company: they stand for themselves.
         $page->set('data.attendees.new', ['present' => true, 'name' => 'زائر'])
             ->set('data.attendees.new.represents', $company->id)
-            ->set('data.attendees.new.as', 'employee')
+            ->set('data.attendees.new.as', 'authorized')
             ->set('data.attendees.new.party_id', $company->id)
             ->assertSet('data.attendees.new.represents', null)
             ->assertSet('data.attendees.new.as', null);

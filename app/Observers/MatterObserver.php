@@ -4,6 +4,7 @@ namespace App\Observers;
 
 use App\Enums\MatterCollectionStatus;
 use App\Models\Matter;
+use App\Services\MMS\MatterProgressRecorder;
 use App\Services\MMS\NewMatterNotification;
 use Illuminate\Support\Facades\Log;
 
@@ -61,6 +62,12 @@ class MatterObserver
     public function saved(Matter $matter): void
     {
         $matter->updateCollectionStatus();
+
+        // The reports' dates, as steps in its progress.
+        if ($matter->wasChanged(['initial_report_at', 'final_report_at'])
+            || ($matter->wasRecentlyCreated && ($matter->initial_report_at || $matter->final_report_at))) {
+            MatterProgressRecorder::reports($matter);
+        }
 
     }
 

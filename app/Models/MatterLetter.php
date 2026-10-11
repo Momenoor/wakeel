@@ -85,6 +85,33 @@ class MatterLetter extends Model
     }
 
     /**
+     * The emails of the matter's experts copied in on its letters and
+     * minutes — the kinds ticked in System Settings (the assistants, unless
+     * changed) — from their party, or the account they sign in with.
+     *
+     * @return list<string>
+     */
+    public static function ccEmails(?Matter $matter): array
+    {
+        $types = self::ccExpertTypes();
+
+        if (! $matter || $types === []) {
+            return [];
+        }
+
+        return $matter->matterParties()
+            ->with('party.user')
+            ->where('role', 'expert')
+            ->whereIn('type', $types)
+            ->get()
+            ->flatMap(fn (MatterParty $assistant): array => array_filter((array) ($assistant->party?->email ?: $assistant->party?->user?->email)))
+            ->filter(fn ($email): bool => filter_var($email, FILTER_VALIDATE_EMAIL) !== false)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
      * The reference for a matter's nth letter, from the format in System
      * Settings: {year} and {number} the matter's, {seq} the letter's number
      * on the matter, {current_year} the year it is issued.

@@ -3,15 +3,19 @@
 namespace App\Services\MMS\Letters;
 
 use App\Mail\LetterEmail;
+use App\Models\MatterEmail;
 use App\Models\MatterMinutes;
 use App\Models\MinutesDelivery;
 use App\Models\Party;
 use App\Models\WhatsAppTemplate;
 use App\Services\MMS\BulkMailPlaceholders;
+use App\Services\MMS\MatterProgressRecorder;
 use App\Services\MMS\SenderMailer;
+use App\Services\MMS\SentEmailArchive;
 use App\Services\WhatsAppCloud;
 use App\Services\WhatsAppService;
 use App\Support\Addresses;
+use App\Support\EmailGrouping;
 use App\Support\Honorific;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -29,6 +33,9 @@ class MinutesSender
 
     /**
      * @param  list<array{name?: string, party_id?: ?int, emails?: list<string>, email?: ?string, phone?: ?string, by_email?: bool, by_whatsapp?: bool}>  $recipients
+     * @param  list<array{path: string, name: string}>  $attachments  more files, by email only
+     * @param  list<string>  $cc  copied in on each email
+     * @param  string|bool|null  $grouping  EmailGrouping: one email each, by party, or one for all
      * @return array{sent: int, failed: int, errors: list<string>}
      */
     public function send(
@@ -39,46 +46,88 @@ class MinutesSender
         ?string $body = null,
         ?WhatsAppTemplate $template = null,
         ?int $userId = null,
+        array $attachments = [],
+        array $cc = [],
+        string|bool|null $grouping = EmailGrouping::SEPARATE,
     ): array {
         $result = ['sent' => 0, 'failed' => 0, 'errors' => []];
         $composer = MinutesService::composer($minutes);
         $values = $composer->values();
         $pdf = $this->pdf($minutes, $composer);
         $fileName = MinutesService::fileName($minutes).'.pdf';
+        // Files of this send's own, with the minutes in each email (not on
+        // WhatsApp: its approved template carries the minutes only).
+        $files = [
+            ['name' => $fileName, 'data' => $pdf, 'mime' => 'application/pdf'],
+            ...LetterMailer::attachedFiles($attachments),
+        ];
         $mediaId = null;
+        $arabic = $composer->isArabic();
+        $personal = fn (string $name): array => [...$values, ...Honorific::values($name, $arabic)];
         // Each inbox and WhatsApp number once, however many recipients share it.
         $emailed = [];
         $messaged = [];
+        // Who it reached (by line), and how, for the matter's progress.
+        $reachedRows = [];
+        $methods = [];
+        $recipients = array_values(array_filter($recipients, 'is_array'));
 
-        foreach ($recipients as $recipient) {
-            $name = trim((string) ($recipient['name'] ?? ''));
-            // "الأستاذة/ موزة …": the bare name, its title and the honorific that agrees.
-            $personal = [...$values, ...Honorific::values($name, $composer->isArabic())];
-
+        // By email: each line's addresses not yet on an earlier one…
+        $byEmail = [];
+        foreach ($recipients as $i => $recipient) {
             $emails = Addresses::without(Addresses::emails([...(array) ($recipient['emails'] ?? []), $recipient['email'] ?? null]), $emailed);
 
             if (! empty($recipient['by_email']) && $emails !== [] && $senderKey) {
                 $emailed = [...$emailed, ...$emails];
-                $this->attempt($minutes, $recipient, MinutesDelivery::EMAIL, Str::limit(implode(', ', $emails), 250, ''), $userId, $result, function () use ($senderKey, $subject, $body, $personal, $composer, $pdf, $fileName, $emails) {
-                    $email = new LetterEmail(
-                        BulkMailPlaceholders::apply((string) ($subject ?: self::defaultSubject($composer->isArabic())), array_map('strip_tags', $personal)),
-                        BulkMailPlaceholders::apply((string) ($body ?: self::defaultBody($composer->isArabic())), $personal, escape: true),
-                        $composer->isArabic(),
-                        [],
-                        [['name' => $fileName, 'data' => $pdf, 'mime' => 'application/pdf']],
-                    );
-
-                    SenderMailer::using(SenderMailer::sender($senderKey), fn () => Mail::to($emails)->send($email));
-
-                    return null;
-                });
+                $byEmail[$i] = [...$recipient, 'emails' => $emails];
             }
+        }
 
+        // …in one email each, by party, or all together.
+        foreach (self::emailGroups($byEmail, EmailGrouping::from($grouping), $arabic) as $group) {
+            $emails = Addresses::emails(collect($group['rows'])->flatMap(fn (array $r) => $r['emails'])->all());
+            $greeting = $personal($group['name']);
+
+            $email = new LetterEmail(
+                BulkMailPlaceholders::apply((string) ($subject ?: self::defaultSubject($arabic)), array_map('strip_tags', $greeting)),
+                BulkMailPlaceholders::apply((string) ($body ?: self::defaultBody($arabic)), $greeting, escape: true),
+                $arabic,
+                [],
+                $files,
+            );
+            $copied = Addresses::without(Addresses::emails($cc), $emails);
+
+            $sent = $this->attempt($minutes, array_values($group['rows']), MinutesDelivery::EMAIL, Str::limit(implode(', ', $emails), 250, ''), $userId, $result, function () use ($senderKey, $email, $emails, $copied, $minutes, $userId) {
+                $message = SenderMailer::using(SenderMailer::sender($senderKey), fn () => Mail::to($emails)->cc($copied)->send($email));
+                // Remembered, for its replies.
+                MatterEmail::recordSent($minutes->matter_id, $minutes, $senderKey, $message?->getMessageId(), $email->emailSubject, [...$emails, ...$copied], $userId);
+
+                return null;
+            });
+
+            if ($sent) {
+                $reachedRows += array_fill_keys(array_keys($group['rows']), true);
+                $methods[MatterProgressRecorder::EMAIL] = true;
+
+                // Kept with the matter as it went — once the page has answered.
+                $names = collect($group['rows'])->pluck('name')->filter()->implode('، ');
+                $title = __('Minutes no. :number', ['number' => $minutes->number]);
+                $sender = SenderMailer::sender($senderKey);
+                if ($minutes->matter) {
+                    defer(fn () => app(SentEmailArchive::class)->keepEmail($minutes->matter, $email, $sender, $names, $emails, $copied, $title, $userId));
+                }
+            }
+        }
+
+        // By WhatsApp: each on their own.
+        foreach ($recipients as $i => $recipient) {
             $phone = WhatsAppService::formatWhatsAppNumber($recipient['phone'] ?? null);
 
             if (! empty($recipient['by_whatsapp']) && $template && $phone && ! in_array($phone, $messaged, true)) {
                 $messaged[] = $phone;
-                $this->attempt($minutes, $recipient, MinutesDelivery::WHATSAPP, $phone, $userId, $result, function () use ($template, $phone, $personal, $pdf, $fileName, &$mediaId) {
+                $greeting = $personal(trim((string) ($recipient['name'] ?? '')));
+
+                $sent = $this->attempt($minutes, [$recipient], MinutesDelivery::WHATSAPP, $phone, $userId, $result, function () use ($template, $phone, $greeting, $pdf, $fileName, &$mediaId) {
                     if ($template->header === 'document' && $mediaId === null) {
                         $file = tempnam(sys_get_temp_dir(), 'minutes');
                         file_put_contents($file, $pdf);
@@ -93,42 +142,104 @@ class MinutesSender
                         $phone,
                         $template->meta_name,
                         $template->language,
-                        $template->parameterValues($personal),
+                        $template->parameterValues($greeting),
                         $template->header === 'document' ? ['id' => $mediaId, 'filename' => $fileName] : null,
                     );
                 });
+
+                if ($sent) {
+                    $reachedRows[$i] = true;
+                    $methods[MatterProgressRecorder::WHATSAPP] = true;
+                }
             }
+        }
+
+        ksort($reachedRows);
+        $reached = array_values(array_map(fn (int $i): string => trim((string) ($recipients[$i]['name'] ?? '')), array_keys($reachedRows)));
+
+        if ($reached !== []) {
+            MatterProgressRecorder::minutesSent($minutes, $reached, $userId, methods: array_keys($methods));
         }
 
         return $result;
     }
 
     /**
-     * One send, kept whether it went or not.
+     * One send — to one line, or to several in one email — kept for each,
+     * whether it went or not.
      *
-     * @param  array<string, mixed>  $recipient
+     * @param  list<array<string, mixed>>  $rows
      * @param  array{sent: int, failed: int, errors: list<string>}  $result
      * @param  callable(): ?string  $send  the message id, if any
      */
-    private function attempt(MatterMinutes $minutes, array $recipient, string $channel, string $address, ?int $userId, array &$result, callable $send): void
+    private function attempt(MatterMinutes $minutes, array $rows, string $channel, string $address, ?int $userId, array &$result, callable $send): bool
     {
-        $delivery = $minutes->deliveries()->create([
-            'party_id' => filled($recipient['party_id'] ?? null) ? (int) $recipient['party_id'] : null,
-            'name' => trim((string) ($recipient['name'] ?? '')) ?: $address,
+        $deliveries = array_map(fn (array $row) => $minutes->deliveries()->create([
+            'party_id' => filled($row['party_id'] ?? null) ? (int) $row['party_id'] : null,
+            'name' => trim((string) ($row['name'] ?? '')) ?: $address,
             'channel' => $channel,
             'address' => $address,
             'status' => MinutesDelivery::SENT,
             'sent_by' => $userId,
-        ]);
+        ]), $rows);
 
         try {
-            $delivery->update(['message_id' => $send(), 'sent_at' => now()]);
-            $result['sent']++;
+            $messageId = $send();
+
+            foreach ($deliveries as $delivery) {
+                $delivery->update(['message_id' => $messageId, 'sent_at' => now()]);
+                $result['sent']++;
+            }
+
+            return true;
         } catch (\Throwable $e) {
-            $delivery->update(['status' => MinutesDelivery::FAILED, 'error' => Str::limit($e->getMessage(), 1000)]);
-            $result['failed']++;
-            $result['errors'][] = $delivery->name.': '.$e->getMessage();
+            foreach ($deliveries as $delivery) {
+                $delivery->update(['status' => MinutesDelivery::FAILED, 'error' => Str::limit($e->getMessage(), 1000)]);
+                $result['failed']++;
+            }
+            $result['errors'][] = collect($deliveries)->pluck('name')->implode('، ').': '.$e->getMessage();
+
+            return false;
         }
+    }
+
+    /**
+     * The emails to send: one a line; one a party — its own line, its
+     * representatives' and theirs who attended for it (a line of no party
+     * on its own); or one for all. Each named as it greets: the person, the
+     * party, or the parties.
+     *
+     * @param  array<int, array<string, mixed>>  $rows  by their place in the list
+     * @return list<array{name: string, rows: array<int, array<string, mixed>>}>
+     */
+    public static function emailGroups(array $rows, string $grouping, bool $arabic): array
+    {
+        $name = fn (array $row): string => trim((string) ($row['name'] ?? ''));
+
+        if ($rows === []) {
+            return [];
+        }
+
+        if ($grouping === EmailGrouping::ALL) {
+            return [['name' => count($rows) === 1 ? $name(reset($rows)) : ($arabic ? 'السادة/ أطراف الدعوى' : 'All parties'), 'rows' => $rows]];
+        }
+
+        if ($grouping === EmailGrouping::SEPARATE) {
+            return array_values(array_map(fn (array $row, int $i): array => ['name' => $name($row), 'rows' => [$i => $row]], $rows, array_keys($rows)));
+        }
+
+        $groups = [];
+        foreach ($rows as $i => $row) {
+            $key = filled($row['group'] ?? null) ? 'party-'.(int) $row['group'] : 'line-'.$i;
+            $groups[$key][$i] = $row;
+        }
+
+        return array_values(array_map(function (array $group) use ($name): array {
+            // Greeted as the party, when it's among them; else the first.
+            $party = collect($group)->first(fn (array $row) => filled($row['group'] ?? null) && (int) ($row['party_id'] ?? 0) === (int) $row['group']);
+
+            return ['name' => $name($party ?? reset($group)), 'rows' => $group];
+        }, $groups));
     }
 
     /**
@@ -200,8 +311,12 @@ class MinutesSender
         $emailed = [];
         $messaged = [];
 
+        $groupOf = fn (array $a): ?int => filled($a['represents'] ?? null)
+            ? ($mainOf[(int) $a['represents']] ?? (int) $a['represents'])
+            : ($mainOf[(int) ($a['party_id'] ?? 0)] ?? null);
+
         return $rows
-            ->map(function (array $a) use ($parties, &$emailed, &$messaged): array {
+            ->map(function (array $a) use ($parties, $groupOf, &$emailed, &$messaged): array {
                 $party = filled($a['party_id'] ?? null) ? $parties->get($a['party_id']) : null;
                 $emails = Addresses::without(Addresses::emails([$a['email'] ?? null, ...array_reverse(Addresses::emails($party?->email ?? []))]), $emailed);
                 $emailed = [...$emailed, ...$emails];
@@ -217,6 +332,8 @@ class MinutesSender
                 return [
                     'name' => trim(trim((string) ($a['title'] ?? '')).' '.trim((string) $a['name'])),
                     'party_id' => $party?->getKey(),
+                    // The main party it goes with, sent by party.
+                    'group' => $groupOf($a),
                     'emails' => $emails,
                     'phone' => $phone,
                     'by_email' => $emails !== [],

@@ -13,11 +13,12 @@ use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
 use App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager;
+use App\Filament\Mms\Resources\Matters\RelationManagers\ProgressRelationManager;
 use App\Helpers\FileUploadHelper;
+use App\Livewire\MatterOneDriveFiles;
 use App\Models\CalendarEvent;
 use App\Models\IncentiveAssistantLine;
 use App\Models\Matter;
-use App\Models\MatterOneDriveFolder;
 use App\Models\Type;
 use App\Services\MMS\Calendar\EventMatterLinker;
 use App\Services\MMS\IncentiveCalculatorService;
@@ -125,6 +126,16 @@ class MatterInfolist
                                     static::partiesSection(),
                                 ]),
                             ]),
+                        // Each step so far — letters, meetings, emails, reports …
+                        Tab::make(__('Progress'))
+                            ->icon('heroicon-o-queue-list')
+                            ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_PROGRESS_TAB))
+                            ->schema([
+                                Livewire::make(ProgressRelationManager::class, fn ($record) => [
+                                    'ownerRecord' => $record,
+                                    'pageClass' => ViewMatter::class,
+                                ])->key('matter-progress'),
+                            ]),
                         Tab::make(__('Sessions & Events'))
                             ->icon('heroicon-o-calendar-days')
                             ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_SESSIONS_TAB))
@@ -142,6 +153,8 @@ class MatterInfolist
                             ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_REQUESTS_TAB))
                             ->badge(fn ($record) => $record ? ($record->requests()->where('status', RequestStatus::PENDING->value)->count() ?: null) : null)
                             ->badgeColor('warning')
+                            // Side by side; one under the other on a narrow screen.
+                            ->columns(['default' => 1, 'lg' => 2])
                             ->schema([
                                 static::requestsSection(),
                                 static::notesSection(),
@@ -149,6 +162,7 @@ class MatterInfolist
                         Tab::make(__('Files'))
                             ->icon('heroicon-o-paper-clip')
                             ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_FILES_TAB))
+                            ->columns(['default' => 1, 'lg' => 2])
                             ->schema([
                                 static::attachmentsSection(),
                                 static::oneDriveSection(),
@@ -224,6 +238,16 @@ class MatterInfolist
                     ->dateTime('D d/m/Y g:i A')
                     ->placeholder('—')
                     ->color('primary'),
+                // The latest step of its progress.
+                TextEntry::make('progress_summary')
+                    ->label(__('Latest progress'))
+                    ->icon('heroicon-o-queue-list')
+                    ->state(function ($record): ?string {
+                        $step = $record?->progress()->latest('happened_at')->latest('id')->first();
+
+                        return $step ? $step->type->getLabel().(trim($step->title) !== $step->type->getLabel() ? ': '.$step->title : '').' — '.$step->happened_at->format('d/m/Y') : null;
+                    })
+                    ->placeholder('—'),
                 TextEntry::make('assistants_summary')
                     ->label(__('Assistants'))
                     ->icon('heroicon-o-user-group')
@@ -605,6 +629,23 @@ class MatterInfolist
                                     ->columnSpan(2),
                             ]),
                     ]),
+                // Added at the meetings' minutes.
+                RepeatableEntry::make('attendeesOnly')
+                    ->label(__('Meeting attendees'))
+                    ->columns(5)
+                    ->columnSpanFull()
+                    ->visible(fn ($record) => $record?->attendeesOnly()->exists())
+                    ->schema([
+                        TextEntry::make('party.name')->label(__('Name'))
+                            ->icon('heroicon-o-user')->columnSpan(3),
+                        TextEntry::make('party_contact')
+                            ->label(__('Contact'))
+                            ->state(fn ($record): ?string => $record?->party?->contactLine())
+                            ->placeholder('—')
+                            ->extraAttributes(['dir' => 'ltr', 'style' => 'text-align: start;'])
+                            ->copyable()
+                            ->columnSpan(2),
+                    ]),
             ]);
     }
 
@@ -807,24 +848,25 @@ class MatterInfolist
      * any missing or failed one again — folders already made stay as they
      * are.
      */
+    private static function visibleOneDriveFolders($record): Collection
+    {
+        return MatterOneDriveFolders::visibleTo($record, auth()->user());
+    }
+
+    private static function showsOneDrive($record): bool
+    {
+        return $record && (
+            static::visibleOneDriveFolders($record)->isNotEmpty()
+            || (MatterOneDriveFolders::enabled() && auth()->user()?->can('update', $record) && $record->assistantsOnly()->exists())
+        );
+    }
+
     private static function oneDriveSection(): Section
     {
-        $visible = function ($record): Collection {
-            $user = auth()->user();
-
-            return $record->oneDriveFolders()
-                ->with('party')
-                ->when(! ($user?->hasRole('super-admin') ?? false), fn ($q) => $q->where('party_id', $user?->party?->id ?? 0))
-                ->get();
-        };
-
         return Section::make(__('OneDrive'))
             ->icon('heroicon-o-cloud')
             ->collapsible()
-            ->visible(fn ($record) => $record && (
-                $visible($record)->isNotEmpty()
-                || (MatterOneDriveFolders::enabled() && auth()->user()?->can('update', $record) && $record->assistantsOnly()->exists())
-            ))
+            ->visible(fn ($record) => static::showsOneDrive($record))
             ->headerActions([
                 Action::make('createOneDriveFolders')
                     ->label(__('Create folders'))
@@ -833,7 +875,7 @@ class MatterInfolist
                     ->visible(fn ($record) => auth()->user()?->can('update', $record) && $record->assistantsOnly()->exists())
                     ->requiresConfirmation()
                     ->modalDescription(__('Makes the folder in each assistant\'s OneDrive where it is missing or failed. Folders already made are not changed.'))
-                    ->action(function ($record) {
+                    ->action(function ($record, $livewire) {
                         $queued = $record->assistantsOnly()->pluck('party_id')->unique()
                             ->map(fn ($partyId) => MatterOneDriveFolders::queue($record, (int) $partyId))
                             ->filter(fn ($folder) => ! $folder->isCreated())
@@ -843,37 +885,25 @@ class MatterInfolist
                             ->title($queued ? __(':count folder(s) queued — they appear here within a minute.', ['count' => $queued]) : __('Every assistant already has the folder.'))
                             ->success()
                             ->send();
+
+                        // The file manager shows them as they now are.
+                        $livewire->dispatch('onedrive-folders-changed');
                     }),
             ])
-            ->schema(fn ($record) => $record ? [
-                TextEntry::make('onedrive_folders')
-                    ->hiddenLabel()
-                    ->state(function () use ($record, $visible) {
-                        $rows = $visible($record);
-
-                        if ($rows->isEmpty()) {
-                            return __('No folders yet.');
-                        }
-
-                        return new HtmlString($rows->map(function (MatterOneDriveFolder $folder): string {
-                            $name = e($folder->party?->name ?? '—');
-                            $label = e($folder->folder_name);
-
-                            return match ($folder->status) {
-                                MatterOneDriveFolder::CREATED => "<div>{$name}: <a href=\"".e($folder->web_url).'" target="_blank" rel="noopener" style="text-decoration: underline;">'.$label.'</a></div>',
-                                MatterOneDriveFolder::FAILED => "<div>{$name}: <span style=\"color: rgb(220 38 38);\">".e(__('Failed')).' — '.e((string) $folder->error).'</span></div>',
-                                default => "<div>{$name}: <span style=\"opacity: .7;\">".e(__('Creating…')).' '.$label.'</span></div>',
-                            };
-                        })->implode(''));
-                    })
-                    ->html(),
-            ] : []);
+            // Its folders as a file manager — each assistant's, with how
+            // one not yet made is going.
+            ->schema([
+                Livewire::make(MatterOneDriveFiles::class, fn ($record) => ['matter' => $record])
+                    ->key('matter-onedrive-files'),
+            ]);
     }
 
     private static function attachmentsSection(): Section
     {
         return Section::make(__('Attachments'))
             ->icon('heroicon-o-paper-clip')
+            // Beside OneDrive; the whole width when it isn't shown.
+            ->columnSpan(fn ($record) => static::showsOneDrive($record) ? 1 : 'full')
             ->headerActions([static::addAttachmentsAction()])
             ->schema([
                 RepeatableEntry::make('attachments')

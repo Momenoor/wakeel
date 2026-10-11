@@ -21,6 +21,8 @@
         <env name="APP_ENV" value="testing"/>
         <env name="LICENSE_VERSION_FROM_GIT" value="false"/>
         <env name="APP_TIMEZONE" value="Asia/Muscat"/>
+        <!-- The tests read in English, whatever the local .env is set to. -->
+        <env name="APP_LOCALE" value="en" force="true"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>

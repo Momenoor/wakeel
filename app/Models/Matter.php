@@ -179,6 +179,40 @@ class Matter extends Model
     /**
      * @return HasMany<MatterParty, $this>
      */
+    /**
+     * Its emails, each way: sent from it, and the replies collected.
+     *
+     * @return HasMany<MatterEmail, $this>
+     */
+    public function emails(): HasMany
+    {
+        return $this->hasMany(MatterEmail::class);
+    }
+
+    /**
+     * The steps of its progress — letters, meetings, emails, reports …
+     *
+     * @return HasMany<MatterProgress, $this>
+     */
+    public function progress(): HasMany
+    {
+        return $this->hasMany(MatterProgress::class);
+    }
+
+    /**
+     * Those added at a meeting's minutes — not parties of the matter, but
+     * kept with it (MinutesService::registerAttendees).
+     *
+     * @return HasMany<MatterParty, $this>
+     */
+    public function attendeesOnly(): HasMany
+    {
+        return $this->hasMany(MatterParty::class, 'matter_id')->where('role', 'attendee');
+    }
+
+    /**
+     * @return HasMany<MatterParty, $this>
+     */
     public function assistantsOnly(): HasMany
     {
         return $this->hasMany(MatterParty::class, 'matter_id')

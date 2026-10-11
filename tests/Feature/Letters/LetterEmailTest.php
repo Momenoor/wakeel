@@ -18,6 +18,7 @@ use App\Models\User;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterMailer;
 use App\Services\MMS\SentFolder;
+use App\Support\EmailGrouping;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -139,6 +140,35 @@ class LetterEmailTest extends TestCase
         $this->assertStringContainsString('السادة/ مكتب المزروعي', $this->sent[1]->getHtmlBody());
     }
 
+    public function test_a_letter_goes_to_each_person_by_party_or_to_all(): void
+    {
+        $cover = EmailTemplate::create(['name' => 'Cover', 'subject' => '{{reference}}', 'body' => '<p>إلى {{recipient.name}}</p>']);
+        $letter = app(LetterIssuer::class)->issue($this->letter->template, $this->letter->matter, [
+            ['name' => 'منى أحمد', 'role' => 'المدعي', 'emails' => ['mona@example.com'],
+                'representatives' => [['name' => 'مكتب المزروعي', 'emails' => ['office@law.ae']]]],
+            ['name' => 'سعيد', 'role' => 'المدعى عليه', 'emails' => ['saeed@example.com']],
+        ], []);
+        $to = fn (int $i): array => array_map(fn ($a) => $a->getAddress(), $this->sent[$i]->getTo());
+
+        // Each person: the party, then its representative on their own, greeted by name.
+        $result = app(LetterMailer::class)->send($letter, 'iflas', LetterMailer::ATTACHMENT, $cover, ['pdf'], separate: EmailGrouping::SEPARATE);
+        $this->assertSame([['mona@example.com'], ['office@law.ae'], ['saeed@example.com']], [$to(0), $to(1), $to(2)]);
+        $this->assertStringContainsString('إلى مكتب المزروعي', $this->sent[1]->getHtmlBody());
+        $this->assertSame(2, $result['sent']);
+
+        // By party: the party with its representative.
+        $this->sent = [];
+        app(LetterMailer::class)->send($letter, 'iflas', LetterMailer::ATTACHMENT, $cover, ['pdf'], separate: EmailGrouping::BY_PARTY);
+        $this->assertSame([['mona@example.com', 'office@law.ae'], ['saeed@example.com']], [$to(0), $to(1)]);
+        $this->assertStringContainsString('إلى منى أحمد', $this->sent[0]->getHtmlBody());
+
+        // All: one email.
+        $this->sent = [];
+        app(LetterMailer::class)->send($letter, 'iflas', LetterMailer::ATTACHMENT, $cover, ['pdf'], separate: EmailGrouping::ALL);
+        $this->assertCount(1, $this->sent);
+        $this->assertSame(['mona@example.com', 'office@law.ae', 'saeed@example.com'], $to(0));
+    }
+
     public function test_an_inbox_shared_by_recipients_gets_the_letter_once(): void
     {
         // The party and its lawyer's office share an address (spelt differently);
@@ -187,7 +217,7 @@ class LetterEmailTest extends TestCase
                 'mode' => LetterMailer::ATTACHMENT,
                 'formats' => ['pdf'],
                 'recipients' => [$this->letter->recipients->first()->id],
-                'separate' => false,
+                'grouping' => EmailGrouping::ALL,
             ])
             ->assertHasNoTableActionErrors();
 
@@ -291,7 +321,7 @@ class LetterEmailTest extends TestCase
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->letter->matter, 'pageClass' => ViewMatter::class])
             ->mountTableAction('email', $this->letter)
-            ->setTableActionData(['sender' => 'iflas', 'email_template_id' => $template->id, 'recipients' => [$mona->id], 'separate' => true])
+            ->setTableActionData(['sender' => 'iflas', 'email_template_id' => $template->id, 'recipients' => [$mona->id], 'grouping' => EmailGrouping::BY_PARTY])
             // Starts from the template, the letter's details filled in; each
             // recipient's name still to come.
             ->assertTableActionDataSet([
@@ -343,7 +373,8 @@ class LetterEmailTest extends TestCase
         $attachment = $this->letter->matter->attachments()->sole();
         $this->assertSame('correspondence', $attachment->type);
         $this->assertSame('pdf', $attachment->extension);
-        $this->assertStringContainsString('JPA/2026/986/1', $attachment->name);
+        // Named as in OneDrive: the party, the reference (its "/" no folder).
+        $this->assertStringContainsString('JPA 2026 986 1', $attachment->name);
         $this->assertStringContainsString('منى أحمد', $attachment->name);
 
         $pdf = Storage::disk('public')->get($attachment->path);
@@ -353,6 +384,23 @@ class LetterEmailTest extends TestCase
         // Each email sent separately: one each.
         app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::BODY, separate: true);
         $this->assertSame(3, $this->letter->matter->attachments()->count());
+    }
+
+    public function test_the_covering_emails_own_cc_is_added_and_swapped_with_it(): void
+    {
+        $legal = EmailTemplate::create(['name' => 'Legal', 'subject' => '{{reference}}', 'body' => '<p>…</p>', 'is_default' => true, 'cc' => ['legal@jpa.ae']]);
+        $finance = EmailTemplate::create(['name' => 'Finance', 'subject' => '{{reference}}', 'body' => '<p>…</p>', 'cc' => ['finance@jpa.ae']]);
+
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->letter->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('email', $this->letter)
+            ->assertSet('mountedActions.0.data.email_template_id', $legal->id)
+            ->assertSet('mountedActions.0.data.cc', ['legal@jpa.ae'])
+            // One typed by hand stays; the template's own follows the template.
+            ->set('mountedActions.0.data.cc', ['legal@jpa.ae', 'boss@jpa.ae'])
+            ->set('mountedActions.0.data.email_template_id', $finance->id)
+            ->assertSet('mountedActions.0.data.cc', ['boss@jpa.ae', 'finance@jpa.ae'])
+            ->set('mountedActions.0.data.email_template_id', null)
+            ->assertSet('mountedActions.0.data.cc', ['boss@jpa.ae']);
     }
 
     public function test_the_email_templates_screen(): void

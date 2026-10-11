@@ -18,6 +18,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Components\Wizard\Step;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Recording a meeting (the Record the meeting page), in three steps:
@@ -44,7 +45,8 @@ class MinutesRecordForm
         return [
             'meeting_at' => $minutes->meeting_at?->format('Y-m-d H:i:s'),
             'meeting_link' => $minutes->meeting_link,
-            'attendees' => $minutes->attendees ?: MinutesService::attendeeCandidates($minutes),
+            // Not yet recorded: as the previous meeting, else the parties.
+            'attendees' => $minutes->attendees ?: MinutesService::startingAttendees($minutes),
             'items' => $minutes->items ?? [],
             'inputs' => self::inputDefaults($minutes),
             'opening' => MinutesService::opening($minutes),
@@ -111,7 +113,8 @@ class MinutesRecordForm
                     ->addActionLabel(__('Add attendee'))
                     ->reorderable()
                     ->schema([
-                        Toggle::make('present')->label(__('Attended'))->inline(false)->columnSpan(1),
+                        // A line added at the meeting: someone there.
+                        Toggle::make('present')->label(__('Attended'))->default(true)->inline(false)->columnSpan(1),
                         Select::make('title')
                             ->label(__('Title'))
                             ->options(['السادة/' => 'السادة/', 'الأستاذ/' => 'الأستاذ/', 'الأستاذة/' => 'الأستاذة/', 'السيد/' => 'السيد/', 'السيدة/' => 'السيدة/', 'Messrs.' => 'Messrs.', 'Mr.' => 'Mr.', 'Ms.' => 'Ms.'])
@@ -119,19 +122,22 @@ class MinutesRecordForm
                             ->columnSpan(2),
                         // Linked to a party in the system: their name, ID,
                         // latest phone and email filled in.
+                        // A line of one of the matter's parties: its parties to pick
+                        // from. A line added: every party, of any role — found by
+                        // name, phone, email or role.
                         Select::make('party_id')
                             ->label(__('From the parties'))
                             ->placeholder(__('Not in the system'))
                             ->searchable()
-                            ->getSearchResultsUsing(fn (string $search): array => Party::query()
-                                ->where('name', 'like', '%'.$search.'%')
-                                ->orderBy('name')
-                                ->limit(20)
-                                ->pluck('name', 'id')
-                                ->all())
-                            ->getOptionLabelUsing(fn ($value): ?string => Party::query()->whereKey($value)->value('name'))
+                            ->options(fn (Get $get): array => self::partyOptions(self::isMatterLine($minutes, $get('party_id'))
+                                ? Party::query()->whereIn('id', self::matterPartyIds($minutes))
+                                : Party::query()))
+                            ->getSearchResultsUsing(fn (string $search, Get $get): array => self::partyOptions(self::isMatterLine($minutes, $get('party_id'))
+                                ? self::searchParties($search)->whereIn('id', self::matterPartyIds($minutes))
+                                : self::searchParties($search)))
+                            ->getOptionLabelUsing(fn ($value): ?string => ($party = Party::with('parent')->find($value)) ? self::partyLabel($party) : null)
                             ->live()
-                            ->afterStateUpdated(function ($state, $old, Get $get, Set $set) use ($arabic): void {
+                            ->afterStateUpdated(function ($state, $old, Get $get, Set $set) use ($arabic, $minutes): void {
                                 // Only a party newly picked fills the line in — not one already
                                 // on it (its name there), whose phone may have just been typed.
                                 $party = filled($state) && (string) $state !== (string) $old ? Party::find($state) : null;
@@ -152,22 +158,39 @@ class MinutesRecordForm
                                     $set('represents', null);
                                     $set('as', null);
                                 }
+
+                                // One who belongs to a party of the matter stands for it.
+                                if (blank($get('represents')) && filled($party->parent_id)
+                                    && array_key_exists((int) $party->parent_id, MinutesService::mainParties($minutes))) {
+                                    $as = $get('as');
+                                    $set('represents', (int) $party->parent_id);
+                                    $set('as', $as ?: 'agent');
+                                    self::followCapacity($minutes, $get, $set, null, $as);
+                                }
                             })
                             ->columnSpan(4),
                         TextInput::make('name')->label(__('Name'))->required()->columnSpan(5),
                         // Whom they stand for, and how: the capacity follows
-                        // ("محامٍ عن المدعي"), still editable.
+                        // ("وكيلاً عن (السادة/ … - المدعي)"), still editable.
                         Select::make('represents')
                             ->label(__('Represents'))
                             // Not themselves: one can't stand for oneself.
                             ->options(fn (Get $get): array => array_diff_key(MinutesService::mainParties($minutes), filled($get('party_id')) ? [(int) $get('party_id') => true] : []))
                             ->placeholder(__('Themselves'))
                             ->live()
-                            ->afterStateUpdated(fn ($old, Get $get, Set $set) => self::followCapacity($minutes, $get, $set, $old, $get('as')))
+                            ->afterStateUpdated(function ($old, Get $get, Set $set) use ($minutes): void {
+                                $as = $get('as');
+                                // Standing for someone: their agent, unless said otherwise.
+                                if (filled($get('represents')) && blank($as)) {
+                                    $set('as', 'agent');
+                                }
+
+                                self::followCapacity($minutes, $get, $set, $old, $as);
+                            })
                             ->columnSpan(4),
                         Select::make('as')
                             ->label(__('As'))
-                            ->options(MinutesService::attendeeRoles())
+                            ->options(fn (Get $get): array => MinutesService::attendeeRoles($get('as')))
                             ->placeholder('—')
                             ->live()
                             ->afterStateUpdated(fn ($old, Get $get, Set $set) => self::followCapacity($minutes, $get, $set, $get('represents'), $old))
@@ -178,6 +201,75 @@ class MinutesRecordForm
                         TextInput::make('email')->label(__('Email'))->email()->extraInputAttributes(['dir' => 'ltr'])->columnSpan(5),
                     ]),
             ]);
+    }
+
+    /**
+     * The matter's parties, representatives and experts — not those added
+     * at its meetings.
+     *
+     * @return list<int>
+     */
+    private static function matterPartyIds(MatterMinutes $minutes): array
+    {
+        // Once a request: asked of each line.
+        return once(fn (): array => $minutes->matter?->matterParties()
+            ->where(fn ($q) => $q->whereNull('role')->orWhere('role', '!=', 'attendee'))
+            ->pluck('party_id')->map(fn ($id) => (int) $id)->unique()->values()->all() ?? []);
+    }
+
+    /** A line of one of the matter's parties (else one added at the meeting). */
+    private static function isMatterLine(MatterMinutes $minutes, mixed $partyId): bool
+    {
+        return filled($partyId) && in_array((int) $partyId, self::matterPartyIds($minutes), true);
+    }
+
+    /**
+     * Parties by name, legal name, phone or email — or holding a role (or an
+     * expert's type) of that name.
+     *
+     * @return Builder<Party>
+     */
+    public static function searchParties(string $search): Builder
+    {
+        $search = trim($search);
+        $like = '%'.$search.'%';
+        $matches = fn (array $labels): array => array_keys(array_filter($labels, fn (string $label): bool => $search !== '' && mb_stripos($label, $search) !== false));
+
+        return Party::query()->where(function (Builder $q) use ($like, $matches): void {
+            $q->where('name', 'like', $like)
+                ->orWhere('legal_name', 'like', $like)
+                ->orWhere('phone', 'like', $like)
+                ->orWhere('email', 'like', $like);
+
+            foreach ($matches(Party::roleOptions()) as $role) {
+                $q->orWhere(fn (Builder $r) => $r->withRole($role));
+            }
+
+            foreach ($matches(Party::expertTypeOptions()) as $type) {
+                $q->orWhere(fn (Builder $r) => $r->withRole('expert', $type));
+            }
+        });
+    }
+
+    /**
+     * @param  Builder<Party>  $query
+     * @return array<int, string>
+     */
+    private static function partyOptions(Builder $query): array
+    {
+        return $query->with('parent')->orderBy('name')->limit(50)->get()
+            ->mapWithKeys(fn (Party $party): array => [$party->getKey() => self::partyLabel($party)])
+            ->all();
+    }
+
+    /** "سالم الموظف — موظف (شركة المهاد)". */
+    public static function partyLabel(Party $party): string
+    {
+        $role = $party->roleLabel();
+
+        return trim($party->name
+            .($role !== '' ? ' — '.$role : '')
+            .($party->parent ? ' ('.$party->parent->name.')' : ''));
     }
 
     private static function questions(): Section
@@ -212,7 +304,7 @@ class MinutesRecordForm
 
     /**
      * Whom an attendee stands for, or how, changed: their capacity follows
-     * ("موظف عن المدعي") — unless it was written by hand (it is then neither
+     * ("مفوضاً عن (…)") — unless it was written by hand (it is then neither
      * empty nor what the earlier choice made).
      */
     private static function followCapacity(MatterMinutes $minutes, Get $get, Set $set, mixed $oldRepresents, ?string $oldAs): void

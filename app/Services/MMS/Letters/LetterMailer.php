@@ -5,19 +5,21 @@ namespace App\Services\MMS\Letters;
 use App\Enums\LetterStatus;
 use App\Mail\LetterEmail;
 use App\Models\EmailTemplate;
+use App\Models\MatterEmail;
 use App\Models\MatterLetter;
 use App\Models\MatterLetterRecipient;
 use App\Services\MMS\BulkMailPlaceholders;
-use App\Services\MMS\EmailPdf;
+use App\Services\MMS\MatterProgressRecorder;
 use App\Services\MMS\SenderMailer;
+use App\Services\MMS\SentEmailArchive;
 use App\Services\MMS\SentFolder;
 use App\Support\Addresses;
+use App\Support\EmailGrouping;
 use App\Support\Honorific;
 use App\Support\RichHtml;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 use function Illuminate\Support\defer;
@@ -29,8 +31,9 @@ use function Illuminate\Support\defer;
  *    built-in note) with the letter attached as PDF and/or Word;
  *  - as the body: the letter itself, reference and date on top.
  *
- * To everyone in one email, or a separate email to each recipient (so
- * {{recipient.name}} greets each by name). Each recipient is marked sent
+ * To everyone in one email, one to each recipient with their
+ * representatives, or one to each person (EmailGrouping) — so
+ * {{recipient.name}} greets each by name. Each recipient is marked sent
  * or failed, with the reason; the letter is marked Sent when any went out.
  */
 class LetterMailer
@@ -43,6 +46,7 @@ class LetterMailer
      * @param  list<int>  $recipientIds  MatterLetterRecipient ids
      * @param  list<string>  $formats  'pdf' and/or 'docx'
      * @param  list<string>  $cc
+     * @param  string|bool  $separate  EmailGrouping — one each, by party, or one for all (true: by party; false: all)
      * @param  ?string  $subject  this send's own subject, instead of the template's
      * @param  ?string  $body  this send's own covering email, instead of the template's
      * @param  list<array{path: string, name: string}>  $attachments  more files to send with the letter, either way it goes
@@ -56,7 +60,7 @@ class LetterMailer
         array $formats = ['pdf'],
         array $recipientIds = [],
         array $cc = [],
-        bool $separate = false,
+        string|bool $separate = false,
         ?string $subject = null,
         ?string $body = null,
         array $attachments = [],
@@ -79,36 +83,42 @@ class LetterMailer
             ...($mode === self::ATTACHMENT ? $this->files($letter, $composer, $formats) : []),
             ...self::attachedFiles($attachments),
         ];
-        $groups = $separate ? $withEmail->map(fn ($r) => collect([$r])) : collect([$withEmail]);
+        $grouping = EmailGrouping::from($separate);
         $cc = Addresses::emails($cc);
         // Every inbox once: a party and its representative (or two parties)
         // sharing an address get one email, not one each.
         $reached = [];
+        // Each recipient sent if any of their emails went (separately, a
+        // party's and each representative's are their own).
+        $sentIds = [];
+        $failedIds = [];
+        $withoutRecipients = ['sent' => 0, 'failed' => 0];
+        // Whom it reached, for the matter's progress.
+        $names = [];
 
-        foreach ($groups as $group) {
-            $to = Addresses::without(Addresses::emails($group->flatMap(fn (MatterLetterRecipient $r) => $this->emails($r))), $reached);
+        foreach (self::emailGroups($withEmail, $grouping) as $unit) {
+            $group = $unit['recipients'];
+            $to = Addresses::without($unit['emails'], $reached);
 
             if ($to === [] && $reached !== []) {
                 // All of theirs had it already, in an earlier email.
-                $group->each(fn (MatterLetterRecipient $r) => $r->update(['delivery_status' => LetterStatus::SENT, 'delivered_at' => now(), 'failure_reason' => null]));
-                $result['sent'] += max(1, $group->count());
+                $sentIds = [...$sentIds, ...$group->pluck('id')->all()];
 
                 continue;
             }
 
             $reached = [...$reached, ...$to];
             $groupCc = Addresses::without($cc, $to);
-            $email = $this->email($composer, $mode, $template, $separate ? $group->first() : null, $files, $subject, $body);
+            $email = $this->email($composer, $mode, $template, $unit['greet'], $files, $subject, $body, $unit['name']);
 
             try {
                 $sent = SenderMailer::using($sender, fn () => Mail::to($to ?: $groupCc)->cc($to ? $groupCc : [])->send($email));
+                // Remembered, for its replies.
+                MatterEmail::recordSent($letter->matter_id, $letter, $senderKey, $sent?->getMessageId(), $email->emailSubject, [...$to, ...$groupCc], auth()->id());
 
-                $group->each(fn (MatterLetterRecipient $r) => $r->update([
-                    'delivery_status' => LetterStatus::SENT,
-                    'delivered_at' => now(),
-                    'failure_reason' => null,
-                ]));
-                $result['sent'] += max(1, $group->count());
+                $sentIds = [...$sentIds, ...$group->pluck('id')->all()];
+                $withoutRecipients['sent'] += $group->isEmpty() ? 1 : 0;
+                $names = [...$names, ...($unit['name'] !== null ? [$unit['name']] : $group->pluck('name')->all())];
 
                 $this->copyToSentFolder($senderKey, $sent?->toString());
 
@@ -119,14 +129,25 @@ class LetterMailer
                 $userId = auth()->id();
                 defer(fn () => $this->keepOnMatter($letter, $email, $sender, $group, $keepTo, $keepCc, $userId));
             } catch (\Throwable $e) {
-                $group->each(fn (MatterLetterRecipient $r) => $r->update([
-                    'delivery_status' => LetterStatus::FAILED,
-                    'failure_reason' => Str::limit($e->getMessage(), 1000),
-                ]));
-                $result['failed'] += max(1, $group->count());
+                foreach ($group as $recipient) {
+                    $failedIds[$recipient->id] = Str::limit($e->getMessage(), 1000);
+                }
+                $withoutRecipients['failed'] += $group->isEmpty() ? 1 : 0;
                 $result['errors'][] = $e->getMessage();
             }
         }
+
+        $sentIds = array_values(array_unique($sentIds));
+        foreach ($withEmail as $recipient) {
+            if (in_array($recipient->id, $sentIds, true)) {
+                $recipient->update(['delivery_status' => LetterStatus::SENT, 'delivered_at' => now(), 'failure_reason' => null]);
+            } elseif (isset($failedIds[$recipient->id])) {
+                $recipient->update(['delivery_status' => LetterStatus::FAILED, 'failure_reason' => $failedIds[$recipient->id]]);
+            }
+        }
+
+        $result['sent'] = count($sentIds) + $withoutRecipients['sent'];
+        $result['failed'] = count(array_diff(array_keys($failedIds), $sentIds)) + $withoutRecipients['failed'];
 
         if ($result['sent'] > 0) {
             $letter->update([
@@ -134,6 +155,8 @@ class LetterMailer
                 'sent_at' => now(),
                 'sender_key' => $senderKey,
             ]);
+
+            MatterProgressRecorder::letterSent($letter, $names ?: $cc, auth()->id());
         }
 
         return $result;
@@ -152,43 +175,8 @@ class LetterMailer
      */
     private function keepOnMatter(MatterLetter $letter, LetterEmail $email, array $sender, Collection $group, array $to, array $cc, ?int $userId): void
     {
-        if (! $letter->matter_id) {
-            return;
-        }
-
-        try {
-            // Its images from their files (in the email, they're embedded).
-            $html = $email->letterHtml;
-            foreach ($email->images as $token => $path) {
-                $html = str_replace($token, $path, $html);
-            }
-
-            $names = $group->pluck('name')->filter()->implode('، ');
-            $pdf = EmailPdf::render(
-                $email->emailSubject,
-                $html,
-                ['name' => (string) ($sender['name'] ?? ''), 'address' => (string) ($sender['address'] ?? '')],
-                $names,
-                $to,
-                $cc,
-                [],
-                array_column($email->files, 'name'),
-                now(),
-            );
-
-            $path = 'attachments/letter-emails/'.$letter->getKey().'/'.now()->format('Ymd-His').'-'.Str::random(6).'.pdf';
-            Storage::disk('public')->put($path, $pdf);
-
-            $letter->matter->attachments()->create([
-                'user_id' => $userId,
-                'type' => 'correspondence',
-                'path' => $path,
-                'name' => Str::limit(trim(__('Email').' — '.$letter->reference.($names !== '' ? ' — '.$names : '')), 200, '').'.pdf',
-                'size' => strlen($pdf),
-                'extension' => 'pdf',
-            ]);
-        } catch (\Throwable $e) {
-            Log::warning('Letter email not kept on its matter', ['letter' => $letter->getKey(), 'error' => $e->getMessage()]);
+        if ($letter->matter) {
+            app(SentEmailArchive::class)->keepEmail($letter->matter, $email, $sender, $group->pluck('name')->filter()->implode('، '), $to, $cc, (string) $letter->reference, $userId);
         }
     }
 
@@ -230,9 +218,9 @@ class LetterMailer
      *
      * @return array{subject: string, html: string, rtl: bool}
      */
-    public function preview(MatterLetter $letter, string $mode, ?EmailTemplate $template, ?MatterLetterRecipient $recipient, ?string $subject = null, ?string $body = null): array
+    public function preview(MatterLetter $letter, string $mode, ?EmailTemplate $template, ?MatterLetterRecipient $recipient, ?string $subject = null, ?string $body = null, ?string $name = null): array
     {
-        $email = $this->email(LetterIssuer::composerFor($letter), $mode, $template, $recipient, [], $subject, $body);
+        $email = $this->email(LetterIssuer::composerFor($letter), $mode, $template, $recipient, [], $subject, $body, $name);
 
         $html = $email->letterHtml;
         foreach ($email->images as $token => $path) {
@@ -243,12 +231,55 @@ class LetterMailer
     }
 
     /**
+     * The emails to send: one for all (no one greeted by name); one a
+     * recipient with their representatives; or one each — the recipient,
+     * then each representative on their own.
+     *
+     * @param  Collection<int, MatterLetterRecipient>  $recipients
+     * @return list<array{recipients: Collection<int, MatterLetterRecipient>, emails: list<string>, greet: ?MatterLetterRecipient, name: ?string}>
+     */
+    public static function emailGroups(Collection $recipients, string $grouping): array
+    {
+        if ($grouping === EmailGrouping::ALL || $recipients->isEmpty()) {
+            return [[
+                'recipients' => $recipients->values(),
+                'emails' => Addresses::emails($recipients->flatMap(fn (MatterLetterRecipient $r) => $r->allEmails())->all()),
+                'greet' => null,
+                'name' => null,
+            ]];
+        }
+
+        $units = [];
+        foreach ($recipients as $recipient) {
+            if ($grouping === EmailGrouping::BY_PARTY) {
+                $units[] = ['recipients' => collect([$recipient]), 'emails' => $recipient->allEmails(), 'greet' => $recipient, 'name' => null];
+
+                continue;
+            }
+
+            $own = Addresses::emails($recipient->emails ?: [$recipient->email]);
+            if ($own !== []) {
+                $units[] = ['recipients' => collect([$recipient]), 'emails' => $own, 'greet' => $recipient, 'name' => null];
+            }
+
+            foreach ((array) ($recipient->representatives ?? []) as $representative) {
+                $emails = Addresses::emails((array) ($representative['emails'] ?? []));
+                if ($emails !== []) {
+                    $units[] = ['recipients' => collect([$recipient]), 'emails' => $emails, 'greet' => $recipient, 'name' => trim((string) ($representative['name'] ?? '')) ?: null];
+                }
+            }
+        }
+
+        return $units;
+    }
+
+    /**
      * Files added to this one send, as attachments.
      *
      * @param  list<array{path: string, name: string}>  $attachments
      * @return list<array{name: string, data: string, mime: string}>
      */
-    private static function attachedFiles(array $attachments): array
+    public static function attachedFiles(array $attachments): array
     {
         return array_values(array_filter(array_map(
             fn (array $file): ?array => is_file($file['path'])
@@ -269,12 +300,13 @@ class LetterMailer
     /**
      * @param  list<array{name: string, data: string, mime: string}>  $files
      */
-    private function email(LetterComposer $composer, string $mode, ?EmailTemplate $template, ?MatterLetterRecipient $recipient, array $files, ?string $subjectOverride = null, ?string $bodyOverride = null): LetterEmail
+    private function email(LetterComposer $composer, string $mode, ?EmailTemplate $template, ?MatterLetterRecipient $recipient, array $files, ?string $subjectOverride = null, ?string $bodyOverride = null, ?string $name = null): LetterEmail
     {
         $values = [
             ...$composer->values(),
-            ...Honorific::values((string) ($recipient?->name ?? ''), $composer->isArabic()),
-            'recipient.role' => (string) ($recipient?->role ?? ''),
+            // A representative's own email: greeted by their name.
+            ...Honorific::values((string) ($name ?? $recipient?->name ?? ''), $composer->isArabic()),
+            'recipient.role' => $name !== null ? '' : (string) ($recipient?->role ?? ''),
         ];
 
         if ($mode === self::BODY) {

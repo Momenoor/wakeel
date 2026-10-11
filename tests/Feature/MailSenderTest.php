@@ -15,7 +15,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Mail;
 use Livewire\Livewire;
+use Microsoft\Graph\Generated\Models\ODataErrors\MainError;
+use Microsoft\Graph\Generated\Models\ODataErrors\ODataError;
 use ReflectionProperty;
+use RuntimeException;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -108,6 +111,33 @@ class MailSenderTest extends TestCase
 
         $this->assertNotSame('p@ss$word', DB::table('mail_senders')->value('password'));
         $this->assertSame('p@ss$word', SenderMailer::sender('cpanel')['password']);
+    }
+
+    public function test_a_failed_send_says_why_and_what_to_set_up_when_microsoft_refuses(): void
+    {
+        // As the Microsoft 365 mailer throws it: its reason a level down.
+        $refusal = new ODataError;
+        $refusal->setResponseStatusCode(403);
+        $error = new MainError;
+        $error->setCode('ErrorAccessDenied');
+        $error->setMessage('Access is denied. Check credentials and try again.');
+        $refusal->setError($error);
+        $failure = new RuntimeException('Failed to send email: ', 0, $refusal);
+
+        $sender = ['driver' => MailSender::MICROSOFT, 'address' => 'info@jpaemirates.com'];
+
+        try {
+            SenderMailer::using($sender, fn () => throw $failure);
+            $this->fail('A failed send must not pass.');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('Mail.Send', $e->getMessage());
+            $this->assertStringContainsString('info@jpaemirates.com', $e->getMessage());
+            $this->assertStringContainsString('ErrorAccessDenied: Access is denied.', $e->getMessage());
+            $this->assertSame($failure, $e->getPrevious());
+        }
+
+        // Any other: as it came.
+        $this->assertSame('Connection refused', SenderMailer::reason(new RuntimeException('Connection refused')));
     }
 
     public function test_the_screen_adds_and_tests_a_sender(): void

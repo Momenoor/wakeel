@@ -12,6 +12,6 @@ class ManageEmailTemplates extends ManageRecords
 
     protected function getHeaderActions(): array
     {
-        return [CreateAction::make()->modalWidth('4xl')];
+        return [CreateAction::make()->modalWidth('6xl')];
     }
 }

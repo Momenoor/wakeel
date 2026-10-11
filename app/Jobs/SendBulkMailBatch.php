@@ -9,8 +9,11 @@ use App\Mail\BulkMailMessage;
 use App\Models\BulkMailCampaign;
 use App\Models\BulkMailLog;
 use App\Models\BulkMailRecipient;
+use App\Models\MatterEmail;
 use App\Services\MMS\BulkMailService;
+use App\Services\MMS\MatterProgressRecorder;
 use App\Services\MMS\SenderMailer;
+use App\Services\MMS\SentEmailArchive;
 use App\Services\MMS\SentFolder;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -19,6 +22,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 
 class SendBulkMailBatch implements ShouldQueue
 {
@@ -85,7 +89,12 @@ class SendBulkMailBatch implements ShouldQueue
                     'sent_at' => now(),
                     'message_id' => $sent?->getMessageId(),
                 ]);
+                // A matter's email: remembered, for its replies.
+                MatterEmail::recordSent($campaign->matter_id, $campaign, (string) $campaign->from_sender_key, $sent?->getMessageId(),
+                    $campaign->renderSubject($recipient), [...(array) $recipient->email, ...($campaign->cc_emails ?? []), ...($recipient->cc_emails ?? [])], $campaign->created_by);
                 $campaign->increment('sent_count');
+                // An email to a matter's parties: a step in its progress.
+                MatterProgressRecorder::emailSent($campaign);
             } catch (\Exception $e) {
                 // Log the failure
                 Log::error("Bulk mail batch stopped. Failed for recipient {$email}: ".$e->getMessage());
@@ -172,6 +181,19 @@ class SendBulkMailBatch implements ShouldQueue
             $pdfPath = app(BulkMailService::class)->generate($campaign, $recipient);
             $recipient->update(['pdf_path' => $pdfPath]);
             $result['pdf_path'] = $pdfPath;
+
+            // An email of a matter: in its OneDrive too (kept with the
+            // campaign already, not added to the matter's attachments).
+            if ($campaign->matter) {
+                app(SentEmailArchive::class)->keep(
+                    $campaign->matter,
+                    (string) Storage::disk(BulkMailService::DISK)->get($pdfPath),
+                    (string) $recipient->name,
+                    $campaign->renderSubject($recipient),
+                    $campaign->created_by,
+                    asAttachment: false,
+                );
+            }
         } catch (\Throwable $e) {
             Log::warning("Bulk mail {$recipient->id} was sent but its PDF failed: ".$e->getMessage());
             $result['pdf_error'] = $e->getMessage();

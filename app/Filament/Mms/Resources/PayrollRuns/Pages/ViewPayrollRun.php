@@ -288,7 +288,7 @@ class ViewPayrollRun extends ViewRecord
             ]))
             ->modalSubmitAction(false)
             ->modalCancelActionLabel(__('Close'))
-            ->modalWidth('4xl');
+            ->modalWidth('6xl');
     }
 
     /**

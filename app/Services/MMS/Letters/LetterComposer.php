@@ -89,7 +89,8 @@ class LetterComposer
         $candidates = [];
         foreach ($top as $mp) {
             $label = self::typeLabel($mp->type, $arabic, $matter->type);
-            $representatives = $rows->filter(fn (MatterParty $rep) => (int) $rep->parent_id === (int) $mp->id);
+            // An attendee kept under the party they attended for is no representative.
+            $representatives = $rows->filter(fn (MatterParty $rep) => (int) $rep->parent_id === (int) $mp->id && $rep->role !== 'attendee');
 
             $candidates[$mp->id] = [
                 ...self::candidate($mp, $label),

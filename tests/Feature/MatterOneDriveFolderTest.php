@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Filament\Mms\Pages\OneDriveSettings;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Jobs\CreateMatterOneDriveFolder;
+use App\Livewire\MatterOneDriveFiles;
 use App\Models\Court;
 use App\Models\Matter;
 use App\Models\MatterOneDriveFolder;
@@ -250,16 +251,14 @@ class MatterOneDriveFolderTest extends TestCase
         $this->assign($matter, $nahla);
 
         $this->actingAs($this->superAdmin());
-        $html = Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])->html();
-        $this->assertStringContainsString('Amr:', $html);
-        $this->assertStringContainsString('Nahla:', $html);
+        Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])->assertSeeLivewire(MatterOneDriveFiles::class);
+        // The OneDrive section's file manager: each assistant's folder.
+        Livewire::test(MatterOneDriveFiles::class, ['matter' => $matter])->assertSee('Amr')->assertSee('Nahla');
 
         $user = User::factory()->create();
         $amr->update(['user_id' => $user->id]);
         $this->actingAs($user->fresh());
-        $html = Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])->html();
-        $this->assertStringContainsString('Amr:', $html);
-        $this->assertStringNotContainsString('Nahla:', $html);
+        Livewire::test(MatterOneDriveFiles::class, ['matter' => $matter])->assertSee('Amr')->assertDontSee('Nahla');
     }
 
     public function test_the_calendar_app_is_used_when_set_up_otherwise_the_mail_app(): void

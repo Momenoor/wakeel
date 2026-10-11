@@ -135,6 +135,11 @@ class Party extends Model
             'employee' => __('Employee'),
             'tenant' => __('Tenant'),
             'owner' => __('Owner'),
+            // Added at a meeting's minutes (MinutesService::registerAttendees).
+            'attendee' => __('Attendee'),
+            // Written to from a matter — police, central bank … — with
+            // letter templates of their own (LetterTemplate::entities()).
+            'external' => __('External entity'),
         ];
     }
 
@@ -178,6 +183,26 @@ class Party extends Model
         $query->whereRaw($sql, $bindings);
     }
 
+    /**
+     * Its roles as read: "Representative، Attendee" (an expert's type for
+     * the expert).
+     */
+    public function roleLabel(): string
+    {
+        $role = (array) ($this->role ?? []);
+        $types = self::expertTypeOptions();
+
+        return collect((array) ($role['role'] ?? []))
+            ->map(fn (string $r): string => $r === 'expert' && filled($role['type'] ?? null)
+                ? collect((array) $role['type'])->map(fn (string $t): string => $types[$t] ?? $t)->implode('، ')
+                : (self::roleOptions()[$r] ?? $r))
+            ->implode('، ');
+    }
+
+    /**
+     * Whom this party belongs to — the company of its employee, the party an
+     * attendee came for.
+     */
     public function parent(): BelongsTo
     {
         return $this->belongsTo(Party::class, 'parent_id');

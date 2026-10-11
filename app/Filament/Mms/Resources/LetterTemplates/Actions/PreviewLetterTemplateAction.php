@@ -24,7 +24,7 @@ class PreviewLetterTemplateAction
             ->label(__('Preview PDF'))
             ->icon('heroicon-o-eye')
             ->color('gray')
-            ->modalWidth('md')
+            ->modalWidth('xl')
             ->modalSubmitActionLabel(__('Preview'))
             ->schema([
                 Select::make('matter_id')

@@ -39,7 +39,27 @@ class MatterOneDriveFolders
     /** The subfolder of a matter's folder signed minutes go to. */
     public const SIGNED_MINUTES = 'onedrive_signed_minutes_folder';
 
+    /** Where every email sent from a matter is kept, as a PDF; empty: not kept there. */
+    public const SENT_EMAILS = 'onedrive_sent_emails_folder';
+
+    /** Where the replies to them are kept, with what they came with; empty: not kept there. */
+    public const RECEIVED_EMAILS = 'onedrive_received_emails_folder';
+
     public function __construct(private readonly OneDriveClient $client) {}
+
+    /**
+     * The matter's OneDrive folders a user may see: every one for a super
+     * admin, else their own (as the assistant).
+     *
+     * @return Collection<int, MatterOneDriveFolder>
+     */
+    public static function visibleTo(Matter $matter, ?User $user): Collection
+    {
+        return $matter->oneDriveFolders()
+            ->with('party')
+            ->when(! ($user?->hasRole('super-admin') ?? false), fn ($q) => $q->where('party_id', $user?->party?->id ?? 0))
+            ->get();
+    }
 
     public static function enabled(): bool
     {
@@ -264,12 +284,34 @@ class MatterOneDriveFolders
         return trim((string) Setting::get(self::SIGNED_MINUTES, '')) ?: 'محاضر موقعة';
     }
 
+    /** The subfolder replies are kept in — empty when they aren't. */
+    public static function receivedEmailsFolder(): string
+    {
+        return trim((string) Setting::get(self::RECEIVED_EMAILS, 'المراسلات الواردة'));
+    }
+
+    /** The subfolder sent emails are kept in — empty when they aren't. */
+    public static function sentEmailsFolder(): string
+    {
+        return trim((string) Setting::get(self::SENT_EMAILS, 'المراسلات الصادرة'));
+    }
+
     /**
      * A signed copy of minutes, into the matter's folder in its assistant's
      * OneDrive — in the signed-minutes subfolder (made when missing). Null
      * when the matter has no folder.
      */
     public function uploadSignedMinutes(Matter $matter, string $name, string $contents, string $mime): ?string
+    {
+        return $this->uploadToSubfolder($matter, self::signedMinutesFolder(), $name, $contents, $mime);
+    }
+
+    /**
+     * A file into a subfolder of the matter's folder in its assistant's
+     * OneDrive (made when missing) — "a/b" for one inside another. Its
+     * link; null when the matter has no folder.
+     */
+    public function uploadToSubfolder(Matter $matter, string $subfolder, string $name, string $contents, string $mime): ?string
     {
         $folder = MatterOneDriveFolder::query()
             ->where('matter_id', $matter->getKey())
@@ -285,7 +327,7 @@ class MatterOneDriveFolders
         }
 
         $user = (string) $folder->party->onedrive_email;
-        $path = implode('/', array_map([self::class, 'clean'], OneDriveClient::segments(self::signedMinutesFolder())));
+        $path = implode('/', array_map([self::class, 'clean'], OneDriveClient::segments($subfolder)));
         $target = $path !== '' ? $this->client->ensureFolder($user, $path, $folder->drive_item_id)['id'] : $folder->drive_item_id;
 
         return $this->client->upload($user, $target, self::clean(pathinfo($name, PATHINFO_FILENAME)).'.'.pathinfo($name, PATHINFO_EXTENSION), $contents, $mime)['webUrl'];

@@ -12,6 +12,6 @@ class ManageLetterFonts extends ManageRecords
 
     protected function getHeaderActions(): array
     {
-        return [CreateAction::make()->modalWidth('3xl')];
+        return [CreateAction::make()->modalWidth('5xl')];
     }
 }

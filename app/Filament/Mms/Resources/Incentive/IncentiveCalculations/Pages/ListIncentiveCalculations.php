@@ -69,7 +69,7 @@ class ListIncentiveCalculations extends ListRecords
                     return $query;
                 }),
             ExportAction::make('data')
-                ->modalWidth(Width::ThreeExtraLarge)
+                ->modalWidth(Width::FiveExtraLarge)
                 ->schema([
                     DatePicker::make('start_date'),
                     DatePicker::make('end_date'),

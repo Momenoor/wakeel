@@ -78,7 +78,7 @@ class PayrollRunsTable
                     ]))
                     ->modalSubmitAction(false)
                     ->modalCancelActionLabel(__('Close'))
-                    ->modalWidth('4xl'),
+                    ->modalWidth('6xl'),
                 // Same permission, same reasoning as the action above: a
                 // JV-only user needs the printable sheet too, not just the
                 // on-screen modal, without ever touching `View:PayrollRun`.

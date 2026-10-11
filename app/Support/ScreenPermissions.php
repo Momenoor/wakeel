@@ -63,6 +63,8 @@ final class ScreenPermissions
 
     public const MATTER_MINUTES_TAB = 'View:MatterMinutesTab';
 
+    public const MATTER_PROGRESS_TAB = 'View:MatterProgressTab';
+
     // ── Matters list tabs ────────────────────────────────────────────────
     public const MATTERS_ALL_TAB = 'View:MattersAllTab';
 
@@ -143,6 +145,7 @@ final class ScreenPermissions
             self::MATTER_FILES_TAB => $matterViewers,
             self::MATTER_LETTERS_TAB => $matterViewers,
             self::MATTER_MINUTES_TAB => $matterViewers,
+            self::MATTER_PROGRESS_TAB => $matterViewers,
 
             self::MATTERS_ALL_TAB => $matterListers,
             self::MATTERS_IN_PROGRESS_TAB => $matterListers,

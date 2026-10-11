@@ -7,6 +7,7 @@ use App\Filament\Shared\Pages\Schemas\SystemSettingsForm;
 use App\Models\MatterLetter;
 use App\Models\Setting;
 use App\Services\Installer\EnvironmentFileWriter;
+use App\Services\MMS\SenderMailer;
 use App\Support\Branding;
 use App\Support\CompanyContact;
 use App\Support\Integrations;
@@ -241,7 +242,8 @@ class SystemSettings extends Page
         } catch (\Throwable $e) {
             Notification::make()
                 ->title(__('Failed to send test email'))
-                ->body($e->getMessage())
+                ->body(SenderMailer::reason($e))
+                ->persistent()
                 ->danger()
                 ->send();
         }
