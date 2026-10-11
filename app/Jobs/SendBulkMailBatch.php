@@ -89,8 +89,8 @@ class SendBulkMailBatch implements ShouldQueue
                     'sent_at' => now(),
                     'message_id' => $sent?->getMessageId(),
                 ]);
-                // A matter's email: remembered, for its replies.
-                MatterEmail::recordSent($campaign->matter_id, $campaign, (string) $campaign->from_sender_key, $sent?->getMessageId(),
+                // Remembered by its recipient, for their reply — with a matter or not.
+                MatterEmail::recordSent($campaign->matter_id, $recipient, (string) $campaign->from_sender_key, $sent?->getMessageId(),
                     $campaign->renderSubject($recipient), [...(array) $recipient->email, ...($campaign->cc_emails ?? []), ...($recipient->cc_emails ?? [])], $campaign->created_by);
                 $campaign->increment('sent_count');
                 // An email to a matter's parties: a step in its progress.

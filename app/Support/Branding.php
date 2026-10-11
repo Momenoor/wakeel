@@ -27,6 +27,43 @@ class Branding
 
     public const DIRECTORY = 'branding';
 
+    /** How the PDF of an email is branded: as Outlook prints it, or as the office. */
+    public const EMAIL_PDF = 'email_pdf_branding';
+
+    public const EMAIL_PDF_OUTLOOK = 'outlook';
+
+    public const EMAIL_PDF_OFFICE = 'office';
+
+    /** @return array<string, string> */
+    public static function emailPdfOptions(): array
+    {
+        return [
+            self::EMAIL_PDF_OUTLOOK => __('Outlook — as Outlook prints an email'),
+            self::EMAIL_PDF_OFFICE => __('The office — its logo and name'),
+        ];
+    }
+
+    /**
+     * An email PDF's brand: its picture (a file), the name beside it (none
+     * with the office's logo, which carries it), and what the page header
+     * calls the mail ("Mail - … - Outlook").
+     *
+     * @return array{logo: ?string, name: ?string, app: string, office: bool}
+     */
+    public static function emailPdf(): array
+    {
+        if (Setting::get(self::EMAIL_PDF, self::EMAIL_PDF_OUTLOOK) === self::EMAIL_PDF_OFFICE) {
+            return [
+                'logo' => static::logoFile(),
+                'name' => static::logoFile() ? null : (string) Setting::get('company_name', config('app.name')),
+                'app' => (string) Setting::get('app_name', config('app.name')),
+                'office' => true,
+            ];
+        }
+
+        return ['logo' => public_path('images/MicrosoftOutlook.png'), 'name' => 'Outlook', 'app' => 'Outlook', 'office' => false];
+    }
+
     /**
      * Dark mode uses the uploaded dark logo, else the uploaded light one;
      * with nothing uploaded, the shipped image for that mode.

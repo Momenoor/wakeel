@@ -5,7 +5,9 @@ namespace App\Filament\Support;
 use App\Models\EmailTemplate;
 use App\Models\Matter;
 use App\Models\MatterLetter;
+use App\Models\Setting;
 use App\Services\MMS\MatterOneDriveExplorer;
+use App\Services\MMS\SenderMailer;
 use App\Support\Addresses;
 use App\Support\EmailGrouping;
 use Filament\Forms\Components\FileUpload;
@@ -26,6 +28,39 @@ final class EmailSendFields
 
     /** @var list<string> the OneDrive files fetched for this send */
     private static array $fetched = [];
+
+    /** The mailbox letters, minutes and bulk mail start from (Settings → Email). */
+    public const DEFAULT_SENDER = 'default_send_sender_key';
+
+    /**
+     * The mailbox a send goes from — chosen each time, starting from the
+     * default (defaultSender()).
+     */
+    public static function sender(string $name = 'sender'): Select
+    {
+        return Select::make($name)
+            ->label(__('Send from'))
+            ->options(fn (): array => SenderMailer::options())
+            ->required()
+            ->live();
+    }
+
+    /**
+     * The default mailbox: the one set for letters and mail (Settings →
+     * Email), else the system's own, else the first.
+     */
+    public static function defaultSender(): ?string
+    {
+        $options = SenderMailer::options();
+
+        foreach ([Setting::get(self::DEFAULT_SENDER), Setting::get('mail_sender_key')] as $key) {
+            if (filled($key) && array_key_exists($key, $options)) {
+                return $key;
+            }
+        }
+
+        return array_key_first($options);
+    }
 
     /**
      * Copied in: the matter's experts (System Settings) and the chosen

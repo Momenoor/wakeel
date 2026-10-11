@@ -135,7 +135,8 @@ class MinutesRecordForm
                             ->getSearchResultsUsing(fn (string $search, Get $get): array => self::partyOptions(self::isMatterLine($minutes, $get('party_id'))
                                 ? self::searchParties($search)->whereIn('id', self::matterPartyIds($minutes))
                                 : self::searchParties($search)))
-                            ->getOptionLabelUsing(fn ($value): ?string => ($party = Party::with('parent')->find($value)) ? self::partyLabel($party) : null)
+                            ->getOptionLabelUsing(fn ($value, Get $get): ?string => self::partyLabels((array) ($get('../../attendees') ?? []))[(int) $value]
+                                ?? (($party = Party::with('parent')->find($value)) ? self::partyLabel($party) : null))
                             ->live()
                             ->afterStateUpdated(function ($state, $old, Get $get, Set $set) use ($arabic, $minutes): void {
                                 // Only a party newly picked fills the line in — not one already
@@ -260,6 +261,22 @@ class MinutesRecordForm
         return $query->with('parent')->orderBy('name')->limit(50)->get()
             ->mapWithKeys(fn (Party $party): array => [$party->getKey() => self::partyLabel($party)])
             ->all();
+    }
+
+    /**
+     * Every attendee line's party, labelled — read at once, not one line
+     * at a time.
+     *
+     * @param  array<array-key, mixed>  $attendees
+     * @return array<int, string>
+     */
+    private static function partyLabels(array $attendees): array
+    {
+        $ids = collect($attendees)->pluck('party_id')->filter()->map(fn ($id) => (int) $id)->unique()->sort()->values()->all();
+
+        return once(fn (): array => Party::with('parent')->whereKey($ids)->get()
+            ->mapWithKeys(fn (Party $party): array => [$party->getKey() => self::partyLabel($party)])
+            ->all());
     }
 
     /** "سالم الموظف — موظف (شركة المهاد)". */

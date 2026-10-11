@@ -116,15 +116,9 @@ class MatterReferenceMatcher
      */
     public static function matterIds(?string $text): array
     {
-        $ids = [];
-
-        foreach (self::references($text) as $ref) {
-            $id = self::matterFor($ref['number'], $ref['year']);
-
-            if ($id !== null) {
-                $ids[] = $id;
-            }
-        }
+        $refs = self::references($text);
+        $matters = self::matterIdsFor($refs);
+        $ids = array_filter(array_map(fn (array $ref): ?int => $matters[self::key($ref)] ?? null, $refs));
 
         return array_values(array_unique($ids));
     }
@@ -136,15 +130,38 @@ class MatterReferenceMatcher
      */
     public static function matterFor(string $number, int $year): ?int
     {
-        $id = Matter::query()
-            ->where('year', $year)
-            ->where('number', $number)
-            // Closed = final report given (Matter::status()); open first.
-            ->orderByRaw('CASE WHEN final_report_at IS NULL THEN 0 ELSE 1 END')
-            ->orderByDesc('final_report_at')
-            ->orderByDesc('id')
-            ->value('id');
+        return self::matterIdsFor([['number' => $number, 'year' => $year]])[self::key(['number' => $number, 'year' => $year])] ?? null;
+    }
 
-        return $id === null ? null : (int) $id;
+    /**
+     * The matter each number/year means (matterFor()), all read at once —
+     * "639/2025" => id, for those that exist.
+     *
+     * @param  list<array{number: string, year: int}>  $refs
+     * @return array<string, int>
+     */
+    public static function matterIdsFor(array $refs): array
+    {
+        $refs = collect($refs)->unique(fn (array $ref): string => self::key($ref))->values();
+        $found = [];
+
+        foreach ($refs->chunk(200) as $chunk) {
+            $matters = Matter::query()
+                ->where(function ($query) use ($chunk) {
+                    foreach ($chunk as $ref) {
+                        $query->orWhere(fn ($q) => $q->where('year', $ref['year'])->where('number', $ref['number']));
+                    }
+                })
+                ->get(['id', 'year', 'number', 'final_report_at']);
+
+            // Several sharing it: the current one — not yet at its final
+            // report, the newest — else the one closed last.
+            foreach ($matters->groupBy(fn (Matter $m): string => self::key(['number' => (string) $m->number, 'year' => (int) $m->year])) as $key => $same) {
+                $found[$key] = (int) $same->sort(fn (Matter $a, Matter $b): int => [$a->final_report_at !== null, -($a->final_report_at?->getTimestamp() ?? 0), -$a->id]
+                    <=> [$b->final_report_at !== null, -($b->final_report_at?->getTimestamp() ?? 0), -$b->id])->first()->id;
+            }
+        }
+
+        return $found;
     }
 }

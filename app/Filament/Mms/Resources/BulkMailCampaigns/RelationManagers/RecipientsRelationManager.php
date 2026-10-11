@@ -7,6 +7,7 @@ use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Mms\Imports\BulkMailRecipientImporter;
 use App\Jobs\RebuildCampaignPdfs;
 use App\Models\BulkMailRecipient;
+use App\Models\MatterEmail;
 use App\Services\MMS\BulkMailService;
 use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
@@ -83,6 +84,27 @@ class RecipientsRelationManager extends RelationManager
         ]);
     }
 
+    /** @var Collection<int, Collection<int, MatterEmail>>|null this request's replies, by recipient */
+    private ?\Illuminate\Support\Collection $repliesRead = null;
+
+    /**
+     * The campaign's replies, by recipient, newest first — read once a
+     * request, not a row at a time.
+     *
+     * @return Collection<int, Collection<int, MatterEmail>>
+     */
+    private function replies(): \Illuminate\Support\Collection
+    {
+        return $this->repliesRead ??= MatterEmail::query()
+            ->where('direction', MatterEmail::RECEIVED)
+            ->whereHas('parent', fn ($q) => $q->where('source_type', (new BulkMailRecipient)->getMorphClass())
+                ->whereIn('source_id', $this->getOwnerRecord()->recipients()->select('id')))
+            ->with('parent:id,source_id')
+            ->latest('at')
+            ->get()
+            ->groupBy(fn (MatterEmail $reply): int => (int) $reply->parent->source_id);
+    }
+
     public function table(Table $table): Table
     {
         return $table
@@ -102,6 +124,14 @@ class RecipientsRelationManager extends RelationManager
                 TextColumn::make('failed_at')
                     ->label(__('bulk_mail.fields.failed_at'))
                     ->dateTime(),
+                // Their reply, collected from the inbox of the mailbox it went from.
+                TextColumn::make('reply')
+                    ->label(__('Reply'))
+                    ->state(fn (BulkMailRecipient $record) => $this->replies()->get($record->getKey())?->first()?->at)
+                    ->dateTime('d/m/Y H:i')
+                    ->description(fn (BulkMailRecipient $record): ?string => ($count = $this->replies()->get($record->getKey())?->count() ?? 0) > 1 ? trans_choice(':count reply|:count replies', $count, ['count' => $count]) : null)
+                    ->placeholder('—')
+                    ->color('success'),
             ])
             ->filters([
                 //
@@ -152,6 +182,15 @@ class RecipientsRelationManager extends RelationManager
                     )),
             ])
             ->recordActions([
+                Action::make('replies')
+                    ->label(__('Reply'))
+                    ->icon('heroicon-o-envelope-open')
+                    ->color('success')
+                    ->visible(fn (BulkMailRecipient $record): bool => $this->replies()->has($record->getKey()))
+                    ->modalHeading(fn (BulkMailRecipient $record): string => __('Replies from :name', ['name' => $record->name ?: $record->email]))
+                    ->modalContent(fn (BulkMailRecipient $record) => view('filament.mms.bulk-mail.replies', ['replies' => $this->replies()->get($record->getKey())]))
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel(__('Close')),
                 EditAction::make(),
                 DeleteAction::make()
                     ->after(function ($livewire) {

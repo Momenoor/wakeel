@@ -22,7 +22,6 @@ use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterMailer;
 use App\Services\MMS\Letters\LetterMeeting;
-use App\Services\MMS\SenderMailer;
 use App\Support\Addresses;
 use App\Support\EmailGrouping;
 use App\Support\ScreenPermissions;
@@ -142,8 +141,8 @@ class LettersRelationManager extends RelationManager
             ->modalSubmitActionLabel(__('Send'))
             ->fillForm(fn (MatterLetter $record) => [
                 // The mailbox this matter's letters last went from.
-                'sender' => MatterLetter::query()->where('matter_id', $record->matter_id)->whereNotNull('sender_key')->latest('sent_at')->value('sender_key')
-                    ?? array_key_first(SenderMailer::options()),
+                // The default mailbox (Settings), chosen again each time.
+                'sender' => EmailSendFields::defaultSender(),
                 'mode' => LetterMailer::ATTACHMENT,
                 'email_template_id' => self::coverEmail($record)?->getKey(),
                 'formats' => ['pdf'],
@@ -155,10 +154,7 @@ class LettersRelationManager extends RelationManager
                 ...app(LetterMailer::class)->draft($record, LetterMailer::ATTACHMENT, self::coverEmail($record)),
             ])
             ->schema(fn (MatterLetter $record) => [
-                Select::make('sender')
-                    ->label(__('Send from'))
-                    ->options(SenderMailer::options())
-                    ->required(),
+                EmailSendFields::sender(),
                 Radio::make('mode')
                     ->label(__('Send the letter'))
                     ->options([

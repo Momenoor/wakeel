@@ -54,6 +54,7 @@ class LetterItem extends Model
      */
     public static function groups(): array
     {
-        return static::query()->distinct()->orderBy('group')->pluck('group')->all();
+        // Once a request: each item line of a template's form asks.
+        return once(fn (): array => static::query()->distinct()->orderBy('group')->pluck('group')->all());
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\BulkMailCampaigns\Schema;
 
 use App\Enums\BulkMailCampaignStatus;
+use App\Filament\Support\EmailSendFields;
 use App\Filament\Support\LiveMergeTags;
 use App\Filament\Support\RichEditorDirection;
 use App\Models\BulkMailCampaign;
@@ -54,6 +55,8 @@ class BulkMailCampaignSchema
                     Select::make('from_sender_key')
                         ->label(__('bulk_mail.fields.from_sender'))
                         ->options(fn () => SenderMailer::options())
+                        // A new campaign starts from the default mailbox (Settings).
+                        ->default(fn (): ?string => EmailSendFields::defaultSender())
                         ->required()
                         ->live(),
 

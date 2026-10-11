@@ -2,6 +2,9 @@
 
 namespace App\Support;
 
+use Illuminate\Support\Facades\DB;
+use Spatie\Permission\PermissionRegistrar;
+
 /**
  * The permissions for parts of a screen that Shield does not generate on
  * its own: each relation manager and each tab has one, so a role can be
@@ -109,6 +112,8 @@ final class ScreenPermissions
 
     public const SETTINGS_NOTIFICATIONS_TAB = 'View:SystemSettingsNotificationsTab';
 
+    public const SETTINGS_LETTERS_TAB = 'View:SystemSettingsLettersTab';
+
     /**
      * Each permission, and the existing permissions whose holders could
      * already see that part — any one of them is enough.
@@ -172,12 +177,35 @@ final class ScreenPermissions
             self::SETTINGS_GENERAL_TAB => ['View:SystemSettings'],
             self::SETTINGS_EMAIL_TAB => ['View:SystemSettings'],
             self::SETTINGS_NOTIFICATIONS_TAB => ['View:SystemSettings'],
+            self::SETTINGS_LETTERS_TAB => ['View:SystemSettings'],
         ];
     }
 
     /**
      * @return list<string>
      */
+    /**
+     * A new screen permission, given to every role and user already holding
+     * one of the permissions it comes from (grantedFrom()) — for the
+     * migration that adds it.
+     */
+    public static function grant(string $permission): void
+    {
+        $sources = DB::table('permissions')->whereIn('name', self::grantedFrom()[$permission] ?? [])->pluck('id');
+        $id = DB::table('permissions')->where('name', $permission)->where('guard_name', 'web')->value('id')
+            ?? DB::table('permissions')->insertGetId(['name' => $permission, 'guard_name' => 'web', 'created_at' => now(), 'updated_at' => now()]);
+
+        foreach (DB::table('role_has_permissions')->whereIn('permission_id', $sources)->distinct()->pluck('role_id') as $roleId) {
+            DB::table('role_has_permissions')->insertOrIgnore(['permission_id' => $id, 'role_id' => $roleId]);
+        }
+
+        foreach (DB::table('model_has_permissions')->whereIn('permission_id', $sources)->select(['model_type', 'model_id'])->distinct()->get() as $row) {
+            DB::table('model_has_permissions')->insertOrIgnore(['permission_id' => $id, 'model_type' => $row->model_type, 'model_id' => $row->model_id]);
+        }
+
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+    }
+
     public static function all(): array
     {
         return array_keys(self::grantedFrom());

@@ -284,7 +284,8 @@ class LetterComposer
     private function itemsHtml(array $input, array $chosen): string
     {
         $ids = array_filter($chosen, 'is_numeric');
-        $items = LetterItem::query()->whereIn('id', $ids)->get()->keyBy('id');
+        // None chosen: nothing to read.
+        $items = $ids === [] ? collect() : LetterItem::query()->whereIn('id', $ids)->get()->keyBy('id');
 
         $lines = collect($chosen)
             ->map(fn ($entry) => is_numeric($entry) ? $items->get($entry)?->text : $entry)

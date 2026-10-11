@@ -3,8 +3,12 @@
 namespace Tests\Feature;
 
 use App\Enums\ProgressType;
+use App\Filament\Mms\Resources\BulkMailCampaigns\Pages\ViewBulkMailCampaign;
+use App\Filament\Mms\Resources\BulkMailCampaigns\RelationManagers\RecipientsRelationManager;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\ProgressRelationManager;
+use App\Filament\Support\EmailSendFields;
+use App\Models\BulkMailCampaign;
 use App\Models\Letterhead;
 use App\Models\LetterTemplate;
 use App\Models\MailSender;
@@ -12,11 +16,13 @@ use App\Models\Matter;
 use App\Models\MatterEmail;
 use App\Models\MatterOneDriveFolder;
 use App\Models\Party;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterMailer;
 use App\Services\MMS\MatterOneDriveExplorer;
 use App\Services\MMS\MatterReplyCollector;
+use App\Services\MMS\SenderMailer;
 use App\Services\MMS\SentEmailArchive;
 use App\Services\MMS\SentFolder;
 use Filament\Facades\Filament;
@@ -199,6 +205,50 @@ class MatterRepliesTest extends TestCase
         $this->assertNull($answers(['at' => now()->subWeek()->toDateTimeString()]));
 
         $this->assertSame('طلب بيانات', MatterReplyCollector::bareSubject('RE: Fw: رد: طلب   بيانات'));
+    }
+
+    public function test_a_reply_to_a_bulk_email_of_no_matter_is_kept_with_its_recipient(): void
+    {
+        $campaign = BulkMailCampaign::create(['name' => 'Notice', 'subject' => 'إخطار', 'body' => '<p>…</p>', 'from_sender_key' => 'iflas', 'created_by' => $this->user->id, 'status' => 'completed']);
+        $recipient = $campaign->recipients()->create(['email' => 'client@x.ae', 'name' => 'Client', 'status' => 'sent', 'sent_at' => now()->subDay()]);
+
+        // As the bulk sender remembers it: by its recipient, no matter.
+        MatterEmail::recordSent(null, $recipient, 'iflas', 'bulk-1@jpa.ae', 'إخطار', ['client@x.ae'], $this->user->id);
+        $sent = MatterEmail::sole();
+        $this->assertNull($sent->matter_id);
+
+        $this->assertSame(1, app(MatterReplyCollector::class)->handle([$this->reply([
+            'message_id' => '<r-bulk@x.ae>', 'references' => ['<bulk-1@jpa.ae>'], 'subject' => 'RE: إخطار', 'from' => 'client@x.ae', 'from_name' => 'Client',
+        ])], collect([$sent])));
+
+        // Its PDF and file kept with it — no matter, nothing in OneDrive, no progress.
+        $reply = MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->sole();
+        $this->assertNull($reply->matter_id);
+        $this->assertCount(2, $reply->files);
+        $this->assertStringEndsWith('.pdf', $reply->files[0]['name']);
+        $this->assertSame('كشف.xlsx', $reply->files[1]['name']);
+        $this->assertSame('xlsx-bytes', Storage::disk('public')->get($reply->files[1]['path']));
+        $this->assertSame([], $this->uploads);
+        $this->assertSame(1, $this->user->notifications()->count());
+
+        // On the campaign's recipients: the reply, and a way to open it.
+        Livewire::test(RecipientsRelationManager::class, ['ownerRecord' => $campaign, 'pageClass' => ViewBulkMailCampaign::class])
+            ->assertTableColumnStateSet('reply', $reply->at, $recipient)
+            ->assertTableActionVisible('replies', $recipient)
+            ->mountTableAction('replies', $recipient)
+            ->assertMountedActionModalSee('كشف.xlsx');
+    }
+
+    public function test_letters_minutes_and_bulk_mail_start_from_the_default_mailbox(): void
+    {
+        config(['mail_senders.senders.legal' => ['username' => 'legal@jpa.ae', 'address' => 'legal@jpa.ae', 'name' => 'Legal', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']]);
+        Setting::set(EmailSendFields::DEFAULT_SENDER, 'legal', 'mail');
+
+        $this->assertSame('legal', EmailSendFields::defaultSender());
+
+        // One no longer there: the next choice.
+        Setting::set(EmailSendFields::DEFAULT_SENDER, 'gone', 'mail');
+        $this->assertSame(array_key_first(SenderMailer::options()), EmailSendFields::defaultSender());
     }
 
     public function test_a_microsoft_365_inbox_is_read_and_a_refusal_says_what_to_grant(): void

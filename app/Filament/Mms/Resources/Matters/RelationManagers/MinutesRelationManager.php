@@ -19,7 +19,6 @@ use App\Models\MinutesDelivery;
 use App\Models\WhatsAppTemplate;
 use App\Services\MMS\Letters\MinutesSender;
 use App\Services\MMS\Letters\MinutesService;
-use App\Services\MMS\SenderMailer;
 use App\Services\WhatsAppCloud;
 use App\Support\EmailGrouping;
 use App\Support\Honorific;
@@ -324,7 +323,7 @@ class MinutesRelationManager extends RelationManager
 
                 return [
                     'recipients' => MinutesSender::recipients($record),
-                    'sender' => array_key_first(SenderMailer::options()),
+                    'sender' => EmailSendFields::defaultSender(),
                     // …and the email template's own.
                     'cc' => EmailSendFields::startingCc($record->matter, $template?->getKey()),
                     'grouping' => EmailGrouping::SEPARATE,
@@ -352,7 +351,7 @@ class MinutesRelationManager extends RelationManager
                 Section::make(__('Email'))
                     ->collapsible()
                     ->schema([
-                        Select::make('sender')->label(__('Send from'))->options(SenderMailer::options()),
+                        EmailSendFields::sender(),
                         EmailSendFields::grouping(),
                         EmailSendFields::cc(),
                         // From Templates → Email templates ("Minutes for

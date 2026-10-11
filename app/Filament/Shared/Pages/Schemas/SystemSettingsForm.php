@@ -3,11 +3,14 @@
 namespace App\Filament\Shared\Pages\Schemas;
 
 use App\Filament\Schemas\BrandingSettingsSection;
+use App\Filament\Support\EmailSendFields;
 use App\Models\MatterLetter;
 use App\Models\Party;
 use App\Services\MMS\SenderMailer;
+use App\Support\Branding;
 use App\Support\ScreenPermissions;
 use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
@@ -141,25 +144,6 @@ class SystemSettingsForm
                                         ->required()
                                         ->default(25),
 
-                                    // How each matter letter is numbered.
-                                    TextInput::make('letter_reference_format')
-                                        ->label(__('Letter reference format'))
-                                        ->default(MatterLetter::DEFAULT_REFERENCE_FORMAT)
-                                        ->required()
-                                        ->maxLength(100)
-                                        ->rule('regex:/\{seq\}/')
-                                        ->validationMessages(['regex' => __('The format must include {seq}, so each letter on a matter gets its own reference.')])
-                                        ->helperText(__('{year} and {number}: the matter\'s; {seq}: the letter\'s number on the matter (required); {current_year}: the year it is issued. Letters already issued keep their reference.'))
-                                        ->columnSpanFull(),
-
-                                    // Who is copied in when a letter is emailed.
-                                    CheckboxList::make('letter_cc_expert_types')
-                                        ->label(__('Copied in on letter and minutes emails'))
-                                        ->options(fn () => Party::expertTypeOptions())
-                                        ->default(MatterLetter::DEFAULT_CC_EXPERT_TYPES)
-                                        ->columns(2)
-                                        ->helperText(__('The matter\'s experts of these kinds are put in CC whenever a letter or minutes are sent by email; the sender can still remove them. None ticked: no one.'))
-                                        ->columnSpanFull(),
                                 ]),
 
                             BrandingSettingsSection::make(),
@@ -246,6 +230,57 @@ class SystemSettingsForm
                                         ->label(__('Sender Name'))
                                         ->placeholder(__('Your office name'))
                                         ->required(),
+                                ]),
+                        ]),
+
+                    // Letters and the emails sent and kept: their numbering, who is
+                    // copied in, the mailbox they go from, how their PDFs look.
+                    Tabs\Tab::make(__('Letters & emails'))
+                        ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::SETTINGS_LETTERS_TAB))
+                        ->icon(Heroicon::DocumentText)
+                        ->schema([
+                            Section::make(__('Letters'))
+                                ->schema([
+                                    // How each matter letter is numbered.
+                                    TextInput::make('letter_reference_format')
+                                        ->label(__('Letter reference format'))
+                                        ->default(MatterLetter::DEFAULT_REFERENCE_FORMAT)
+                                        ->required()
+                                        ->maxLength(100)
+                                        ->rule('regex:/\{seq\}/')
+                                        ->validationMessages(['regex' => __('The format must include {seq}, so each letter on a matter gets its own reference.')])
+                                        ->helperText(__('{year} and {number}: the matter\'s; {seq}: the letter\'s number on the matter (required); {current_year}: the year it is issued. Letters already issued keep their reference.'))
+                                        ->columnSpanFull(),
+
+                                    // Who is copied in when a letter is emailed.
+                                    CheckboxList::make('letter_cc_expert_types')
+                                        ->label(__('Copied in on letter and minutes emails'))
+                                        ->options(fn () => Party::expertTypeOptions())
+                                        ->default(MatterLetter::DEFAULT_CC_EXPERT_TYPES)
+                                        ->columns(2)
+                                        ->helperText(__('The matter\'s experts of these kinds are put in CC whenever a letter or minutes are sent by email; the sender can still remove them. None ticked: no one.'))
+                                        ->columnSpanFull(),
+                                ]),
+
+                            Section::make(__('Sending'))
+                                ->schema([
+                                    // Letters, minutes and bulk mail start from this mailbox; chosen again each send.
+                                    Select::make(EmailSendFields::DEFAULT_SENDER)
+                                        ->label(__('Send letters, minutes and bulk mail from'))
+                                        ->options(fn () => SenderMailer::options())
+                                        ->placeholder(__('As the system emails'))
+                                        ->helperText(__('The mailbox a letter, minutes or a bulk mail campaign starts from when sent; another can be chosen each time.'))
+                                        ->columnSpanFull(),
+                                ]),
+
+                            Section::make(__('Email PDFs'))
+                                ->schema([
+                                    Radio::make(Branding::EMAIL_PDF)
+                                        ->label(__('Email PDFs'))
+                                        ->helperText(__('The look of the PDF kept of each email sent or received.'))
+                                        ->options(Branding::emailPdfOptions())
+                                        ->default(Branding::EMAIL_PDF_OUTLOOK)
+                                        ->columnSpanFull(),
                                 ]),
                         ]),
 

@@ -3798,5 +3798,17 @@
     "Outgoing email": "بريد صادر",
     "By email and WhatsApp": "بالبريد الإلكتروني وواتساب",
     "Reading OneDrive…": "جارٍ قراءة OneDrive…",
-    "Already sent: only a super admin can delete it.": "أُرسل بالفعل: لا يحذفه إلا المدير العام."
+    "Already sent: only a super admin can delete it.": "أُرسل بالفعل: لا يحذفه إلا المدير العام.",
+    "Email PDFs": "ملفات PDF للبريد",
+    "The look of the PDF kept of each email sent or received.": "شكل ملف PDF المحفوظ لكل رسالة مُرسلة أو واردة.",
+    "Outlook — as Outlook prints an email": "Outlook — كما يطبع Outlook الرسالة",
+    "The office — its logo and name": "المكتب — شعاره واسمه",
+    "Letters & emails": "الخطابات والمراسلات",
+    "Sending": "الإرسال",
+    "Send letters, minutes and bulk mail from": "إرسال الخطابات والمحاضر والبريد الجماعي من",
+    "As the system emails": "كرسائل النظام",
+    "The mailbox a letter, minutes or a bulk mail campaign starts from when sent; another can be chosen each time.": "صندوق البريد الذي يبدأ منه إرسال الخطاب أو المحضر أو حملة البريد الجماعي؛ ويمكن اختيار غيره في كل مرة.",
+    ":count reply|:count replies": ":count رد|:count ردود",
+    "Replies from :name": "ردود :name",
+    ":name replied to a bulk email": "ردّ :name على رسالة جماعية"
 }

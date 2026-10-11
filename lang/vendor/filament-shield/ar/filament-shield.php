@@ -101,6 +101,7 @@ return [
         'view_system_settings_general_tab' => 'تبويب إعدادات النظام: الإعدادات العامة',
         'view_system_settings_email_tab' => 'تبويب إعدادات النظام: البريد الإلكتروني',
         'view_system_settings_notifications_tab' => 'تبويب إعدادات النظام: الإشعارات والإعلانات',
+        'view_system_settings_letters_tab' => 'تبويب إعدادات النظام: الخطابات والمراسلات',
         'generate_eosg_closing_voucher' => 'توليد سند إقفال مكافأة نهاية الخدمة',
 
         // Matter — scope.

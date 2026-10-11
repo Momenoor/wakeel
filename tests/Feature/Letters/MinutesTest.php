@@ -27,6 +27,7 @@ use Filament\Facades\Filament;
 use Filament\Forms\Components\Select;
 use Filament\Schemas\Components\Wizard;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
@@ -401,6 +402,20 @@ class MinutesTest extends TestCase
         // Not taken for the company's representative, nor one of the matter's parties.
         $this->assertSame([$this->lawyer->id], collect(LetterComposer::candidates($this->matter->fresh()))->where('of', $companyRow->id)->pluck('party_id')->values()->all());
         $this->assertCount(1, $this->matter->fresh()->mainPartiesOnly);
+    }
+
+    public function test_the_attendees_parties_are_read_at_once(): void
+    {
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT,
+            'attendees' => collect(range(1, 6))->map(fn ($i) => ['present' => true, 'name' => "P$i", 'party_id' => Party::factory()->create(['name' => "P$i"])->id])->all()]);
+
+        DB::enableQueryLog();
+        $this->recordPage($minutes)->assertSee('P6');
+        $single = collect(DB::getQueryLog())->filter(fn ($q) => preg_match('/from "parties" where "parties"."id" = \? limit 1/', $q['query']))->count();
+
+        // Not one lookup a line.
+        $this->assertLessThan(2, $single);
     }
 
     public function test_an_attendee_added_starts_as_present(): void

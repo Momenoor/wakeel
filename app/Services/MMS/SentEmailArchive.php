@@ -66,7 +66,7 @@ class SentEmailArchive
                 $to,
                 $cc,
                 [],
-                array_column($email->files, 'name'),
+                array_map(fn (array $file): array => ['name' => $file['name'], 'size' => strlen((string) $file['data'])], $email->files),
                 now(),
             );
 
@@ -91,9 +91,10 @@ class SentEmailArchive
      * attachments (unless kept elsewhere), and in this subfolder of its
      * OneDrive folder (none: not there).
      */
-    public function keepFile(Matter $matter, string $name, string $contents, string $mime, string $subfolder, ?int $userId, bool $asAttachment = true): void
+    public function keepFile(Matter $matter, string $name, string $contents, string $mime, string $subfolder, ?int $userId, bool $asAttachment = true): ?string
     {
         $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+        $path = null;
 
         if ($asAttachment) {
             try {
@@ -109,13 +110,14 @@ class SentEmailArchive
                     'extension' => $extension,
                 ]);
             } catch (Throwable $e) {
-                Log::warning('Sent email not kept with the matter\'s attachments', ['matter' => $matter->getKey(), 'error' => $e->getMessage()]);
+                Log::warning('Email file not kept with the matter\'s attachments', ['matter' => $matter->getKey(), 'error' => $e->getMessage()]);
+                $path = null;
             }
         }
 
         $folder = trim($subfolder);
         if ($folder === '') {
-            return;
+            return $path;
         }
 
         try {
@@ -126,5 +128,21 @@ class SentEmailArchive
         } catch (Throwable $e) {
             Log::warning('Email file not saved in OneDrive', ['matter' => $matter->getKey(), 'error' => $e->getMessage()]);
         }
+
+        return $path;
+    }
+
+    /**
+     * A file of an email of no matter (a bulk mail campaign's reply), kept
+     * in its own folder. Where it went.
+     */
+    public function keepLoose(string $folder, string $name, string $contents): string
+    {
+        $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+        $base = $extension !== '' ? Str::beforeLast($name, '.'.pathinfo($name, PATHINFO_EXTENSION)) : $name;
+        $path = trim($folder, '/').'/'.MatterOneDriveExplorer::cleanName($base).($extension !== '' ? '.'.$extension : '');
+        Storage::disk('public')->put($path, $contents);
+
+        return $path;
     }
 }

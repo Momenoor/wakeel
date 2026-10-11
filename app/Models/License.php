@@ -46,7 +46,23 @@ class License extends Model
      */
     public static function current(): ?self
     {
-        return static::query()->latest('updated_at')->first();
+        // Read once a request — the license check and the update banner
+        // both ask — and again once it changes (booted()).
+        // Kept wrapped: none at all is remembered too.
+        if (! app()->bound(self::CURRENT)) {
+            app()->instance(self::CURRENT, (object) ['license' => static::query()->latest('updated_at')->first()]);
+        }
+
+        return app(self::CURRENT)->license;
+    }
+
+    private const CURRENT = 'license.current';
+
+    protected static function booted(): void
+    {
+        $forget = fn () => app()->forgetInstance(self::CURRENT);
+        static::saved($forget);
+        static::deleted($forget);
     }
 
     /**

@@ -4,6 +4,7 @@ namespace App\Filament\Shared\Pages;
 
 use App\Filament\Shared\Clusters\Settings;
 use App\Filament\Shared\Pages\Schemas\SystemSettingsForm;
+use App\Filament\Support\EmailSendFields;
 use App\Models\MatterLetter;
 use App\Models\Setting;
 use App\Services\Installer\EnvironmentFileWriter;
@@ -81,8 +82,10 @@ class SystemSettings extends Page
             'letter_reference_format' => Setting::get('letter_reference_format', MatterLetter::DEFAULT_REFERENCE_FORMAT),
             'letter_cc_expert_types' => MatterLetter::ccExpertTypes(),
             ...collect(Branding::KEYS)->mapWithKeys(fn (string $key): array => [$key => Setting::get($key)])->all(),
+            Branding::EMAIL_PDF => Setting::get(Branding::EMAIL_PDF, Branding::EMAIL_PDF_OUTLOOK),
 
             'mail_sender_key' => Setting::get('mail_sender_key'),
+            EmailSendFields::DEFAULT_SENDER => Setting::get(EmailSendFields::DEFAULT_SENDER),
             'mail_mailer' => Setting::get('mail_mailer', config('mail.default', 'smtp')),
             'mail_host' => Setting::get('mail_host', config('mail.mailers.smtp.host', '')),
             'mail_port' => Setting::get('mail_port', config('mail.mailers.smtp.port', 587)),
@@ -180,6 +183,7 @@ class SystemSettings extends Page
             'letter_cc_expert_types' => 'general',
 
             'mail_sender_key' => 'mail',
+            EmailSendFields::DEFAULT_SENDER => 'mail',
             'mail_mailer' => 'mail',
             'mail_host' => 'mail',
             'mail_port' => 'mail',

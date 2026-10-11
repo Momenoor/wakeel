@@ -180,6 +180,25 @@ class CalendarMatterLinkingTest extends TestCase
         $this->assertNotContains($closedEarly->id, $event->matters()->pluck('matters.id')->all());
     }
 
+    public function test_linking_every_event_reads_the_matters_at_once(): void
+    {
+        $matters = [$this->matter(11, 2024), $this->matter(12, 2024), $this->matter(13, 2025)];
+        foreach (range(1, 40) as $i) {
+            CalendarEvent::withoutEvents(fn () => CalendarEvent::create(['title' => 'Session '.(11 + $i % 3).'/'.($i % 3 === 2 ? 2025 : 2024), 'type' => 'single',
+                'start_datetime' => now()->addDays($i), 'end_datetime' => now()->addDays($i)->addHour()]));
+        }
+
+        DB::enableQueryLog();
+        $result = app(EventMatterLinker::class)->linkAll(CalendarEvent::query());
+        $lookups = collect(DB::getQueryLog())->filter(fn ($q) => str_contains($q['query'], 'from "matters" where'))->count();
+
+        $this->assertSame(['events' => 40, 'links' => 40], $result);
+        // One read of the matters for the 40 events, not one each.
+        $this->assertSame(1, $lookups);
+        // Each matter its own events: 11/2024 is named by 13 of them.
+        $this->assertSame(13, $matters[0]->linkedCalendarEvents()->count());
+    }
+
     public function test_the_event_form_shows_and_changes_all_its_matters(): void
     {
         $this->signIn();

@@ -17,13 +17,18 @@ class EventMatterLinker
     /**
      * @return int how many links were added
      */
-    public function link(CalendarEvent $event): int
+    /**
+     * @param  array<string, int>|null  $matters  the matters already found for the references ("639/2025" => id)
+     */
+    public function link(CalendarEvent $event, ?array $matters = null): int
     {
         // Not the numbers marked as not that matter for this event.
+        $refs = $event->matterReferences();
+        $matters ??= MatterReferenceMatcher::matterIdsFor($refs);
         $ids = [];
 
-        foreach ($event->matterReferences() as $ref) {
-            if (($id = MatterReferenceMatcher::matterFor($ref['number'], $ref['year'])) !== null) {
+        foreach ($refs as $ref) {
+            if (($id = $matters[MatterReferenceMatcher::key($ref)] ?? null) !== null) {
                 $ids[] = $id;
             }
         }
@@ -40,7 +45,10 @@ class EventMatterLinker
 
         $added = count($event->matters()->syncWithoutDetaching($ids)['attached']);
 
-        $this->tidy($event);
+        // Nothing new: nothing to put in line.
+        if ($added > 0) {
+            $this->tidy($event);
+        }
 
         return $added;
     }
@@ -57,8 +65,11 @@ class EventMatterLinker
         $links = 0;
 
         $query->select(['id', 'title', 'ignored_references', 'matter_id', 'type'])->chunkById(200, function ($chunk) use (&$events, &$links) {
+            // The matters the whole chunk names, read at once.
+            $matters = MatterReferenceMatcher::matterIdsFor($chunk->flatMap(fn (CalendarEvent $event): array => $event->matterReferences())->all());
+
             foreach ($chunk as $event) {
-                $added = $this->link($event);
+                $added = $this->link($event, $matters);
                 $links += $added;
                 $events += $added > 0 ? 1 : 0;
             }

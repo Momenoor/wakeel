@@ -2,7 +2,9 @@
 
 namespace App\Services\MMS;
 
+use App\Filament\Mms\Resources\BulkMailCampaigns\BulkMailCampaignResource;
 use App\Filament\Mms\Resources\Matters\MatterResource;
+use App\Models\BulkMailRecipient;
 use App\Models\MatterEmail;
 use App\Models\Party;
 use App\Models\Setting;
@@ -171,10 +173,8 @@ class MatterReplyCollector
      */
     private function keep(MatterEmail $answers, array $message, ?string $id): void
     {
+        // A matter's — or a bulk mail campaign's with no matter.
         $matter = $answers->matter;
-        if (! $matter) {
-            return;
-        }
 
         $body = $message['body'] instanceof Closure ? ($message['body'])() : (string) ($message['body'] ?? '');
         $files = $message['attachments'] instanceof Closure ? ($message['attachments'])() : (array) ($message['attachments'] ?? []);
@@ -183,7 +183,7 @@ class MatterReplyCollector
         $fromName = trim((string) ($message['from_name'] ?? '')) ?: $from;
 
         $reply = MatterEmail::create([
-            'matter_id' => $matter->getKey(),
+            'matter_id' => $matter?->getKey(),
             'direction' => MatterEmail::RECEIVED,
             'parent_id' => $answers->getKey(),
             'sender_key' => $answers->sender_key,
@@ -202,22 +202,39 @@ class MatterReplyCollector
             array_values((array) ($message['to'] ?? [])),
             array_values((array) ($message['cc'] ?? [])),
             [],
-            array_column($files, 'name'),
+            array_map(fn (array $file): array => ['name' => (string) $file['name'], 'size' => strlen((string) $file['contents'])], $files),
             $at,
+            // The mailbox it came to, as Outlook prints "Mail - … ".
+            (string) (SenderMailer::all()[$answers->sender_key]['name'] ?? $answers->sender_key),
         );
 
         // Named for the party who replied: the reply's PDF in the replies
         // folder, the files it came with in a folder of the same name
         // beside it.
-        $folder = MatterOneDriveFolders::receivedEmailsFolder();
         $name = SentEmailArchive::emailName(false, self::partyName($from) ?? $fromName, (string) ($message['subject'] ?? ''), $at);
-        $this->archive->keepFile($matter, $name.'.pdf', $pdf, 'application/pdf', $folder, $answers->user_id);
+        $kept = [];
 
-        foreach ($files as $file) {
-            $this->archive->keepFile($matter, (string) $file['name'], (string) $file['contents'], (string) ($file['mime'] ?? 'application/octet-stream'), $folder !== '' ? $folder.'/'.$name : '', $answers->user_id);
+        if ($matter) {
+            $folder = MatterOneDriveFolders::receivedEmailsFolder();
+            $kept[] = ['name' => $name.'.pdf', 'path' => $this->archive->keepFile($matter, $name.'.pdf', $pdf, 'application/pdf', $folder, $answers->user_id)];
+
+            foreach ($files as $file) {
+                $kept[] = ['name' => (string) $file['name'], 'path' => $this->archive->keepFile($matter, (string) $file['name'], (string) $file['contents'], (string) ($file['mime'] ?? 'application/octet-stream'), $folder !== '' ? $folder.'/'.$name : '', $answers->user_id)];
+            }
+
+            MatterProgressRecorder::replyReceived($reply->setRelation('parent', $answers));
+        } else {
+            // No matter: its PDF and the files it came with, in a folder of its own.
+            $folder = 'email-replies/'.$reply->getKey();
+            $kept[] = ['name' => $name.'.pdf', 'path' => $this->archive->keepLoose($folder, $name.'.pdf', $pdf)];
+
+            foreach ($files as $file) {
+                $kept[] = ['name' => (string) $file['name'], 'path' => $this->archive->keepLoose($folder.'/'.$name, (string) $file['name'], (string) $file['contents'])];
+            }
         }
 
-        MatterProgressRecorder::replyReceived($reply->setRelation('parent', $answers));
+        // Where each went — for the campaign's recipients list to open.
+        $reply->update(['files' => array_values(array_filter($kept, fn (array $file) => filled($file['path'])))]);
         $this->tell($reply, $answers, count($files));
     }
 
@@ -239,6 +256,20 @@ class MatterReplyCollector
             ?->name;
     }
 
+    /** Where to see a reply: its matter, or the campaign its email was of. */
+    private static function replyUrl(MatterEmail $reply, MatterEmail $answers): ?string
+    {
+        if ($reply->matter_id) {
+            return MatterResource::getUrl('view', ['record' => $reply->matter_id], panel: 'mms');
+        }
+
+        $recipient = $answers->source;
+
+        return $recipient instanceof BulkMailRecipient
+            ? BulkMailCampaignResource::getUrl('view', ['record' => $recipient->campaign_id], panel: 'mms')
+            : null;
+    }
+
     /** Whoever sent the email: told of the reply. */
     private function tell(MatterEmail $reply, MatterEmail $answers, int $files): void
     {
@@ -251,10 +282,12 @@ class MatterReplyCollector
             Notification::make()
                 ->success()
                 ->icon('heroicon-o-envelope-open')
-                ->title(__(':name replied on matter :matter', ['name' => $reply->from, 'matter' => $reply->matter?->year.'/'.$reply->matter?->number]))
+                ->title($reply->matter
+                    ? __(':name replied on matter :matter', ['name' => $reply->from, 'matter' => $reply->matter->year.'/'.$reply->matter->number])
+                    : __(':name replied to a bulk email', ['name' => $reply->from]))
                 ->body(trim($reply->subject.($files ? ' — '.trans_choice(':count file|:count files', $files, ['count' => $files]) : '')))
                 ->actions([
-                    Action::make('view')->label(__('View'))->url(MatterResource::getUrl('view', ['record' => $reply->matter_id], panel: 'mms'))->markAsRead(),
+                    Action::make('view')->label(__('View'))->url(self::replyUrl($reply, $answers))->markAsRead(),
                 ])
                 ->sendToDatabase($user);
         } catch (Throwable $e) {

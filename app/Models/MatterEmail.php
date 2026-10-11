@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -19,28 +20,26 @@ class MatterEmail extends Model
 
     public const RECEIVED = 'received';
 
-    protected $fillable = ['matter_id', 'direction', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'at', 'user_id'];
+    protected $fillable = ['matter_id', 'direction', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'files', 'at', 'user_id'];
 
     protected function casts(): array
     {
         return [
             'to' => 'array',
+            'files' => 'array',
             'at' => 'datetime',
         ];
     }
 
     /**
-     * An email sent from a matter, remembered — for its replies to be found.
-     * Never stops the send it records.
+     * An email sent — from a matter, or a bulk mail campaign with none —
+     * remembered for its replies to be found. Never stops the send it
+     * records.
      *
      * @param  list<string>  $to  everyone it went to, copied in too
      */
     public static function recordSent(?int $matterId, ?Model $source, string $senderKey, ?string $messageId, string $subject, array $to, ?int $userId): void
     {
-        if (! $matterId) {
-            return;
-        }
-
         try {
             static::create([
                 'matter_id' => $matterId,
@@ -65,6 +64,19 @@ class MatterEmail extends Model
         $id = trim((string) $id, " <>\t\r\n");
 
         return $id === '' ? null : mb_substr($id, 0, 500);
+    }
+
+    /**
+     * The replies to what went to a bulk mail recipient, newest first.
+     *
+     * @return Builder<self>
+     */
+    public static function repliesTo(Model $source): Builder
+    {
+        return static::query()
+            ->where('direction', self::RECEIVED)
+            ->whereIn('parent_id', static::query()->where('source_type', $source->getMorphClass())->where('source_id', $source->getKey())->select('id'))
+            ->latest('at');
     }
 
     /**

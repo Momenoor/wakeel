@@ -1,6 +1,6 @@
 {{-- resources/views/bulk-mail/pdf.blade.php --}}
     <!DOCTYPE html>
-<html lang="{{ $isRtl ? 'ar' : 'en' }}" dir="{{ $isRtl ? 'rtl' : 'ltr' }}">
+<html lang="{{ $isRtl ? 'ar' : 'en' }}" dir="ltr">
 <head>
     <meta charset="UTF-8">
     <style>
@@ -14,7 +14,8 @@
             font-family: 'Arial Unicode MS', Arial, sans-serif;
             font-size: 10pt;
             color: #000;
-            direction: {{ $isRtl ? 'rtl' : 'ltr' }};
+            /* The page left to right; each Arabic block of the email right to left (EmailPdf::directed()). */
+            direction: ltr;
         }
 
         /* ── Outlook brand block ── */
@@ -47,7 +48,6 @@
             padding: 8px 0 6px;
             border-bottom: 1px solid #d0d0d0;
             margin-bottom: 8px;
-            text-align: {{ $isRtl ? 'right' : 'left' }};
         }
 
         /* ── Meta table ── */
@@ -106,22 +106,26 @@
 </head>
 <body>
 
-{{-- ── Outlook brand ── --}}
+{{-- ── Brand: Outlook, or the office — its logo, else its name (Settings) ── --}}
 <div class="outlook-brand" style="direction: ltr; text-align: left;">
     <table cellpadding="0" cellspacing="0" style="direction: ltr;">
         <tr>
-            <td style="width: 38px; vertical-align: middle;">
-                <img src="{{ asset('images/MicrosoftOutlook.png') }}" width="48" alt="Outlook icon">
-            </td>
-            <td style="vertical-align: middle; padding-left: 8px; font-size: 16pt; font-weight: normal; color: #1a1a1a;">
-                Outlook
-            </td>
+            @if ($brand['logo'])
+                <td style="vertical-align: middle;">
+                    <img src="{{ $brand['logo'] }}" @if ($brand['office']) height="48" @else width="48" @endif alt="">
+                </td>
+            @endif
+            @if ($brand['name'])
+                <td style="vertical-align: middle; padding-left: 8px; font-size: 16pt; font-weight: normal; color: #1a1a1a;">
+                    {{ $brand['name'] }}
+                </td>
+            @endif
         </tr>
     </table>
 </div>
 
 {{-- ── Subject ── --}}
-<div class="email-subject">{{ $subject }}</div>
+<div class="email-subject" dir="{{ \App\Services\MMS\BulkMailService::containsArabic($subject) ? 'rtl' : 'ltr' }}" style="text-align: {{ \App\Services\MMS\BulkMailService::containsArabic($subject) ? 'right' : 'left' }};">{{ $subject }}</div>
 
 {{-- ── Meta table (always LTR) ── --}}
 <table class="meta-table">
@@ -162,10 +166,10 @@
 {{-- ── Attachments ── --}}
 @if(!empty($attachments))
     <div class="attachments-block">
-        &#128206; {{ count($attachments) }} {{ \Illuminate\Support\Str::plural('attachment', count($attachments)) }}
+        <img src="{{ public_path('images/paperclip.png') }}" width="10" alt=""> {{ count($attachments) }} {{ \Illuminate\Support\Str::plural('attachment', count($attachments)) }}
         <div class="att-names">
-            @foreach($attachments as $path)
-                {{ basename($path) }}@if(!$loop->last)
+            @foreach($attachments as $file)
+                {{ $file['name'] }}@if(!$loop->last)
                     ;
                 @endif
             @endforeach
@@ -176,7 +180,7 @@
 <div class="body-gap"></div>
 
 {{-- ── Email body (Arabic handled automatically by mPDF autoArabic) ── --}}
-<div class="email-body">
+<div class="email-body" dir="ltr">
     {!! $html !!}
 </div>
 
