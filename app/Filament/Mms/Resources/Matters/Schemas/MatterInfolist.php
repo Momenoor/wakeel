@@ -21,10 +21,12 @@ use App\Livewire\MatterOneDriveFiles;
 use App\Models\CalendarEvent;
 use App\Models\IncentiveAssistantLine;
 use App\Models\Matter;
+use App\Models\Party;
 use App\Models\Type;
 use App\Services\MMS\Calendar\EventMatterLinker;
 use App\Services\MMS\IncentiveCalculatorService;
 use App\Services\MMS\MatterOneDriveFolders;
+use App\Services\MMS\OneDriveFolderLinker;
 use App\Support\Currency;
 use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
@@ -886,6 +888,7 @@ class MatterInfolist
     private static function oneDriveSection(): Section
     {
         return Section::make(__('OneDrive'))
+            ->key('matter-onedrive')
             ->icon('heroicon-o-cloud')
             ->collapsible()
             ->visible(fn ($record) => static::showsOneDrive($record))
@@ -909,6 +912,48 @@ class MatterInfolist
                             ->send();
 
                         // The file manager shows them as they now are.
+                        $livewire->dispatch('onedrive-folders-changed');
+                    }),
+                // A matter from before: its folder already in OneDrive, as it
+                // is named, linked — once for each assistant.
+                Action::make('linkOneDriveFolder')
+                    ->label(__('Link existing folder'))
+                    ->icon('heroicon-o-link')
+                    ->color('gray')
+                    ->size('sm')
+                    ->visible(fn ($record) => auth()->user()?->can('update', $record) && OneDriveFolderLinker::unlinked($record)->isNotEmpty())
+                    ->modalDescription(__('Choose the folder already in the assistant\'s OneDrive for this matter — any name, anywhere. It is linked as it is: not renamed, nothing made in it.'))
+                    ->modalSubmitActionLabel(__('Link'))
+                    ->fillForm(fn ($record): array => ['party_id' => OneDriveFolderLinker::unlinked($record)->first()?->getKey()])
+                    ->schema(fn ($record): array => [
+                        Select::make('party_id')
+                            ->label(__('Assistant'))
+                            ->options(fn () => OneDriveFolderLinker::unlinked($record)->pluck('name', 'id')->all())
+                            ->required()
+                            ->live()
+                            ->afterStateUpdated(fn ($set) => $set('drive_item_id', null)),
+                        Select::make('drive_item_id')
+                            ->label(__('Folder'))
+                            ->helperText(__('★ has the matter\'s number and year. Type to search the whole OneDrive.'))
+                            ->searchable()
+                            ->options(fn (Get $get): array => ($assistant = Party::find($get('party_id')))
+                                ? rescue(fn () => app(OneDriveFolderLinker::class)->choices($record, $assistant), [], false) : [])
+                            ->getSearchResultsUsing(fn (Get $get, string $search): array => ($assistant = Party::find($get('party_id')))
+                                ? rescue(fn () => app(OneDriveFolderLinker::class)->search($assistant, $search), [], false) : [])
+                            ->getOptionLabelUsing(fn (Get $get, $value): ?string => ($assistant = Party::find($get('party_id')))
+                                ? app(OneDriveFolderLinker::class)->label($assistant, (string) $value) : null)
+                            ->required(),
+                    ])
+                    ->action(function ($record, array $data, $livewire): void {
+                        try {
+                            $folder = app(OneDriveFolderLinker::class)->link($record, Party::findOrFail($data['party_id']), (string) $data['drive_item_id']);
+                        } catch (\Throwable $e) {
+                            Notification::make()->danger()->title(__('The folder could not be linked'))->body($e->getMessage())->persistent()->send();
+
+                            return;
+                        }
+
+                        Notification::make()->success()->title(__('":name" linked to this matter.', ['name' => $folder->folder_name]))->send();
                         $livewire->dispatch('onedrive-folders-changed');
                     }),
             ])

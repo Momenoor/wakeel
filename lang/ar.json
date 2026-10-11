@@ -3859,5 +3859,11 @@
     "Copied in whenever they are emailed on this matter; their party record is not changed.": "تُضاف نسخةً كلما راسلناه في هذه القضية؛ ولا تتغير بياناته في جدول الأطراف.",
     "No contacts yet": "لا توجد جهات اتصال بعد",
     "The matter's parties, and everyone its letters, minutes and emails reach, appear here.": "يظهر هنا أطراف القضية وكل من وصلتهم خطاباتها ومحاضرها ورسائلها.",
-    "Bulk Mail Campaign": "حملة بريد جماعي"
+    "Bulk Mail Campaign": "حملة بريد جماعي",
+    "Link existing folder": "ربط مجلد موجود",
+    "Choose the folder already in the assistant's OneDrive for this matter — any name, anywhere. It is linked as it is: not renamed, nothing made in it.": "اختر المجلد الموجود فعلًا لهذه القضية في OneDrive الخاص بالمساعد — بأي اسم وفي أي مكان. يُربط كما هو: دون إعادة تسمية ودون إنشاء أي شيء بداخله.",
+    "★ has the matter's number and year. Type to search the whole OneDrive.": "★ يحمل رقم القضية وسنتها. اكتب للبحث في OneDrive بالكامل.",
+    "The folder could not be linked": "تعذر ربط المجلد",
+    "\":name\" linked to this matter.": "تم ربط \":name\" بهذه القضية.",
+    "\":name\" is a file, not a folder.": "\":name\" ملف وليس مجلدًا."
 }
