@@ -413,7 +413,7 @@ class Party extends Model
     /**
      * @return list<string>
      */
-    private static function values(mixed $value): array
+    public static function values(mixed $value): array
     {
         return collect(is_array($value) ? $value : [$value])->flatten()->map(fn ($v) => trim((string) $v))->filter()->values()->all();
     }

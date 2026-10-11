@@ -3810,5 +3810,9 @@
     "The mailbox a letter, minutes or a bulk mail campaign starts from when sent; another can be chosen each time.": "صندوق البريد الذي يبدأ منه إرسال الخطاب أو المحضر أو حملة البريد الجماعي؛ ويمكن اختيار غيره في كل مرة.",
     ":count reply|:count replies": ":count رد|:count ردود",
     "Replies from :name": "ردود :name",
-    ":name replied to a bulk email": "ردّ :name على رسالة جماعية"
+    ":name replied to a bulk email": "ردّ :name على رسالة جماعية",
+    ":count party(ies) imported.": "تم استيراد :count طرف.",
+    "\":email\" is not an email address.": "\":email\" ليس عنوان بريد إلكتروني.",
+    "A party cannot belong to itself.": "لا يمكن أن يتبع الطرف نفسه.",
+    ":what \":value\" is not known.": ":what \":value\" غير معروف."
 }

@@ -2,10 +2,12 @@
 
 namespace App\Filament\Mms\Resources\Parties\Pages;
 
+use App\Filament\Mms\Imports\PartyImporter;
 use App\Filament\Mms\Resources\Parties\PartyResource;
 use App\Models\Party;
 use App\Support\ScreenPermissions;
 use Filament\Actions\CreateAction;
+use Filament\Actions\ImportAction;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
 use Illuminate\Database\Eloquent\Builder;
@@ -17,6 +19,10 @@ class ListParties extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
+            // From a spreadsheet: several phones / emails a cell, roles, whom each belongs to.
+            ImportAction::make()
+                ->importer(PartyImporter::class)
+                ->visible(fn (): bool => auth()->user()?->can('create', Party::class) ?? false),
             CreateAction::make(),
         ];
     }
