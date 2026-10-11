@@ -25,22 +25,16 @@ class Todo extends Model
     }
 
     /**
-     * What the note shows: the days ahead, today, and an earlier day while
-     * something on it is still open — done lines only until the day after
-     * they were done (unless all are asked for).
+     * What the note shows: what is still to do — a line ticked off leaves
+     * it at once — or, asked for, the done ones too.
      *
      * @return Builder<self>
      */
     public static function shownFor(int $userId, bool $allDone = false): Builder
     {
-        $today = today();
-
         return static::query()
             ->where('user_id', $userId)
-            ->where(fn (Builder $q) => $q->whereNull('done_at')
-                ->orWhere('due_on', '>=', $today)
-                ->orWhere('done_at', '>=', $today)
-                ->when($allDone, fn (Builder $q) => $q->orWhereNotNull('done_at')))
+            ->when(! $allDone, fn (Builder $q) => $q->whereNull('done_at'))
             ->orderBy('due_on')
             ->orderByRaw('done_at is not null')
             ->orderBy('id');

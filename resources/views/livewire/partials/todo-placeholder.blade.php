@@ -4,8 +4,12 @@
     note arrives.
 --}}
 <div
-    x-data="{ style: '' }"
-    x-init="try { const p = JSON.parse(localStorage.getItem('wakeel.todo.position')); if (p) { style = 'left:' + p.x + 'px; top:' + p.y + 'px; right:auto; bottom:auto'; } } catch (e) {}"
+    x-data="{
+        style: '',
+        init() {
+            try { const p = JSON.parse(localStorage.getItem('wakeel.todo.position')); if (p) { this.style = 'left:' + p.x + 'px; top:' + p.y + 'px; right:auto; bottom:auto'; } } catch (e) {}
+        },
+    }"
     x-bind:style="style"
     class="fi-todo-note fixed bottom-6 end-24 z-40"
 >

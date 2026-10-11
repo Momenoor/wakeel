@@ -57,18 +57,18 @@ class TodoNoteTest extends TestCase
         $this->assertStringStartsWith(__('Today'), $groups[0]['label']);
     }
 
-    public function test_what_is_shown_past_days_while_open_done_ones_until_the_next_day(): void
+    public function test_only_what_is_still_to_do_is_shown_done_ones_on_asking(): void
     {
         $this->todo('Late, still open', '2026-10-09');
         $this->todo('Old and done', '2026-10-08', '2026-10-08 12:00');
-        $this->todo('Done today', '2026-10-10', '2026-10-12 08:00');
+        $this->todo('Done today', '2026-10-12', '2026-10-12 08:00');
         $this->todo('Today', '2026-10-12');
-        $this->todo('Someone else\'s', '2026-10-12', user: User::factory()->create());
+        $this->todo('Not mine', '2026-10-12', user: User::factory()->create());
 
-        $shown = Todo::shownFor($this->user->id)->pluck('title')->all();
-        $this->assertSame(['Late, still open', 'Done today', 'Today'], $shown);
-        // Every done one, when asked.
-        $this->assertContains('Old and done', Todo::shownFor($this->user->id, allDone: true)->pluck('title')->all());
+        // Ticked off: gone from the list at once.
+        $this->assertSame(['Late, still open', 'Today'], Todo::shownFor($this->user->id)->pluck('title')->all());
+        // Every done one, when asked: after the open ones of its day.
+        $this->assertSame(['Old and done', 'Late, still open', 'Today', 'Done today'], Todo::shownFor($this->user->id, allDone: true)->pluck('title')->all());
 
         $groups = Todo::grouped(Todo::shownFor($this->user->id)->get());
         $this->assertTrue($groups[0]['overdue']);
@@ -84,8 +84,9 @@ class TodoNoteTest extends TestCase
 
         $note = Livewire::test(TodoNote::class)->call('setOpen', true)->assertSee('Call');
 
-        $note->call('toggle', $todo->id);
+        $note->call('toggle', $todo->id)->assertDontSee('Call');
         $this->assertNotNull($todo->refresh()->done_at);
+        $note->set('allDone', true)->assertSee('Call');
         $note->call('toggle', $todo->id);
         $this->assertNull($todo->refresh()->done_at);
 
@@ -97,6 +98,20 @@ class TodoNoteTest extends TestCase
 
         $note->call('remove', $todo->id);
         $this->assertModelMissing($todo);
+    }
+
+    public function test_the_notes_width_is_dragged_and_kept_for_the_user(): void
+    {
+        Livewire::test(TodoNote::class)->assertSet('width', TodoNote::WIDTH)->call('saveWidth', 480);
+
+        $this->assertSame(480, $this->user->refresh()->ui_preferences['todo_width']);
+        Livewire::test(TodoNote::class)->assertSet('width', 480);
+
+        // Never too narrow or too wide.
+        Livewire::test(TodoNote::class)->call('saveWidth', 50);
+        $this->assertSame(TodoNote::MIN_WIDTH, $this->user->refresh()->ui_preferences['todo_width']);
+        Livewire::test(TodoNote::class)->call('saveWidth', 5000);
+        $this->assertSame(TodoNote::MAX_WIDTH, $this->user->refresh()->ui_preferences['todo_width']);
     }
 
     public function test_no_one_else_s_line_is_touched(): void

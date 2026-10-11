@@ -97,6 +97,8 @@ class UnfiledEmails extends Page implements HasTable
     {
         return $table
             ->query(self::waiting())
+            ->modelLabel(__('Unfiled email'))
+            ->pluralModelLabel(__('Unfiled emails'))
             ->defaultSort('at', 'desc')
             ->columns([
                 TextColumn::make('at')

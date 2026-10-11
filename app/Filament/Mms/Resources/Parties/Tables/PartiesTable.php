@@ -44,10 +44,15 @@ class PartiesTable
                         $rawRole = $record->getRawOriginal('role');
                         $roles = json_decode($rawRole, true) ?? [];
 
-                        return collect($roles)->map(function ($role) {
-                            $label = __($role['role'] ? ucfirst($role['role']) : '');
-                            if (isset($role['type'])) {
-                                $label .= ' ('.__($role['type'] ? ucfirst($role['type']) : '').')';
+                        // Each by its own list: "external" is an external entity as
+                        // a role, and an external expert only as an expert's type.
+                        $roleNames = Party::roleOptions();
+                        $typeNames = Party::expertTypeOptions();
+
+                        return collect($roles)->map(function ($role) use ($roleNames, $typeNames) {
+                            $label = filled($role['role'] ?? null) ? ($roleNames[$role['role']] ?? __(ucfirst($role['role']))) : '';
+                            if (filled($role['type'] ?? null)) {
+                                $label .= ' ('.($typeNames[$role['type']] ?? __(ucfirst($role['type']))).')';
                             }
                             if (isset($role['field'])) {
                                 $label .= ' - '.ExpertiseArea::labelFor($role['field']);

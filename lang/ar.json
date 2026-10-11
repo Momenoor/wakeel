@@ -3875,5 +3875,12 @@
     "Delete this to-do?": "حذف هذه المهمة؟",
     "Nothing to do. Add the first one above.": "لا توجد مهام. أضف أول مهمة بالأعلى.",
     "Delete the done to-dos of past days?": "حذف المهام المنجزة للأيام السابقة؟",
-    "Clear done of past days": "مسح المنجز من الأيام السابقة"
+    "Clear done of past days": "مسح المنجز من الأيام السابقة",
+    "Drag to resize": "اسحب لتغيير العرض",
+    "Delete all the done to-dos?": "حذف كل المهام المنجزة؟",
+    "Clear done": "مسح المنجز",
+    "Late (to-do)": "متأخرة",
+    "Folder review": "مراجعة مجلد",
+    "Folder reviews": "مراجعات المجلدات",
+    "Unfiled email": "رسالة بلا قضية"
 }

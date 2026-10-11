@@ -27,12 +27,37 @@ class TodoNote extends Component
 
     public string $dueOn = '';
 
+    /** The note's width, as the user dragged it (their preferences). */
+    public int $width = self::WIDTH;
+
+    public const WIDTH = 352;
+
+    public const MIN_WIDTH = 280;
+
+    public const MAX_WIDTH = 720;
+
     private const STATE = 'wakeel.todo.open';
 
     public function mount(): void
     {
         $this->isOpen = (bool) session(self::STATE, false);
         $this->dueOn = today()->toDateString();
+        $this->width = self::clampWidth((int) (auth()->user()?->ui_preferences['todo_width'] ?? self::WIDTH));
+    }
+
+    /** Dragged wider or narrower: kept for this user, on every device. */
+    public function saveWidth(int $width): void
+    {
+        $this->width = self::clampWidth($width);
+        $user = auth()->user();
+        $user->forceFill(['ui_preferences' => [...($user->ui_preferences ?? []), 'todo_width' => $this->width]])->save();
+
+        $this->skipRender();
+    }
+
+    public static function clampWidth(int $width): int
+    {
+        return max(self::MIN_WIDTH, min(self::MAX_WIDTH, $width));
     }
 
     /** Opened or hidden — already, in the browser; kept here for the next page. */
@@ -94,10 +119,10 @@ class TodoNote extends Component
         unset($this->groups, $this->dueCount);
     }
 
-    /** Done lines of past days, cleared away. */
+    /** Every done line, cleared away. */
     public function clearDone(): void
     {
-        Todo::query()->where('user_id', auth()->id())->whereNotNull('done_at')->where('due_on', '<', today())->delete();
+        Todo::query()->where('user_id', auth()->id())->whereNotNull('done_at')->delete();
         unset($this->groups);
     }
 

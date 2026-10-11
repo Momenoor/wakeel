@@ -65,6 +65,16 @@ class PartyRoleFilterTest extends TestCase
             ->assertCanNotSeeTableRecords([$plaintiff]);
     }
 
+    public function test_an_external_entity_is_not_called_an_external_expert(): void
+    {
+        $police = Party::factory()->create(['role' => ['role' => ['external']]]);
+        $expert = Party::factory()->create(['role' => ['role' => ['expert'], 'type' => ['external']]]);
+
+        Livewire::test(ListParties::class)
+            ->assertTableColumnStateSet('role', [Party::roleOptions()['external']], $police)
+            ->assertTableColumnStateSet('role', [Party::roleOptions()['expert'].' ('.Party::expertTypeOptions()['external'].')'], $expert);
+    }
+
     public function test_the_tab_shows_only_with_its_permission(): void
     {
         $this->denied = ['View:PartiesExternalTab'];

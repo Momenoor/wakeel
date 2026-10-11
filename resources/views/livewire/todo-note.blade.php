@@ -37,12 +37,30 @@
         },
         clicked() {
             if (this.moved) { this.moved = false; return; }
-            this.toggle(! $wire.isOpen);
+            this.toggle(! this.$wire.isOpen);
         },
         {{-- Shown or hidden at once; the server keeps it for the next page. --}}
         toggle(open) {
-            $wire.isOpen = open;
-            $wire.setOpen(open);
+            this.$wire.isOpen = open;
+            this.$wire.setOpen(open);
+        },
+        {{-- The note's width: dragged by either side border, saved for the user when let go. --}}
+        width: @js($width),
+        resizing: null,
+        startResize(e, side) {
+            this.resizing = { side, x: e.clientX, w: this.width };
+            e.currentTarget.setPointerCapture(e.pointerId);
+        },
+        onResize(e) {
+            if (! this.resizing) { return; }
+            const dx = e.clientX - this.resizing.x;
+            const w = this.resizing.w + (this.resizing.side === 'left' ? -dx : dx);
+            this.width = Math.round(Math.min(Math.max({{ \App\Livewire\TodoNote::MIN_WIDTH }}, w), Math.min({{ \App\Livewire\TodoNote::MAX_WIDTH }}, window.innerWidth - 32)));
+        },
+        endResize() {
+            if (! this.resizing) { return; }
+            this.resizing = null;
+            this.$wire.saveWidth(this.width);
         },
         placement() {
             if (! this.pos) { return ''; }
@@ -97,8 +115,23 @@
         x-transition:leave-start="opacity-100 translate-y-0 scale-100"
         x-transition:leave-end="opacity-0 translate-y-4 scale-95"
         style="display: none;"
-        class="flex max-h-[min(32rem,calc(100vh-7rem))] w-[22rem] max-w-[calc(100vw-3rem)] -rotate-[0.4deg] flex-col overflow-hidden rounded-md border border-amber-300/70 bg-amber-100 text-amber-950 shadow-2xl shadow-amber-900/20 dark:border-amber-500/30 dark:bg-amber-950 dark:text-amber-50"
+        :style="{ width: width + 'px' }"
+        :class="resizing ? 'select-none' : ''"
+        class="relative flex max-h-[min(32rem,calc(100vh-7rem))] max-w-[calc(100vw-2rem)] -rotate-[0.4deg] flex-col overflow-hidden rounded-md border border-amber-300/70 bg-amber-100 text-amber-950 shadow-2xl shadow-amber-900/20 dark:border-amber-500/30 dark:bg-amber-950 dark:text-amber-50"
     >
+        {{-- Either side border: drag to make the note wider or narrower. --}}
+        @foreach (['left', 'right'] as $side)
+            <div
+                x-on:pointerdown.prevent="startResize($event, '{{ $side }}')"
+                x-on:pointermove="onResize($event)"
+                x-on:pointerup="endResize()"
+                x-on:pointercancel="endResize()"
+                style="touch-action: none;"
+                class="absolute inset-y-0 {{ $side === 'left' ? 'left-0' : 'right-0' }} z-10 w-1.5 cursor-ew-resize transition-colors hover:bg-amber-400/60"
+                title="{{ __('Drag to resize') }}"
+            ></div>
+        @endforeach
+
         <div class="flex items-center gap-2 border-b border-amber-300/70 bg-amber-200/70 px-4 py-2.5 dark:border-amber-500/30 dark:bg-amber-900/60">
             <x-filament::icon icon="heroicon-o-clipboard-document-check" class="h-5 w-5" />
             <h2 class="flex-1 text-sm font-semibold">{{ __('To-do list') }}</h2>
@@ -139,7 +172,7 @@
                     <section wire:key="day-{{ $group['date'] }}" class="py-2">
                         <h3 @class(['mb-1 text-xs font-bold uppercase tracking-wide', 'text-danger-600 dark:text-danger-400' => $group['overdue'], 'text-amber-800 dark:text-amber-300' => ! $group['overdue']])>
                             {{ $group['label'] }}
-                            @if ($group['overdue']) · {{ __('Overdue') }} @endif
+                            @if ($group['overdue']) · {{ __('Late (to-do)') }} @endif
                         </h3>
 
                         <ul class="flex flex-col">
@@ -203,8 +236,8 @@
 
             @if ($allDone)
                 <div class="border-t border-amber-300/70 px-4 py-2 text-end dark:border-amber-500/30">
-                    <button type="button" wire:click="clearDone" wire:confirm="{{ __('Delete the done to-dos of past days?') }}" class="text-xs text-danger-700 underline-offset-2 hover:underline dark:text-danger-400">
-                        {{ __('Clear done of past days') }}
+                    <button type="button" wire:click="clearDone" wire:confirm="{{ __('Delete all the done to-dos?') }}" class="text-xs text-danger-700 underline-offset-2 hover:underline dark:text-danger-400">
+                        {{ __('Clear done') }}
                     </button>
                 </div>
             @endif

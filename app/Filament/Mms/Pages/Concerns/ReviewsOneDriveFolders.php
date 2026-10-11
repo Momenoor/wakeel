@@ -64,6 +64,8 @@ trait ReviewsOneDriveFolders
     {
         return $table
             ->query(Review::query()->with(['matter.court', 'matter.type', 'party']))
+            ->modelLabel(__('Folder review'))
+            ->pluralModelLabel(__('Folder reviews'))
             ->defaultSort('status')
             ->columns([
                 TextColumn::make('matter')
