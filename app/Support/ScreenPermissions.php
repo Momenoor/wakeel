@@ -90,6 +90,8 @@ final class ScreenPermissions
 
     public const PARTIES_EMPLOYEES_TAB = 'View:PartiesEmployeesTab';
 
+    public const PARTIES_EXTERNAL_TAB = 'View:PartiesExternalTab';
+
     // ── Financial Configuration tabs ─────────────────────────────────────
     public const FINANCIAL_INCENTIVE_TAB = 'View:FinancialIncentiveTab';
 
@@ -163,6 +165,7 @@ final class ScreenPermissions
             self::PARTIES_REPRESENTATIVES_TAB => ['ViewAny:Party'],
             self::PARTIES_EXPERTS_TAB => ['ViewAny:Party'],
             self::PARTIES_EMPLOYEES_TAB => ['ViewAny:Party'],
+            self::PARTIES_EXTERNAL_TAB => ['ViewAny:Party'],
 
             // The Financial Configuration tabs are granted by the migration's
             // own rule (the page's old per-cluster check), not a simple list.

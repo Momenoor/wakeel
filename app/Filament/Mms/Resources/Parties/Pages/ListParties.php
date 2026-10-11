@@ -33,6 +33,7 @@ class ListParties extends ListRecords
             'representatives' => ScreenPermissions::PARTIES_REPRESENTATIVES_TAB,
             'experts' => ScreenPermissions::PARTIES_EXPERTS_TAB,
             'employees' => ScreenPermissions::PARTIES_EMPLOYEES_TAB,
+            'external' => ScreenPermissions::PARTIES_EXTERNAL_TAB,
         ];
 
         return array_filter(
@@ -60,6 +61,9 @@ class ListParties extends ListRecords
             // to be coverable by a test.
             'employees' => Tab::make(__('Employees'))
                 ->modifyQueryUsing($this->scopeToEmployees(...)),
+            // Police, central bank …: written to from matters, with their own letter templates.
+            'external' => Tab::make(__('External entities'))
+                ->modifyQueryUsing(fn (Builder $query) => $query->withRole('external')),
         ];
     }
 

@@ -18,11 +18,15 @@ class PartyRoleFilterTest extends TestCase
 {
     use RefreshDatabase;
 
+    /** @var list<string> */
+    private array $denied = [];
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        Gate::before(fn () => true);
+        // Everything allowed — but what a test denies.
+        Gate::before(fn ($user, string $ability) => in_array($ability, $this->denied, true) ? false : true);
         Filament::setCurrentPanel('mms');
         $this->actingAs(User::factory()->create());
     }
@@ -48,5 +52,23 @@ class PartyRoleFilterTest extends TestCase
             ->filterTable('sub_role', ['assistant'])
             ->assertCanSeeTableRecords([$assistant])
             ->assertCanNotSeeTableRecords([$certified, $employee, $tenant]);
+    }
+
+    public function test_external_entities_have_a_tab_of_their_own(): void
+    {
+        $police = Party::factory()->create(['name' => 'شرطة دبي', 'role' => ['role' => ['external']]]);
+        $plaintiff = Party::factory()->create(['role' => ['role' => ['party']]]);
+
+        Livewire::test(ListParties::class)
+            ->set('activeTab', 'external')
+            ->assertCanSeeTableRecords([$police])
+            ->assertCanNotSeeTableRecords([$plaintiff]);
+    }
+
+    public function test_the_tab_shows_only_with_its_permission(): void
+    {
+        $this->denied = ['View:PartiesExternalTab'];
+
+        $this->assertArrayNotHasKey('external', Livewire::test(ListParties::class)->instance()->getTabs());
     }
 }

@@ -91,6 +91,7 @@ return [
         'view_parties_representatives_tab' => 'تبويب الأطراف: الممثلون',
         'view_parties_experts_tab' => 'تبويب الأطراف: الخبراء',
         'view_parties_employees_tab' => 'تبويب الأطراف: الموظفون',
+        'view_parties_external_tab' => 'تبويب الأطراف: الجهات الخارجية',
         'view_financial_incentive_tab' => 'تبويب الإعدادات المالية: الحوافز',
         'view_financial_incentive_rates_tab' => 'تبويب الإعدادات المالية: النسب والخصومات',
         'view_financial_type_configurations_tab' => 'تبويب الإعدادات المالية: إعدادات الأنواع',
