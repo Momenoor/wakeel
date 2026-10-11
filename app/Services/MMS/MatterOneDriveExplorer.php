@@ -58,8 +58,37 @@ class MatterOneDriveExplorer
      */
     private function children(MatterOneDriveFolder $folder, string $itemId): array
     {
-        return Cache::remember($this->listingKey($folder, $itemId), self::LISTING_SECONDS,
-            fn (): array => $this->client->children($this->user($folder), $itemId));
+        return Cache::remember($this->listingKey($folder, $itemId), self::LISTING_SECONDS, function () use ($folder, $itemId): array {
+            $items = $this->client->children($this->user($folder), $itemId);
+            $this->know($folder, $items);
+
+            return $items;
+        });
+    }
+
+    /**
+     * Items read from inside the matter's folder, remembered as inside it
+     * (and whether each is a folder) — asked about again, no need to ask
+     * OneDrive where they are. Forgotten with the listings (refresh()).
+     *
+     * @param  list<array{id: string, folder: bool}>  $items
+     */
+    private function know(MatterOneDriveFolder $folder, array $items): void
+    {
+        if ($items === []) {
+            return;
+        }
+
+        $key = $this->versioned($folder, 'known');
+        Cache::put($key, [...(array) Cache::get($key, []), ...array_column($items, 'folder', 'id')], self::LISTING_SECONDS);
+    }
+
+    /** Known to be in the matter's folder: true a folder, false a file, null not known. */
+    private function known(MatterOneDriveFolder $folder, string $itemId): ?bool
+    {
+        $known = (array) Cache::get($this->versioned($folder, 'known'), []);
+
+        return array_key_exists($itemId, $known) ? (bool) $known[$itemId] : null;
     }
 
     /** A link to download a file, good for a few minutes. */
@@ -100,10 +129,21 @@ class MatterOneDriveExplorer
         $top = $this->list($folder);
         $files = collect($top)->reject(fn (array $i) => $i['folder'])->map(fn (array $i): array => ['id' => $i['id'], 'name' => $i['name'], 'where' => '']);
 
-        foreach (collect($top)->filter(fn (array $i) => $i['folder'] && $i['children'] > 0)->take(15) as $sub) {
-            $files = $files->concat(collect($this->children($folder, $sub['id']))
+        // The folders in it: those not kept already read all at once.
+        $subs = collect($top)->filter(fn (array $i) => $i['folder'] && $i['children'] > 0)->take(15)->keyBy('id');
+        $listings = $subs->mapWithKeys(fn (array $sub): array => [$sub['id'] => Cache::get($this->listingKey($folder, $sub['id']))]);
+        $missing = $listings->filter(fn ($items) => $items === null)->keys()->all();
+
+        foreach ($this->client->childrenOfMany($this->user($folder), $missing) as $id => $items) {
+            Cache::put($this->listingKey($folder, $id), $items, self::LISTING_SECONDS);
+            $this->know($folder, $items);
+            $listings[$id] = $items;
+        }
+
+        foreach ($listings as $id => $items) {
+            $files = $files->concat(collect($items)
                 ->reject(fn (array $i) => $i['folder'])
-                ->map(fn (array $i): array => ['id' => $i['id'], 'name' => $i['name'], 'where' => $sub['name']]));
+                ->map(fn (array $i): array => ['id' => $i['id'], 'name' => $i['name'], 'where' => $subs[$id]['name']]));
         }
 
         return $files->take(100)->values()->all();
@@ -153,7 +193,7 @@ class MatterOneDriveExplorer
     /** In the folder it's in (shown now), renamed. */
     public function rename(MatterOneDriveFolder $folder, ?string $parentId, string $itemId, string $name): void
     {
-        $this->info($folder, $itemId, notTheRoot: true);
+        $this->guard($folder, $itemId, notTheRoot: true);
         $this->client->rename($this->user($folder), $itemId, self::cleanName($name));
         $this->forget($folder, $this->inside($folder, $parentId));
     }
@@ -161,7 +201,7 @@ class MatterOneDriveExplorer
     /** To the owner's OneDrive recycle bin, from where it can be restored. */
     public function delete(MatterOneDriveFolder $folder, ?string $parentId, string $itemId): void
     {
-        $this->info($folder, $itemId, notTheRoot: true);
+        $this->guard($folder, $itemId, notTheRoot: true);
         $this->client->delete($this->user($folder), $itemId);
         $this->forget($folder, $this->inside($folder, $parentId));
     }
@@ -176,11 +216,25 @@ class MatterOneDriveExplorer
             return $this->rootId($folder);
         }
 
-        if (! $this->info($folder, $itemId)['folder']) {
+        $isFolder = $this->known($folder, $itemId) ?? $this->info($folder, $itemId)['folder'];
+
+        if (! $isFolder) {
             throw new RuntimeException(__('That is not a folder.'));
         }
 
         return $itemId;
+    }
+
+    /** Only an item in the matter's folder (not the folder itself, when said) — asked of OneDrive only when not known. */
+    private function guard(MatterOneDriveFolder $folder, string $itemId, bool $notTheRoot = false): void
+    {
+        if ($notTheRoot && $itemId === $this->rootId($folder)) {
+            throw new RuntimeException(__('The matter\'s own folder can\'t be changed here.'));
+        }
+
+        if ($this->known($folder, $itemId) === null) {
+            $this->info($folder, $itemId, $notTheRoot);
+        }
     }
 
     /**
@@ -199,6 +253,12 @@ class MatterOneDriveExplorer
         }
 
         $info = $this->client->itemInfo($this->user($folder), $itemId);
+
+        // Read from inside it already: where it is needs no checking.
+        if ($this->known($folder, $itemId) !== null) {
+            return $info;
+        }
+
         $root = $this->rootPath($folder);
         $path = self::normalPath($info['path']);
 
@@ -212,11 +272,11 @@ class MatterOneDriveExplorer
     /** "/drive/root:/Work/Matters/639-2025" — where the matter folder is, with its name. */
     private function rootPath(MatterOneDriveFolder $folder): string
     {
-        return $this->roots[$folder->getKey()] ??= (function () use ($folder): string {
+        return $this->roots[$folder->getKey()] ??= Cache::remember($this->versioned($folder, 'root'), self::LISTING_SECONDS, function () use ($folder): string {
             $info = $this->client->itemInfo($this->user($folder), $this->rootId($folder));
 
             return self::normalPath($info['path'].'/'.$info['name']);
-        })();
+        });
     }
 
     private function rootId(MatterOneDriveFolder $folder): string
@@ -241,9 +301,15 @@ class MatterOneDriveExplorer
 
     private function listingKey(MatterOneDriveFolder $folder, string $itemId): string
     {
+        return $this->versioned($folder, 'listing:'.md5($itemId));
+    }
+
+    /** A key of this version of the folder's listings (refresh() starts another). */
+    private function versioned(MatterOneDriveFolder $folder, string $what): string
+    {
         $version = Cache::rememberForever($this->versionKey($folder), fn (): string => Str::random(10));
 
-        return 'onedrive-listing:'.$folder->getKey().':'.$version.':'.md5($itemId);
+        return 'onedrive:'.$folder->getKey().':'.$version.':'.$what;
     }
 
     private function versionKey(MatterOneDriveFolder $folder): string

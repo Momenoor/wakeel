@@ -52,6 +52,10 @@ class ViewMatter extends ViewRecord
     public function matterChanged(): void
     {
         $this->record = $this->resolveRecord($this->record->getKey());
+
+        // Its sections built anew from it — their badges (the tabs' counts)
+        // were built from the matter as it was.
+        $this->cachedSchemas = [];
     }
 
     /**

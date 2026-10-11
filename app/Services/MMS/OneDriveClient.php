@@ -2,6 +2,7 @@
 
 namespace App\Services\MMS;
 
+use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -118,30 +119,78 @@ class OneDriveClient
      */
     public function children(string $user, string $folderId): array
     {
-        $uri = "/users/{$this->user($user)}/drive/items/".rawurlencode($folderId).'/children?$select=id,name,webUrl,folder,file,size,lastModifiedDateTime&$top=200';
+        $uri = $this->childrenUri($user, $folderId);
         $items = [];
 
         while ($uri !== null) {
             $response = $this->request('get', $uri);
-
-            foreach ((array) $response->json('value') as $item) {
-                $items[] = [
-                    'id' => (string) $item['id'],
-                    'name' => (string) $item['name'],
-                    'webUrl' => (string) ($item['webUrl'] ?? ''),
-                    'folder' => isset($item['folder']),
-                    'children' => isset($item['folder']) ? (int) ($item['folder']['childCount'] ?? 0) : null,
-                    'size' => isset($item['size']) ? (int) $item['size'] : null,
-                    'modified' => $item['lastModifiedDateTime'] ?? null,
-                    'mime' => $item['file']['mimeType'] ?? null,
-                ];
-            }
-
-            $next = $response->json('@odata.nextLink');
-            $uri = is_string($next) && str_starts_with($next, self::GRAPH) ? substr($next, strlen(self::GRAPH)) : null;
+            $items = [...$items, ...self::items($response)];
+            $uri = self::next($response);
         }
 
         return $items;
+    }
+
+    /**
+     * What's in each of several folders — asked of OneDrive all at once,
+     * not one folder after another.
+     *
+     * @param  list<string>  $folderIds
+     * @return array<string, list<array{id: string, name: string, webUrl: string, folder: bool, children: ?int, size: ?int, modified: ?string, mime: ?string}>>
+     */
+    public function childrenOfMany(string $user, array $folderIds): array
+    {
+        if ($folderIds === []) {
+            return [];
+        }
+
+        $token = $this->token();
+        $responses = Http::pool(fn (Pool $pool) => array_map(
+            fn (string $id) => $pool->as($id)->withToken($token)->acceptJson()->timeout(20)->get(self::GRAPH.$this->childrenUri($user, $id)),
+            $folderIds,
+        ));
+
+        $listings = [];
+        foreach ($folderIds as $id) {
+            $response = $responses[$id] ?? null;
+
+            // One that failed, or has more than a page: read as usual.
+            $listings[$id] = $response instanceof Response && $response->successful() && self::next($response) === null
+                ? self::items($response)
+                : $this->children($user, $id);
+        }
+
+        return $listings;
+    }
+
+    private function childrenUri(string $user, string $folderId): string
+    {
+        return "/users/{$this->user($user)}/drive/items/".rawurlencode($folderId).'/children?$select=id,name,webUrl,folder,file,size,lastModifiedDateTime&$top=200';
+    }
+
+    /**
+     * @return list<array{id: string, name: string, webUrl: string, folder: bool, children: ?int, size: ?int, modified: ?string, mime: ?string}>
+     */
+    private static function items(Response $response): array
+    {
+        return array_map(fn (array $item): array => [
+            'id' => (string) $item['id'],
+            'name' => (string) $item['name'],
+            'webUrl' => (string) ($item['webUrl'] ?? ''),
+            'folder' => isset($item['folder']),
+            'children' => isset($item['folder']) ? (int) ($item['folder']['childCount'] ?? 0) : null,
+            'size' => isset($item['size']) ? (int) $item['size'] : null,
+            'modified' => $item['lastModifiedDateTime'] ?? null,
+            'mime' => $item['file']['mimeType'] ?? null,
+        ], (array) $response->json('value'));
+    }
+
+    /** The next page, as a path under the API root. */
+    private static function next(Response $response): ?string
+    {
+        $next = $response->json('@odata.nextLink');
+
+        return is_string($next) && str_starts_with($next, self::GRAPH) ? substr($next, strlen(self::GRAPH)) : null;
     }
 
     /**

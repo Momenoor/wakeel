@@ -84,6 +84,12 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
      * polling requests. With Pusher configured the chat widget overrides
      * this live from the "online" presence channel; this is the fallback.
      */
+    /** The super administrator (filament-shield's role): allowed what others aren't. */
+    public function isSuperAdmin(): bool
+    {
+        return $this->hasRole(Utils::getSuperAdminName());
+    }
+
     public function isOnline(): bool
     {
         return (bool) $this->last_seen_at?->gt(now()->subSeconds(self::ONLINE_WITHIN_SECONDS));

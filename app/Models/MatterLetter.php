@@ -48,6 +48,12 @@ class MatterLetter extends Model
         return $this->belongsTo(User::class, 'sent_by');
     }
 
+    /** Sent by email at least once. */
+    public function wasSent(): bool
+    {
+        return $this->sent_at !== null;
+    }
+
     public function recipients(): HasMany
     {
         return $this->hasMany(MatterLetterRecipient::class);

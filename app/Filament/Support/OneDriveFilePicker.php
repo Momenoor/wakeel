@@ -119,9 +119,14 @@ final class OneDriveFilePicker
      */
     private static function folders(?Matter $matter): Collection
     {
-        return $matter
-            ? MatterOneDriveFolders::visibleTo($matter, auth()->user())->filter(fn (MatterOneDriveFolder $f) => $f->isCreated())->values()
-            : collect();
+        if (! $matter) {
+            return collect();
+        }
+
+        // Once a request: asked of the field's options, labels and visibility alike.
+        return once(fn (): Collection => MatterOneDriveFolders::visibleTo($matter, auth()->user())
+            ->filter(fn (MatterOneDriveFolder $f) => $f->isCreated())
+            ->values());
     }
 
     /**

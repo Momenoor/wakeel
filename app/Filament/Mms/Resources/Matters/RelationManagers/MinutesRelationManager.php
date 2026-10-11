@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 
 use App\Enums\LetterTemplateCategories;
+use App\Filament\Concerns\GuardsSentDeletion;
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Concerns\RefreshesMatterPage;
 use App\Filament\Mms\Resources\Matters\Pages\RecordMinutes;
@@ -56,6 +57,7 @@ use Illuminate\Support\HtmlString;
  */
 class MinutesRelationManager extends RelationManager
 {
+    use GuardsSentDeletion;
     use HasRelationManagerPermission;
     use RefreshesMatterPage;
 
@@ -465,13 +467,20 @@ class MinutesRelationManager extends RelationManager
 
     private function deleteAction(): Action
     {
-        return Action::make('deleteMinutes')
+        return self::guardSentDeletion(Action::make('deleteMinutes'))
             ->label(__('Delete'))
             ->icon('heroicon-o-trash')
             ->color('danger')
             ->requiresConfirmation()
             ->modalDescription(__('The PDF already filed with the attachments stays there.'))
             ->visible(fn (): bool => $this->canChange())
-            ->action(fn (MatterMinutes $record) => $record->delete());
+            ->action(function (MatterMinutes $record, Action $action): void {
+                // Never, however it's asked for: sent, a super admin's to delete.
+                if (! self::mayDeleteSent($record)) {
+                    $action->halt();
+                }
+
+                $record->delete();
+            });
     }
 }

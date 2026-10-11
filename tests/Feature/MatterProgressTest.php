@@ -24,6 +24,7 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
+use Filament\Schemas\Components\Tabs\Tab;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
@@ -207,10 +208,16 @@ class MatterProgressTest extends TestCase
             ->callTableAction(CreateAction::class, data: ['type' => ProgressType::SESSION->value, 'title' => 'جلسة', 'happened_at' => '2026-10-04 10:00:00'])
             ->assertDispatched('matter-changed');
 
-        // Meanwhile a letter issued: the page, told, counts it.
+        // Meanwhile a letter issued: the page, told, counts it — on the tab itself.
+        $lettersBadge = fn () => $page->instance()->getSchema('infolist')
+            ->getComponent(fn ($component) => $component instanceof Tab && $component->getLabel() === __('Letters'), withHidden: true)
+            ?->getBadge();
+        $this->assertNull($lettersBadge());
+
         $this->issueLetter();
         $page->dispatch('matter-changed');
         $this->assertSame(1, $page->instance()->getRecord()->letters_count);
+        $this->assertEquals(1, $lettersBadge());
     }
 
     public function test_what_matters_already_have_is_filled_in_once(): void

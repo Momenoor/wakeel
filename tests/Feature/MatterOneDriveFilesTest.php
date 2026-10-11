@@ -23,6 +23,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Mail\Events\MessageSent;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
@@ -53,6 +54,9 @@ class MatterOneDriveFilesTest extends TestCase
 
     /** How many times a folder was read from OneDrive. */
     private int $listings = 0;
+
+    /** How many times OneDrive was asked about one item (where it is, its link). */
+    private int $lookups = 0;
 
     protected function setUp(): void
     {
@@ -112,6 +116,7 @@ class MatterOneDriveFilesTest extends TestCase
 
             preg_match('#/items/([^/?:]+)(/children)?#', $url, $m);
             $this->listings += isset($m[2]) ? 1 : 0;
+            $this->lookups += isset($m[2]) || ! isset($m[1]) ? 0 : 1;
 
             return isset($m[2])
                 ? Http::response(['value' => array_map(fn ($id) => $items[$id] + ['webUrl' => 'https://od/'.$id], $children[$m[1]] ?? [])])
@@ -159,6 +164,27 @@ class MatterOneDriveFilesTest extends TestCase
         // The matter opened again: afresh.
         $this->page();
         $this->assertSame(5, $this->listings);
+    }
+
+    public function test_what_a_listing_found_is_not_asked_about_again(): void
+    {
+        Storage::fake('local');
+        $page = $this->page();
+        $this->assertSame(0, $this->lookups);
+
+        // Read from inside the matter's folder: opened, renamed with no question to OneDrive.
+        $page->callTableAction('open', 'sub-id')->callTableAction('rename', 'inner-id', ['name' => 'x.docx']);
+        $this->assertSame(0, $this->lookups);
+
+        // A download: only its link asked for — not where it is.
+        $page->call('goTo', -1)->callTableAction('download', 'file-id');
+        $this->assertSame(1, $this->lookups);
+
+        // One request, the matter read once.
+        $page->mountTableAction('rename', 'file-id')->setTableActionData(['name' => 'y.pdf']);
+        DB::enableQueryLog();
+        $page->callMountedTableAction();
+        $this->assertSame(1, collect(DB::getQueryLog())->filter(fn ($q) => preg_match('/from "matters" where "matters"."id" = \?/', $q['query']))->count());
     }
 
     public function test_a_change_here_tells_the_matter_page(): void

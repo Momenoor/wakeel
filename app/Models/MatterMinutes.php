@@ -63,6 +63,12 @@ class MatterMinutes extends Model
     }
 
     /** Sent to the attendees to sign, and what came back. */
+    /** Sent to anyone — by email or WhatsApp — at least once. */
+    public function wasSent(): bool
+    {
+        return $this->deliveries()->whereNotNull('sent_at')->exists();
+    }
+
     public function deliveries(): HasMany
     {
         return $this->hasMany(MinutesDelivery::class, 'matter_minutes_id');

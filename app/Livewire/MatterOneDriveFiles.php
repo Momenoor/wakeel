@@ -61,6 +61,14 @@ class MatterOneDriveFiles extends Component implements HasActions, HasSchemas, H
     /** Why the listing couldn't be read, if it couldn't. */
     public ?string $error = null;
 
+    /** For this request only: read once, asked of every row and action. */
+    private ?Matter $matterRead = null;
+
+    /** @var Collection<int, MatterOneDriveFolder>|null */
+    private ?Collection $foldersRead = null;
+
+    private ?bool $mayChange = null;
+
     public function mount(Matter $matter): void
     {
         $this->matterId = $matter->getKey();
@@ -89,6 +97,8 @@ class MatterOneDriveFiles extends Component implements HasActions, HasSchemas, H
     #[On('onedrive-folders-changed')]
     public function foldersChanged(): void
     {
+        $this->foldersRead = null;
+
         if (! $this->folder()?->isCreated()) {
             $this->pickFolder();
         }
@@ -104,11 +114,20 @@ class MatterOneDriveFiles extends Component implements HasActions, HasSchemas, H
      */
     public function folders(): Collection
     {
-        $matter = Matter::withTrashed()->find($this->matterId);
+        // Read once a request: asked of every row and action.
+        return $this->foldersRead ??= (function (): Collection {
+            $matter = $this->matter();
 
-        return $matter && auth()->user()?->can('view', $matter)
-            ? MatterOneDriveFolders::visibleTo($matter, auth()->user())->values()
-            : collect();
+            return $matter && auth()->user()?->can('view', $matter)
+                ? MatterOneDriveFolders::visibleTo($matter, auth()->user())->values()
+                : collect();
+        })();
+    }
+
+    /** The matter — read once a request. */
+    private function matter(): ?Matter
+    {
+        return $this->matterRead ??= Matter::withTrashed()->find($this->matterId);
     }
 
     private function folder(): ?MatterOneDriveFolder
@@ -123,9 +142,7 @@ class MatterOneDriveFiles extends Component implements HasActions, HasSchemas, H
 
     private function canChange(): bool
     {
-        $matter = Matter::withTrashed()->find($this->matterId);
-
-        return $matter && (auth()->user()?->can('update', $matter) ?? false);
+        return $this->mayChange ??= (bool) (($matter = $this->matter()) && auth()->user()?->can('update', $matter));
     }
 
     private function explorer(): MatterOneDriveExplorer

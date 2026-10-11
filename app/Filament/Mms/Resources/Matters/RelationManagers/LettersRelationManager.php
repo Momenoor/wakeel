@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 
 use App\Enums\LetterTemplateCategories;
+use App\Filament\Concerns\GuardsSentDeletion;
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Concerns\RefreshesMatterPage;
 use App\Filament\Support\EmailSendFields;
@@ -62,6 +63,7 @@ use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
  */
 class LettersRelationManager extends RelationManager
 {
+    use GuardsSentDeletion;
     use HasRelationManagerPermission;
     use RefreshesMatterPage;
 
@@ -389,14 +391,19 @@ class LettersRelationManager extends RelationManager
      */
     private function deleteAction(): Action
     {
-        return Action::make('deleteLetter')
+        return self::guardSentDeletion(Action::make('deleteLetter'))
             ->label(__('Delete'))
             ->icon('heroicon-o-trash')
             ->color('danger')
             ->requiresConfirmation()
             ->modalHeading(fn (MatterLetter $record) => __('Delete letter :reference', ['reference' => $record->reference]))
             ->visible(fn (): bool => auth()->user()?->can('update', $this->getOwnerRecord()) ?? false)
-            ->action(function (MatterLetter $record): void {
+            ->action(function (MatterLetter $record, Action $action): void {
+                // Never, however it's asked for: sent, a super admin's to delete.
+                if (! self::mayDeleteSent($record)) {
+                    $action->halt();
+                }
+
                 $record->delete();
 
                 Notification::make()->success()->title(__('Letter :reference deleted', ['reference' => $record->reference]))->send();
