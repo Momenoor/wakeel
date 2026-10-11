@@ -1,0 +1,217 @@
+<div
+    x-data="{
+        {{-- The bubble can be dragged anywhere (its own place, not the chat's), remembered per browser. --}}
+        pos: null,
+        drag: null,
+        moved: false,
+        loadPos() {
+            try { this.pos = JSON.parse(localStorage.getItem('wakeel.todo.position')); } catch (e) { this.pos = null; }
+            this.clamp();
+        },
+        clamp() {
+            if (! this.pos) { return; }
+            this.pos = {
+                x: Math.min(Math.max(8, this.pos.x), window.innerWidth - 64),
+                y: Math.min(Math.max(8, this.pos.y), window.innerHeight - 64),
+            };
+        },
+        startDrag(e) {
+            if (e.button !== undefined && e.button !== 0) { return; }
+            const r = e.currentTarget.getBoundingClientRect();
+            this.drag = { dx: e.clientX - r.left, dy: e.clientY - r.top, sx: e.clientX, sy: e.clientY };
+            this.moved = false;
+            e.currentTarget.setPointerCapture(e.pointerId);
+        },
+        onDrag(e) {
+            if (! this.drag) { return; }
+            if (! this.moved && Math.hypot(e.clientX - this.drag.sx, e.clientY - this.drag.sy) < 5) { return; }
+            this.moved = true;
+            this.pos = { x: e.clientX - this.drag.dx, y: e.clientY - this.drag.dy };
+            this.clamp();
+        },
+        endDrag() {
+            if (this.drag && this.moved) {
+                try { localStorage.setItem('wakeel.todo.position', JSON.stringify(this.pos)); } catch (e) {}
+            }
+            this.drag = null;
+        },
+        clicked() {
+            if (this.moved) { this.moved = false; return; }
+            this.toggle(! $wire.isOpen);
+        },
+        {{-- Shown or hidden at once; the server keeps it for the next page. --}}
+        toggle(open) {
+            $wire.isOpen = open;
+            $wire.setOpen(open);
+        },
+        placement() {
+            if (! this.pos) { return ''; }
+            const left = this.pos.x < 384;
+            const top = this.pos.y < 540;
+            return [
+                left ? 'left:' + this.pos.x + 'px; right:auto' : 'right:' + (window.innerWidth - this.pos.x - 56) + 'px; left:auto',
+                top ? 'top:' + this.pos.y + 'px; bottom:auto' : 'bottom:' + (window.innerHeight - this.pos.y - 56) + 'px; top:auto',
+                {{-- The note opens away from the edge it is near. --}}
+                'flex-direction:' + (top ? 'column' : 'column-reverse'),
+                'align-items:' + (left ? 'flex-start' : 'flex-end'),
+            ].join('; ');
+        },
+    }"
+    x-init="loadPos(); window.addEventListener('resize', () => clamp())"
+    x-on:keydown.escape.window="if ($wire.isOpen) { toggle(false) }"
+    :style="placement()"
+    wire:key="todo-note"
+    class="fi-todo-note fixed bottom-6 end-24 z-40 flex flex-col-reverse items-end gap-3"
+>
+    {{-- The bubble: click to show or hide, drag to move. --}}
+    <button
+        type="button"
+        x-on:pointerdown="startDrag($event)"
+        x-on:pointermove="onDrag($event)"
+        x-on:pointerup="endDrag()"
+        x-on:pointercancel="endDrag()"
+        x-on:click="clicked()"
+        style="touch-action: none; user-select: none; cursor: grab;"
+        title="{{ __('To-do list') }} — {{ __('Drag to move') }}"
+        aria-label="{{ __('To-do list') }}"
+        class="relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-500 text-amber-950 shadow-lg shadow-amber-600/30 ring-1 ring-black/5 transition-transform hover:scale-105 active:scale-95"
+    >
+        <x-filament::icon icon="heroicon-o-clipboard-document-check" class="h-6 w-6" x-show="! $wire.isOpen" />
+        <x-filament::icon icon="heroicon-o-x-mark" class="h-5 w-5" x-show="$wire.isOpen" x-cloak />
+
+        @if ($this->dueCount > 0)
+            <span
+                x-show="! $wire.isOpen"
+                class="absolute -end-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-danger-500 px-1 text-[11px] font-semibold leading-none text-white ring-2 ring-white dark:ring-gray-950"
+            >{{ $this->dueCount }}</span>
+        @endif
+    </button>
+
+    {{-- The note. --}}
+    <div
+        x-show="$wire.isOpen"
+        x-transition:enter="transition ease-out duration-200"
+        x-transition:enter-start="opacity-0 translate-y-4 scale-95"
+        x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+        x-transition:leave="transition ease-in duration-150"
+        x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+        x-transition:leave-end="opacity-0 translate-y-4 scale-95"
+        style="display: none;"
+        class="flex max-h-[min(32rem,calc(100vh-7rem))] w-[22rem] max-w-[calc(100vw-3rem)] -rotate-[0.4deg] flex-col overflow-hidden rounded-md border border-amber-300/70 bg-amber-100 text-amber-950 shadow-2xl shadow-amber-900/20 dark:border-amber-500/30 dark:bg-amber-950 dark:text-amber-50"
+    >
+        <div class="flex items-center gap-2 border-b border-amber-300/70 bg-amber-200/70 px-4 py-2.5 dark:border-amber-500/30 dark:bg-amber-900/60">
+            <x-filament::icon icon="heroicon-o-clipboard-document-check" class="h-5 w-5" />
+            <h2 class="flex-1 text-sm font-semibold">{{ __('To-do list') }}</h2>
+            <button type="button" wire:click="$toggle('allDone')" class="text-xs underline-offset-2 hover:underline">
+                {{ $allDone ? __('Hide done') : __('Show done') }}
+            </button>
+            <button type="button" x-on:click="toggle(false)" class="rounded p-1 hover:bg-amber-300/60 dark:hover:bg-amber-800" aria-label="{{ __('Hide') }}">
+                <x-filament::icon icon="heroicon-o-minus" class="h-4 w-4" />
+            </button>
+        </div>
+
+        @if ($isOpen)
+            {{-- A new line: what, and for which day. --}}
+            <form wire:submit="add" class="flex flex-col gap-2 border-b border-amber-300/70 px-4 py-3 dark:border-amber-500/30">
+                <div class="flex gap-2">
+                    <input
+                        type="text"
+                        wire:model="title"
+                        maxlength="500"
+                        placeholder="{{ __('Add a to-do…') }}"
+                        class="min-w-0 flex-1 rounded border-amber-300 bg-white/70 px-2 py-1.5 text-sm text-gray-900 placeholder-amber-700/60 focus:border-amber-500 focus:ring-amber-500 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-50"
+                    >
+                    <button type="submit" class="rounded bg-amber-500 px-3 text-sm font-semibold text-amber-950 hover:bg-amber-400" aria-label="{{ __('Add') }}">
+                        <x-filament::icon icon="heroicon-m-plus" class="h-4 w-4" />
+                    </button>
+                </div>
+                <input
+                    type="date"
+                    wire:model="dueOn"
+                    class="w-40 rounded border-amber-300 bg-white/70 px-2 py-1 text-xs text-gray-900 focus:border-amber-500 focus:ring-amber-500 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-50"
+                    aria-label="{{ __('Date') }}"
+                >
+                @error('title') <p class="text-xs text-danger-600">{{ $message }}</p> @enderror
+            </form>
+
+            <div class="flex-1 overflow-y-auto px-4 py-2">
+                @forelse ($this->groups as $group)
+                    <section wire:key="day-{{ $group['date'] }}" class="py-2">
+                        <h3 @class(['mb-1 text-xs font-bold uppercase tracking-wide', 'text-danger-600 dark:text-danger-400' => $group['overdue'], 'text-amber-800 dark:text-amber-300' => ! $group['overdue']])>
+                            {{ $group['label'] }}
+                            @if ($group['overdue']) · {{ __('Overdue') }} @endif
+                        </h3>
+
+                        <ul class="flex flex-col">
+                            @foreach ($group['todos'] as $todo)
+                                <li
+                                    wire:key="todo-{{ $todo->id }}"
+                                    x-data="{ editing: false, title: @js($todo->title), date: @js($todo->due_on->toDateString()) }"
+                                    class="group flex items-start gap-2 rounded px-1 py-1 hover:bg-amber-200/50 dark:hover:bg-amber-900/50"
+                                >
+                                    <input
+                                        type="checkbox"
+                                        @checked($todo->done_at)
+                                        wire:click="toggle({{ $todo->id }})"
+                                        class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-amber-500 text-amber-600 focus:ring-amber-500"
+                                        aria-label="{{ __('Done') }}"
+                                    >
+
+                                    <div class="min-w-0 flex-1" x-show="! editing">
+                                        <p
+                                            x-on:dblclick="editing = true; $nextTick(() => $refs.edit.focus())"
+                                            @class(['break-words text-sm', 'text-amber-800/60 line-through dark:text-amber-200/50' => $todo->done_at])
+                                        >{{ $todo->title }}</p>
+                                    </div>
+
+                                    {{-- Changed in place: Enter keeps it, Escape leaves it. --}}
+                                    <form
+                                        x-show="editing"
+                                        x-cloak
+                                        x-on:submit.prevent="editing = false; $wire.change({{ $todo->id }}, title, date)"
+                                        x-on:keydown.escape.stop="editing = false"
+                                        class="flex min-w-0 flex-1 flex-col gap-1"
+                                    >
+                                        <input x-ref="edit" type="text" x-model="title" maxlength="500" class="rounded border-amber-300 bg-white/80 px-2 py-1 text-sm text-gray-900 dark:bg-amber-900/40 dark:text-amber-50">
+                                        <div class="flex items-center gap-2">
+                                            <input type="date" x-model="date" class="rounded border-amber-300 bg-white/80 px-2 py-0.5 text-xs text-gray-900 dark:bg-amber-900/40 dark:text-amber-50">
+                                            <button type="submit" class="text-xs font-semibold underline">{{ __('Save') }}</button>
+                                        </div>
+                                    </form>
+
+                                    <div class="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100" x-show="! editing">
+                                        <button type="button" x-on:click="editing = true; $nextTick(() => $refs.edit.focus())" class="rounded p-0.5 hover:bg-amber-300/70 dark:hover:bg-amber-800" title="{{ __('Edit') }}">
+                                            <x-filament::icon icon="heroicon-m-pencil" class="h-3.5 w-3.5" />
+                                        </button>
+                                        @unless ($todo->done_at)
+                                            <button type="button" wire:click="postpone({{ $todo->id }})" class="rounded p-0.5 hover:bg-amber-300/70 dark:hover:bg-amber-800" title="{{ __('To the next day') }}">
+                                                <x-filament::icon icon="heroicon-m-arrow-right-circle" class="h-3.5 w-3.5 rtl:rotate-180" />
+                                            </button>
+                                        @endunless
+                                        <button type="button" wire:click="remove({{ $todo->id }})" wire:confirm="{{ __('Delete this to-do?') }}" class="rounded p-0.5 text-danger-700 hover:bg-amber-300/70 dark:text-danger-400 dark:hover:bg-amber-800" title="{{ __('Delete') }}">
+                                            <x-filament::icon icon="heroicon-m-trash" class="h-3.5 w-3.5" />
+                                        </button>
+                                    </div>
+                                </li>
+                            @endforeach
+                        </ul>
+                    </section>
+                @empty
+                    <p class="py-8 text-center text-sm text-amber-800/70 dark:text-amber-200/60">{{ __('Nothing to do. Add the first one above.') }}</p>
+                @endforelse
+            </div>
+
+            @if ($allDone)
+                <div class="border-t border-amber-300/70 px-4 py-2 text-end dark:border-amber-500/30">
+                    <button type="button" wire:click="clearDone" wire:confirm="{{ __('Delete the done to-dos of past days?') }}" class="text-xs text-danger-700 underline-offset-2 hover:underline dark:text-danger-400">
+                        {{ __('Clear done of past days') }}
+                    </button>
+                </div>
+            @endif
+        @else
+            <div class="flex h-40 items-center justify-center">
+                <x-filament::loading-indicator class="h-6 w-6 text-amber-600" />
+            </div>
+        @endif
+    </div>
+</div>

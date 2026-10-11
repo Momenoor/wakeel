@@ -3865,5 +3865,15 @@
     "★ has the matter's number and year. Type to search the whole OneDrive.": "★ يحمل رقم القضية وسنتها. اكتب للبحث في OneDrive بالكامل.",
     "The folder could not be linked": "تعذر ربط المجلد",
     "\":name\" linked to this matter.": "تم ربط \":name\" بهذه القضية.",
-    "\":name\" is a file, not a folder.": "\":name\" ملف وليس مجلدًا."
+    "\":name\" is a file, not a folder.": "\":name\" ملف وليس مجلدًا.",
+    "To-do list": "قائمة المهام",
+    "To-do": "المهمة",
+    "Hide done": "إخفاء المنجز",
+    "Show done": "عرض المنجز",
+    "Add a to-do…": "أضف مهمة…",
+    "To the next day": "تأجيل لليوم التالي",
+    "Delete this to-do?": "حذف هذه المهمة؟",
+    "Nothing to do. Add the first one above.": "لا توجد مهام. أضف أول مهمة بالأعلى.",
+    "Delete the done to-dos of past days?": "حذف المهام المنجزة للأيام السابقة؟",
+    "Clear done of past days": "مسح المنجز من الأيام السابقة"
 }

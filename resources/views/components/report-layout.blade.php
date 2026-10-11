@@ -77,6 +77,7 @@
             .fi-announcement,
             .fi-wi-chart,
             #chat-widget,
+            .fi-todo-note,
             .no-print {
                 display: none !important;
             }

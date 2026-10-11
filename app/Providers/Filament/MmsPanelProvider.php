@@ -343,6 +343,13 @@ class MmsPanelProvider extends PanelProvider
                 .'<meta name="apple-mobile-web-app-capable" content="yes">'
         );
 
+        // Each user's to-do list, a sticky note on every page of both
+        // panels — loaded after the page, like the chat.
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::BODY_END,
+            fn (): string => Auth::check() ? Blade::render("@livewire('todo-note', ['lazy' => true])") : '',
+        );
+
         FilamentView::registerRenderHook(
             PanelsRenderHook::BODY_END,
             function (): string {
