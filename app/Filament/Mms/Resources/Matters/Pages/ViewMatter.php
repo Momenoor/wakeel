@@ -10,6 +10,7 @@ use App\Filament\Mms\Resources\CalendarEvents\Schemas\CalendarEventForm;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Helpers\FileUploadHelper;
 use App\Models\Matter;
+use App\Services\MMS\MatterContactsExport;
 use App\Support\MatterEvents;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -77,6 +78,12 @@ class ViewMatter extends ViewRecord
                 ->visible(fn () => auth()->user()->can('CreateSingle:CalendarEvent'))
                 ->fillForm(fn (Matter $record): array => CalendarEventForm::forMatter($record)),
             SyncToOutlookAction::make(),
+            // Everyone dealt with on it, and how to reach them.
+            Action::make('exportContacts')
+                ->label(__('Export contacts'))
+                ->icon('heroicon-o-arrow-down-tray')
+                ->color('gray')
+                ->action(fn (Matter $record) => MatterContactsExport::download($record)),
             Action::make('initial_report')
                 ->label(__('Initial Report'))
                 ->color(fn ($record) => $record->initial_report_at === null ? 'warning' : Color::Stone)

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\BulkMailRecipientStatus;
+use App\Support\Addresses;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -47,6 +48,13 @@ class BulkMailRecipient extends Model
         static::creating(function ($recipient) {
             if (empty($recipient->unsubscribe_token)) {
                 $recipient->unsubscribe_token = Str::random(32);
+            }
+
+            // On a matter's campaign: whom they brought into the matter, copied in.
+            $matterId = BulkMailCampaign::query()->whereKey($recipient->campaign_id)->value('matter_id');
+            $theirs = MatterContact::copiedFor($matterId ? (int) $matterId : null, Addresses::emails((array) $recipient->email));
+            if ($theirs !== []) {
+                $recipient->cc_emails = Addresses::emails([...(array) ($recipient->cc_emails ?? []), ...$theirs]);
             }
         });
     }

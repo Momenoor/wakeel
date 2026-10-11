@@ -190,6 +190,26 @@ class Matter extends Model
     }
 
     /**
+     * Its bulk mail campaigns.
+     *
+     * @return HasMany<BulkMailCampaign, $this>
+     */
+    public function bulkMailCampaigns(): HasMany
+    {
+        return $this->hasMany(BulkMailCampaign::class);
+    }
+
+    /**
+     * Addresses its parties brought in, by putting them in To or CC.
+     *
+     * @return HasMany<MatterContact, $this>
+     */
+    public function contacts(): HasMany
+    {
+        return $this->hasMany(MatterContact::class);
+    }
+
+    /**
      * The steps of its progress — letters, meetings, emails, reports …
      *
      * @return HasMany<MatterProgress, $this>

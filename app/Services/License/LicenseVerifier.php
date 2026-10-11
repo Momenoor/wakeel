@@ -5,6 +5,7 @@ namespace App\Services\License;
 use App\Models\License;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -28,7 +29,19 @@ class LicenseVerifier
      */
     public function verify(License $license): array
     {
-        $result = $this->client->verify($license->key, $license->fingerprint);
+        $key = $license->readableKey();
+
+        // Encrypted under another APP_KEY: no key to check — activated again
+        // (the License screen), rather than every page failing.
+        if ($key === null) {
+            Log::warning('License key cannot be decrypted with this APP_KEY; the license must be activated again.');
+            $license->forceFill(['status' => 'revoked', 'last_checked_at' => now()])->saveQuietly();
+            app()->forgetInstance('license.current');
+
+            return ['valid' => false, 'reason' => 'unreadable', 'expires_at' => null, 'plan' => null, 'latest_version' => null, 'release_notes' => null, 'released_at' => null];
+        }
+
+        $result = $this->client->verify($key, $license->fingerprint);
 
         $license->last_checked_at = now();
 

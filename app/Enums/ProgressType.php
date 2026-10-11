@@ -19,6 +19,7 @@ enum ProgressType: string implements HasColor, HasIcon, HasLabel
     case MINUTES_SENT = 'minutes_sent';
     case EMAIL_SENT = 'email_sent';
     case REPLY_RECEIVED = 'reply_received';
+    case EMAIL_RECEIVED = 'email_received';
     case INITIAL_REPORT = 'initial_report';
     case FINAL_REPORT = 'final_report';
     case DOCUMENTS_RECEIVED = 'documents_received';
@@ -35,6 +36,7 @@ enum ProgressType: string implements HasColor, HasIcon, HasLabel
             self::MINUTES_SENT => __('Minutes sent'),
             self::EMAIL_SENT => __('Email sent'),
             self::REPLY_RECEIVED => __('Reply received'),
+            self::EMAIL_RECEIVED => __('Email received'),
             self::INITIAL_REPORT => __('Initial report submitted'),
             self::FINAL_REPORT => __('Final report issued'),
             self::DOCUMENTS_RECEIVED => __('Documents received'),
@@ -50,7 +52,7 @@ enum ProgressType: string implements HasColor, HasIcon, HasLabel
             self::LETTER_ISSUED, self::LETTER_SENT => 'info',
             self::MEETING_HELD, self::MINUTES_SENT => 'primary',
             self::EMAIL_SENT => 'gray',
-            self::REPLY_RECEIVED => 'success',
+            self::REPLY_RECEIVED, self::EMAIL_RECEIVED => 'success',
             self::INITIAL_REPORT => 'warning',
             self::FINAL_REPORT => 'success',
             self::DOCUMENTS_RECEIVED, self::DOCUMENTS_SUBMITTED => 'danger',
@@ -67,6 +69,7 @@ enum ProgressType: string implements HasColor, HasIcon, HasLabel
             self::MINUTES_SENT => 'heroicon-o-paper-airplane',
             self::EMAIL_SENT => 'heroicon-o-at-symbol',
             self::REPLY_RECEIVED => 'heroicon-o-envelope-open',
+            self::EMAIL_RECEIVED => 'heroicon-o-inbox-arrow-down',
             self::INITIAL_REPORT => 'heroicon-o-document-check',
             self::FINAL_REPORT => 'heroicon-o-check-badge',
             self::DOCUMENTS_RECEIVED => 'heroicon-o-inbox-arrow-down',

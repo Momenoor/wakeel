@@ -68,6 +68,10 @@ final class ScreenPermissions
 
     public const MATTER_PROGRESS_TAB = 'View:MatterProgressTab';
 
+    public const MATTER_BULK_MAIL_TAB = 'View:MatterBulkMailTab';
+
+    public const MATTER_CONTACTS_TAB = 'View:MatterContactsTab';
+
     // ── Matters list tabs ────────────────────────────────────────────────
     public const MATTERS_ALL_TAB = 'View:MattersAllTab';
 
@@ -153,6 +157,8 @@ final class ScreenPermissions
             self::MATTER_LETTERS_TAB => $matterViewers,
             self::MATTER_MINUTES_TAB => $matterViewers,
             self::MATTER_PROGRESS_TAB => $matterViewers,
+            self::MATTER_BULK_MAIL_TAB => $matterViewers,
+            self::MATTER_CONTACTS_TAB => $matterViewers,
 
             self::MATTERS_ALL_TAB => $matterListers,
             self::MATTERS_IN_PROGRESS_TAB => $matterListers,
@@ -185,16 +191,15 @@ final class ScreenPermissions
     }
 
     /**
-     * @return list<string>
-     */
-    /**
      * A new screen permission, given to every role and user already holding
-     * one of the permissions it comes from (grantedFrom()) — for the
-     * migration that adds it.
+     * one of the permissions it comes from (grantedFrom(), or $from for a
+     * page's own) — for the migration that adds it.
+     *
+     * @param  list<string>|null  $from
      */
-    public static function grant(string $permission): void
+    public static function grant(string $permission, ?array $from = null): void
     {
-        $sources = DB::table('permissions')->whereIn('name', self::grantedFrom()[$permission] ?? [])->pluck('id');
+        $sources = DB::table('permissions')->whereIn('name', $from ?? self::grantedFrom()[$permission] ?? [])->pluck('id');
         $id = DB::table('permissions')->where('name', $permission)->where('guard_name', 'web')->value('id')
             ?? DB::table('permissions')->insertGetId(['name' => $permission, 'guard_name' => 'web', 'created_at' => now(), 'updated_at' => now()]);
 
@@ -209,6 +214,9 @@ final class ScreenPermissions
         app(PermissionRegistrar::class)->forgetCachedPermissions();
     }
 
+    /**
+     * @return list<string>
+     */
     public static function all(): array
     {
         return array_keys(self::grantedFrom());

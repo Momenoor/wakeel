@@ -136,17 +136,19 @@ class ProgressRelationManager extends RelationManager
             ->headerActions([
                 // Now, not waiting for the next round (every ten minutes).
                 Action::make('collectReplies')
-                    ->label(__('Check for replies'))
+                    ->label(__('Check for emails'))
+                    ->tooltip(__("Replies, and any other email from the matter's parties"))
                     ->icon('heroicon-o-envelope-open')
                     ->color('gray')
-                    ->visible(fn (): bool => $this->getOwnerRecord()->emails()->where('direction', MatterEmail::SENT)->exists())
+                    ->visible(fn (): bool => MatterEmail::query()->where('direction', MatterEmail::SENT)->exists())
                     ->action(function (): void {
                         @set_time_limit(300);
                         $result = app(MatterReplyCollector::class)->collect($this->getOwnerRecord()->getKey());
 
                         Notification::make()
                             ->title(trans_choice('No new replies.|:count new reply kept.|:count new replies kept.', $result['replies'], ['count' => $result['replies']]))
-                            ->body($result['errors'] ? implode("\n", $result['errors']) : null)
+                            ->body(trim(($result['emails'] ? trans_choice(':count other email from the parties kept.|:count other emails from the parties kept.', $result['emails'], ['count' => $result['emails']]) : '')
+                                ."\n".implode("\n", $result['errors'])) ?: null)
                             ->status($result['errors'] ? 'warning' : 'success')
                             ->persistent($result['errors'] !== [])
                             ->send();

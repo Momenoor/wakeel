@@ -94,6 +94,16 @@ class MatterProgressRecorder
             $reply->parent?->user_id);
     }
 
+    /** An email from one of the matter's parties — not a reply — collected from the mailbox. */
+    public static function emailReceived(MatterEmail $email, ?int $userId = null): void
+    {
+        self::keep($email->matter_id, ProgressType::EMAIL_RECEIVED, $email,
+            $email->subject !== '' ? $email->subject : __('(no subject)'),
+            $email->at ?? now(),
+            self::join([$email->from, $email->matched_by ? __('Matter known by: :how', ['how' => MatterEmail::matchedByLabel($email->matched_by)]) : null], ' — '),
+            $userId);
+    }
+
     /** An email to the matter's parties (Bulk Mail): one step, however many it reaches. */
     public static function emailSent(BulkMailCampaign $campaign, ?CarbonInterface $at = null): void
     {

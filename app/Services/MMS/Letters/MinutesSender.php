@@ -3,6 +3,7 @@
 namespace App\Services\MMS\Letters;
 
 use App\Mail\LetterEmail;
+use App\Models\MatterContact;
 use App\Models\MatterEmail;
 use App\Models\MatterMinutes;
 use App\Models\MinutesDelivery;
@@ -36,6 +37,7 @@ class MinutesSender
      * @param  list<array{path: string, name: string}>  $attachments  more files, by email only
      * @param  list<string>  $cc  copied in on each email
      * @param  string|bool|null  $grouping  EmailGrouping: one email each, by party, or one for all
+     * @param  list<string>|null  $contactsCc  of the addresses recipients brought in (MatterContact), those to copy in on the email to them — null: all
      * @return array{sent: int, failed: int, errors: list<string>}
      */
     public function send(
@@ -49,6 +51,7 @@ class MinutesSender
         array $attachments = [],
         array $cc = [],
         string|bool|null $grouping = EmailGrouping::SEPARATE,
+        ?array $contactsCc = null,
     ): array {
         $result = ['sent' => 0, 'failed' => 0, 'errors' => []];
         $composer = MinutesService::composer($minutes);
@@ -95,7 +98,9 @@ class MinutesSender
                 [],
                 $files,
             );
-            $copied = Addresses::without(Addresses::emails($cc), $emails);
+            // …and whom these recipients brought into the matter.
+            $theirs = MatterContact::copiedFor($minutes->matter_id, $emails, collect($group['rows'])->pluck('party_id')->filter()->all(), $contactsCc);
+            $copied = Addresses::without(Addresses::emails([...$cc, ...$theirs]), $emails);
 
             $sent = $this->attempt($minutes, array_values($group['rows']), MinutesDelivery::EMAIL, Str::limit(implode(', ', $emails), 250, ''), $userId, $result, function () use ($senderKey, $email, $emails, $copied, $minutes, $userId) {
                 $message = SenderMailer::using(SenderMailer::sender($senderKey), fn () => Mail::to($emails)->cc($copied)->send($email));

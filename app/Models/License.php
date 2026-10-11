@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Database\Factories\LicenseFactory;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -39,6 +40,19 @@ class License extends Model
         'last_valid_at' => 'datetime',
         'latest_released_at' => 'datetime',
     ];
+
+    /**
+     * The key, or null when it can't be read — encrypted under another
+     * APP_KEY (the .env replaced, a database copied from another server).
+     */
+    public function readableKey(): ?string
+    {
+        try {
+            return $this->key;
+        } catch (DecryptException) {
+            return null;
+        }
+    }
 
     /**
      * There is only ever one license row for this installation — the

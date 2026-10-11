@@ -26,6 +26,7 @@ use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Auth\Access\Response;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
@@ -57,6 +58,42 @@ class RecipientsRelationManager extends RelationManager
     public function refreshRecipients(): void
     {
         $this->getOwnerRecord()->refresh();
+    }
+
+    /**
+     * On the campaign's page too (Filament makes a view page's tables read
+     * only): a recipient's details corrected or removed — by whoever may
+     * change the campaign.
+     */
+    public function isReadOnly(): bool
+    {
+        return false;
+    }
+
+    /** Whoever may change the campaign — whatever a recipient's own policy. */
+    private function changes(): Response
+    {
+        return (auth()->user()?->can('update', $this->getOwnerRecord()) ?? false) ? Response::allow() : Response::deny();
+    }
+
+    protected function getCreateAuthorizationResponse(): Response
+    {
+        return $this->changes();
+    }
+
+    protected function getEditAuthorizationResponse(Model $record): Response
+    {
+        return $this->changes();
+    }
+
+    protected function getDeleteAuthorizationResponse(Model $record): Response
+    {
+        return $this->changes();
+    }
+
+    protected function getDeleteAnyAuthorizationResponse(): Response
+    {
+        return $this->changes();
     }
 
     public static function getModelLabel(): ?string
@@ -234,7 +271,8 @@ class RecipientsRelationManager extends RelationManager
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    DeleteBulkAction::make()
+                        ->after(fn ($livewire) => $livewire->getOwnerRecord()->update(['total_recipients' => $livewire->getOwnerRecord()->recipients()->count()])),
                     BulkAction::make('retry_failed')
                         ->label(__('bulk_mail.actions.retry_failed'))
                         ->icon('heroicon-o-arrow-path')

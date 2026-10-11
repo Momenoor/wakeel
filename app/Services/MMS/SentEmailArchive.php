@@ -28,14 +28,14 @@ class SentEmailArchive
     public function __construct(private readonly MatterOneDriveFolders $folders) {}
 
     /**
-     * An email's file name, sent or received alike — when, which way, the
+     * An email's file name, sent or received (a reply or not) — when, which way, the
      * party, what about: "2026-10-11 05.48 بريد صادر — شرطة دبي — JPA
      * 2026 986 1". The party's name and the whole kept short; nothing a
      * file name can't hold.
      */
-    public static function emailName(bool $sent, string $party, string $about, ?CarbonInterface $at = null): string
+    public static function emailName(bool $sent, string $party, string $about, ?CarbonInterface $at = null, bool $reply = true): string
     {
-        $head = ($at ?? now())->format('Y-m-d H.i').' '.($sent ? __('Outgoing email') : __('Reply'));
+        $head = ($at ?? now())->format('Y-m-d H.i').' '.($sent ? __('Outgoing email') : ($reply ? __('Reply') : __('Incoming email')));
         $party = Str::limit(trim((string) preg_replace('/\s+/u', ' ', $party)), self::PARTY_LIMIT, '…');
         $name = implode(' — ', array_filter([$head, $party, trim($about)], fn ($part) => $part !== ''));
 

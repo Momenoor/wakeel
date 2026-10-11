@@ -128,6 +128,19 @@ class LettersRelationManager extends RelationManager
     }
 
     /**
+     * Its recipients' addresses and parties.
+     *
+     * @return array{0: list<string>, 1: list<int>}
+     */
+    private static function reached(MatterLetter $letter): array
+    {
+        return [
+            $letter->recipients->flatMap(fn ($r) => $r->allEmails())->values()->all(),
+            $letter->recipients->pluck('recipient_id')->filter()->map(fn ($id) => (int) $id)->values()->all(),
+        ];
+    }
+
+    /**
      * Email an issued letter: as an attachment under a covering email, or
      * as the email body; to everyone at once or separately.
      */
@@ -151,6 +164,8 @@ class LettersRelationManager extends RelationManager
                 // The matter's experts of the kinds System Settings names.
                 // …and the covering email's own.
                 'cc' => EmailSendFields::startingCc($record->matter, self::coverEmail($record)?->getKey()),
+                // …and, on the email to each, whom they brought in.
+                'contacts_cc' => EmailSendFields::startingContactsCc($record->matter, ...self::reached($record)),
                 ...app(LetterMailer::class)->draft($record, LetterMailer::ATTACHMENT, self::coverEmail($record)),
             ])
             ->schema(fn (MatterLetter $record) => [
@@ -188,6 +203,7 @@ class LettersRelationManager extends RelationManager
                     ->bulkToggleable()
                     ->live(),
                 EmailSendFields::cc(),
+                EmailSendFields::contactsCc($record->matter, ...self::reached($record)),
                 // Files of this send's own, beside the letter — whichever way it goes.
                 EmailSendFields::attachments('letter-attachments', __('Sent with the letter, for this email only.')),
                 EmailSendFields::oneDriveFiles($record->matter),
@@ -241,6 +257,7 @@ class LettersRelationManager extends RelationManager
                     $data['subject'] ?? null,
                     ($data['mode'] ?? null) === LetterMailer::ATTACHMENT ? ($data['body'] ?? null) : null,
                     EmailSendFields::uploaded($data, $record->matter),
+                    array_values((array) ($data['contacts_cc'] ?? [])),
                 );
 
                 EmailSendFields::forget($data);

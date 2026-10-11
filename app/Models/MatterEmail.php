@@ -11,8 +11,10 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * An email of a matter: sent from it (a letter, minutes, bulk mail), or a
- * reply to one collected from the mailbox (MatterReplyCollector).
+ * An email of a matter: sent from it (a letter, minutes, bulk mail), or one
+ * collected from the mailbox (MatterReplyCollector) — a reply to one, or any
+ * other email from one of its parties. An incoming email whose matter is not
+ * certain waits (PENDING, its candidates) for a person to choose.
  */
 class MatterEmail extends Model
 {
@@ -20,13 +22,34 @@ class MatterEmail extends Model
 
     public const RECEIVED = 'received';
 
-    protected $fillable = ['matter_id', 'direction', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'files', 'at', 'user_id'];
+    /** An incoming email waiting for a person to choose its matter. */
+    public const PENDING = 'pending';
+
+    public const FILED = 'filed';
+
+    /** Not about any matter, a person said. */
+    public const DISMISSED = 'dismissed';
+
+    /** How an incoming email's matter was known. */
+    public const BY_SUBJECT = 'subject_reference';
+
+    public const BY_BODY = 'body_reference';
+
+    public const BY_PARTY_NAME = 'party_name';
+
+    public const BY_ADDRESS = 'address';
+
+    public const BY_HAND = 'hand';
+
+    protected $fillable = ['matter_id', 'direction', 'status', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'cc', 'files', 'candidates', 'matched_by', 'at', 'user_id'];
 
     protected function casts(): array
     {
         return [
             'to' => 'array',
+            'cc' => 'array',
             'files' => 'array',
+            'candidates' => 'array',
             'at' => 'datetime',
         ];
     }
@@ -56,6 +79,38 @@ class MatterEmail extends Model
         } catch (Throwable $e) {
             Log::warning('Matter email not recorded: '.$e->getMessage());
         }
+    }
+
+    public static function matchedByLabel(?string $how): string
+    {
+        return match ($how) {
+            self::BY_SUBJECT => __('the matter number in its subject'),
+            self::BY_BODY => __('the matter number in its text'),
+            self::BY_PARTY_NAME => __("a party's name in it"),
+            self::BY_ADDRESS => __("the sender's only matter"),
+            self::BY_HAND => __('chosen by hand'),
+            default => '—',
+        };
+    }
+
+    /**
+     * Incoming emails waiting for a person to choose their matter — those
+     * that may be about one of these matters, when given.
+     *
+     * @param  list<int>|null  $matterIds
+     * @return Builder<self>
+     */
+    public static function pending(?array $matterIds = null): Builder
+    {
+        return static::query()
+            ->where('direction', self::RECEIVED)
+            ->where('status', self::PENDING)
+            ->when($matterIds !== null, fn (Builder $q) => $q->where(function (Builder $q) use ($matterIds) {
+                $q->whereRaw('1 = 0');
+                foreach ($matterIds as $id) {
+                    $q->orWhereJsonContains('candidates', (int) $id);
+                }
+            }));
     }
 
     /** "<abc@host>" and "abc@host" alike. */

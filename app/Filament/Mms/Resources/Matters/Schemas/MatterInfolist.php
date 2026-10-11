@@ -11,10 +11,12 @@ use App\Filament\Mms\Actions\Request\RejectRequestAction;
 use App\Filament\Mms\Resources\CalendarEvents\CalendarEventResource;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
+use App\Filament\Mms\Resources\Matters\RelationManagers\BulkMailRelationManager;
 use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
 use App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager;
 use App\Filament\Mms\Resources\Matters\RelationManagers\ProgressRelationManager;
 use App\Helpers\FileUploadHelper;
+use App\Livewire\MatterContacts;
 use App\Livewire\MatterOneDriveFiles;
 use App\Models\CalendarEvent;
 use App\Models\IncentiveAssistantLine;
@@ -194,6 +196,26 @@ class MatterInfolist
                                     'ownerRecord' => $record,
                                     'pageClass' => ViewMatter::class,
                                 ])->key('matter-minutes'),
+                            ]),
+                        // Its bulk mail campaigns — to creditors, parties …
+                        Tab::make(__('Bulk mail'))
+                            ->icon('heroicon-o-megaphone')
+                            ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_BULK_MAIL_TAB))
+                            ->badge(fn ($record) => $record ? (($record->bulk_mail_campaigns_count ?? $record->loadCount('bulkMailCampaigns')->bulk_mail_campaigns_count) ?: null) : null)
+                            ->schema([
+                                Livewire::make(BulkMailRelationManager::class, fn ($record) => [
+                                    'ownerRecord' => $record,
+                                    'pageClass' => ViewMatter::class,
+                                ])->key('matter-bulk-mail'),
+                            ]),
+                        // Everyone it dealt with, and how to reach them.
+                        Tab::make(__('Contacts'))
+                            ->icon('heroicon-o-identification')
+                            ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_CONTACTS_TAB))
+                            ->schema([
+                                Livewire::make(MatterContacts::class, fn ($record) => ['matter' => $record])
+                                    ->key('matter-contacts')
+                                    ->lazy(),
                             ]),
                     ]),
             ]);

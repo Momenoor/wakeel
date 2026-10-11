@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\License;
 use App\Models\User;
+use Illuminate\Encryption\Encrypter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -58,6 +59,22 @@ class EnsureLicenseIsValidTest extends TestCase
         $this->get('/pms')->assertRedirect(route('license.show'));
 
         $this->assertSame('revoked', $license->fresh()->status);
+    }
+
+    public function test_a_key_encrypted_under_another_app_key_asks_for_the_license_again_not_an_error(): void
+    {
+        $license = License::factory()->create([
+            'status' => 'active',
+            'last_valid_at' => now()->subHours(2),
+            'last_checked_at' => now()->subHours(2),
+        ]);
+        // As if the .env's APP_KEY was replaced since it was activated.
+        \DB::table('licenses')->where('id', $license->id)->update(['key' => (new Encrypter(random_bytes(32), 'aes-256-cbc'))->encrypt('MIE-OLD', false)]);
+
+        $this->get('/pms')->assertRedirect(route('license.show'));
+
+        $this->assertSame('revoked', $license->fresh()->status);
+        Http::assertNothingSent();
     }
 
     public function test_an_interval_of_zero_asks_the_server_on_every_request(): void

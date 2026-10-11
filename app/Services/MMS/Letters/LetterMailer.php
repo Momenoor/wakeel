@@ -5,6 +5,7 @@ namespace App\Services\MMS\Letters;
 use App\Enums\LetterStatus;
 use App\Mail\LetterEmail;
 use App\Models\EmailTemplate;
+use App\Models\MatterContact;
 use App\Models\MatterEmail;
 use App\Models\MatterLetter;
 use App\Models\MatterLetterRecipient;
@@ -50,6 +51,7 @@ class LetterMailer
      * @param  ?string  $subject  this send's own subject, instead of the template's
      * @param  ?string  $body  this send's own covering email, instead of the template's
      * @param  list<array{path: string, name: string}>  $attachments  more files to send with the letter, either way it goes
+     * @param  list<string>|null  $contactsCc  of the addresses recipients brought in (MatterContact), those to copy in on the email to them — null: all
      * @return array{sent: int, failed: int, skipped: int, errors: list<string>}
      */
     public function send(
@@ -64,6 +66,7 @@ class LetterMailer
         ?string $subject = null,
         ?string $body = null,
         array $attachments = [],
+        ?array $contactsCc = null,
     ): array {
         $sender = SenderMailer::sender($senderKey);
         $composer = LetterIssuer::composerFor($letter);
@@ -108,7 +111,9 @@ class LetterMailer
             }
 
             $reached = [...$reached, ...$to];
-            $groupCc = Addresses::without($cc, $to);
+            // …and whom these recipients brought into the matter.
+            $theirs = MatterContact::copiedFor($letter->matter_id, $to, $group->pluck('recipient_id')->filter()->all(), $contactsCc);
+            $groupCc = Addresses::without(Addresses::emails([...$cc, ...$theirs]), $to);
             $email = $this->email($composer, $mode, $template, $unit['greet'], $files, $subject, $body, $unit['name']);
 
             try {

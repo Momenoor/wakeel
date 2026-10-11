@@ -305,6 +305,20 @@ class MinutesRelationManager extends RelationManager
     }
 
     /**
+     * The recipients' addresses and parties.
+     *
+     * @param  list<array<string, mixed>>  $recipients
+     * @return array{0: list<string>, 1: list<int>}
+     */
+    private static function reached(array $recipients): array
+    {
+        return [
+            collect($recipients)->flatMap(fn (array $r): array => [...(array) ($r['emails'] ?? []), $r['email'] ?? null])->filter()->values()->all(),
+            collect($recipients)->pluck('party_id')->filter()->map(fn ($id) => (int) $id)->values()->all(),
+        ];
+    }
+
+    /**
      * Finalised minutes to the attendees, to sign and send back: by email
      * and/or WhatsApp, each as ticked.
      */
@@ -321,8 +335,12 @@ class MinutesRelationManager extends RelationManager
                 $arabic = MinutesService::composer($record)->isArabic();
                 $template = EmailTemplate::default(EmailTemplate::MINUTES_SIGNATURE, $arabic ? 'ar' : 'en');
 
+                $recipients = MinutesSender::recipients($record);
+
                 return [
-                    'recipients' => MinutesSender::recipients($record),
+                    'recipients' => $recipients,
+                    // On the email to each, whom they brought into the matter.
+                    'contacts_cc' => EmailSendFields::startingContactsCc($record->matter, ...self::reached($recipients)),
                     'sender' => EmailSendFields::defaultSender(),
                     // …and the email template's own.
                     'cc' => EmailSendFields::startingCc($record->matter, $template?->getKey()),
@@ -354,6 +372,7 @@ class MinutesRelationManager extends RelationManager
                         EmailSendFields::sender(),
                         EmailSendFields::grouping(),
                         EmailSendFields::cc(),
+                        EmailSendFields::contactsCc($record->matter, ...self::reached(MinutesSender::recipients($record))),
                         // From Templates → Email templates ("Minutes for
                         // signature"); another one chosen starts the email again.
                         Select::make('email_template_id')
@@ -415,6 +434,7 @@ class MinutesRelationManager extends RelationManager
                     EmailSendFields::uploaded($data, $record->matter),
                     array_values((array) ($data['cc'] ?? [])),
                     $data['grouping'] ?? EmailGrouping::SEPARATE,
+                    array_values((array) ($data['contacts_cc'] ?? [])),
                 );
 
                 EmailSendFields::forget($data);

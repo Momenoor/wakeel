@@ -4,12 +4,14 @@ namespace App\Filament\Support;
 
 use App\Models\EmailTemplate;
 use App\Models\Matter;
+use App\Models\MatterContact;
 use App\Models\MatterLetter;
 use App\Models\Setting;
 use App\Services\MMS\MatterOneDriveExplorer;
 use App\Services\MMS\SenderMailer;
 use App\Support\Addresses;
 use App\Support\EmailGrouping;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
@@ -85,6 +87,38 @@ final class EmailSendFields
     public static function startingCc(?Matter $matter, mixed $templateId): array
     {
         return Addresses::emails([...MatterLetter::ccEmails($matter), ...EmailTemplate::ccOf($templateId)]);
+    }
+
+    /**
+     * The addresses the recipients brought into the matter (MatterContact)
+     * — each copied in on the email to whoever brought it only; unticked:
+     * not this time. Shown only when there are some.
+     *
+     * @param  list<string>  $to
+     * @param  list<int>  $partyIds
+     */
+    public static function contactsCc(?Matter $matter, array $to, array $partyIds = []): CheckboxList
+    {
+        $options = MatterContact::options($matter?->getKey(), $to, $partyIds);
+
+        return CheckboxList::make('contacts_cc')
+            ->label(__('Also copied in, from their replies'))
+            ->helperText(__('Addresses a recipient put in To or CC when replying on this matter — each is copied in on the email to that recipient only.'))
+            ->options($options)
+            ->bulkToggleable()
+            ->visible($options !== []);
+    }
+
+    /**
+     * All of them, to start ticked.
+     *
+     * @param  list<string>  $to
+     * @param  list<int>  $partyIds
+     * @return list<string>
+     */
+    public static function startingContactsCc(?Matter $matter, array $to, array $partyIds = []): array
+    {
+        return array_keys(MatterContact::options($matter?->getKey(), $to, $partyIds));
     }
 
     public static function grouping(): Radio
