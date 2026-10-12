@@ -14,12 +14,15 @@ use Illuminate\Support\Facades\Cache;
  */
 final class ChatReading
 {
-    /** How long a mark lasts without being renewed. */
-    private const SECONDS = LiveRefresh::SECONDS * 2 + 5;
+    /** How long a mark lasts without being renewed: a little over two checks. */
+    private static function seconds(): int
+    {
+        return LiveRefresh::seconds() * 2 + 5;
+    }
 
     public static function mark(int $userId, int $conversationId): void
     {
-        Cache::put(self::key($userId, $conversationId), true, self::SECONDS);
+        Cache::put(self::key($userId, $conversationId), true, self::seconds());
     }
 
     public static function forget(int $userId, int $conversationId): void

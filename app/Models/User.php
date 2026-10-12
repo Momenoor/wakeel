@@ -102,7 +102,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
      */
     public static function onlineIds(): array
     {
-        return Cache::remember('users.online', LiveRefresh::SECONDS, fn (): array => static::query()
+        return Cache::remember('users.online', LiveRefresh::seconds(), fn (): array => static::query()
             ->where('last_seen_at', '>', now()->subSeconds(self::ONLINE_WITHIN_SECONDS))
             ->pluck('id')
             ->map(fn ($id) => (int) $id)

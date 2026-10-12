@@ -83,8 +83,24 @@ class RedirectToInstaller
             return false;
         }
 
+        // Found within the hour: not asked again. On MySQL each check is a
+        // query on information_schema — on every request, the chat's
+        // checks every two seconds among them.
+        $known = storage_path('framework/table-'.config($tableKey, $defaultTable).'.present');
+        // (Not in tests: they take tables away to try the installer.)
+        $remember = ! app()->runningUnitTests();
+        if ($remember && is_file($known) && filemtime($known) > time() - 3600) {
+            return false;
+        }
+
         try {
-            return ! Schema::hasTable(config($tableKey, $defaultTable));
+            $missing = ! Schema::hasTable(config($tableKey, $defaultTable));
+
+            if (! $missing && $remember) {
+                @touch($known);
+            }
+
+            return $missing;
         } catch (Throwable) {
             // Can't even reach the database to ask — treat that exactly
             // like the table not existing, since either way the real

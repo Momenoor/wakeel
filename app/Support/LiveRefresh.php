@@ -2,20 +2,47 @@
 
 namespace App\Support;
 
+use App\Models\Setting;
+use Throwable;
+
 /**
  * How often the chat checks for new messages — the bubble and the Chat page
- * alike: one interval, kept in background tabs too, whether or not Pusher
- * delivers sooner. A check with nothing new sends nothing back.
+ * alike, Pusher or not: one interval, set in System Settings (Notifications)
+ * so it can be eased on a busy server without a release. A check with
+ * nothing new sends nothing back.
+ *
+ * The Chat page keeps checking in a background tab; the bubble pauses there
+ * (a new message still comes as a desktop or push notification): every
+ * open tab checking at once kept a shared server near its limit of
+ * requests at a time — refused ones are the "Error while loading" notice.
  */
 final class LiveRefresh
 {
-    // A message within a couple of seconds. Each check is a single light
-    // query and, with nothing new, sends nothing back.
-    public const SECONDS = 2;
+    public const SETTING = 'chat_refresh_seconds';
 
-    /** The Livewire poll attribute calling this method on the shared interval. */
-    public static function poll(string $method): string
+    public const DEFAULT = 5;
+
+    public const MIN = 2;
+
+    public const MAX = 60;
+
+    public static function seconds(): int
     {
-        return 'wire:poll.'.self::SECONDS.'s.keep-alive="'.$method.'"';
+        try {
+            $seconds = (int) Setting::get(self::SETTING, self::DEFAULT);
+        } catch (Throwable) {
+            $seconds = self::DEFAULT;
+        }
+
+        return max(self::MIN, min(self::MAX, $seconds ?: self::DEFAULT));
+    }
+
+    /**
+     * The Livewire poll attribute calling this method on the interval —
+     * kept going in a background tab only when asked.
+     */
+    public static function poll(string $method, bool $inBackground = true): string
+    {
+        return 'wire:poll.'.self::seconds().'s'.($inBackground ? '.keep-alive' : '').'="'.$method.'"';
     }
 }

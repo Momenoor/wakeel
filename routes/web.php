@@ -73,10 +73,13 @@ Route::middleware('auth')->group(function () {
     Route::get('/chat/files/{message}/{index}', ChatAttachmentController::class)->whereNumber('index')->name('chat.attachment');
     // A message with files, uploaded straight from the browser.
     Route::post('/chat/conversations/{conversation}/messages', [ChatMessageController::class, 'store'])->name('chat.messages.store');
-
-    // The system's font, when an uploaded one is chosen for it.
-    Route::get('/fonts/letter/{font}/{weight}', LetterFontFileController::class)->name('letter-fonts.file');
 });
+
+// The system's font, when an uploaded one is chosen for it — signed-in users
+// only (LetterFontFileController), but answered "no" rather than sent to the
+// login: sent there, the font's address became the page to return to after
+// signing in, and the browser downloaded the font.
+Route::get('/fonts/letter/{font}/{weight}', LetterFontFileController::class)->name('letter-fonts.file');
 
 // Public, no sign-in: the privacy policy (with the data deletion
 // instructions) and the terms of use — the addresses Meta asks for before

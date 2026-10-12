@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Livewire\ChatWidget;
 use App\Livewire\TodoNote;
 use App\Models\ChatConversation;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\Chat\ChatMessenger;
 use App\Services\Chat\ChatReading;
@@ -79,10 +80,19 @@ class ChatReadingTest extends TestCase
 
     public function test_the_bubble_and_the_chat_page_check_on_one_interval(): void
     {
-        $poll = 'wire:poll.'.LiveRefresh::SECONDS.'s.keep-alive="checkForNewMessages"';
+        // The interval set in System Settings, within its bounds.
+        $this->assertSame(LiveRefresh::DEFAULT, LiveRefresh::seconds());
+        Setting::set(LiveRefresh::SETTING, 3, 'notifications');
+        $this->assertSame(3, LiveRefresh::seconds());
+        Setting::set(LiveRefresh::SETTING, 0, 'notifications');
+        $this->assertSame(LiveRefresh::DEFAULT, LiveRefresh::seconds());
+        Setting::set(LiveRefresh::SETTING, 500, 'notifications');
+        $this->assertSame(LiveRefresh::MAX, LiveRefresh::seconds());
+        Setting::set(LiveRefresh::SETTING, 3, 'notifications');
 
-        Livewire::test(ChatWidget::class, ['mode' => 'popup'])->assertSeeHtml($poll);
-        Livewire::test(ChatWidget::class, ['mode' => 'page'])->assertSeeHtml($poll);
+        // The Chat page keeps checking in a background tab; the bubble pauses there.
+        Livewire::test(ChatWidget::class, ['mode' => 'page'])->assertSeeHtml('wire:poll.3s.keep-alive="checkForNewMessages"');
+        Livewire::test(ChatWidget::class, ['mode' => 'popup'])->assertSeeHtml('wire:poll.3s="checkForNewMessages"');
         // The to-do list does not check by itself.
         Livewire::test(TodoNote::class)->call('setOpen', true)->assertDontSeeHtml('wire:poll');
     }

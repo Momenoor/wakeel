@@ -31,6 +31,17 @@ class LetterFont extends Model
         return ['files' => 'array'];
     }
 
+    protected static function booted(): void
+    {
+        // Deleted: its uploaded files too, not left on the server.
+        static::deleted(function (LetterFont $font): void {
+            $paths = array_values(array_filter((array) ($font->files ?? [])));
+            if ($paths !== []) {
+                Storage::disk(self::DISK)->delete($paths);
+            }
+        });
+    }
+
     /**
      * The name mPDF knows it by: changing a file gives a new one, so a
      * font laid out before isn't reused.

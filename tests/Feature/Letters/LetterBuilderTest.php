@@ -1019,6 +1019,28 @@ class LetterBuilderTest extends TestCase
         $this->get(LetterTemplateResource::getUrl('edit', ['record' => $this->template]))->assertSuccessful()->assertSee('Calibri');
     }
 
+    public function test_a_font_deleted_goes_completely_its_files_and_its_use(): void
+    {
+        Storage::fake(LetterFont::DISK);
+        $ttf = (string) file_get_contents(public_path('fonts/BoutrosMBCDinkum-Medium.ttf'));
+        Storage::disk(LetterFont::DISK)->put('letter-fonts/outfit.ttf', $ttf);
+        Storage::disk(LetterFont::DISK)->put('letter-fonts/outfit-bold.ttf', $ttf);
+        $outfit = LetterFont::create(['name' => 'Outfit', 'files' => ['regular' => 'letter-fonts/outfit.ttf', 'bold' => 'letter-fonts/outfit-bold.ttf']]);
+        $this->template->update(['letter_font_id' => $outfit->id]);
+
+        // The system's font, then deleted.
+        Livewire::test(ManageLetterFonts::class)->callTableAction('useForEnglish', $outfit);
+        Livewire::test(ManageLetterFonts::class)->callTableAction('delete', $outfit);
+        Setting::clearCache();
+
+        $this->assertModelMissing($outfit);
+        $this->assertFalse(Storage::disk(LetterFont::DISK)->exists('letter-fonts/outfit.ttf'));
+        $this->assertFalse(Storage::disk(LetterFont::DISK)->exists('letter-fonts/outfit-bold.ttf'));
+        // The system and the template back to the standard fonts.
+        $this->assertSame('', InterfaceFont::css());
+        $this->assertNull($this->template->refresh()->letter_font_id);
+    }
+
     public function test_the_system_shows_english_and_arabic_each_in_its_font(): void
     {
         Storage::fake(LetterFont::DISK);
@@ -1056,7 +1078,12 @@ class LetterBuilderTest extends TestCase
         $this->get(route('letter-fonts.file', ['font' => $calibri, 'weight' => 'bold']))->assertOk()->assertHeader('Content-Type', 'font/ttf');
         $this->get(route('letter-fonts.file', ['font' => $calibri, 'weight' => 'italic']))->assertNotFound();
         auth()->logout();
-        $this->get(route('letter-fonts.file', ['font' => $calibri, 'weight' => 'regular']))->assertRedirect();
+        // Refused, not sent to the login: sent there, its address became the
+        // page to return to after signing in — the browser downloaded the font.
+        $this->get(route('letter-fonts.file', ['font' => $calibri, 'weight' => 'regular']))->assertForbidden();
+        $this->assertNull(session('url.intended'));
+        // Nor asked for by the login page: its rules for signed-in pages only.
+        $this->get(Filament::getPanel('mms')->getLoginUrl())->assertOk()->assertDontSee("local('Dubai')", false);
         $this->actingAs(User::factory()->create()->assignRole(Role::firstOrCreate(['name' => config('filament-shield.super_admin.name', 'super_admin'), 'guard_name' => 'web'])));
 
         // Back to the standard fonts.

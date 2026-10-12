@@ -155,7 +155,7 @@
     {{-- The bubble and the Chat page check alike (LiveRefresh), in a
          background tab too, Pusher or not: Pusher not delivering (its channel
          refused, the connection lost) left a page waiting for a refresh. --}}
-    {!! \App\Support\LiveRefresh::poll('checkForNewMessages') !!}
+    {!! \App\Support\LiveRefresh::poll('checkForNewMessages', inBackground: ! $isPopup) !!}
     @if ($isPopup)
         wire:key="chat-widget-popup"
         :style="placement()"

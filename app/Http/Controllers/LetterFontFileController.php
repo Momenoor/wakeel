@@ -14,6 +14,9 @@ class LetterFontFileController extends Controller
 {
     public function __invoke(LetterFont $font, string $weight): StreamedResponse
     {
+        // Not signed in: refused, never sent to the login (see routes/web.php).
+        abort_unless(auth()->check(), 403);
+
         $path = ($font->files ?? [])[$weight] ?? null;
         abort_unless(array_key_exists($weight, LetterFont::WEIGHTS) && filled($path) && Storage::disk(LetterFont::DISK)->exists($path), 404);
 

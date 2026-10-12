@@ -124,7 +124,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         // The system's font, when an uploaded one (Calibri …) is chosen for it.
-        FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): string => InterfaceFont::css());
+        // Signed in only: the font's file is served to signed-in users alone,
+        // and its address asked for from the login page became "the page you
+        // wanted" — after signing in the browser was sent to the font file
+        // and offered to download it.
+        FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): string => auth()->check() ? InterfaceFont::css() : '');
 
         // The rich editors' placeholders (merge tags) stay inside the editor.
         // Filament keeps each on one line, so a long name — an Arabic label,

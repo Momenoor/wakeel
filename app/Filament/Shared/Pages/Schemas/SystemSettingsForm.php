@@ -8,6 +8,7 @@ use App\Models\MatterLetter;
 use App\Models\Party;
 use App\Services\MMS\SenderMailer;
 use App\Support\Branding;
+use App\Support\LiveRefresh;
 use App\Support\ScreenPermissions;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Radio;
@@ -295,6 +296,18 @@ class SystemSettingsForm
                                     Toggle::make('default_notify_by_email')
                                         ->label(__('Default Notify by Email for New Users'))
                                         ->default(true),
+
+                                    // How often the chat checks for new messages (App\Support\LiveRefresh).
+                                    TextInput::make(LiveRefresh::SETTING)
+                                        ->label(__('Chat checks for new messages every'))
+                                        ->numeric()
+                                        ->integer()
+                                        ->minValue(LiveRefresh::MIN)
+                                        ->maxValue(LiveRefresh::MAX)
+                                        ->suffix(__('seconds'))
+                                        ->default(LiveRefresh::DEFAULT)
+                                        ->required()
+                                        ->helperText(__('Shorter: messages and online status sooner, but more requests to the server. If "Error while loading" notices appear, make it longer.')),
 
                                     // Who hears of a new leave request (email + bell).
                                     TagsInput::make('leave_request_recipients')

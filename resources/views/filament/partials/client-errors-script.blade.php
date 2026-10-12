@@ -6,7 +6,17 @@
 --}}
 <script>
     (() => {
+        // Not inside a frame (a preview): its page is not the one used.
+        if (window.self !== window.top) {
+            return;
+        }
+
         let leaving = false;
+        // A few a minute at most: one failure can set off others (each
+        // failure's own notice is a request too) — a storm of reports
+        // helped nobody, and the server turned them away (429).
+        const LIMIT = 5;
+        let sent = [];
         window.addEventListener('pagehide', () => { leaving = true; });
         window.addEventListener('beforeunload', () => { leaving = true; });
 
@@ -26,6 +36,12 @@
             if (leaving) {
                 return;
             }
+            const now = Date.now();
+            sent = sent.filter((at) => now - at < 60000);
+            if (sent.length >= LIMIT) {
+                return;
+            }
+            sent.push(now);
             const name = typeof request === 'string' ? request : describe(request);
             try {
                 fetch(@js(route('client-errors.store')), {
@@ -61,6 +77,14 @@
 
         document.addEventListener('livewire:init', () => {
             Livewire.interceptRequest(({ request, onError, onFailure }) => {
+                // Filament's own notices failing: as Filament itself, not
+                // reported — they only follow another failure, already told.
+                try {
+                    const components = request?.payload?.components ?? [];
+                    if (components.length > 0 && components.every((c) => JSON.parse(c.snapshot).data?.isFilamentNotificationsComponent)) {
+                        return;
+                    }
+                } catch (e) {}
                 const started = performance.now();
                 onError(({ response }) => report(response?.status ?? 0, request, started));
                 onFailure(() => report(0, request, started));

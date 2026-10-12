@@ -12,6 +12,7 @@ use App\Services\MMS\SenderMailer;
 use App\Support\Branding;
 use App\Support\CompanyContact;
 use App\Support\Integrations;
+use App\Support\LiveRefresh;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
@@ -96,6 +97,7 @@ class SystemSettings extends Page
             'mail_from_name' => Setting::get('mail_from_name', config('mail.from.name', '')),
 
             'default_notify_by_email' => Setting::get('default_notify_by_email', true),
+            LiveRefresh::SETTING => LiveRefresh::seconds(),
             'default_notify_by_whatsapp' => Setting::get('default_notify_by_whatsapp', false),
             'system_announcement' => Setting::get('system_announcement', ''),
             'show_system_announcement' => Setting::get('show_system_announcement', false),
@@ -194,6 +196,7 @@ class SystemSettings extends Page
             'mail_from_name' => 'mail',
 
             'default_notify_by_email' => 'notifications',
+            LiveRefresh::SETTING => 'notifications',
             'default_notify_by_whatsapp' => 'notifications',
             'system_announcement' => 'notifications',
             'show_system_announcement' => 'notifications',
