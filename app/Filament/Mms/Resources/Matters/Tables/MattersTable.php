@@ -642,7 +642,8 @@ class MattersTable
         $head = 'padding:2px 6px;font-weight:600;opacity:.7;font-size:11px';
 
         return new HtmlString(
-            '<table style="border-collapse:collapse;font-size:12px">'
+            // wakeel-fees-tip: the tooltip as wide as its table (theme.css).
+            '<div class="wakeel-fees-tip"><table style="border-collapse:collapse;font-size:12px">'
             .'<thead><tr>'
             .'<th style="'.$head.';text-align:start">'.e(__('Type')).'</th>'
             .'<th style="'.$head.';text-align:start">'.e(__('Date')).'</th>'
@@ -655,7 +656,7 @@ class MattersTable
             .'<td style="'.$cell.';text-align:end;font-weight:700">'.number_format($total, 2).'</td>'
             .'<td style="'.$cell.';text-align:end;font-weight:700">'.number_format($collected, 2).'</td>'
             .'</tr></tfoot>'
-            .'</table>'
+            .'</table></div>'
         );
     }
 }

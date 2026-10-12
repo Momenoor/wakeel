@@ -471,3 +471,17 @@ html {
         transform: none !important;
     }
 }
+
+/*
+ * The matters list's fees breakdown (MattersTable::feesBreakdown): the
+ * tooltip as wide as its table — tooltips stop at 350px, and the table ran
+ * out of the box. Never wider than the screen; scrolls there if it must.
+ */
+.tippy-box:has(.wakeel-fees-tip) {
+    max-width: min(48rem, calc(100vw - 2rem)) !important;
+}
+
+.wakeel-fees-tip {
+    max-width: 100%;
+    overflow-x: auto;
+}
