@@ -157,11 +157,12 @@
             <button type="button" wire:click="$toggle('allDone')" class="text-xs underline-offset-2 hover:underline">
                 {{ $allDone ? __('Hide done') : __('Show done') }}
             </button>
-            {{-- Pinned to the page as a column, or a bubble again. --}}
+            {{-- Pinned to the page as a column, or a bubble again. Wide screens only:
+         max-lg:hidden, not "hidden lg:…" — the tour plugin's .hidden is !important. --}}
             <button
                 type="button"
                 x-on:click="pin(! docked())"
-                class="hidden rounded p-1 hover:bg-amber-300/60 lg:block dark:hover:bg-amber-800"
+                class="block rounded p-1 hover:bg-amber-300/60 max-lg:hidden dark:hover:bg-amber-800"
                 :class="docked() ? 'bg-amber-300/70 dark:bg-amber-800' : ''"
                 :title="docked() ? @js(__('Unpin from the page')) : @js(__('Pin to the page'))"
             >

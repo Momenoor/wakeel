@@ -41,11 +41,12 @@
         <span class="min-w-0 flex-1 truncate font-semibold">{{ __('Messages') }}</span>
     @endif
 
-    {{-- Pinned to the page as a column, or a bubble again. --}}
+    {{-- Pinned to the page as a column, or a bubble again. Wide screens only:
+         max-lg:hidden, not "hidden lg:…" — the tour plugin's .hidden is !important. --}}
     <button
         type="button"
         x-on:click="pin(! docked())"
-        class="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-white/90 transition hover:bg-white/15 lg:flex"
+        class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-white/90 transition hover:bg-white/15 max-lg:hidden"
         :class="docked() ? 'bg-white/20' : ''"
         :title="docked() ? @js(__('Unpin from the page')) : @js(__('Pin to the page'))"
     >

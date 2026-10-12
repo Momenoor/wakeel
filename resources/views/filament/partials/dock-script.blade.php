@@ -13,7 +13,8 @@
 <script>
     (() => {
         const pinned = { todo: @js($dock['todo']), chat: @js($dock['chat'] && $chatHere) };
-        const wide = () => window.innerWidth >= 1024;
+        // The same width the pin buttons appear from (Tailwind's lg: 64rem).
+        const wide = () => window.matchMedia('(min-width: 64rem)').matches;
         const html = document.documentElement;
 
         // At once, before the page is drawn: no jump when Alpine starts.

@@ -432,7 +432,7 @@ html {
  * column at the end of every page, the content making room for it. Both
  * pinned: the note above, the chat below. Wide screens only.
  */
-@media (min-width: 1024px) {
+@media (min-width: 64rem) {
     html[data-dock] .fi-main-ctn {
         margin-inline-end: var(--wakeel-dock-w, 24rem) !important;
     }
