@@ -3900,5 +3900,8 @@
     "Issuing a letter on a matter offers only the templates for its court too. Leave empty to offer this one at every court.": "عند إصدار خطاب في قضية تظهر فقط النماذج الخاصة بمحكمتها أيضًا. اتركه فارغًا ليظهر هذا النموذج في كل المحاكم.",
     "Chat checks for new messages every": "تتحقق الدردشة من الرسائل الجديدة كل",
     "seconds": "ثانية",
-    "Shorter: messages and online status sooner, but more requests to the server. If \"Error while loading\" notices appear, make it longer.": "أقصر: تصل الرسائل وحالة الاتصال أسرع، لكن مع طلبات أكثر على الخادم. إذا ظهرت رسائل \"خطأ أثناء التحميل\" فاجعلها أطول."
+    "Shorter: messages and online status sooner, but more requests to the server. If \"Error while loading\" notices appear, make it longer.": "أقصر: تصل الرسائل وحالة الاتصال أسرع، لكن مع طلبات أكثر على الخادم. إذا ظهرت رسائل \"خطأ أثناء التحميل\" فاجعلها أطول.",
+    "Pause": "إيقاف مؤقت",
+    "Play": "تشغيل",
+    "Speed": "السرعة"
 }

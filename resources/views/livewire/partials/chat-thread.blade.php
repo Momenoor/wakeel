@@ -161,11 +161,8 @@
                     @foreach ($message->files() as $index => $file)
                         @php($url = route('chat.attachment', [$message, $index]))
                         @if (\App\Models\ChatMessage::isAudio($file))
-                            {{-- A voice note (or sound file): played here. --}}
-                            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
-                                @if (! empty($file['voice']))<span aria-hidden="true">🎤</span>@endif
-                                <audio controls preload="metadata" src="{{ $url }}" style="height: 36px; max-width: 240px;"></audio>
-                            </div>
+                            {{-- A voice note (or sound file): played as WhatsApp does. --}}
+                            @include('livewire.partials.chat-voice-note', ['url' => $url, 'seed' => $message->id * 10 + $index, 'isMine' => $isMine])
                         @elseif (\App\Models\ChatMessage::isVideo($file))
                             <div style="position: relative; margin-bottom: 6px;">
                                 <video controls preload="metadata" src="{{ $url }}" style="display: block; max-width: 100%; max-height: 260px; border-radius: 10px;"></video>
@@ -276,6 +273,7 @@
     --}}
     <div x-data="{
         files: [],
+        dragging: false,
         error: '',
         progress: null,
         recording: false,
@@ -313,16 +311,50 @@
                 if (! send || ! voice.chunks.length) { return; }
                 const type = recorder.mimeType || 'audio/webm';
                 const ext = type.includes('mp4') ? 'm4a' : (type.includes('ogg') ? 'ogg' : 'webm');
-                const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+                const stamp = this.stamp();
                 const file = new File([new Blob(voice.chunks, { type })], 'voice-note-' + stamp + '.' + ext, { type });
                 this.sendFiles('', [file], true);
             };
             recorder.stop();
         },
+        // A file's time in its name, as the user's clock shows it: 2026-10-13-00-40-11.
+        stamp() {
+            const d = new Date();
+            const two = (n) => String(n).padStart(2, '0');
+            return d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate()) + '-' + two(d.getHours()) + '-' + two(d.getMinutes()) + '-' + two(d.getSeconds());
+        },
         clock() { return Math.floor(this.seconds / 60) + ':' + String(this.seconds % 60).padStart(2, '0'); },
         pick(event) {
+            this.add(event.target.files);
+            event.target.value = '';
+        },
+        // A picture copied or a screenshot, pasted in the message box: kept
+        // to send like a file picked — named for when it was taken. Text
+        // pastes as text.
+        paste(event) {
+            const images = [...(event.clipboardData?.files ?? [])].filter((file) => file.type.startsWith('image/'));
+            if (! images.length) {
+                return;
+            }
+            event.preventDefault();
+            const stamp = this.stamp();
+            this.add(images.map((file, i) => new File([file], 'screenshot-' + stamp + (i ? '-' + (i + 1) : '') + '.' + (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg'), { type: file.type })));
+            this.$refs.input.focus();
+        },
+        // Files dropped on the message box.
+        drop(event) {
+            this.dragging = false;
+            if (event.dataTransfer?.files?.length) {
+                this.add(event.dataTransfer.files);
+            }
+        },
+        // A picture's thumbnail, made once.
+        thumb(file) {
+            return file._thumb ??= URL.createObjectURL(file);
+        },
+        add(list) {
             this.error = '';
-            for (const file of event.target.files) {
+            for (const file of list) {
                 if (this.files.length >= {{ \App\Services\Chat\ChatMessenger::MAX_FILES }}) {
                     this.error = @js(__('Up to :count files at a time.', ['count' => \App\Services\Chat\ChatMessenger::MAX_FILES]));
                     break;
@@ -333,7 +365,6 @@
                 }
                 this.files.push(file);
             }
-            event.target.value = '';
         },
         sendFiles(text, files = null, voice = false) {
             const data = new FormData();
@@ -388,7 +419,11 @@
             <div style="display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 12px 0;">
                 <template x-for="(file, index) in files" :key="index">
                     <span style="display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 3px 4px 3px 10px; border-radius: 9999px; background: rgba(107, 114, 128, .12); font-size: .75rem;">
-                        <span dir="auto" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 12rem;" x-text="'📎 ' + file.name"></span>
+                        {{-- A picture (a pasted screenshot): what is being sent, seen. --}}
+                        <template x-if="file.type.startsWith('image/')">
+                            <img x-bind:src="thumb(file)" alt="" style="width: 36px; height: 36px; margin-inline-start: -6px; border-radius: 8px; object-fit: cover;">
+                        </template>
+                        <span dir="auto" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 12rem;" x-text="(file.type.startsWith('image/') ? '' : '📎 ') + file.name"></span>
                         <button type="button" x-on:click="files.splice(index, 1)" x-bind:disabled="progress !== null" aria-label="{{ __('Remove') }}" style="padding: 0 6px; font-size: .9rem; line-height: 1; opacity: .6;">×</button>
                     </span>
                 </template>
@@ -412,6 +447,10 @@
 
         <form
             x-on:submit.prevent="send()"
+            x-on:dragover.prevent="dragging = true"
+            x-on:dragleave="dragging = false"
+            x-on:drop.prevent="drop($event)"
+            x-bind:style="dragging ? 'outline: 2px dashed rgb(37 99 235); outline-offset: -4px;' : ''"
             class="flex items-center gap-2 border-t border-gray-100 p-3 dark:border-white/10"
         >
             <template x-ref="pending">
@@ -433,6 +472,7 @@
             <input
                 type="text"
                 x-ref="input"
+                x-on:paste="paste($event)"
                 wire:model="body"
                 autocomplete="off"
                 placeholder="{{ __('Type a message...') }}"

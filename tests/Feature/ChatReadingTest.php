@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Livewire\ChatWidget;
 use App\Livewire\TodoNote;
 use App\Models\ChatConversation;
+use App\Models\ChatMessage;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\Chat\ChatMessenger;
@@ -76,6 +77,16 @@ class ChatReadingTest extends TestCase
         $this->assertFalse(ChatReading::isReading($this->me->id, $this->conversation->id));
         $this->aliWrites('ping');
         $this->assertSame(1, $this->me->notifications()->count());
+    }
+
+    public function test_a_voice_note_is_played_with_its_waveform_length_and_speed(): void
+    {
+        ChatMessage::create(['chat_conversation_id' => $this->conversation->id, 'user_id' => $this->ali->id, 'body' => '',
+            'attachments' => [['path' => 'chat/1/voice.webm', 'name' => 'voice-note.webm', 'mime' => 'audio/webm', 'size' => 1000, 'voice' => true]]]);
+
+        Livewire::test(ChatWidget::class, ['mode' => 'page', 'conversation' => $this->conversation->id])
+            ->assertSeeHtml('x-data="wkVoice(')
+            ->assertDontSeeHtml('<audio controls');
     }
 
     public function test_the_bubble_and_the_chat_page_check_on_one_interval(): void

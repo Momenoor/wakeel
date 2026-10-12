@@ -351,6 +351,7 @@ class MmsPanelProvider extends PanelProvider
             PanelsRenderHook::HEAD_END,
             fn (): string => Auth::check()
                 ? view('filament.partials.dock-script')->render().view('filament.partials.client-errors-script')->render()
+                    .view('filament.partials.chat-voice-script')->render()
                 : '',
         );
 
