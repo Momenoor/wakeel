@@ -168,7 +168,8 @@
         @if ($isOpen)
             {{-- A new line: what, and for which day. --}}
             <form wire:submit="add" class="flex flex-col gap-2 border-b border-amber-300/70 px-4 py-3 dark:border-amber-500/30">
-                <div class="flex gap-2">
+                {{-- items-start: the suggestions open under the field, the button keeps its size. --}}
+                <div class="flex items-start gap-2">
                     <div class="relative min-w-0 flex-1" x-data="todoMentions(@js($this->people))">
                     <input
                         type="text"
@@ -183,7 +184,7 @@
                     >
                     @include('livewire.partials.todo-mention-list')
                     </div>
-                    <button type="submit" class="rounded bg-amber-500 px-3 text-sm font-semibold text-amber-950 hover:bg-amber-400" aria-label="{{ __('Add') }}">
+                    <button type="submit" class="h-[34px] rounded bg-amber-500 px-3 text-sm font-semibold text-amber-950 hover:bg-amber-400" aria-label="{{ __('Add') }}">
                         <x-filament::icon icon="heroicon-m-plus" class="h-4 w-4" />
                     </button>
                 </div>

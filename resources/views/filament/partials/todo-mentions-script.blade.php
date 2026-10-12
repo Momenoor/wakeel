@@ -8,8 +8,13 @@
                 at: -1,
                 idx: 0,
                 get matches() {
-                    const q = this.query.toLowerCase();
-                    return this.people.filter((name) => name.toLowerCase().includes(q)).slice(0, 6);
+                    const q = this.query.trim().toLowerCase();
+                    if (q === '') {
+                        return this.people;
+                    }
+                    const found = this.people.filter((name) => name.toLowerCase().includes(q));
+                    const starting = found.filter((name) => name.toLowerCase().startsWith(q));
+                    return [...starting, ...found.filter((name) => ! starting.includes(name))];
                 },
                 scan(el) {
                     const before = el.value.slice(0, el.selectionStart);
@@ -23,6 +28,7 @@
                     this.query = before.slice(at + 1);
                     this.idx = 0;
                     this.open = this.matches.length > 0;
+                    this.$nextTick(() => this.$refs.list?.scrollTo({ top: 0 }));
                 },
                 pick(el, name) {
                     const end = el.selectionStart;
@@ -40,6 +46,8 @@
                     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                         e.preventDefault();
                         this.idx = (this.idx + (e.key === 'ArrowDown' ? 1 : this.matches.length - 1)) % this.matches.length;
+                        // The one chosen kept in view.
+                        this.$nextTick(() => this.$refs.list?.children[this.idx + 1]?.scrollIntoView({ block: 'nearest' }));
                     } else if (e.key === 'Enter' || e.key === 'Tab') {
                         e.preventDefault();
                         e.stopPropagation();

@@ -1,8 +1,9 @@
 {{-- Who can be mentioned: shown while "@name" is being written (todoMentions). --}}
 <ul
+    x-ref="list"
     x-show="open"
     x-cloak
-    class="absolute inset-x-0 top-full z-30 mt-1 max-h-48 overflow-y-auto rounded border border-amber-300 bg-white py-1 text-sm text-gray-900 shadow-lg dark:border-amber-700 dark:bg-gray-900 dark:text-gray-100"
+    class="mt-1 max-h-48 overflow-y-auto rounded border border-amber-300 bg-white py-1 text-sm text-gray-900 shadow-lg dark:border-amber-700 dark:bg-gray-900 dark:text-gray-100"
 >
     <template x-for="(name, i) in matches" :key="name">
         <li>
