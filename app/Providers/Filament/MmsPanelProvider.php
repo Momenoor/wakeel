@@ -359,7 +359,7 @@ class MmsPanelProvider extends PanelProvider
             // ?todo=1 (a to-do notification's link) opens it.
             fn (): string => Auth::check()
                 ? view('filament.partials.todo-mentions-script')->render()
-                    .Blade::render("@livewire('todo-note', ['lazy' => \$lazy, 'open' => \$open])", ['open' => request()->boolean('todo'), 'lazy' => ! Dock::pinned(Auth::user(), Dock::TODO)])
+                    .Blade::render("@livewire('todo-note', ['defer' => \$lazy, 'open' => \$open])", ['open' => request()->boolean('todo'), 'lazy' => ! Dock::pinned(Auth::user(), Dock::TODO)])
                 : '',
         );
 
@@ -381,7 +381,7 @@ class MmsPanelProvider extends PanelProvider
                 // no longer waits for the conversations, unread counts and
                 // (when it was left open) a whole conversation on every
                 // request. A plain bubble stands in until then.
-                return Blade::render("@livewire('chat-widget', ['mode' => 'popup', 'lazy' => \$lazy])", ['lazy' => ! Dock::pinned(Auth::user(), Dock::CHAT)]);
+                return Blade::render("@livewire('chat-widget', ['mode' => 'popup', 'defer' => \$lazy])", ['lazy' => ! Dock::pinned(Auth::user(), Dock::CHAT)]);
             }
         );
 

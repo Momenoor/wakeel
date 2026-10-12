@@ -3,7 +3,9 @@
     page: the same bubble where it was dragged to, so nothing moves when the
     note arrives.
 --}}
+<div>
 <div
+    wire:key="todo-note-placeholder"
     x-data="{
         style: '',
         init() {
@@ -19,4 +21,5 @@
     >
         <x-filament::icon icon="heroicon-o-clipboard-document-check" class="h-6 w-6 opacity-80" />
     </span>
+</div>
 </div>

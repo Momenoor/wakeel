@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Resources\Matters\Tables;
 use App\Enums\MatterCollectionStatus;
 use App\Filament\Mms\Concerns\HasMultiWordSearch;
 use App\Models\Court;
+use App\Models\Matter;
 use App\Models\Party;
 use App\Models\Type;
 use Carbon\Carbon;
@@ -26,6 +27,8 @@ use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\HtmlString;
+use Illuminate\Support\Str;
 
 class MattersTable
 {
@@ -192,6 +195,8 @@ class MattersTable
 
                         return 'danger';
                     })
+                    // Hovered: each fee that makes up the total.
+                    ->tooltip(fn ($record) => self::feesBreakdown($record))
                     ->searchable(false)
                     ->grow(false)
                     ->width('10%')
@@ -606,5 +611,51 @@ class MattersTable
         $words = preg_split('~[\s/\-:_\\\\|+–]+~u', strtr($search, self::DIGITS), -1, PREG_SPLIT_NO_EMPTY) ?: [];
 
         return array_values(array_filter($words, fn (string $word): bool => ! in_array(mb_strtolower($word), ['لسنة', 'لعام', 'سنة', 'of'], true)));
+    }
+
+    /**
+     * A matter's fees one by one — type, date, amount, collected — and
+     * their total: the fees column's tooltip. Its fees and their payments
+     * are already loaded with the list.
+     */
+    public static function feesBreakdown(Matter $record): ?HtmlString
+    {
+        if ($record->fees->isEmpty()) {
+            return null;
+        }
+
+        $cell = 'padding:2px 6px;white-space:nowrap';
+        $rows = $record->fees->sortBy('date')->map(function ($fee) use ($cell): string {
+            $collected = (float) $fee->allocations->sum('amount');
+            $note = filled($fee->description) ? '<div style="opacity:.7;font-size:11px;white-space:normal;max-width:16rem">'.e(Str::limit((string) $fee->description, 60)).'</div>' : '';
+
+            return '<tr>'
+                .'<td style="'.$cell.'">'.e($fee->type?->getLabel() ?? '—').$note.'</td>'
+                .'<td style="'.$cell.'">'.e($fee->date?->format('d/m/Y') ?? '—').'</td>'
+                .'<td style="'.$cell.';text-align:end;font-weight:600">'.number_format((float) $fee->amount, 2).'</td>'
+                .'<td style="'.$cell.';text-align:end;opacity:.8">'.number_format($collected, 2).'</td>'
+                .'</tr>';
+        })->implode('');
+
+        $total = (float) $record->fees->sum('amount');
+        $collected = (float) $record->fees->sum(fn ($fee) => $fee->allocations->sum('amount'));
+        $head = 'padding:2px 6px;font-weight:600;opacity:.7;font-size:11px';
+
+        return new HtmlString(
+            '<table style="border-collapse:collapse;font-size:12px">'
+            .'<thead><tr>'
+            .'<th style="'.$head.';text-align:start">'.e(__('Type')).'</th>'
+            .'<th style="'.$head.';text-align:start">'.e(__('Date')).'</th>'
+            .'<th style="'.$head.';text-align:end">'.e(__('Amount')).'</th>'
+            .'<th style="'.$head.';text-align:end">'.e(__('Collected')).'</th>'
+            .'</tr></thead>'
+            .'<tbody>'.$rows.'</tbody>'
+            .'<tfoot><tr style="border-top:1px solid currentColor">'
+            .'<td colspan="2" style="'.$cell.';font-weight:700">'.e(__('Total')).'</td>'
+            .'<td style="'.$cell.';text-align:end;font-weight:700">'.number_format($total, 2).'</td>'
+            .'<td style="'.$cell.';text-align:end;font-weight:700">'.number_format($collected, 2).'</td>'
+            .'</tr></tfoot>'
+            .'</table>'
+        );
     }
 }

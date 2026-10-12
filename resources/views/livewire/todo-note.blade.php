@@ -1,3 +1,10 @@
+{{--
+    An outer element of its own: Livewire swaps the placeholder for this, and
+    the two inner elements carry different keys, so the placeholder's Alpine
+    state is replaced, not kept — kept, none of the functions below existed
+    ("placement is not defined", the pin and drag dead).
+--}}
+<div>
 <div
     x-data="{
         {{-- The bubble can be dragged anywhere (its own place, not the chat's), remembered per browser. --}}
@@ -11,8 +18,8 @@
         clamp() {
             if (! this.pos) { return; }
             this.pos = {
-                x: Math.min(Math.max(8, this.pos.x), window.innerWidth - 64),
-                y: Math.min(Math.max(8, this.pos.y), window.innerHeight - 64),
+                x: Math.max(8, Math.min(this.pos.x, window.innerWidth - 64)),
+                y: Math.max(8, Math.min(this.pos.y, window.innerHeight - 64)),
             };
         },
         startDrag(e) {
@@ -88,7 +95,7 @@
     x-on:keydown.escape.window="if ($wire.isOpen && ! docked()) { toggle(false) }"
     :style="placement()"
     :class="docked() ? 'wakeel-docked wakeel-docked-todo' : ''"
-    wire:key="todo-note"
+    wire:key="todo-note-body"
     class="fi-todo-note fixed bottom-6 end-24 z-40 flex flex-col-reverse items-end gap-3"
 >
     {{-- The bubble: click to show or hide, drag to move. --}}
@@ -294,4 +301,5 @@
             </div>
         @endif
     </div>
+</div>
 </div>

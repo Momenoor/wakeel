@@ -3,6 +3,13 @@
     $showingThread = (bool) $this->activeConversation;
 @endphp
 
+{{--
+    An outer element of its own: Livewire swaps the placeholder for this, and
+    the two inner elements carry different keys, so the placeholder's Alpine
+    state is replaced, not kept — kept, none of the functions below existed
+    ("placement is not defined", the pin and drag dead).
+--}}
+<div>
 <div
     x-data="{
         {{--
@@ -41,8 +48,8 @@
         clamp() {
             if (! this.pos) { return; }
             this.pos = {
-                x: Math.min(Math.max(8, this.pos.x), window.innerWidth - 64),
-                y: Math.min(Math.max(8, this.pos.y), window.innerHeight - 64),
+                x: Math.max(8, Math.min(this.pos.x, window.innerWidth - 64)),
+                y: Math.max(8, Math.min(this.pos.y, window.innerHeight - 64)),
             };
         },
         startDrag(e) {
@@ -239,4 +246,5 @@
             </div>
         </div>
     @endif
+</div>
 </div>
