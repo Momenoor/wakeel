@@ -72,6 +72,27 @@ class PerformanceTrackingTest extends TestCase
         $this->assertSame(0, PerformanceSample::where('name', 'like', '%checkForNewMessages%')->count());
     }
 
+    public function test_a_failed_request_is_kept_and_reported_seen_by_the_server_or_only_by_the_browser(): void
+    {
+        // A background check that failed: kept, however fast.
+        PerformanceSample::query()->delete();
+        $this->post(route('default-livewire.update'), ['components' => [['snapshot' => '{bad', 'calls' => [['method' => 'checkForNewMessages']]]]]);
+        $failed = PerformanceSample::query()->where('status', '>=', 400)->first();
+        $this->assertNotNull($failed);
+
+        // One with no answer at all, as the browser tells it.
+        $this->postJson(route('client-errors.store'), ['status' => 0, 'name' => 'todo-note@setOpen', 'page' => 'https://wakeel.test/mms/matters?tab=all', 'ms' => 30000])
+            ->assertNoContent();
+
+        $browser = PerformanceSample::query()->where('method', 'CLIENT')->sole();
+        $this->assertSame(['browser: todo-note@setOpen', 0, '/mms/matters', auth()->id()], [$browser->name, $browser->status, $browser->path, $browser->user_id]);
+
+        $report = Livewire::test(Performance::class)->instance()->report();
+        $this->assertStringContainsString('## Failed requests', $report);
+        $this->assertStringContainsString('status 0 (no answer) — browser: todo-note@setOpen', $report);
+        $this->assertStringContainsString('status '.$failed->status.' — '.$failed->name, $report);
+    }
+
     public function test_measuring_can_be_stopped(): void
     {
         Setting::set(TrackPerformance::SETTING, false, 'system', 'boolean');
@@ -105,7 +126,7 @@ class PerformanceTrackingTest extends TestCase
         $this->assertMatchesRegularExpression('~| mms: resources.matters.index | 1 | d+ |~', $report);
         $this->assertStringContainsString('mms: slow.screen — 2500 ms, 300 queries (290 repeated)', $report);
         $this->assertStringContainsString("most run: `290× select * from 'fees' where 'matter_id' = ?`", $report);
-        $this->assertStringContainsString("## Most repeated query, by screen", $report);
+        $this->assertStringContainsString('## Most repeated query, by screen', $report);
         $this->assertStringContainsString("- mms: slow.screen (290 repeated): `290× select * from 'fees' where 'matter_id' = ?`", $report);
 
         // Downloaded as a file.

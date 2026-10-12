@@ -50,6 +50,24 @@
         toggle(open) {
             this.$wire.isOpen = open;
             this.$wire.setOpen(open);
+            this.storeOpen(open);
+        },
+        {{-- Open or minimised, kept for this tab's next pages: the browser's
+             own word wins — the server's session could be written back by
+             another request running at the same time, and the bubble opened
+             again on the next page. Pinned: always open. --}}
+        storeOpen(open) {
+            try { sessionStorage.setItem('wakeel.todo.open', open ? '1' : '0'); } catch (e) {}
+        },
+        restoreOpen() {
+            let stored = null;
+            try { stored = sessionStorage.getItem('wakeel.todo.open'); } catch (e) {}
+            if (stored !== null && ! this.docked() && (stored === '1') !== this.$wire.isOpen) {
+                this.$wire.isOpen = stored === '1';
+                this.$wire.setOpen(stored === '1');
+            }
+            // Opened by the page itself (a new message): kept too.
+            this.$wire.$watch('isOpen', (open) => this.storeOpen(open));
         },
         {{-- The note's width: dragged by either side border, saved for the user when let go. --}}
         width: @js($width),
@@ -91,7 +109,7 @@
             ].join('; ');
         },
     }"
-    x-init="loadPos(); window.addEventListener('resize', () => clamp())"
+    x-init="loadPos(); restoreOpen(); window.addEventListener('resize', () => clamp())"
     x-on:keydown.escape.window="if ($wire.isOpen && ! docked()) { toggle(false) }"
     :style="placement()"
     :class="docked() ? 'wakeel-docked wakeel-docked-todo' : ''"

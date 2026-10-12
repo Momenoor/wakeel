@@ -10,6 +10,7 @@ use App\Models\ChatMessage;
 use App\Models\User;
 use App\Services\Chat\ChatBellNotifications;
 use App\Services\Chat\ChatMessenger;
+use App\Services\Chat\ChatReading;
 use App\Services\Notify\UserAlert;
 use App\Support\Dock;
 use BezhanSalleh\FilamentShield\Support\Utils;
@@ -170,7 +171,12 @@ class ChatWidget extends Component
      */
     public function checkForNewMessages(): void
     {
+        // Who is online, at every check — sent back even when nothing is
+        // redrawn, and the page's dots follow it (chat-widget's style).
+        $this->onlineUserIds = User::onlineIds();
         $this->markIncomingDelivered();
+        // Still on screen: no notifications for it meanwhile.
+        $this->markReading();
 
         $latest = $this->incomingMessages()
             ->where('id', '>', $this->lastSeenMessageId)
@@ -189,9 +195,11 @@ class ChatWidget extends Component
         $this->lastSeenMessageId = (int) $latest->id;
 
         // A desktop notification too, when Wakeel is in a background tab —
-        // the same tag as its push, so it never shows twice.
+        // the same tag as its push, so it never shows twice. Not for the
+        // conversation on screen: it is being read.
         $latest->loadMissing(['sender', 'conversation']);
-        $this->dispatch(
+        $onScreen = (int) $latest->chat_conversation_id === (int) $this->activeConversationId && ($this->isOpen || $this->mode !== 'popup');
+        $onScreen || $this->dispatch(
             'wakeel-desktop-notification',
             id: 'chat-'.$latest->chat_conversation_id,
             // In a group: the group, then who wrote.
@@ -383,6 +391,9 @@ class ChatWidget extends Component
      */
     public function setOpen(bool $open): void
     {
+        if (! $open) {
+            $this->stopReading();
+        }
         $this->isOpen = $open;
         $this->rememberState();
 
@@ -395,6 +406,7 @@ class ChatWidget extends Component
 
     public function backToList(): void
     {
+        $this->stopReading();
         $this->activeConversationId = null;
         $this->messageLimit = self::PAGE;
         $this->showMembers = false;
@@ -404,6 +416,7 @@ class ChatWidget extends Component
 
     public function selectConversation(int $conversationId): void
     {
+        $this->stopReading();
         $this->activeConversationId = $conversationId;
         $this->focusMessageId = null;
         $this->messageLimit = self::PAGE;
@@ -873,12 +886,27 @@ class ChatWidget extends Component
         return view('livewire.partials.chat-placeholder');
     }
 
+    /** The conversation on screen (ChatReading): the bubble open on it, or the Chat page. */
+    private function markReading(): void
+    {
+        if ($this->activeConversationId !== null && ($this->isOpen || $this->mode !== 'popup')) {
+            ChatReading::mark((int) Auth::id(), (int) $this->activeConversationId);
+        }
+    }
+
+    /** Off screen now: notified again. */
+    private function stopReading(): void
+    {
+        if ($this->activeConversationId !== null) {
+            ChatReading::forget((int) Auth::id(), (int) $this->activeConversationId);
+        }
+    }
+
     public function render(): View
     {
-        $this->onlineUserIds = User::query()
-            ->where('last_seen_at', '>', now()->subSeconds(User::ONLINE_WITHIN_SECONDS))
-            ->pluck('id')
-            ->all();
+        $this->markReading();
+
+        $this->onlineUserIds = User::onlineIds();
 
         return view('livewire.chat-widget');
     }

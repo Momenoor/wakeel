@@ -80,7 +80,7 @@ class TrackPerformance
         $name = $this->name($request);
         $routine = Str::contains($name, self::ROUTINE);
 
-        if ($routine && $duration < self::SLOW_MS) {
+        if ($routine && $duration < self::SLOW_MS && $response->getStatusCode() < 400) {
             return;
         }
 

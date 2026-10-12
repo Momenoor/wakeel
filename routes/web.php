@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ChatAttachmentController;
 use App\Http\Controllers\ChatMessageController;
+use App\Http\Controllers\ClientErrorController;
 use App\Http\Controllers\LetterFontFileController;
 use App\Http\Controllers\LicenseController;
 use App\Http\Controllers\PushSubscriptionController;
@@ -64,6 +65,8 @@ Route::get('/login', fn () => redirect()->to(Filament::getDefaultPanel()->getLog
 // resources/views/filament/partials/desktop-notifications.blade.php).
 Route::middleware('auth')->group(function () {
     Route::post('/push/subscriptions', [PushSubscriptionController::class, 'store'])->name('push.subscribe');
+    // A background request that failed in the browser (filament.partials.client-errors-script).
+    Route::post('/client-errors', [ClientErrorController::class, 'store'])->middleware('throttle:30,1')->name('client-errors.store');
     Route::delete('/push/subscriptions', [PushSubscriptionController::class, 'destroy'])->name('push.unsubscribe');
 
     // A file sent in a chat message, to those in the conversation.

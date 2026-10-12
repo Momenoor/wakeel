@@ -7,6 +7,7 @@ use App\Filament\Mms\Resources\LetterTemplates\Pages\ListLetterTemplates;
 use App\Models\Court;
 use App\Models\LetterTemplate;
 use App\Models\Matter;
+use App\Models\Party;
 use App\Models\Type;
 use App\Models\User;
 use Filament\Facades\Filament;
@@ -49,6 +50,41 @@ class LetterTemplateCourtTest extends TestCase
         $offered = LetterTemplate::query()->forMatter($matter)->whereIn('name', ['Everywhere', 'At Dubai', 'At Sharjah', 'Dubai other type'])->pluck('name')->all();
 
         $this->assertEqualsCanonicalizing(['Everywhere', 'At Dubai'], $offered);
+    }
+
+    public function test_minutes_are_offered_only_their_courts_templates(): void
+    {
+        $dubai = Court::factory()->create(['name' => 'Dubai']);
+        $sharjah = Court::factory()->create(['name' => 'Sharjah']);
+        $matter = Matter::factory()->create(['court_id' => $sharjah->id]);
+        LetterTemplate::query()->where('category', LetterTemplateCategories::MINUTES->value)->delete();
+
+        $this->template('Minutes everywhere', [], [], LetterTemplateCategories::MINUTES);
+        $this->template('Minutes at Dubai', [$dubai->id], [], LetterTemplateCategories::MINUTES);
+        $this->template('A letter', [], [], collect(LetterTemplateCategories::cases())->first(fn ($c) => $c !== LetterTemplateCategories::MINUTES));
+
+        // A Sharjah matter: not Dubai's minutes, nor a letter template.
+        $this->assertSame(['Minutes everywhere'], LetterTemplate::query()->minutesFor($matter)->pluck('name')->all());
+    }
+
+    public function test_the_templates_list_is_filtered_by_external_entity(): void
+    {
+        Gate::before(fn () => true);
+        Filament::setCurrentPanel('mms');
+        $this->actingAs(User::factory()->create());
+
+        $police = Party::factory()->create(['name' => 'Police', 'role' => ['role' => ['external']]]);
+        $bank = Party::factory()->create(['name' => 'Central bank', 'role' => ['role' => ['external']]]);
+        $toPolice = $this->template('To the police');
+        $toPolice->entities()->sync([$police->id]);
+        $toBank = $this->template('To the bank');
+        $toBank->entities()->sync([$bank->id]);
+        $general = $this->template('General');
+
+        Livewire::test(ListLetterTemplates::class)
+            ->filterTable('entities', [$police->id])
+            ->assertCanSeeTableRecords([$toPolice])
+            ->assertCanNotSeeTableRecords([$toBank, $general]);
     }
 
     public function test_the_templates_list_is_filtered_by_court_type_and_category(): void

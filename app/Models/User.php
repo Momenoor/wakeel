@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\Branding;
+use App\Support\LiveRefresh;
 use BezhanSalleh\FilamentShield\Support\Utils;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Models\Contracts\HasAvatar;
@@ -15,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
@@ -26,7 +28,9 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable implements FilamentUser, HasAvatar
 {
     /** Seen within this many seconds counts as online (see isOnline()). */
-    public const ONLINE_WITHIN_SECONDS = 60;
+    // Twice the stamp's interval (TrackUserLastSeen, 15 s): someone with the
+    // app open never flickers off; gone, they show offline within it.
+    public const ONLINE_WITHIN_SECONDS = 30;
 
     use HasFactory, HasInbox, HasRoles, Notifiable;
     use LogsActivity;
@@ -79,7 +83,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     ];
 
     /**
-     * "Online" is a 60-second window on last_seen_at, which TrackUserLastSeen
+     * "Online" is a 30-second window on last_seen_at, which TrackUserLastSeen
      * stamps (at most every 15 seconds) on page loads and on the panels'
      * polling requests. With Pusher configured the chat widget overrides
      * this live from the "online" presence channel; this is the fallback.
@@ -88,6 +92,21 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     public function isSuperAdmin(): bool
     {
         return $this->hasRole(Utils::getSuperAdminName());
+    }
+
+    /**
+     * Everyone online now — read once every couple of seconds for all who
+     * ask (each chat's check): one small query, however many are open.
+     *
+     * @return list<int>
+     */
+    public static function onlineIds(): array
+    {
+        return Cache::remember('users.online', LiveRefresh::SECONDS, fn (): array => static::query()
+            ->where('last_seen_at', '>', now()->subSeconds(self::ONLINE_WITHIN_SECONDS))
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all());
     }
 
     public function isOnline(): bool

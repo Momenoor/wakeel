@@ -45,6 +45,12 @@ class LetterTemplatesTable
                     ->badge()
                     ->color('gray')
                     ->placeholder(__('All courts')),
+                TextColumn::make('entities.name')
+                    ->label(__('External entities'))
+                    ->badge()
+                    ->color('warning')
+                    ->placeholder('—')
+                    ->toggleable(),
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -72,6 +78,13 @@ class LetterTemplatesTable
                     ->options(fn () => Court::query()->orderBy('name')->pluck('name', 'id'))
                     ->searchable()
                     ->query(fn (Builder $query, array $data) => filled($data['value'] ?? null) ? $query->forCourt((int) $data['value']) : $query),
+                // Written to these entities (police, the central bank …).
+                SelectFilter::make('entities')
+                    ->label(__('External entity'))
+                    ->relationship('entities', 'name', fn (Builder $query) => $query->withRole('external'))
+                    ->multiple()
+                    ->searchable()
+                    ->preload(),
             ])
             ->recordActions([
                 ViewAction::make(),

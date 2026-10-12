@@ -288,6 +288,25 @@ class Performance extends Page
             $lines[] = '- '.$sample->name.' ('.$sample->repeated.' repeated): `'.str_replace('`', "'", $sample->top_query).'`';
         }
 
+        // What failed — answered with an error, or (status 0, seen by the
+        // browser) not answered at all: the "Error while loading" notices.
+        $lines = [...$lines, '', '## Failed requests', ''];
+        $failed = $this->samples()
+            ->where(fn (Builder $q) => $q->where('status', '>=', 400)->orWhere('method', 'CLIENT'))
+            ->selectRaw('name, status, count(*) as times, max(created_at) as last_at, max(path) as page')
+            ->groupBy('name', 'status')
+            ->orderByDesc('times')
+            ->limit(80)
+            ->get();
+
+        if ($failed->isEmpty()) {
+            $lines[] = '- None.';
+        }
+
+        foreach ($failed as $row) {
+            $lines[] = '- '.$row->times.'× status '.($row->status ?: '0 (no answer)').' — '.$row->name.' — last '.$row->last_at.' on '.$row->page;
+        }
+
         $lines = [...$lines, '', '## Slowest requests', ''];
 
         foreach ($this->slowest(50) as $sample) {

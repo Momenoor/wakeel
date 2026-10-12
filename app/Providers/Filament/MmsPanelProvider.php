@@ -349,7 +349,9 @@ class MmsPanelProvider extends PanelProvider
         // — at the end, its content slid aside on every page.
         FilamentView::registerRenderHook(
             PanelsRenderHook::HEAD_END,
-            fn (): string => Auth::check() ? view('filament.partials.dock-script')->render() : '',
+            fn (): string => Auth::check()
+                ? view('filament.partials.dock-script')->render().view('filament.partials.client-errors-script')->render()
+                : '',
         );
 
         // Each user's to-do list, a sticky note on every page of both

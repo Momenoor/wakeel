@@ -82,6 +82,24 @@
         toggle(open) {
             this.$wire.isOpen = open;
             this.$wire.setOpen(open);
+            this.storeOpen(open);
+        },
+        {{-- Open or minimised, kept for this tab's next pages: the browser's
+             own word wins — the server's session could be written back by
+             another request running at the same time, and the bubble opened
+             again on the next page. Pinned: always open. --}}
+        storeOpen(open) {
+            try { sessionStorage.setItem('wakeel.chat.open', open ? '1' : '0'); } catch (e) {}
+        },
+        restoreOpen() {
+            let stored = null;
+            try { stored = sessionStorage.getItem('wakeel.chat.open'); } catch (e) {}
+            if (stored !== null && ! this.docked() && (stored === '1') !== this.$wire.isOpen) {
+                this.$wire.isOpen = stored === '1';
+                this.$wire.setOpen(stored === '1');
+            }
+            // Opened by the page itself (a new message): kept too.
+            this.$wire.$watch('isOpen', (open) => this.storeOpen(open));
         },
         {{-- Pinned to the page (the dock store): a column, not a bubble. --}}
         docked() {
@@ -116,6 +134,7 @@
              position was never read back. --}}
         if (@js($isPopup)) {
             loadPos();
+            restoreOpen();
             window.addEventListener('resize', () => clamp());
         }
         if (! Alpine.store('chatOnline')) {
@@ -133,11 +152,10 @@
         polling is what delivers both — and keeps a background tab's user
         online — so it runs faster and keeps going.
     --}}
-    @if (filled(config('filament.broadcasting.echo')))
-        wire:poll.60s="checkForNewMessages"
-    @else
-        wire:poll.20s.keep-alive="checkForNewMessages"
-    @endif
+    {{-- The bubble and the Chat page check alike (LiveRefresh), in a
+         background tab too, Pusher or not: Pusher not delivering (its channel
+         refused, the connection lost) left a page waiting for a refresh. --}}
+    {!! \App\Support\LiveRefresh::poll('checkForNewMessages') !!}
     @if ($isPopup)
         wire:key="chat-widget-popup"
         :style="placement()"

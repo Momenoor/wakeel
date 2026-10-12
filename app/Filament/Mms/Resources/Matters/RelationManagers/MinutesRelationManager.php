@@ -2,7 +2,6 @@
 
 namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 
-use App\Enums\LetterTemplateCategories;
 use App\Filament\Concerns\GuardsSentDeletion;
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Concerns\RefreshesMatterPage;
@@ -169,8 +168,8 @@ class MinutesRelationManager extends RelationManager
                 $event = CalendarEvent::query()->where('matter_id', $matter->getKey())->where('start_datetime', '>=', now()->startOfDay())->orderBy('start_datetime')->first()
                     ?? CalendarEvent::query()->where('matter_id', $matter->getKey())->latest('start_datetime')->first();
 
-                // The default minutes template, and its letterhead (else the default one).
-                $templateId = LetterTemplate::query()->where('category', LetterTemplateCategories::MINUTES->value)->where('is_active', true)
+                // The default minutes template for its type and court, and its letterhead (else the default one).
+                $templateId = LetterTemplate::query()->minutesFor($matter)
                     ->orderByDesc('is_default')->oldest('id')->value('id');
 
                 return [
@@ -187,7 +186,8 @@ class MinutesRelationManager extends RelationManager
                     ->schema([
                         Select::make('letter_template_id')
                             ->label(__('Template'))
-                            ->options(fn () => LetterTemplate::query()->where('category', LetterTemplateCategories::MINUTES->value)->where('is_active', true)->orderBy('name')->pluck('name', 'id'))
+                            // Only those for the matter's type and court (and those for every one).
+                            ->options(fn () => LetterTemplate::query()->minutesFor($matter)->orderBy('name')->pluck('name', 'id'))
                             ->required()
                             ->live()
                             // Another template: its letterhead.

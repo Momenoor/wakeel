@@ -142,6 +142,16 @@ class LetterTemplate extends Model implements HasRichContent
         $query->forMatterType($matter->type_id)->forCourt($matter->court_id);
     }
 
+    /**
+     * Minutes templates for this matter: active, for its type and court.
+     *
+     * @param  Builder<LetterTemplate>  $query
+     */
+    public function scopeMinutesFor(Builder $query, Matter $matter): void
+    {
+        $query->forMatter($matter)->where('category', LetterTemplateCategories::MINUTES->value);
+    }
+
     public function getFilamentRichContentField(): string
     {
         return 'body';
