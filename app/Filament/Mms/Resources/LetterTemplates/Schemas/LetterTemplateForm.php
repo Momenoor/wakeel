@@ -102,6 +102,15 @@ class LetterTemplateForm
                             ->placeholder(__('All matter types'))
                             ->helperText(__('Issuing a letter on a matter offers only the templates for its type. Leave empty to offer this one for every type.'))
                             ->columnSpanFull(),
+                        Select::make('courts')
+                            ->label(__('Courts'))
+                            ->relationship('courts', 'name')
+                            ->multiple()
+                            ->preload()
+                            ->searchable()
+                            ->placeholder(__('All courts'))
+                            ->helperText(__('Issuing a letter on a matter offers only the templates for its court too. Leave empty to offer this one at every court.'))
+                            ->columnSpanFull(),
                         // Picking one of these entities on a letter picks this template.
                         Select::make('entities')
                             ->label(__('External entities'))

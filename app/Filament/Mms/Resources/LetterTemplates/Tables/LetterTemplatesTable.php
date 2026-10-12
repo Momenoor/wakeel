@@ -2,13 +2,18 @@
 
 namespace App\Filament\Mms\Resources\LetterTemplates\Tables;
 
+use App\Enums\LetterTemplateCategories;
+use App\Models\Court;
+use App\Models\Type;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class LetterTemplatesTable
 {
@@ -35,6 +40,11 @@ class LetterTemplatesTable
                     ->label(__('Matter types'))
                     ->badge()
                     ->placeholder(__('All matter types')),
+                TextColumn::make('courts.name')
+                    ->label(__('Courts'))
+                    ->badge()
+                    ->color('gray')
+                    ->placeholder(__('All courts')),
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -44,8 +54,24 @@ class LetterTemplatesTable
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
+            // A court or a type: the templates for it — those for every one included.
             ->filters([
-                //
+                SelectFilter::make('category')
+                    ->label(__('Category'))
+                    ->options(LetterTemplateCategories::class)
+                    ->multiple(),
+                SelectFilter::make('type')
+                    ->label(__('Matter type'))
+                    ->options(fn () => Type::query()->orderBy('name')->pluck('name', 'id'))
+                    ->searchable()
+                    ->query(fn (Builder $query, array $data) => filled($data['value'] ?? null)
+                        ? $query->where(fn (Builder $q) => $q->whereDoesntHave('types')->orWhereHas('types', fn (Builder $t) => $t->whereKey($data['value'])))
+                        : $query),
+                SelectFilter::make('court')
+                    ->label(__('Court'))
+                    ->options(fn () => Court::query()->orderBy('name')->pluck('name', 'id'))
+                    ->searchable()
+                    ->query(fn (Builder $query, array $data) => filled($data['value'] ?? null) ? $query->forCourt((int) $data['value']) : $query),
             ])
             ->recordActions([
                 ViewAction::make(),

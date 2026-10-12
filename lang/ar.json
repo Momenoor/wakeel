@@ -3895,5 +3895,7 @@
     "The fee's date was updated": "تم تحديث تاريخ الرسوم",
     "The fee was dated :from, after this payment; it is now dated :to, as per the payment date.": "كان تاريخ الرسوم :from أي بعد تاريخ هذه الدفعة، وأصبح الآن :to وفقًا لتاريخ الدفعة.",
     "Pin to the page": "تثبيت في الصفحة",
-    "Unpin from the page": "إلغاء التثبيت من الصفحة"
+    "Unpin from the page": "إلغاء التثبيت من الصفحة",
+    "All courts": "كل المحاكم",
+    "Issuing a letter on a matter offers only the templates for its court too. Leave empty to offer this one at every court.": "عند إصدار خطاب في قضية تظهر فقط النماذج الخاصة بمحكمتها أيضًا. اتركه فارغًا ليظهر هذا النموذج في كل المحاكم."
 }

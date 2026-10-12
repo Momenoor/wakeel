@@ -75,6 +75,12 @@ class LetterTemplate extends Model implements HasRichContent
         return $this->belongsToMany(Type::class, 'letter_template_type');
     }
 
+    /** The courts it is for; none: every court. */
+    public function courts(): BelongsToMany
+    {
+        return $this->belongsToMany(Court::class, 'letter_template_court');
+    }
+
     /**
      * The external entities this template is written to.
      */
@@ -85,12 +91,13 @@ class LetterTemplate extends Model implements HasRichContent
 
     /**
      * The template to start a letter to this entity from: an active one,
-     * for the matter's type, written to it.
+     * for the matter's type and court, written to it.
      */
-    public static function forEntity(int $partyId, ?int $typeId): ?self
+    public static function forEntity(int $partyId, ?int $typeId, ?int $courtId = null): ?self
     {
         return static::query()
             ->forMatterType($typeId)
+            ->forCourt($courtId)
             ->where('category', '!=', LetterTemplateCategories::MINUTES->value)
             ->whereHas('entities', fn (Builder $q) => $q->whereKey($partyId))
             ->orderByDesc('is_default')
@@ -110,6 +117,29 @@ class LetterTemplate extends Model implements HasRichContent
             ->where(fn (Builder $q) => $q
                 ->whereDoesntHave('types')
                 ->when($typeId, fn (Builder $q) => $q->orWhereHas('types', fn (Builder $t) => $t->whereKey($typeId))));
+    }
+
+    /**
+     * Those usable at this court: linked to it, or to no court at all.
+     *
+     * @param  Builder<LetterTemplate>  $query
+     */
+    public function scopeForCourt(Builder $query, ?int $courtId): void
+    {
+        $query->where(fn (Builder $q) => $q
+            ->whereDoesntHave('courts')
+            ->when($courtId, fn (Builder $q) => $q->orWhereHas('courts', fn (Builder $c) => $c->whereKey($courtId))));
+    }
+
+    /**
+     * Active templates for this matter: its type's and its court's (or for
+     * every type, every court).
+     *
+     * @param  Builder<LetterTemplate>  $query
+     */
+    public function scopeForMatter(Builder $query, Matter $matter): void
+    {
+        $query->forMatterType($matter->type_id)->forCourt($matter->court_id);
     }
 
     public function getFilamentRichContentField(): string

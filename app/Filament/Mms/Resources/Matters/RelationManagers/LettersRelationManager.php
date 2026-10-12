@@ -844,8 +844,8 @@ class LettersRelationManager extends RelationManager
                 ->schema([
                     Select::make('letter_template_id')
                         ->label(__('Template'))
-                        // Only the templates for this matter's type (and those for every type).
-                        ->options(fn () => LetterTemplate::query()->forMatterType($matter->type_id)->where('category', '!=', LetterTemplateCategories::MINUTES->value)->orderBy('name')->pluck('name', 'id'))
+                        // Only the templates for this matter's type and court (and those for every one).
+                        ->options(fn () => LetterTemplate::query()->forMatter($matter)->where('category', '!=', LetterTemplateCategories::MINUTES->value)->orderBy('name')->pluck('name', 'id'))
                         ->searchable()
                         ->required()
                         ->live()
@@ -864,7 +864,7 @@ class LettersRelationManager extends RelationManager
 
             // An external entity added: its template, when none is chosen yet.
             self::recipientsSection($matter, onEntity: function (Party $party, Get $get, Set $set) use ($matter): void {
-                $template = blank($get('letter_template_id')) ? LetterTemplate::forEntity($party->getKey(), $matter->type_id) : null;
+                $template = blank($get('letter_template_id')) ? LetterTemplate::forEntity($party->getKey(), $matter->type_id, $matter->court_id) : null;
 
                 if ($template) {
                     $set('letter_template_id', $template->getKey());
