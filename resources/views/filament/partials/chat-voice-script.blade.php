@@ -41,9 +41,13 @@
             seeking: false,
 
             init() {
-                this.audio = new Audio();
+                // In the page, played inline: Safari on a phone wants both.
+                this.audio = document.createElement('audio');
                 this.audio.preload = 'metadata';
+                this.audio.setAttribute('playsinline', '');
+                this.audio.style.display = 'none';
                 this.audio.src = url;
+                this.$el.appendChild(this.audio);
                 this.audio.addEventListener('loadedmetadata', () => {
                     if (isFinite(this.audio.duration) && this.audio.duration > 0 && ! this.duration) {
                         this.duration = this.audio.duration;
@@ -85,9 +89,17 @@
                 }
                 try {
                     const data = await (await fetch(url, { credentials: 'same-origin' })).arrayBuffer();
-                    const context = new (window.AudioContext || window.webkitAudioContext)();
-                    const buffer = await context.decodeAudioData(data);
-                    context.close?.();
+                    // Read offline — no sound out: a live AudioContext took the
+                    // phone's sound over (iPhone), and the note then played
+                    // silent until it was sought.
+                    const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+                    if (! Offline) {
+                        return;
+                    }
+                    const buffer = await new Promise((resolve, reject) => {
+                        const decoding = new Offline(1, 1, 44100).decodeAudioData(data, resolve, reject);
+                        decoding?.catch?.(reject);
+                    });
                     const samples = buffer.getChannelData(0);
                     const block = Math.max(1, Math.floor(samples.length / BARS));
                     const raw = Array.from({ length: BARS }, (_, i) => {
@@ -113,6 +125,10 @@
                     return;
                 }
                 window.dispatchEvent(new CustomEvent('wk-voice-play', { detail: this }));
+                // Nothing loaded yet: loaded first, so it starts with its sound.
+                if (this.audio.readyState === 0) {
+                    this.audio.load();
+                }
                 this.audio.playbackRate = speeds[this.speed];
                 this.audio.play().catch(() => {});
             },
