@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Livewire\Concerns\SavesDockWidth;
 use App\Models\Todo;
 use App\Models\User;
 use App\Support\Dock;
@@ -19,6 +20,8 @@ use Livewire\Component;
  */
 class TodoNote extends Component
 {
+    use SavesDockWidth;
+
     /** Open or hidden — kept for the next page. */
     public bool $isOpen = false;
 

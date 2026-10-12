@@ -58,6 +58,24 @@ class DockTest extends TestCase
         Livewire::test(ChatWidget::class, ['mode' => 'popup'])->assertSet('isOpen', true);
     }
 
+    public function test_the_columns_width_is_dragged_and_kept_for_the_user(): void
+    {
+        $this->assertSame(Dock::WIDTH, Dock::width($this->user));
+
+        Livewire::test(TodoNote::class)->call('saveDockWidth', 500);
+        $this->assertSame(500, Dock::width($this->user->refresh()));
+
+        // From the chat too; never too narrow or too wide.
+        Livewire::test(ChatWidget::class, ['mode' => 'popup'])->call('saveDockWidth', 50);
+        $this->assertSame(Dock::MIN_WIDTH, Dock::width($this->user->refresh()));
+        Livewire::test(TodoNote::class)->call('saveDockWidth', 5000);
+        $this->assertSame(Dock::MAX_WIDTH, Dock::width($this->user->refresh()));
+
+        // The page starts at it.
+        Filament::setCurrentPanel('mms');
+        $this->get(Filament::getPanel('mms')->getUrl())->assertSee("'--wakeel-dock-w', '".Dock::MAX_WIDTH."px'", false);
+    }
+
     public function test_the_page_knows_what_is_pinned(): void
     {
         Filament::setCurrentPanel('mms');

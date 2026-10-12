@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Events\ChatMessagesStatusChanged;
 use App\Filament\Mms\Pages\Chat;
+use App\Livewire\Concerns\SavesDockWidth;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\User;
@@ -38,6 +39,8 @@ use Throwable;
  */
 class ChatWidget extends Component
 {
+    use SavesDockWidth;
+
     /** Session key holding the popup's open state and conversation. */
     private const POPUP_STATE = 'chat.popup';
 

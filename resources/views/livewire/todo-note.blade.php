@@ -137,6 +137,18 @@
         :class="resizing ? 'select-none' : ''"
         class="wakeel-dock-panel relative flex max-h-[min(32rem,calc(100vh-7rem))] max-w-[calc(100vw-2rem)] -rotate-[0.4deg] flex-col overflow-hidden rounded-md border border-amber-300/70 bg-amber-100 text-amber-950 shadow-2xl shadow-amber-900/20 dark:border-amber-500/30 dark:bg-amber-950 dark:text-amber-50"
     >
+{{-- Pinned: its edge toward the page drags the column wider or narrower. --}}
+        <div
+            x-show="docked()"
+            x-on:pointerdown.prevent="$store.dock.startResize($event)"
+            x-on:pointermove="$store.dock.onResize($event)"
+            x-on:pointerup="$store.dock.endResize($wire)"
+            x-on:pointercancel="$store.dock.endResize($wire)"
+            style="touch-action: none;"
+            class="absolute inset-y-0 start-0 z-20 w-2 cursor-ew-resize transition-colors hover:bg-primary-400/50"
+            title="{{ __('Drag to resize') }}"
+        ></div>
+
         {{-- Either side border: drag to make the note wider or narrower. --}}
         @foreach (['left', 'right'] as $side)
             <div

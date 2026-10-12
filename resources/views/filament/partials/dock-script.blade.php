@@ -18,7 +18,7 @@
         const html = document.documentElement;
 
         // At once, before the page is drawn: no jump when Alpine starts.
-        html.style.setProperty('--wakeel-dock-w', '{{ \App\Support\Dock::WIDTH }}px');
+        html.style.setProperty('--wakeel-dock-w', '{{ \App\Support\Dock::width(auth()->user()) }}px');
         if (wide()) {
             html.toggleAttribute('data-dock', pinned.todo || pinned.chat);
             html.toggleAttribute('data-dock-todo', pinned.todo);
@@ -30,6 +30,31 @@
                 todo: pinned.todo,
                 chat: pinned.chat,
                 wide: wide(),
+                width: {{ \App\Support\Dock::width(auth()->user()) }},
+                resizing: null,
+                {{-- Dragged by its edge toward the page; kept for the user when let go ($wire: the panel's). --}}
+                startResize(e) {
+                    this.resizing = { x: e.clientX, w: this.width };
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                },
+                onResize(e) {
+                    if (! this.resizing) {
+                        return;
+                    }
+                    // The column is at the page's end: dragging toward the start widens it.
+                    const dx = e.clientX - this.resizing.x;
+                    const rtl = getComputedStyle(html).direction === 'rtl';
+                    const w = this.resizing.w + (rtl ? dx : -dx);
+                    this.width = Math.round(Math.min(Math.max({{ \App\Support\Dock::MIN_WIDTH }}, w), Math.min({{ \App\Support\Dock::MAX_WIDTH }}, window.innerWidth / 2)));
+                    html.style.setProperty('--wakeel-dock-w', this.width + 'px');
+                },
+                endResize($wire) {
+                    if (! this.resizing) {
+                        return;
+                    }
+                    this.resizing = null;
+                    $wire.saveDockWidth(this.width);
+                },
                 on(which) {
                     return this.wide && this[which];
                 },
@@ -47,6 +72,11 @@
                     this.apply(true);
                 },
                 apply(changed = false) {
+                    // Below the top bar, beside the page's content only.
+                    const topbar = document.querySelector('.fi-topbar');
+                    if (topbar) {
+                        html.style.setProperty('--wakeel-dock-top', topbar.getBoundingClientRect().height + 'px');
+                    }
                     html.toggleAttribute('data-dock', this.any);
                     html.toggleAttribute('data-dock-todo', this.on('todo'));
                     html.toggleAttribute('data-dock-chat', this.on('chat'));

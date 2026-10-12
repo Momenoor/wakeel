@@ -17,8 +17,28 @@ final class Dock
 
     public const CHAT = 'chat';
 
-    /** The column's width, in pixels. */
+    /** The column's width, in pixels, until dragged — and how narrow or wide it may be. */
     public const WIDTH = 384;
+
+    public const MIN_WIDTH = 280;
+
+    public const MAX_WIDTH = 720;
+
+    /** The column's width as the user dragged it. */
+    public static function width(?User $user): int
+    {
+        return self::clampWidth((int) ($user?->ui_preferences['dock_width'] ?? self::WIDTH));
+    }
+
+    public static function setWidth(User $user, int $width): void
+    {
+        $user->forceFill(['ui_preferences' => [...(array) ($user->ui_preferences ?? []), 'dock_width' => self::clampWidth($width)]])->save();
+    }
+
+    public static function clampWidth(int $width): int
+    {
+        return max(self::MIN_WIDTH, min(self::MAX_WIDTH, $width));
+    }
 
     /**
      * @return array{todo: bool, chat: bool}

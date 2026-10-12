@@ -439,7 +439,8 @@ html {
 
     .wakeel-docked {
         position: fixed !important;
-        top: 0 !important;
+        /* Below the top bar (its height: dock-script). */
+        top: var(--wakeel-dock-top, 4rem) !important;
         bottom: 0 !important;
         inset-inline-end: 0 !important;
         inset-inline-start: auto !important;
@@ -452,13 +453,14 @@ html {
         z-index: 25 !important;
     }
 
+    /* Both: the space under the top bar halved. */
     html[data-dock-chat] .wakeel-docked-todo {
-        bottom: 50% !important;
+        bottom: calc((100vh - var(--wakeel-dock-top, 4rem)) / 2) !important;
         padding-bottom: 0.25rem;
     }
 
     html[data-dock-todo] .wakeel-docked-chat {
-        top: 50% !important;
+        top: calc(var(--wakeel-dock-top, 4rem) + (100vh - var(--wakeel-dock-top, 4rem)) / 2) !important;
         padding-top: 0.25rem;
     }
 
