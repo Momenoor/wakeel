@@ -140,8 +140,10 @@
                     .'<button type="button" class="wk-tool" x-on:click.stop="pick('.$message->id.', $event)" title="'.e(__('React')).'" aria-label="'.e(__('React')).'"><svg><use href="#wk-i-react"/></svg></button>'
                     .($this->canDelete($message) ? '<button type="button" class="wk-tool del" wire:click="deleteMessage('.$message->id.')" wire:confirm="'.e(__('Delete this message for everyone?')).'" title="'.e(__('Delete')).'" aria-label="'.e(__('Delete')).'"><svg><use href="#wk-i-delete"/></svg></button>' : ''))
                 @if ($isMine) {!! $tools !!} @endif
+                {{-- A voice note's bubble: a width of its own for the player to fill (sized by its content, a narrow screen pushed the player out of it). --}}
                 <div @class([
                     'max-w-[80%] rounded-2xl px-4 py-2 text-sm shadow-sm',
+                    'w-[80%]' => collect($message->files())->contains(fn (array $file) => \App\Models\ChatMessage::isAudio($file)),
                     'rounded-br-md bg-gradient-to-br from-primary-600 to-primary-500 text-white' => $isMine,
                     'rounded-bl-md bg-gray-100 text-gray-950 dark:bg-white/10 dark:text-white' => ! $isMine,
                 ]) style="min-width: 0;">

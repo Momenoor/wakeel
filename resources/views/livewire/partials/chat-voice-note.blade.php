@@ -11,7 +11,8 @@
     wire:key="voice-{{ $seed }}"
     wire:ignore
     x-data="wkVoice(@js($url), {{ (int) $seed }})"
-    style="display: flex; align-items: center; gap: 10px; min-width: 220px; max-width: 280px; margin-bottom: 6px; padding: 2px 0;"
+    {{-- The bubble's width, at most 300px: on a phone the bars narrow rather than leaving the bubble. --}}
+    style="display: flex; align-items: center; gap: 8px; width: 100%; max-width: 300px; min-width: 0; margin-bottom: 6px; padding: 2px 0;"
 >
     {{-- Play, or pause. --}}
     <button
@@ -35,11 +36,11 @@
             :aria-valuenow="Math.round(current)"
             :aria-valuemax="Math.round(duration)"
             aria-label="{{ __('Voice note') }}"
-            style="display: flex; align-items: center; gap: 2px; height: 28px; cursor: pointer; touch-action: none;"
+            style="display: flex; align-items: center; gap: 2px; height: 28px; min-width: 0; overflow: hidden; cursor: pointer; touch-action: none;"
         >
             <template x-for="(peak, i) in peaks" :key="i">
                 <span
-                    :style="'flex: 1; border-radius: 2px; height: ' + Math.round(peak * 100) + '%; background: ' + ((i + 0.5) / peaks.length <= progress ? @js($tint) : @js($faint)) + ';'"
+                    :style="'flex: 1 1 0; min-width: 1px; border-radius: 2px; height: ' + Math.round(peak * 100) + '%; background: ' + ((i + 0.5) / peaks.length <= progress ? @js($tint) : @js($faint)) + ';'"
                 ></span>
             </template>
         </div>
