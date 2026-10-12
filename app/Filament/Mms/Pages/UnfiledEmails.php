@@ -201,6 +201,7 @@ class UnfiledEmails extends Page implements HasTable
         }
 
         $ids = MatterResource::getEloquentQuery()
+            ->withoutTrashed()
             ->when(count($digits) === 1, fn (Builder $q) => $q->where('number', 'like', $digits[0].'%'))
             ->when(count($digits) > 1, fn (Builder $q) => $q->where(fn (Builder $q) => $q
                 ->where(fn (Builder $q) => $q->where('number', $digits[0])->where('year', $digits[1]))

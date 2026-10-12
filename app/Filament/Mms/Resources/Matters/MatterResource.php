@@ -139,9 +139,11 @@ class MatterResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
+        // Deleted matters: only for whoever has the Deleted tab — there, and
+        // on a deleted matter's own page (to restore it). Every other tab
+        // and every search leaves them out. Without it, never.
         $query = parent::getEloquentQuery()
-            ->withTrashed() // Ensure trashed records are visible
-            // SoftDeletingScope left intact — tabs use onlyTrashed() to control visibility
+            ->when(auth()->user()?->can('ViewTrashed:Matter'), fn (Builder $q) => $q->withTrashed())
             ->with([
                 'mainPartiesOnly.party',
                 'mainPartiesOnly.representatives.party',

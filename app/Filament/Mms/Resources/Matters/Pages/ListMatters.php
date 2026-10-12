@@ -66,8 +66,10 @@ class ListMatters extends ListRecords
     private function allTabs(): array
     {
         return [
+            // Every matter but the deleted: those only on their own tab.
             'all' => Tab::make('All')
-                ->label(__('All')),
+                ->label(__('All'))
+                ->modifyQueryUsing(fn (Builder $query) => $query->withoutTrashed()),
 
             'in_progress' => Tab::make('in progress')
                 ->label(__('In Progress'))
