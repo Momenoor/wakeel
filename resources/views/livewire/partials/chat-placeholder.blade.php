@@ -4,8 +4,12 @@
     it to is kept in the browser), so nothing moves when the chat arrives.
 --}}
 <div
-    x-data="{ style: '' }"
-    x-init="try { const p = JSON.parse(localStorage.getItem('wakeel.chat.position')); if (p) { style = 'left:' + p.x + 'px; top:' + p.y + 'px; right:auto; bottom:auto'; } } catch (e) {}"
+    x-data="{
+        style: '',
+        init() {
+            try { const p = JSON.parse(localStorage.getItem('wakeel.chat.position')); if (p) { this.style = 'left:' + p.x + 'px; top:' + p.y + 'px; right:auto; bottom:auto'; } } catch (e) {}
+        },
+    }"
     x-bind:style="style"
     class="fixed bottom-6 end-6 z-50"
 >

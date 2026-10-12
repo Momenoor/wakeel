@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
@@ -18,6 +20,9 @@ class Allocation extends Model
         return LogOptions::defaults()
             ->logAll();
     }
+
+    /** The fee's date before this payment moved it back (followFee()); null when it did not. */
+    public ?Carbon $feeDateMovedFrom = null;
 
     protected $fillable = [
         'fee_id',
@@ -62,6 +67,7 @@ class Allocation extends Model
         });
 
         static::saved(function (Allocation $allocation) {
+            $allocation->followFee();
             $allocation->fee?->updateStatus();
             $allocation->matter?->updateCollectionStatus();
         });
@@ -70,6 +76,38 @@ class Allocation extends Model
             $allocation->fee?->updateStatus();
             $allocation->matter?->updateCollectionStatus();
         });
+    }
+
+    /**
+     * Paid before its fee's date: the fee is dated from the payment instead
+     * — a fee is never later than what was paid against it.
+     */
+    private function followFee(): void
+    {
+        $fee = $this->fee;
+
+        if ($fee && $this->date && $fee->date && $this->date->lt($fee->date)) {
+            $this->feeDateMovedFrom = $fee->date->copy();
+            $fee->update(['date' => $this->date]);
+        }
+    }
+
+    /** Whoever recorded the payment: told when the fee's date followed it. */
+    public function tellIfFeeDateMoved(): void
+    {
+        if ($this->feeDateMovedFrom === null) {
+            return;
+        }
+
+        Notification::make()
+            ->warning()
+            ->title(__("The fee's date was updated"))
+            ->body(__('The fee was dated :from, after this payment; it is now dated :to, as per the payment date.', [
+                'from' => $this->feeDateMovedFrom->format('d/m/Y'),
+                'to' => $this->date->format('d/m/Y'),
+            ]))
+            ->persistent()
+            ->send();
     }
 
     /**

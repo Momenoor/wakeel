@@ -76,8 +76,17 @@
             this.$wire.isOpen = open;
             this.$wire.setOpen(open);
         },
+        {{-- Pinned to the page (the dock store): a column, not a bubble. --}}
+        docked() {
+            return @js($isPopup) && (this.$store.dock?.on('chat') ?? false);
+        },
+        pin(pinned) {
+            this.$store.dock.set('chat', pinned);
+            this.$wire.isOpen = true;
+            this.$wire.pin(pinned);
+        },
         placement() {
-            if (! this.pos) { return ''; }
+            if (! this.pos || this.docked()) { return ''; }
             const left = this.pos.x < 384;
             const top = this.pos.y < 540;
             return [
@@ -89,13 +98,16 @@
         },
     }"
     x-init="
-        if ($refs.pageShell) {
+        if (@js(! $isPopup)) {
             fillViewport();
             requestAnimationFrame(() => fillViewport());
             window.addEventListener('load', () => fillViewport());
             window.addEventListener('resize', () => fillViewport());
         }
-        if ($refs.bubble) {
+        {{-- The popup: where it was dragged to. Not by $refs.bubble — the
+             bubble's x-ref is not there yet while this runs, and the
+             position was never read back. --}}
+        if (@js($isPopup)) {
             loadPos();
             window.addEventListener('resize', () => clamp());
         }
@@ -122,6 +134,7 @@
     @if ($isPopup)
         wire:key="chat-widget-popup"
         :style="placement()"
+        :class="docked() ? 'wakeel-docked wakeel-docked-chat' : ''"
     @endif
     class="fi-chat-widget {{ $isPopup ? 'fixed bottom-6 end-6 z-50 flex flex-col items-end gap-3' : '' }}"
 >
@@ -144,6 +157,7 @@
         <button
             type="button"
             x-ref="bubble"
+            x-show="! docked()"
             x-on:pointerdown="startDrag($event)"
             x-on:pointermove="onDrag($event)"
             x-on:pointerup="endDrag()"
@@ -172,7 +186,7 @@
         </button>
 
         <div
-            x-show="$wire.isOpen"
+            x-show="$wire.isOpen || docked()"
             x-transition:enter="transition ease-out duration-200"
             x-transition:enter-start="opacity-0 translate-y-4 scale-95"
             x-transition:enter-end="opacity-100 translate-y-0 scale-100"
@@ -180,7 +194,7 @@
             x-transition:leave-start="opacity-100 translate-y-0 scale-100"
             x-transition:leave-end="opacity-0 translate-y-4 scale-95"
             style="display: none;"
-            class="relative flex h-[32rem] w-[23rem] max-w-[calc(100vw-3rem)] origin-bottom-end flex-col overflow-hidden rounded-3xl border border-gray-950/5 bg-white shadow-2xl shadow-gray-950/20 dark:border-white/10 dark:bg-gray-900"
+            class="wakeel-dock-panel relative flex h-[32rem] w-[23rem] max-w-[calc(100vw-3rem)] origin-bottom-end flex-col overflow-hidden rounded-3xl border border-gray-950/5 bg-white shadow-2xl shadow-gray-950/20 dark:border-white/10 dark:bg-gray-900"
         >
             {{-- Switching conversation: seen at once, while the next one loads. --}}
             <div wire:loading.flex wire:target="selectConversation,backToList,startConversationWith" class="absolute inset-0 z-20 items-center justify-center bg-white/60 dark:bg-gray-900/60">

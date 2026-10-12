@@ -114,6 +114,65 @@ class TodoNoteTest extends TestCase
         $this->assertSame(TodoNote::MAX_WIDTH, $this->user->refresh()->ui_preferences['todo_width']);
     }
 
+    public function test_mentioning_someone_shares_it_with_them_and_tells_them(): void
+    {
+        $this->user->update(['name' => 'Momen']);
+        $ahmed = User::factory()->create(['name' => 'Ahmed']);
+        $ahmedAli = User::factory()->create(['name' => 'Ahmed Ali']);
+        $sara = User::factory()->create(['name' => 'Sara']);
+
+        Livewire::test(TodoNote::class)
+            ->set('title', 'Call the court with @Ahmed Ali and @Sara')
+            ->call('add');
+
+        $todo = Todo::sole();
+        // The longest name: "@Ahmed Ali" is not Ahmed.
+        $this->assertEqualsCanonicalizing([$ahmedAli->id, $sara->id], $todo->sharedWith()->pluck('users.id')->all());
+        $this->assertSame(1, $ahmedAli->notifications()->count());
+        $this->assertSame(1, $sara->notifications()->count());
+        $this->assertSame(0, $ahmed->notifications()->count());
+        $this->assertStringContainsString('Momen', $sara->notifications()->first()->data['title']);
+
+        // On their lists, from its creator.
+        $this->actingAs($sara);
+        $this->assertSame([$todo->id], Todo::shownFor($sara->id)->pluck('id')->all());
+        $this->assertSame(1, Todo::dueCount($sara->id));
+        Livewire::test(TodoNote::class)->call('setOpen', true)->assertSee('Momen');
+
+        // Mentions changed: the new one told, the one dropped taken off.
+        $this->actingAs($this->user);
+        Livewire::test(TodoNote::class)->call('change', $todo->id, 'Call the court with @Sara and @Ahmed', '2026-10-12');
+        $this->assertEqualsCanonicalizing([$sara->id, $ahmed->id], $todo->sharedWith()->pluck('users.id')->all());
+        $this->assertSame(1, $ahmed->notifications()->count());
+        $this->assertSame(1, $sara->notifications()->count());
+    }
+
+    public function test_a_shared_to_do_is_ticked_once_for_all_and_only_its_creator_changes_it(): void
+    {
+        $sara = User::factory()->create(['name' => 'Sara']);
+        $todo = $this->todo('Send the report to @Sara', '2026-10-12');
+        $todo->shareWithMentioned();
+
+        $this->actingAs($sara);
+        $note = Livewire::test(TodoNote::class)->call('toggle', $todo->id);
+
+        $todo->refresh();
+        $this->assertNotNull($todo->done_at);
+        $this->assertSame($sara->id, $todo->done_by);
+        // Done for its creator too, and they are told.
+        $this->assertSame([], Todo::shownFor($this->user->id)->pluck('id')->all());
+        $this->assertSame(1, $this->user->notifications()->count());
+
+        // Not changed, moved or deleted by one it was shared with …
+        $note->call('change', $todo->id, 'Changed', '2026-10-20')->assertStatus(404);
+        $this->assertSame('Send the report to @Sara', $todo->refresh()->title);
+
+        // … who can take it off their own list.
+        Livewire::test(TodoNote::class)->call('remove', $todo->id);
+        $this->assertModelExists($todo);
+        $this->assertFalse($todo->sharedWith()->whereKey($sara->id)->exists());
+    }
+
     public function test_no_one_else_s_line_is_touched(): void
     {
         $theirs = $this->todo('Theirs', '2026-10-12', user: User::factory()->create());

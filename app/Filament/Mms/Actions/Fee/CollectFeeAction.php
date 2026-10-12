@@ -107,13 +107,16 @@ class CollectFeeAction extends Action
                     ? -abs($data['amount'])
                     : abs($data['amount']);
 
-                Allocation::create([
+                $allocation = Allocation::create([
                     'matter_id' => $record->matter_id,
                     'fee_id' => $record->id,
                     'amount' => $amount,
                     'date' => $data['date'],
                     'description' => $data['description'] ?? null,
                 ]);
+
+                // Paid before the fee's date: the fee now dated from it — said so.
+                $allocation->tellIfFeeDateMoved();
 
                 $record->matter->updateCollectionStatus();
                 $record->refresh();

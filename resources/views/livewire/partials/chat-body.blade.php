@@ -41,7 +41,17 @@
         <span class="min-w-0 flex-1 truncate font-semibold">{{ __('Messages') }}</span>
     @endif
 
-    <button type="button" x-on:click="toggle(false)" class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-white/90 transition hover:bg-white/15" aria-label="{{ __('Close') }}">
+    {{-- Pinned to the page as a column, or a bubble again. --}}
+    <button
+        type="button"
+        x-on:click="pin(! docked())"
+        class="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-white/90 transition hover:bg-white/15 lg:flex"
+        :class="docked() ? 'bg-white/20' : ''"
+        :title="docked() ? @js(__('Unpin from the page')) : @js(__('Pin to the page'))"
+    >
+        <x-filament::icon icon="heroicon-o-view-columns" class="h-4 w-4" />
+    </button>
+    <button type="button" x-show="! docked()" x-on:click="toggle(false)" class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-white/90 transition hover:bg-white/15" aria-label="{{ __('Close') }}">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
         </svg>

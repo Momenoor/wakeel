@@ -695,6 +695,10 @@ class MatterInfolist
                             ->prefix(fn (Get $get) => $get('type')?->isNegative() ? '-' : '+')
                             ->live()
                             ->required(),
+                        // Optional: today when left empty (Fee).
+                        DatePicker::make('date')
+                            ->label(__('Date'))
+                            ->default(now()),
                         Textarea::make('description')
                             ->label(__('Description')),
                     ])->action(function (array $data, $record, $component) {
@@ -1111,17 +1115,20 @@ class MatterInfolist
             ->schema([
                 TextInput::make('amount')->label(__('Fee Amount'))
                     ->numeric()->required()->prefix(Currency::symbol()),
-                DatePicker::make('date')->label(__('Date'))->required(),
-                TextInput::make('description')->label(__('Description'))->required(),
+                // Both optional; a fee left without a date is dated today (Fee).
+                DatePicker::make('date')->label(__('Date')),
+                Textarea::make('description')->label(__('Description'))->rows(2),
             ])
             ->fillForm(fn ($record) => [
                 'amount' => $record->amount,
+                'date' => $record->date,
                 'description' => $record->description,
             ])
             ->action(function (array $data, $record, $component) {
                 $record->update([
                     'amount' => $data['amount'],
-                    'description' => $data['description'],
+                    'date' => $data['date'] ?? null,
+                    'description' => $data['description'] ?? null,
                 ]);
                 $record->refresh();
                 static::refreshRecord($component);
@@ -1179,6 +1186,8 @@ class MatterInfolist
                     'date' => $data['date'],
                     'description' => $data['description'],
                 ]);
+                // Moved before the fee's date: the fee now dated from it — said so.
+                $record->tellIfFeeDateMoved();
                 $record->refresh();
                 static::refreshRecord($component);
             });

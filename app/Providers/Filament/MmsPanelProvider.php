@@ -30,6 +30,7 @@ use App\Models\Setting;
 use App\Services\MMS\Calendar\UnmatchedEventReferences;
 use App\Services\Push\VapidKeys;
 use App\Support\Branding;
+use App\Support\Dock;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use BezhanSalleh\FilamentShield\Support\Utils;
 use CraftForge\FilamentLanguageSwitcher\FilamentLanguageSwitcherPlugin;
@@ -343,11 +344,23 @@ class MmsPanelProvider extends PanelProvider
                 .'<meta name="apple-mobile-web-app-capable" content="yes">'
         );
 
+        // The to-do note and chat pinned to the page (App\Support\Dock): in
+        // the head, so the page is laid out with its column from the start
+        // — at the end, its content slid aside on every page.
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::HEAD_END,
+            fn (): string => Auth::check() ? view('filament.partials.dock-script')->render() : '',
+        );
+
         // Each user's to-do list, a sticky note on every page of both
-        // panels — loaded after the page, like the chat.
+        // panels — loaded after the page, like the chat (with it, pinned).
         FilamentView::registerRenderHook(
             PanelsRenderHook::BODY_END,
-            fn (): string => Auth::check() ? Blade::render("@livewire('todo-note', ['lazy' => true])") : '',
+            // ?todo=1 (a to-do notification's link) opens it.
+            fn (): string => Auth::check()
+                ? view('filament.partials.todo-mentions-script')->render()
+                    .Blade::render("@livewire('todo-note', ['lazy' => \$lazy, 'open' => \$open])", ['open' => request()->boolean('todo'), 'lazy' => ! Dock::pinned(Auth::user(), Dock::TODO)])
+                : '',
         );
 
         FilamentView::registerRenderHook(
@@ -368,7 +381,7 @@ class MmsPanelProvider extends PanelProvider
                 // no longer waits for the conversations, unread counts and
                 // (when it was left open) a whole conversation on every
                 // request. A plain bubble stands in until then.
-                return Blade::render("@livewire('chat-widget', ['mode' => 'popup', 'lazy' => true])");
+                return Blade::render("@livewire('chat-widget', ['mode' => 'popup', 'lazy' => \$lazy])", ['lazy' => ! Dock::pinned(Auth::user(), Dock::CHAT)]);
             }
         );
 

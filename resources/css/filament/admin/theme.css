@@ -426,3 +426,48 @@ html {
     width: 5.5rem;
     height: 5.5rem;
 }
+
+/*
+ * The to-do note and the chat pinned to the page (App\Support\Dock): a
+ * column at the end of every page, the content making room for it. Both
+ * pinned: the note above, the chat below. Wide screens only.
+ */
+@media (min-width: 1024px) {
+    html[data-dock] .fi-main-ctn {
+        margin-inline-end: var(--wakeel-dock-w, 24rem) !important;
+    }
+
+    .wakeel-docked {
+        position: fixed !important;
+        top: 0 !important;
+        bottom: 0 !important;
+        inset-inline-end: 0 !important;
+        inset-inline-start: auto !important;
+        width: var(--wakeel-dock-w, 24rem);
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 0 !important;
+        padding: 0.5rem;
+        z-index: 25 !important;
+    }
+
+    html[data-dock-chat] .wakeel-docked-todo {
+        bottom: 50% !important;
+        padding-bottom: 0.25rem;
+    }
+
+    html[data-dock-todo] .wakeel-docked-chat {
+        top: 50% !important;
+        padding-top: 0.25rem;
+    }
+
+    .wakeel-docked .wakeel-dock-panel {
+        width: 100% !important;
+        max-width: none !important;
+        height: 100% !important;
+        max-height: none !important;
+        flex: 1 1 auto;
+        transform: none !important;
+    }
+}

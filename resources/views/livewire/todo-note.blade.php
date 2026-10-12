@@ -62,8 +62,17 @@
             this.resizing = null;
             this.$wire.saveWidth(this.width);
         },
+        {{-- Pinned to the page (the dock store): a column, not a bubble. --}}
+        docked() {
+            return this.$store.dock?.on('todo') ?? false;
+        },
+        pin(pinned) {
+            this.$store.dock.set('todo', pinned);
+            this.$wire.isOpen = true;
+            this.$wire.pin(pinned);
+        },
         placement() {
-            if (! this.pos) { return ''; }
+            if (! this.pos || this.docked()) { return ''; }
             const left = this.pos.x < 384;
             const top = this.pos.y < 540;
             return [
@@ -76,14 +85,16 @@
         },
     }"
     x-init="loadPos(); window.addEventListener('resize', () => clamp())"
-    x-on:keydown.escape.window="if ($wire.isOpen) { toggle(false) }"
+    x-on:keydown.escape.window="if ($wire.isOpen && ! docked()) { toggle(false) }"
     :style="placement()"
+    :class="docked() ? 'wakeel-docked wakeel-docked-todo' : ''"
     wire:key="todo-note"
     class="fi-todo-note fixed bottom-6 end-24 z-40 flex flex-col-reverse items-end gap-3"
 >
     {{-- The bubble: click to show or hide, drag to move. --}}
     <button
         type="button"
+        x-show="! docked()"
         x-on:pointerdown="startDrag($event)"
         x-on:pointermove="onDrag($event)"
         x-on:pointerup="endDrag()"
@@ -107,7 +118,7 @@
 
     {{-- The note. --}}
     <div
-        x-show="$wire.isOpen"
+        x-show="$wire.isOpen || docked()"
         x-transition:enter="transition ease-out duration-200"
         x-transition:enter-start="opacity-0 translate-y-4 scale-95"
         x-transition:enter-end="opacity-100 translate-y-0 scale-100"
@@ -115,13 +126,14 @@
         x-transition:leave-start="opacity-100 translate-y-0 scale-100"
         x-transition:leave-end="opacity-0 translate-y-4 scale-95"
         style="display: none;"
-        :style="{ width: width + 'px' }"
+        :style="docked() ? {} : { width: width + 'px' }"
         :class="resizing ? 'select-none' : ''"
-        class="relative flex max-h-[min(32rem,calc(100vh-7rem))] max-w-[calc(100vw-2rem)] -rotate-[0.4deg] flex-col overflow-hidden rounded-md border border-amber-300/70 bg-amber-100 text-amber-950 shadow-2xl shadow-amber-900/20 dark:border-amber-500/30 dark:bg-amber-950 dark:text-amber-50"
+        class="wakeel-dock-panel relative flex max-h-[min(32rem,calc(100vh-7rem))] max-w-[calc(100vw-2rem)] -rotate-[0.4deg] flex-col overflow-hidden rounded-md border border-amber-300/70 bg-amber-100 text-amber-950 shadow-2xl shadow-amber-900/20 dark:border-amber-500/30 dark:bg-amber-950 dark:text-amber-50"
     >
         {{-- Either side border: drag to make the note wider or narrower. --}}
         @foreach (['left', 'right'] as $side)
             <div
+                x-show="! docked()"
                 x-on:pointerdown.prevent="startResize($event, '{{ $side }}')"
                 x-on:pointermove="onResize($event)"
                 x-on:pointerup="endResize()"
@@ -138,7 +150,17 @@
             <button type="button" wire:click="$toggle('allDone')" class="text-xs underline-offset-2 hover:underline">
                 {{ $allDone ? __('Hide done') : __('Show done') }}
             </button>
-            <button type="button" x-on:click="toggle(false)" class="rounded p-1 hover:bg-amber-300/60 dark:hover:bg-amber-800" aria-label="{{ __('Hide') }}">
+            {{-- Pinned to the page as a column, or a bubble again. --}}
+            <button
+                type="button"
+                x-on:click="pin(! docked())"
+                class="hidden rounded p-1 hover:bg-amber-300/60 lg:block dark:hover:bg-amber-800"
+                :class="docked() ? 'bg-amber-300/70 dark:bg-amber-800' : ''"
+                :title="docked() ? @js(__('Unpin from the page')) : @js(__('Pin to the page'))"
+            >
+                <x-filament::icon icon="heroicon-o-view-columns" class="h-4 w-4" />
+            </button>
+            <button type="button" x-show="! docked()" x-on:click="toggle(false)" class="rounded p-1 hover:bg-amber-300/60 dark:hover:bg-amber-800" aria-label="{{ __('Hide') }}">
                 <x-filament::icon icon="heroicon-o-minus" class="h-4 w-4" />
             </button>
         </div>
@@ -147,13 +169,20 @@
             {{-- A new line: what, and for which day. --}}
             <form wire:submit="add" class="flex flex-col gap-2 border-b border-amber-300/70 px-4 py-3 dark:border-amber-500/30">
                 <div class="flex gap-2">
+                    <div class="relative min-w-0 flex-1" x-data="todoMentions(@js($this->people))">
                     <input
                         type="text"
+                        x-ref="field"
                         wire:model="title"
+                        x-on:input="scan($el)"
+                        x-on:keydown="key($event, $el)"
+                        x-on:blur="open = false"
                         maxlength="500"
-                        placeholder="{{ __('Add a to-do…') }}"
-                        class="min-w-0 flex-1 rounded border-amber-300 bg-white/70 px-2 py-1.5 text-sm text-gray-900 placeholder-amber-700/60 focus:border-amber-500 focus:ring-amber-500 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-50"
+                        placeholder="{{ __('Add a to-do… (@ to mention someone)') }}"
+                        class="w-full rounded border-amber-300 bg-white/70 px-2 py-1.5 text-sm text-gray-900 placeholder-amber-700/60 focus:border-amber-500 focus:ring-amber-500 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-50"
                     >
+                    @include('livewire.partials.todo-mention-list')
+                    </div>
                     <button type="submit" class="rounded bg-amber-500 px-3 text-sm font-semibold text-amber-950 hover:bg-amber-400" aria-label="{{ __('Add') }}">
                         <x-filament::icon icon="heroicon-m-plus" class="h-4 w-4" />
                     </button>
@@ -192,9 +221,17 @@
 
                                     <div class="min-w-0 flex-1" x-show="! editing">
                                         <p
-                                            x-on:dblclick="editing = true; $nextTick(() => $refs.edit.focus())"
+                                            @if ($todo->user_id === auth()->id()) x-on:dblclick="editing = true; $nextTick(() => $refs.edit.focus())" @endif
                                             @class(['break-words text-sm', 'text-amber-800/60 line-through dark:text-amber-200/50' => $todo->done_at])
-                                        >{{ $todo->title }}</p>
+                                        >{!! $todo->titleHtml() !!}</p>
+                                        @if ($todo->user_id !== auth()->id())
+                                            <p class="text-[11px] text-amber-700 dark:text-amber-300">{{ __('From :name', ['name' => $todo->user?->name]) }}</p>
+                                        @elseif ($todo->sharedWith->isNotEmpty())
+                                            <p class="text-[11px] text-amber-700 dark:text-amber-300">{{ __('Shared with :names', ['names' => $todo->sharedWith->pluck('name')->implode('، ')]) }}</p>
+                                        @endif
+                                        @if ($todo->done_at && $todo->doneBy && $todo->participants()->count() > 1)
+                                            <p class="text-[11px] text-success-700 dark:text-success-400">{{ __('Done by :name', ['name' => $todo->doneBy->name]) }}</p>
+                                        @endif
                                     </div>
 
                                     {{-- Changed in place: Enter keeps it, Escape leaves it. --}}
@@ -205,7 +242,10 @@
                                         x-on:keydown.escape.stop="editing = false"
                                         class="flex min-w-0 flex-1 flex-col gap-1"
                                     >
-                                        <input x-ref="edit" type="text" x-model="title" maxlength="500" class="rounded border-amber-300 bg-white/80 px-2 py-1 text-sm text-gray-900 dark:bg-amber-900/40 dark:text-amber-50">
+                                        <div class="relative" x-data="todoMentions(@js($this->people))">
+                                            <input x-ref="edit" x-init="$refs.field = $el" type="text" x-model="title" x-on:input="scan($el)" x-on:keydown="key($event, $el)" x-on:blur="open = false" maxlength="500" class="w-full rounded border-amber-300 bg-white/80 px-2 py-1 text-sm text-gray-900 dark:bg-amber-900/40 dark:text-amber-50">
+                                            @include('livewire.partials.todo-mention-list')
+                                        </div>
                                         <div class="flex items-center gap-2">
                                             <input type="date" x-model="date" class="rounded border-amber-300 bg-white/80 px-2 py-0.5 text-xs text-gray-900 dark:bg-amber-900/40 dark:text-amber-50">
                                             <button type="submit" class="text-xs font-semibold underline">{{ __('Save') }}</button>
@@ -213,6 +253,7 @@
                                     </form>
 
                                     <div class="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100" x-show="! editing">
+                                        @if ($todo->user_id === auth()->id())
                                         <button type="button" x-on:click="editing = true; $nextTick(() => $refs.edit.focus())" class="rounded p-0.5 hover:bg-amber-300/70 dark:hover:bg-amber-800" title="{{ __('Edit') }}">
                                             <x-filament::icon icon="heroicon-m-pencil" class="h-3.5 w-3.5" />
                                         </button>
@@ -224,6 +265,11 @@
                                         <button type="button" wire:click="remove({{ $todo->id }})" wire:confirm="{{ __('Delete this to-do?') }}" class="rounded p-0.5 text-danger-700 hover:bg-amber-300/70 dark:text-danger-400 dark:hover:bg-amber-800" title="{{ __('Delete') }}">
                                             <x-filament::icon icon="heroicon-m-trash" class="h-3.5 w-3.5" />
                                         </button>
+                                        @else
+                                        <button type="button" wire:click="remove({{ $todo->id }})" wire:confirm="{{ __('Take this to-do off your list?') }}" class="rounded p-0.5 hover:bg-amber-300/70 dark:hover:bg-amber-800" title="{{ __('Leave') }}">
+                                            <x-filament::icon icon="heroicon-m-arrow-right-start-on-rectangle" class="h-3.5 w-3.5" />
+                                        </button>
+                                        @endif
                                     </div>
                                 </li>
                             @endforeach

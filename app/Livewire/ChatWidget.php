@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\Chat\ChatBellNotifications;
 use App\Services\Chat\ChatMessenger;
 use App\Services\Notify\UserAlert;
+use App\Support\Dock;
 use BezhanSalleh\FilamentShield\Support\Utils;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
@@ -122,7 +123,8 @@ class ChatWidget extends Component
         // conversation — after a refresh or on the next page.
         if ($mode === 'popup') {
             $state = session(self::POPUP_STATE, []);
-            $this->isOpen = (bool) ($state['open'] ?? false);
+            // Pinned to the page: always open.
+            $this->isOpen = (bool) ($state['open'] ?? false) || Dock::pinned(auth()->user(), Dock::CHAT);
             $this->activeConversationId = $state['conversation'] ?? null;
 
             if ($this->activeConversationId !== null && $this->activeConversation === null) {
@@ -357,6 +359,13 @@ class ChatWidget extends Component
         // The event payload isn't consumed directly — the message is read
         // back from the database, and the re-render after this shows it.
         $this->checkForNewMessages();
+    }
+
+    /** Pinned to the page as a column — or a bubble again. Open either way. */
+    public function pin(bool $pinned): void
+    {
+        Dock::set(auth()->user(), Dock::CHAT, $pinned);
+        $this->setOpen(true);
     }
 
     public function toggleOpen(): void
