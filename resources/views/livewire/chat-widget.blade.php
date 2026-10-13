@@ -101,6 +101,32 @@
             // Opened by the page itself (a new message): kept too.
             this.$wire.$watch('isOpen', (open) => this.storeOpen(open));
         },
+        {{-- Two fingers on the popup (touch screens): its size follows the pinch,
+             remembered in this browser. --}}
+        scale: 1,
+        pinch: null,
+        loadScale() {
+            try {
+                const s = parseFloat(localStorage.getItem('wakeel.chat.scale'));
+                if (s) { this.scale = Math.min(1.5, Math.max(0.75, s)); }
+            } catch (e) {}
+        },
+        gap(e) {
+            return Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        },
+        pinchStart(e) {
+            if (this.docked() || e.touches.length !== 2) { return; }
+            this.pinch = { d: this.gap(e), s: this.scale };
+        },
+        pinchMove(e) {
+            if (! this.pinch || e.touches.length !== 2) { return; }
+            this.scale = Math.min(1.5, Math.max(0.75, this.pinch.s * this.gap(e) / this.pinch.d));
+        },
+        pinchEnd(e) {
+            if (! this.pinch || e.touches.length >= 2) { return; }
+            this.pinch = null;
+            try { localStorage.setItem('wakeel.chat.scale', String(this.scale)); } catch (err) {}
+        },
         {{-- Pinned to the page (the dock store): a column, not a bubble. --}}
         docked() {
             return @js($isPopup) && (this.$store.dock?.on('chat') ?? false);
@@ -134,6 +160,7 @@
              position was never read back. --}}
         if (@js($isPopup)) {
             loadPos();
+            loadScale();
             restoreOpen();
             window.addEventListener('resize', () => clamp());
         }
@@ -218,7 +245,12 @@
             x-transition:leave="transition ease-in duration-150"
             x-transition:leave-start="opacity-100 translate-y-0 scale-100"
             x-transition:leave-end="opacity-0 translate-y-4 scale-95"
-            style="display: none;"
+            style="display: none; touch-action: pan-x pan-y;"
+            :style="docked() ? {} : { width: (23 * scale) + 'rem', height: (32 * scale) + 'rem', maxHeight: 'calc(100vh - 7rem)' }"
+            x-on:touchstart.passive="pinchStart($event)"
+            x-on:touchmove.passive="pinchMove($event)"
+            x-on:touchend.passive="pinchEnd($event)"
+            x-on:touchcancel.passive="pinchEnd($event)"
             class="wakeel-dock-panel relative flex h-[32rem] w-[23rem] max-w-[calc(100vw-3rem)] origin-bottom-end flex-col overflow-hidden rounded-3xl border border-gray-950/5 bg-white shadow-2xl shadow-gray-950/20 dark:border-white/10 dark:bg-gray-900"
         >
             {{-- Pinned: its edge toward the page drags the column wider or narrower. --}}

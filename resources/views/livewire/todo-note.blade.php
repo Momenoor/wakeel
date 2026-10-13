@@ -87,6 +87,25 @@
             this.resizing = null;
             this.$wire.saveWidth(this.width);
         },
+        {{-- Two fingers on the note (touch screens): the width follows the pinch, saved when let go. --}}
+        pinch: null,
+        gap(e) {
+            return Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        },
+        pinchStart(e) {
+            if (this.docked() || e.touches.length !== 2) { return; }
+            this.pinch = { d: this.gap(e), w: this.width };
+        },
+        pinchMove(e) {
+            if (! this.pinch || e.touches.length !== 2) { return; }
+            const w = this.pinch.w * this.gap(e) / this.pinch.d;
+            this.width = Math.round(Math.min(Math.max({{ \App\Livewire\TodoNote::MIN_WIDTH }}, w), Math.min({{ \App\Livewire\TodoNote::MAX_WIDTH }}, window.innerWidth - 32)));
+        },
+        pinchEnd(e) {
+            if (! this.pinch || e.touches.length >= 2) { return; }
+            this.pinch = null;
+            this.$wire.saveWidth(this.width);
+        },
         {{-- Pinned to the page (the dock store): a column, not a bubble. --}}
         docked() {
             return this.$store.dock?.on('todo') ?? false;
@@ -150,9 +169,13 @@
         x-transition:leave="transition ease-in duration-150"
         x-transition:leave-start="opacity-100 translate-y-0 scale-100"
         x-transition:leave-end="opacity-0 translate-y-4 scale-95"
-        style="display: none;"
+        style="display: none; touch-action: pan-x pan-y;"
         :style="docked() ? {} : { width: width + 'px' }"
-        :class="resizing ? 'select-none' : ''"
+        :class="resizing || pinch ? 'select-none' : ''"
+        x-on:touchstart.passive="pinchStart($event)"
+        x-on:touchmove.passive="pinchMove($event)"
+        x-on:touchend.passive="pinchEnd($event)"
+        x-on:touchcancel.passive="pinchEnd($event)"
         class="wakeel-dock-panel relative flex max-h-[min(32rem,calc(100vh-7rem))] max-w-[calc(100vw-2rem)] -rotate-[0.4deg] flex-col overflow-hidden rounded-md border shadow-2xl shadow-black/40 border-purple-500/30 bg-[#0d001f] text-purple-50"
     >
 {{-- Pinned: its edge toward the page drags the column wider or narrower. --}}
@@ -291,7 +314,7 @@
                                         </div>
                                     </form>
 
-                                    <div class="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100" x-show="! editing">
+                                    <div class="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100 max-lg:opacity-100 [@media(hover:none)]:opacity-100" x-show="! editing">
                                         @if ($todo->user_id === auth()->id())
                                         <button type="button" x-on:click="editing = true; $nextTick(() => $refs.edit.focus())" class="rounded p-0.5 hover:bg-purple-900" title="{{ __('Edit') }}">
                                             <x-filament::icon icon="heroicon-m-pencil" class="h-3.5 w-3.5" />
