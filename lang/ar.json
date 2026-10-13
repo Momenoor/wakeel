@@ -3903,5 +3903,7 @@
     "Shorter: messages and online status sooner, but more requests to the server. If \"Error while loading\" notices appear, make it longer.": "أقصر: تصل الرسائل وحالة الاتصال أسرع، لكن مع طلبات أكثر على الخادم. إذا ظهرت رسائل \"خطأ أثناء التحميل\" فاجعلها أطول.",
     "Pause": "إيقاف مؤقت",
     "Play": "تشغيل",
-    "Speed": "السرعة"
+    "Speed": "السرعة",
+    "Create from Word file": "إنشاء من ملف Word",
+    "Word file (.docx)": "ملف Word ‏(.docx)"
 }
