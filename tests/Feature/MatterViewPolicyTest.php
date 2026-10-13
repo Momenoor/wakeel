@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Models\Matter;
 use App\Models\MatterParty;
 use App\Models\Party;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
@@ -45,5 +47,20 @@ class MatterViewPolicyTest extends TestCase
     public function test_update_alone_does_not_open_a_matter(): void
     {
         $this->assertFalse($this->userWith('Update:Matter')->can('view', Matter::factory()->create()));
+    }
+
+    public function test_a_tab_permission_without_its_records_permission_does_not_block_the_page(): void
+    {
+        // Holds the Bulk mail tab's permission but cannot view campaigns: the
+        // tab used to render and its relation manager aborted with a 403,
+        // taking the whole matter page down with it.
+        $user = $this->userWith('View:Matter', 'ViewOwn:Matter', 'View:MatterBulkMailTab');
+        $matter = Matter::factory()->create();
+        $party = Party::factory()->create(['user_id' => $user->id]);
+        MatterParty::create(['matter_id' => $matter->id, 'role' => 'assistant', 'type' => 'assistant', 'party_id' => $party->id]);
+
+        $this->actingAs($user->fresh());
+
+        Livewire::test(ViewMatter::class, ['record' => $matter->getKey()])->assertSuccessful();
     }
 }

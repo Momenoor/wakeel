@@ -133,7 +133,8 @@ class MatterInfolist
                         // Each step so far — letters, meetings, emails, reports …
                         Tab::make(__('Progress'))
                             ->icon('heroicon-o-queue-list')
-                            ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_PROGRESS_TAB))
+                            ->visible(fn ($record): bool => ScreenPermissions::can(ScreenPermissions::MATTER_PROGRESS_TAB)
+                                && ProgressRelationManager::canViewForRecord($record, ViewMatter::class))
                             ->schema([
                                 Livewire::make(ProgressRelationManager::class, fn ($record) => [
                                     'ownerRecord' => $record,
@@ -176,7 +177,8 @@ class MatterInfolist
                         // Issue letter action.
                         Tab::make(__('Letters'))
                             ->icon('heroicon-o-envelope')
-                            ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_LETTERS_TAB)
+                            ->visible(fn ($record): bool => ScreenPermissions::can(ScreenPermissions::MATTER_LETTERS_TAB)
+                                && LettersRelationManager::canViewForRecord($record, ViewMatter::class)
                                 && ScreenPermissions::can(ScreenPermissions::MATTER_LETTERS))
                             // Counted once (the badge is asked for more than once).
                             ->badge(fn ($record) => $record ? (($record->letters_count ?? $record->loadCount('letters')->letters_count) ?: null) : null)
@@ -190,7 +192,8 @@ class MatterInfolist
                         // meeting, finalised.
                         Tab::make(__('Meeting minutes'))
                             ->icon('heroicon-o-clipboard-document-list')
-                            ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_MINUTES_TAB)
+                            ->visible(fn ($record): bool => ScreenPermissions::can(ScreenPermissions::MATTER_MINUTES_TAB)
+                                && MinutesRelationManager::canViewForRecord($record, ViewMatter::class)
                                 && ScreenPermissions::can(ScreenPermissions::MATTER_MINUTES))
                             ->badge(fn ($record) => $record ? (($record->minutes_count ?? $record->loadCount('minutes')->minutes_count) ?: null) : null)
                             ->schema([
@@ -202,7 +205,8 @@ class MatterInfolist
                         // Its bulk mail campaigns — to creditors, parties …
                         Tab::make(__('Bulk mail'))
                             ->icon('heroicon-o-megaphone')
-                            ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_BULK_MAIL_TAB))
+                            ->visible(fn ($record): bool => ScreenPermissions::can(ScreenPermissions::MATTER_BULK_MAIL_TAB)
+                                && BulkMailRelationManager::canViewForRecord($record, ViewMatter::class))
                             ->badge(fn ($record) => $record ? (($record->bulk_mail_campaigns_count ?? $record->loadCount('bulkMailCampaigns')->bulk_mail_campaigns_count) ?: null) : null)
                             ->schema([
                                 Livewire::make(BulkMailRelationManager::class, fn ($record) => [
