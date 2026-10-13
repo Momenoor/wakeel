@@ -19,7 +19,15 @@ class MatterPolicy
 
     public function view(AuthUser $authUser, Matter $matter): bool
     {
-        return $authUser->can('View:Matter');
+        if ($authUser->can('View:Matter')) {
+            return true;
+        }
+
+        // A user restricted to their own matters (ViewOwn) can open the ones
+        // they are a party of — the same scope the resource's list applies.
+        return $authUser->can('ViewOwn:Matter')
+            && $authUser->party !== null
+            && $matter->matterParties()->where('party_id', $authUser->party->id)->exists();
     }
 
     public function create(AuthUser $authUser): bool
