@@ -39,7 +39,7 @@ class ListLetterTemplates extends ListRecords
                 ])
                 ->action(function (array $data) {
                     $path = \Illuminate\Support\Facades\Storage::disk('local')->path($data['file']);
-                    $template = app(WordTemplateImporter::class)->import($path, $data['name'], LetterTemplateCategories::from($data['category']));
+                    $template = app(WordTemplateImporter::class)->import($path, $data['name'], $data['category'] instanceof LetterTemplateCategories ? $data['category'] : LetterTemplateCategories::from($data['category']));
                     \Illuminate\Support\Facades\Storage::disk('local')->delete($data['file']);
 
                     return redirect(LetterTemplateResource::getUrl('edit', ['record' => $template]));
