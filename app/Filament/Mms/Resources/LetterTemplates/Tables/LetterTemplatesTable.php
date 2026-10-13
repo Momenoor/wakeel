@@ -39,17 +39,23 @@ class LetterTemplatesTable
                 TextColumn::make('types.name')
                     ->label(__('Matter types'))
                     ->badge()
-                    ->placeholder(__('All matter types')),
+                    ->placeholder(__('All matter types'))
+                    ->limitList(5)
+                    ->expandableLimitedList(),
                 TextColumn::make('courts.name')
                     ->label(__('Courts'))
                     ->badge()
                     ->color('gray')
-                    ->placeholder(__('All courts')),
+                    ->placeholder(__('All courts'))
+                    ->limitList(5)
+                    ->expandableLimitedList(),
                 TextColumn::make('entities.name')
                     ->label(__('External entities'))
                     ->badge()
                     ->color('warning')
                     ->placeholder('—')
+                    ->limitList(5)
+                    ->expandableLimitedList()
                     ->toggleable(),
                 TextColumn::make('created_at')
                     ->dateTime()

@@ -16,7 +16,7 @@
     class="fi-todo-note fixed bottom-6 end-24 z-40"
 >
     <span
-        class="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-500 text-amber-950 shadow-lg shadow-amber-600/30 ring-1 ring-black/5"
+        class="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-purple-800 to-purple-950 text-purple-50 shadow-lg shadow-purple-600/30 ring-1 ring-black/5"
         aria-label="{{ __('To-do list') }}"
     >
         <x-filament::icon icon="heroicon-o-clipboard-document-check" class="h-6 w-6 opacity-80" />
