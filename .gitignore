@@ -30,3 +30,5 @@ Thumbs.db
 # User Guide production tooling: demo data and screenshot scripts stay local
 /database/seeders/Demo/
 /tools/
+/storage/framework/table-cache.present
+/storage/framework/table-sessions.present

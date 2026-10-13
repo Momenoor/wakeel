@@ -40,12 +40,14 @@ class LetterTemplatesTable
                     ->label(__('Matter types'))
                     ->badge()
                     ->placeholder(__('All matter types'))
+                    ->listWithLineBreaks()
                     ->limitList(5)
                     ->expandableLimitedList(),
                 TextColumn::make('courts.name')
                     ->label(__('Courts'))
                     ->badge()
                     ->color('gray')
+                    ->listWithLineBreaks()
                     ->placeholder(__('All courts'))
                     ->limitList(5)
                     ->expandableLimitedList(),
