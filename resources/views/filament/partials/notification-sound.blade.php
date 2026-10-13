@@ -5,7 +5,8 @@
     Wakeel is in front.
 
     - The sound files in public/sounds (notification.mp3, and chat.mp3 if
-      there is one); a built-in Web Audio tone when there is none.
+      there is one); a built-in tone (a WAV made in the page) when there
+      is none.
     - One tab plays it: with Wakeel open in several tabs, the first to claim
       it (localStorage) plays; and a burst of notifications is one sound.
     - The speaker button turns sounds off and on for this browser.
@@ -54,21 +55,9 @@
 @endphp
 <script>
     window.wakeelSound ??= (() => {
-        let context = null;
         let lastPlayed = 0;
         const files = @js($sounds);
         const players = {};
-
-        const audio = () => {
-            const Context = window.AudioContext || window.webkitAudioContext;
-            if (! Context) { return null; }
-            context ??= new Context();
-            return context;
-        };
-
-        // Sound is only allowed once the page has been used.
-        const unlock = () => { audio()?.resume(); };
-        ['pointerdown', 'keydown', 'touchstart'].forEach((type) => window.addEventListener(type, unlock, { passive: true }));
 
         const enabled = () => { try { return localStorage.getItem('wakeel-sound') !== 'off'; } catch (e) { return true; } };
 
@@ -83,17 +72,38 @@
             return true;
         };
 
-        const note = (ctx, frequency, start, length, volume) => {
-            const oscillator = ctx.createOscillator();
-            const gain = ctx.createGain();
-            oscillator.type = 'sine';
-            oscillator.frequency.value = frequency;
-            gain.gain.setValueAtTime(0.0001, start);
-            gain.gain.exponentialRampToValueAtTime(volume, start + 0.015);
-            gain.gain.exponentialRampToValueAtTime(0.0001, start + length);
-            oscillator.connect(gain).connect(ctx.destination);
-            oscillator.start(start);
-            oscillator.stop(start + length + 0.02);
+        // The built-in tone, written once as a small WAV and played like a
+        // sound file. Not through Web Audio: a live AudioContext took an
+        // iPhone's sound over, and a voice note in the chat then played
+        // silent, its bar running, until it was sought.
+        const tone = (notes) => {
+            const rate = 22050;
+            const length = Math.ceil(rate * Math.max(...notes.map(([, start, len]) => start + len + 0.02)));
+            const samples = new Float32Array(length);
+            notes.forEach(([frequency, start, len, volume]) => {
+                const from = Math.floor(start * rate);
+                const count = Math.floor(len * rate);
+                const attack = 0.015 * rate;
+                for (let i = 0; i < count && from + i < length; i++) {
+                    // As the oscillator did: up in 15ms, then away to nothing.
+                    const level = i < attack
+                        ? 0.0001 * Math.pow(volume / 0.0001, i / attack)
+                        : volume * Math.pow(0.0001 / volume, (i - attack) / (count - attack));
+                    samples[from + i] += level * Math.sin(2 * Math.PI * frequency * i / rate);
+                }
+            });
+            const view = new DataView(new ArrayBuffer(44 + length * 2));
+            const text = (at, s) => [...s].forEach((c, i) => view.setUint8(at + i, c.charCodeAt(0)));
+            text(0, 'RIFF'); view.setUint32(4, 36 + length * 2, true); text(8, 'WAVE');
+            text(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+            view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+            text(36, 'data'); view.setUint32(40, length * 2, true);
+            samples.forEach((v, i) => view.setInt16(44 + i * 2, Math.max(-1, Math.min(1, v)) * 0x7fff, true));
+            return URL.createObjectURL(new Blob([view], { type: 'audio/wav' }));
+        };
+        const tones = {
+            chat: () => tone([[660, 0, 0.12, 0.18], [990, 0.07, 0.16, 0.14]]),
+            notification: () => tone([[880, 0, 0.35, 0.16], [1318.5, 0.16, 0.5, 0.12]]),
         };
 
         return {
@@ -101,29 +111,13 @@
                 if (! force && ! enabled()) { return; }
                 // A burst of notifications is one sound.
                 if (! force && Date.now() - lastPlayed < 1500) { return; }
-
-                // The office's sound file, when there is one.
-                if (files[kind]) {
-                    lastPlayed = Date.now();
-                    players[kind] ??= new Audio(files[kind]);
-                    players[kind].currentTime = 0;
-                    players[kind].play().catch(() => {});
-
-                    return;
-                }
-
-                const ctx = audio();
-                if (! ctx || ctx.state !== 'running') { return; }
                 lastPlayed = Date.now();
 
-                const t = ctx.currentTime;
-                if (kind === 'chat') {
-                    note(ctx, 660, t, 0.12, 0.18);
-                    note(ctx, 990, t + 0.07, 0.16, 0.14);
-                } else {
-                    note(ctx, 880, t, 0.35, 0.16);
-                    note(ctx, 1318.5, t + 0.16, 0.5, 0.12);
-                }
+                // The office's sound file, else the built-in tone. Browsers
+                // only allow it once the page has been used.
+                players[kind] ??= new Audio(files[kind] || tones[kind]());
+                players[kind].currentTime = 0;
+                players[kind].play().catch(() => {});
             },
             notify(detail) {
                 const id = String(detail?.id ?? '');
