@@ -206,8 +206,8 @@ class BulkMailPlaceholders
      * {{each matter.plaintiffs}} … {{item.number}} {{item.name}} … {{/each}}
      * ({{item.count}} is how many there are). When the {{each}} and {{/each}}
      * are each alone in a paragraph, those paragraphs are dropped, so
-     * the paragraphs between them repeat. A list that isn't known here is
-     * left as typed.
+     * the paragraphs between them repeat. With both tags inside one table
+     * row, the whole row repeats. A list that isn't known here is left as typed.
      *
      * @param  array<string, string>  $values
      */
@@ -219,27 +219,36 @@ class BulkMailPlaceholders
 
         $lookup = self::lookup($values);
 
+        // The list's items, or null when it isn't known here.
+        $items = function (string $tag) use ($lookup): ?array {
+            $key = self::normalize(self::EACH.html_entity_decode(strip_tags($tag), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+
+            return array_key_exists($key, $lookup)
+                ? array_values(array_filter(explode(self::EACH_SEPARATOR, $lookup[$key]), 'strlen'))
+                : null;
+        };
+
+        $repeat = fn (string $part, array $list): string => collect($list)->map(fn (string $name, int $i) => preg_replace_callback(
+            '/\{\{\s*item[.\s_-](name|number|count)\s*\}\}/iu',
+            fn (array $t) => match (mb_strtolower($t[1])) {
+                'name' => $escape ? e($name) : $name,
+                'number' => (string) ($i + 1),
+                default => (string) count($list),
+            },
+            $part,
+        ))->implode('');
+
+        // A table row holding both tags is repeated whole, once per item.
+        $text = preg_replace_callback(
+            '/(<tr\b[^>]*>(?:(?!<\/tr>).)*?)\{\{\s*each\s+([^{}]+?)\s*\}\}((?:(?!<\/tr>).)*?)\{\{\s*\/each\s*\}\}((?:(?!<\/tr>).)*?<\/tr>)/isu',
+            fn (array $m): string => ($list = $items($m[2])) === null ? $m[0] : $repeat($m[1].$m[3].$m[4], $list),
+            $text,
+        ) ?? $text;
+
+        // Otherwise the part between the tags (their own paragraphs dropped).
         return preg_replace_callback(
             '/(?:<p[^>]*>\s*)?\{\{\s*each\s+([^{}]+?)\s*\}\}(?:\s*<\/p>)?(.*?)(?:<p[^>]*>\s*)?\{\{\s*\/each\s*\}\}(?:\s*<\/p>)?/isu',
-            function (array $m) use ($lookup, $escape): string {
-                $key = self::normalize(self::EACH.html_entity_decode(strip_tags($m[1]), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
-
-                if (! array_key_exists($key, $lookup)) {
-                    return $m[0];
-                }
-
-                $items = array_values(array_filter(explode(self::EACH_SEPARATOR, $lookup[$key]), 'strlen'));
-
-                return collect($items)->map(fn (string $name, int $i) => preg_replace_callback(
-                    '/\{\{\s*item[.\s_-](name|number|count)\s*\}\}/iu',
-                    fn (array $t) => match (mb_strtolower($t[1])) {
-                        'name' => $escape ? e($name) : $name,
-                        'number' => (string) ($i + 1),
-                        default => (string) count($items),
-                    },
-                    $m[2],
-                ))->implode('');
-            },
+            fn (array $m): string => ($list = $items($m[1])) === null ? $m[0] : $repeat($m[2], $list),
             $text,
         ) ?? $text;
     }
