@@ -147,7 +147,7 @@
         style="touch-action: none; user-select: none; cursor: grab;"
         title="{{ __('To-do list') }} — {{ __('Drag to move') }}"
         aria-label="{{ __('To-do list') }}"
-        class="relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-purple-900 to-[#0a0016] text-purple-50 shadow-lg shadow-purple-600/30 ring-1 ring-black/5 transition-transform hover:scale-105 active:scale-95"
+        class="relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-purple-300 to-purple-500 text-purple-950 dark:from-purple-900 dark:to-[#0a0016] dark:text-purple-50 shadow-lg shadow-purple-600/30 ring-1 ring-black/5 transition-transform hover:scale-105 active:scale-95"
     >
         <x-filament::icon icon="heroicon-o-clipboard-document-check" class="h-6 w-6" x-show="! $wire.isOpen" />
         <x-filament::icon icon="heroicon-o-x-mark" class="h-5 w-5" x-show="$wire.isOpen" x-cloak />
@@ -155,7 +155,7 @@
         @if ($this->dueCount > 0)
             <span
                 x-show="! $wire.isOpen"
-                class="absolute -end-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-danger-500 px-1 text-[11px] font-semibold leading-none text-white ring-2 ring-gray-950"
+                class="absolute -end-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-danger-500 px-1 text-[11px] font-semibold leading-none text-white ring-2 ring-white dark:ring-gray-950"
             >{{ $this->dueCount }}</span>
         @endif
     </button>
@@ -176,7 +176,7 @@
         x-on:touchmove.passive="pinchMove($event)"
         x-on:touchend.passive="pinchEnd($event)"
         x-on:touchcancel.passive="pinchEnd($event)"
-        class="wakeel-dock-panel relative flex max-h-[min(32rem,calc(100vh-7rem))] max-w-[calc(100vw-2rem)] -rotate-[0.4deg] flex-col overflow-hidden rounded-md border shadow-2xl shadow-black/40 border-purple-500/30 bg-[#0d001f] text-purple-50"
+        class="wakeel-dock-panel relative flex max-h-[min(32rem,calc(100vh-7rem))] max-w-[calc(100vw-2rem)] -rotate-[0.4deg] flex-col overflow-hidden rounded-md border shadow-2xl shadow-purple-900/20 dark:shadow-black/40 border-purple-300 dark:border-purple-500/30 bg-purple-100 dark:bg-[#0d001f] text-purple-950 dark:text-purple-50"
     >
 {{-- Pinned: its edge toward the page drags the column wider or narrower. --}}
         <div
@@ -204,7 +204,7 @@
             ></div>
         @endforeach
 
-        <div class="flex items-center gap-2 border-b px-4 py-2.5 border-purple-500/30 bg-[#1a0035]">
+        <div class="flex items-center gap-2 border-b px-4 py-2.5 border-purple-300 dark:border-purple-500/30 bg-purple-200 dark:bg-[#1a0035]">
             <x-filament::icon icon="heroicon-o-clipboard-document-check" class="h-5 w-5" />
             <h2 class="flex-1 text-sm font-semibold">{{ __('To-do list') }}</h2>
             <button type="button" wire:click="$toggle('allDone')" class="text-xs underline-offset-2 hover:underline">
@@ -215,20 +215,20 @@
             <button
                 type="button"
                 x-on:click="pin(! docked())"
-                class="block rounded p-1 max-lg:hidden hover:bg-purple-900"
-                :class="docked() ? 'bg-purple-900' : ''"
+                class="block rounded p-1 max-lg:hidden hover:bg-purple-200 dark:hover:bg-purple-900"
+                :class="docked() ? 'bg-purple-300 dark:bg-purple-900' : ''"
                 :title="docked() ? @js(__('Unpin from the page')) : @js(__('Pin to the page'))"
             >
                 <x-filament::icon icon="heroicon-o-view-columns" class="h-4 w-4" />
             </button>
-            <button type="button" x-show="! docked()" x-on:click="toggle(false)" class="rounded p-1 hover:bg-purple-900" aria-label="{{ __('Hide') }}">
+            <button type="button" x-show="! docked()" x-on:click="toggle(false)" class="rounded p-1 hover:bg-purple-200 dark:hover:bg-purple-900" aria-label="{{ __('Hide') }}">
                 <x-filament::icon icon="heroicon-o-minus" class="h-4 w-4" />
             </button>
         </div>
 
         @if ($isOpen)
             {{-- A new line: what, and for which day. --}}
-            <form wire:submit="add" class="flex flex-col gap-2 border-b px-4 py-3 border-purple-500/30">
+            <form wire:submit="add" class="flex flex-col gap-2 border-b px-4 py-3 border-purple-300 dark:border-purple-500/30">
                 {{-- items-start: the suggestions open under the field, the button keeps its size. --}}
                 <div class="flex items-start gap-2">
                     <div class="relative min-w-0 flex-1" x-data="todoMentions(@js($this->people))">
@@ -241,7 +241,7 @@
                         x-on:blur="open = false"
                         maxlength="500"
                         placeholder="{{ __('Add a to-do… (@ to mention someone)') }}"
-                        class="w-full rounded px-2 py-1.5 text-sm placeholder-purple-400/50 focus:border-purple-500 focus:ring-purple-500 border-purple-700 bg-[#1a0035]/60 text-purple-50"
+                        class="w-full rounded px-2 py-1.5 text-sm placeholder-purple-700/60 dark:placeholder-purple-400/50 focus:border-purple-500 focus:ring-purple-500 border-purple-300 dark:border-purple-700 bg-white/70 dark:bg-[#1a0035]/60 text-purple-950 dark:text-purple-50"
                     >
                     @include('livewire.partials.todo-mention-list')
                     </div>
@@ -252,7 +252,7 @@
                 <input
                     type="date"
                     wire:model="dueOn"
-                    class="w-40 rounded px-2 py-1 text-xs focus:border-purple-500 focus:ring-purple-500 border-purple-700 bg-[#1a0035]/60 text-purple-50"
+                    class="w-40 rounded px-2 py-1 text-xs focus:border-purple-500 focus:ring-purple-500 border-purple-300 dark:border-purple-700 bg-white/70 dark:bg-[#1a0035]/60 text-purple-950 dark:text-purple-50"
                     aria-label="{{ __('Date') }}"
                 >
                 @error('title') <p class="text-xs text-danger-600">{{ $message }}</p> @enderror
@@ -261,7 +261,7 @@
             <div class="flex-1 overflow-y-auto px-4 py-2">
                 @forelse ($this->groups as $group)
                     <section wire:key="day-{{ $group['date'] }}" class="py-2">
-                        <h3 @class(['mb-1 text-xs font-bold uppercase tracking-wide', 'text-danger-400' => $group['overdue'], 'text-purple-300' => ! $group['overdue']])>
+                        <h3 @class(['mb-1 text-xs font-bold uppercase tracking-wide', 'text-danger-600 dark:text-danger-400' => $group['overdue'], 'text-purple-800 dark:text-purple-300' => ! $group['overdue']])>
                             {{ $group['label'] }}
                             @if ($group['overdue']) · {{ __('Late (to-do)') }} @endif
                         </h3>
@@ -271,7 +271,7 @@
                                 <li
                                     wire:key="todo-{{ $todo->id }}"
                                     x-data="{ editing: false, title: @js($todo->title), date: @js($todo->due_on->toDateString()) }"
-                                    class="group flex items-start gap-2 rounded px-1 py-1 hover:bg-[#1a0035]/80"
+                                    class="group flex items-start gap-2 rounded px-1 py-1 hover:bg-purple-200/60 dark:hover:bg-[#1a0035]/80"
                                 >
                                     <input
                                         type="checkbox"
@@ -284,15 +284,15 @@
                                     <div class="min-w-0 flex-1" x-show="! editing">
                                         <p
                                             @if ($todo->user_id === auth()->id()) x-on:dblclick="editing = true; $nextTick(() => $refs.edit.focus())" @endif
-                                            @class(['break-words text-sm', 'line-through text-purple-200/50' => $todo->done_at])
+                                            @class(['break-words text-sm', 'line-through text-purple-800/50 dark:text-purple-200/50' => $todo->done_at])
                                         >{!! $todo->titleHtml() !!}</p>
                                         @if ($todo->user_id !== auth()->id())
-                                            <p class="text-[11px] text-purple-300">{{ __('From :name', ['name' => $todo->user?->name]) }}</p>
+                                            <p class="text-[11px] text-purple-800 dark:text-purple-300">{{ __('From :name', ['name' => $todo->user?->name]) }}</p>
                                         @elseif ($todo->sharedWith->isNotEmpty())
-                                            <p class="text-[11px] text-purple-300">{{ __('Shared with :names', ['names' => $todo->sharedWith->pluck('name')->implode('، ')]) }}</p>
+                                            <p class="text-[11px] text-purple-800 dark:text-purple-300">{{ __('Shared with :names', ['names' => $todo->sharedWith->pluck('name')->implode('، ')]) }}</p>
                                         @endif
                                         @if ($todo->done_at && $todo->doneBy && $todo->participants()->count() > 1)
-                                            <p class="text-[11px] text-success-400">{{ __('Done by :name', ['name' => $todo->doneBy->name]) }}</p>
+                                            <p class="text-[11px] text-success-700 dark:text-success-400">{{ __('Done by :name', ['name' => $todo->doneBy->name]) }}</p>
                                         @endif
                                     </div>
 
@@ -305,30 +305,30 @@
                                         class="flex min-w-0 flex-1 flex-col gap-1"
                                     >
                                         <div class="relative" x-data="todoMentions(@js($this->people))">
-                                            <input x-ref="edit" x-init="$refs.field = $el" type="text" x-model="title" x-on:input="scan($el)" x-on:keydown="key($event, $el)" x-on:blur="open = false" maxlength="500" class="w-full rounded border-purple-700 px-2 py-1 text-sm bg-[#1a0035]/60 text-purple-50">
+                                            <input x-ref="edit" x-init="$refs.field = $el" type="text" x-model="title" x-on:input="scan($el)" x-on:keydown="key($event, $el)" x-on:blur="open = false" maxlength="500" class="w-full rounded border-purple-300 dark:border-purple-700 px-2 py-1 text-sm bg-white/70 dark:bg-[#1a0035]/60 text-purple-950 dark:text-purple-50">
                                             @include('livewire.partials.todo-mention-list')
                                         </div>
                                         <div class="flex items-center gap-2">
-                                            <input type="date" x-model="date" class="rounded border-purple-700 px-2 py-0.5 text-xs bg-[#1a0035]/60 text-purple-50">
+                                            <input type="date" x-model="date" class="rounded border-purple-300 dark:border-purple-700 px-2 py-0.5 text-xs bg-white/70 dark:bg-[#1a0035]/60 text-purple-950 dark:text-purple-50">
                                             <button type="submit" class="text-xs font-semibold underline">{{ __('Save') }}</button>
                                         </div>
                                     </form>
 
                                     <div class="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100 max-lg:opacity-100 [@media(hover:none)]:opacity-100" x-show="! editing">
                                         @if ($todo->user_id === auth()->id())
-                                        <button type="button" x-on:click="editing = true; $nextTick(() => $refs.edit.focus())" class="rounded p-0.5 hover:bg-purple-900" title="{{ __('Edit') }}">
+                                        <button type="button" x-on:click="editing = true; $nextTick(() => $refs.edit.focus())" class="rounded p-0.5 hover:bg-purple-200 dark:hover:bg-purple-900" title="{{ __('Edit') }}">
                                             <x-filament::icon icon="heroicon-m-pencil" class="h-3.5 w-3.5" />
                                         </button>
                                         @unless ($todo->done_at)
-                                            <button type="button" wire:click="postpone({{ $todo->id }})" class="rounded p-0.5 hover:bg-purple-900" title="{{ __('To the next day') }}">
+                                            <button type="button" wire:click="postpone({{ $todo->id }})" class="rounded p-0.5 hover:bg-purple-200 dark:hover:bg-purple-900" title="{{ __('To the next day') }}">
                                                 <x-filament::icon icon="heroicon-m-arrow-right-circle" class="h-3.5 w-3.5 rtl:rotate-180" />
                                             </button>
                                         @endunless
-                                        <button type="button" wire:click="remove({{ $todo->id }})" wire:confirm="{{ __('Delete this to-do?') }}" class="rounded p-0.5 text-danger-400 hover:bg-purple-900" title="{{ __('Delete') }}">
+                                        <button type="button" wire:click="remove({{ $todo->id }})" wire:confirm="{{ __('Delete this to-do?') }}" class="rounded p-0.5 text-danger-600 dark:text-danger-400 hover:bg-purple-200 dark:hover:bg-purple-900" title="{{ __('Delete') }}">
                                             <x-filament::icon icon="heroicon-m-trash" class="h-3.5 w-3.5" />
                                         </button>
                                         @else
-                                        <button type="button" wire:click="remove({{ $todo->id }})" wire:confirm="{{ __('Take this to-do off your list?') }}" class="rounded p-0.5 hover:bg-purple-900" title="{{ __('Leave') }}">
+                                        <button type="button" wire:click="remove({{ $todo->id }})" wire:confirm="{{ __('Take this to-do off your list?') }}" class="rounded p-0.5 hover:bg-purple-200 dark:hover:bg-purple-900" title="{{ __('Leave') }}">
                                             <x-filament::icon icon="heroicon-m-arrow-right-start-on-rectangle" class="h-3.5 w-3.5" />
                                         </button>
                                         @endif
@@ -338,13 +338,13 @@
                         </ul>
                     </section>
                 @empty
-                    <p class="py-8 text-center text-sm text-purple-200/60">{{ __('Nothing to do. Add the first one above.') }}</p>
+                    <p class="py-8 text-center text-sm text-purple-800/70 dark:text-purple-200/60">{{ __('Nothing to do. Add the first one above.') }}</p>
                 @endforelse
             </div>
 
             @if ($allDone)
-                <div class="border-t px-4 py-2 text-end border-purple-500/30">
-                    <button type="button" wire:click="clearDone" wire:confirm="{{ __('Delete all the done to-dos?') }}" class="text-xs underline-offset-2 hover:underline text-danger-400">
+                <div class="border-t px-4 py-2 text-end border-purple-300 dark:border-purple-500/30">
+                    <button type="button" wire:click="clearDone" wire:confirm="{{ __('Delete all the done to-dos?') }}" class="text-xs underline-offset-2 hover:underline text-danger-600 dark:text-danger-400">
                         {{ __('Clear done') }}
                     </button>
                 </div>
