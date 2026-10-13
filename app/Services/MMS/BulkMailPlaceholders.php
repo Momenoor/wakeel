@@ -29,6 +29,11 @@ use Illuminate\Support\Collection;
  */
 class BulkMailPlaceholders
 {
+    /** Prefix of the hidden values {{each …}} repeats over, and what separates their items. */
+    public const EACH = '__each.';
+
+    public const EACH_SEPARATOR = "\u{1F}";
+
     /**
      * Every matter placeholder with a readable label, for the campaign form.
      *
@@ -131,6 +136,19 @@ class BulkMailPlaceholders
             'matter.assistants.count' => (string) $top->where('role', 'expert')->where('type', 'assistant')->count(),
         ];
 
+        // The names one by one, for {{each matter.plaintiffs}}…{{/each}}.
+        foreach ([
+            'plaintiffs' => $parties->where('type', 'plaintiff'),
+            'defendants' => $parties->where('type', 'defendant'),
+            'implicate_litigants' => $parties->where('type', 'implicate-litigant'),
+            'experts' => $top->where('role', 'expert')->where('type', '!=', 'assistant'),
+        ] as $name => $rows) {
+            $values[self::EACH.'matter.'.$name] = $rows
+                ->map(fn (MatterParty $mp) => (string) $mp->party?->name)
+                ->filter()
+                ->implode(self::EACH_SEPARATOR);
+        }
+
         // The matter type's own custom fields, e.g. {{matter.custom.Trustee}}.
         foreach ((array) ($matter->custom_fields ?? []) as $label => $value) {
             $values['matter.custom.'.$label] = self::format($value);
@@ -165,6 +183,7 @@ class BulkMailPlaceholders
      */
     public static function apply(string $text, array $values, bool $escape = false): string
     {
+        $text = self::each($text, $values, $escape);
         $lookup = self::lookup($values);
         $text = self::choices($text, $values);
         $text = self::conditionals($text, $values);
@@ -180,6 +199,49 @@ class BulkMailPlaceholders
 
             return $escape ? e($lookup[$key]) : $lookup[$key];
         }, $text) ?? $text);
+    }
+
+    /**
+     * Repeats a part once per item, written
+     * {{each matter.plaintiffs}} … {{item.number}} {{item.name}} … {{/each}}
+     * ({{item.count}} is how many there are). When the {{each}} and {{/each}}
+     * are each alone in a paragraph, those paragraphs are dropped, so
+     * the paragraphs between them repeat. A list that isn't known here is
+     * left as typed.
+     *
+     * @param  array<string, string>  $values
+     */
+    public static function each(string $text, array $values, bool $escape = false): string
+    {
+        if (! preg_match('/\{\{\s*each\b/iu', $text)) {
+            return $text;
+        }
+
+        $lookup = self::lookup($values);
+
+        return preg_replace_callback(
+            '/(?:<p[^>]*>\s*)?\{\{\s*each\s+([^{}]+?)\s*\}\}(?:\s*<\/p>)?(.*?)(?:<p[^>]*>\s*)?\{\{\s*\/each\s*\}\}(?:\s*<\/p>)?/isu',
+            function (array $m) use ($lookup, $escape): string {
+                $key = self::normalize(self::EACH.html_entity_decode(strip_tags($m[1]), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+
+                if (! array_key_exists($key, $lookup)) {
+                    return $m[0];
+                }
+
+                $items = array_values(array_filter(explode(self::EACH_SEPARATOR, $lookup[$key]), 'strlen'));
+
+                return collect($items)->map(fn (string $name, int $i) => preg_replace_callback(
+                    '/\{\{\s*item[.\s_-](name|number|count)\s*\}\}/iu',
+                    fn (array $t) => match (mb_strtolower($t[1])) {
+                        'name' => $escape ? e($name) : $name,
+                        'number' => (string) ($i + 1),
+                        default => (string) count($items),
+                    },
+                    $m[2],
+                ))->implode('');
+            },
+            $text,
+        ) ?? $text;
     }
 
     /**
