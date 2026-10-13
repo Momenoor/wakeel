@@ -37,7 +37,7 @@ class RichEditorDirection
         return $editor
             ->tools(self::tools())
             // And a font size dropdown, in every editor.
-            ->plugins([EditorFontSize::make()])
+            ->plugins([EditorFontSize::make(), EditorCellBackground::make()])
             ->toolbarButtons(fn (RichEditor $component): array => self::toolbar(
                 $toolbar === null ? $component->getDefaultToolbarButtons() : $component->evaluate($toolbar),
             ));
@@ -73,6 +73,12 @@ class RichEditorDirection
 
         // The font size dropdown after the first group (bold, italic…).
         array_splice($toolbar, min(1, count($toolbar)), 0, [[EditorFontSize::toolbarGroup()]]);
+
+        // …and the cell shading one, only where the editor has a table button.
+        $hasTable = collect($toolbar)->flatten()->contains(fn ($button) => $button === 'table');
+        if ($hasTable) {
+            array_splice($toolbar, min(2, count($toolbar)), 0, [[EditorCellBackground::toolbarGroup()]]);
+        }
 
         return $toolbar;
     }
