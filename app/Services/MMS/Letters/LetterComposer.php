@@ -444,7 +444,8 @@ class LetterComposer
         }, e(trim($part))) ?? '';
         $text = $fill($text, $missing);
 
-        return $missing ? null : trim($text);
+        // A part left out leaves its spaces: one is enough.
+        return $missing ? null : trim((string) preg_replace('/ {2,}/u', ' ', $text));
     }
 
     /**
@@ -487,8 +488,15 @@ class LetterComposer
             // One lawyer is addressed by their own title; several, by the plural.
             $repTitle = $named->isEmpty() ? '' : ($named->count() === 1 ? $title($named->first()['title']) : $title(null));
 
+            // The party with its representative on one line: plural, and the words that bring the representative in — none when there is none.
+            $joint = $named->isNotEmpty();
+            $prefix = $first ? '' : ($arabic ? 'و' : 'And ');
+
             $values = [
-                'recipient.title' => $plain(($first ? '' : ($arabic ? 'و' : 'And ')).$partyTitle),
+                'recipient.title' => $plain($prefix.$partyTitle),
+                'recipient.group_title' => $plain($prefix.($joint ? $title(null) : $partyTitle)),
+                'recipient.group_suffix' => $plain(Honorific::suffix($joint ? $title(null) : $partyTitle, $arabic)),
+                'representative.label' => $plain($joint ? ($arabic ? 'ووكيله القانوني' : 'and their legal representative') : ''),
                 'recipient.name' => $plain($name),
                 'recipient.role' => $plain(trim((string) ($recipient['role'] ?? ''))),
                 'recipient.suffix' => $plain(Honorific::suffix($partyTitle, $arabic)),

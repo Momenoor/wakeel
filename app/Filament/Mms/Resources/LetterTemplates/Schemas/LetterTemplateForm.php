@@ -92,7 +92,7 @@ class LetterTemplateForm
                         Textarea::make('recipients_format.lines')
                             ->label(__('Recipients lines'))
                             ->placeholder(fn (Get $get) => LetterComposer::recipientsFormat($get('locale') !== 'en'))
-                            ->helperText(__('One line each; leave empty for the standard lines. Placeholders: :list. A | puts the rest of the line at the far end; a part between << >> shows only when its placeholder is filled; a line whose placeholder is empty is left out.', ['list' => '{{recipient.title}} {{recipient.name}} {{recipient.role}} {{recipient.suffix}} {{representative.title}} {{representative.name}} {{representative.suffix}} {{emails}} {{phones}}']))
+                            ->helperText(__('One line each; leave empty for the standard lines. Placeholders: :list. A | puts the rest of the line at the far end; a part between << >> shows only when its placeholder is filled; a line whose placeholder is empty is left out.', ['list' => '{{recipient.title}} {{recipient.name}} {{recipient.role}} {{recipient.suffix}} {{recipient.group_title}} {{recipient.group_suffix}} {{representative.label}} {{representative.title}} {{representative.name}} {{representative.suffix}} {{emails}} {{phones}}']))
                             ->rows(5)
                             ->columnSpanFull()
                             ->extraInputAttributes(['dir' => 'auto'])

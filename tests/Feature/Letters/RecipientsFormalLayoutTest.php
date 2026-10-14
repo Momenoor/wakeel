@@ -71,4 +71,21 @@ class RecipientsFormalLayoutTest extends TestCase
         $this->assertStringNotContainsString('فاكس', $html);
         $this->assertStringNotContainsString('0509746993', $html);
     }
+
+    public function test_a_party_and_its_lawyer_on_one_line_drops_the_lawyers_words_when_there_is_none(): void
+    {
+        $format = ['lines' => '{{recipient.group_title}} {{recipient.name}}<< ({{recipient.role}})>><< {{representative.label}}>> {{recipient.group_suffix}}'];
+
+        // With a representative: plural, and his words.
+        $with = $this->html('formal', 'ar', $format);
+        $this->assertStringContainsString('السادة/ دعاء سعيد علي محمد (المتنازعة) ووكيله القانوني المحترمين', $with);
+
+        // Without: the party alone, as its own title says — no "ووكيله القانوني".
+        $template = \App\Models\LetterTemplate::create(['name' => 'T2', 'slug' => 't2', 'category' => 'letter', 'locale' => 'ar', 'subject' => 'S', 'is_active' => true, 'recipients_layout' => 'formal', 'recipients_format' => $format, 'body' => '<p>{{recipients}}</p>']);
+        $alone = ['name' => 'شركة سبيبس', 'role' => 'المدعي', 'emails' => [], 'phones' => [], 'party_id' => 3, 'representatives' => []];
+        $html = (new \App\Services\MMS\Letters\LetterComposer($template, \App\Models\Matter::factory()->create(), [], [$alone], 'REF', now()))->bodyHtml();
+
+        $this->assertStringContainsString('السادة/ شركة سبيبس (المدعي) المحترمين', $html);
+        $this->assertStringNotContainsString('ووكيله', $html);
+    }
 }
