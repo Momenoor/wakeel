@@ -46,6 +46,14 @@ class SameDayMeetings
      */
     public static function html(mixed $date, ?int $exceptId = null): string
     {
+        // Filament asks for it again for the field's visibility and its content, and on each render: once a request.
+        $key = 'same-day-meetings:'.json_encode([$date instanceof \DateTimeInterface ? $date->format('Y-m-d') : substr((string) $date, 0, 10), $exceptId]);
+
+        return request()->attributes->get($key) ?? tap(self::build($date, $exceptId), fn (string $html) => request()->attributes->set($key, $html));
+    }
+
+    private static function build(mixed $date, ?int $exceptId): string
+    {
         $events = self::on($date, $exceptId);
 
         if ($events->isEmpty()) {

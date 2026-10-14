@@ -1023,9 +1023,16 @@ class LettersRelationManager extends RelationManager
      *
      * @return array<int, string>
      */
-    public static function meetingsWithoutMinutes(Matter $matter): array
+    public static function meetingsWithoutMinutes(Matter $matter, bool $fresh = false): array
     {
-        return CalendarEvent::query()
+        // The select's options and its visibility ask on each render: once a request (not when issuing).
+        $key = 'meetings-without-minutes:'.$matter->getKey();
+
+        if (! $fresh && request()->attributes->has($key)) {
+            return request()->attributes->get($key);
+        }
+
+        $meetings = CalendarEvent::query()
             ->where(fn ($query) => $query->where('matter_id', $matter->getKey())
                 ->orWhereHas('matters', fn ($q) => $q->whereKey($matter->getKey())))
             ->whereNotIn('id', \App\Models\MatterMinutes::query()->whereNotNull('calendar_event_id')->select('calendar_event_id'))
@@ -1034,6 +1041,10 @@ class LettersRelationManager extends RelationManager
             ->get()
             ->mapWithKeys(fn (CalendarEvent $event) => [$event->getKey() => $event->start_datetime->format('d/m/Y H:i').' — '.$event->title.($event->is_teams_meeting ? ' · Teams' : '')])
             ->all();
+
+        request()->attributes->set($key, $meetings);
+
+        return $meetings;
     }
 
     /**
@@ -1125,7 +1136,7 @@ class LettersRelationManager extends RelationManager
 
         // A meeting already on the calendar: its link and time go in the letter, none is made.
         $existing = filled($data['existing_event_id'] ?? null)
-            ? CalendarEvent::query()->whereKey($data['existing_event_id'])->whereIn('id', array_keys(self::meetingsWithoutMinutes($matter)))->first()
+            ? CalendarEvent::query()->whereKey($data['existing_event_id'])->whereIn('id', array_keys(self::meetingsWithoutMinutes($matter, fresh: true)))->first()
             : null;
 
         if ($existing) {

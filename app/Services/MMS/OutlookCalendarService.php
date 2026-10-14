@@ -163,7 +163,9 @@ class OutlookCalendarService
         try {
             $token = $this->getAccessToken();
             // The user's id: the onlineMeetings API takes it, not the address.
-            $userId = Http::withToken($token)->get("https://graph.microsoft.com/v1.0/users/{$this->getUserEmail()}", ['$select' => 'id'])->json('id');
+            // The same mailbox every time: asked once a day, not for each meeting.
+            $userId = Cache::get('outlook_user_id:'.$this->getUserEmail())
+                ?? tap(Http::withToken($token)->get("https://graph.microsoft.com/v1.0/users/{$this->getUserEmail()}", ['$select' => 'id'])->json('id'), fn ($id) => filled($id) ? Cache::put('outlook_user_id:'.$this->getUserEmail(), $id, 86400) : null);
             // The filter written out: a space must be %20 (the client's own query encoding makes it "+", which Graph refuses).
             $meetings = Http::withToken($token)->get("https://graph.microsoft.com/v1.0/users/{$userId}/onlineMeetings?\$filter=".rawurlencode("JoinWebUrl eq '".str_replace("'", "''", $joinUrl)."'"));
             $meetingId = $meetings->json('value.0.id') ?: self::meetingId($userId, $joinUrl);
