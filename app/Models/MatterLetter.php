@@ -30,7 +30,8 @@ class MatterLetter extends Model
 
     public function matter(): BelongsTo
     {
-        return $this->belongsTo(Matter::class);
+        // Its matter even when that was deleted: the letter is still read, printed and sent.
+        return $this->belongsTo(Matter::class)->withTrashed();
     }
 
     public function template(): BelongsTo

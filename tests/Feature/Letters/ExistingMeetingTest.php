@@ -188,4 +188,14 @@ class ExistingMeetingTest extends TestCase
             ->callMountedTableAction();
         Http::assertSent(fn ($request) => str_contains($request->url(), 'microsoft'));
     }
+
+    public function test_a_letter_of_a_deleted_matter_is_still_composed(): void
+    {
+        $letter = app(\App\Services\MMS\Letters\LetterIssuer::class)->issue($this->template, $this->matter, [], [], now());
+        $this->matter->delete();
+
+        $composer = \App\Services\MMS\Letters\LetterIssuer::composerFor(MatterLetter::find($letter->id));
+        $this->assertNotNull($composer);
+        $this->get(route('letters.pdf', $letter->id))->assertSuccessful();
+    }
 }

@@ -76,6 +76,10 @@ class LetterIssuer
     {
         $letter->loadMissing(['template', 'matter', 'letterhead', 'recipients']);
 
+        if ($letter->matter === null) {
+            throw new \RuntimeException(__('This letter\'s matter no longer exists.'));
+        }
+
         // The wording as issued, not the template's current one. A letter
         // written without a template: its own language and subject.
         $template = ($letter->template ?? new LetterTemplate(['subject' => $letter->subject]))->replicate();

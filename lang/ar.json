@@ -3965,5 +3965,6 @@
     "Create it anyway": "إنشاؤه رغم ذلك",
     "Current and upcoming meetings on this matter that have no minutes yet. Its date, time and Teams link go in the letter; no new meeting is made.": "الاجتماعات الحالية والقادمة لهذه القضية التي لا محضر لها بعد. يوضع تاريخه ووقته ورابط Teams في الخطاب، ولا يُنشأ اجتماع جديد.",
     "Show in the live view": "إظهار في العرض المباشر",
-    "Off: the attendees watching do not see it; the minutes still have it.": "متوقف: لا يراه الحاضرون المتابعون، ويبقى في المحضر."
+    "Off: the attendees watching do not see it; the minutes still have it.": "متوقف: لا يراه الحاضرون المتابعون، ويبقى في المحضر.",
+    "This letter's matter no longer exists.": "لم تعد قضية هذا الخطاب موجودة."
 }

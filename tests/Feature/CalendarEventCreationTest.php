@@ -284,4 +284,31 @@ class CalendarEventCreationTest extends TestCase
         $this->assertSame(1, CalendarEvent::count());
         $this->assertNotNull($first);
     }
+
+    public function test_cancelling_the_overlap_question_returns_to_the_form_filled_as_it_was(): void
+    {
+        CalendarEvent::create(['title' => 'الأول', 'type' => 'single', 'start_datetime' => '2026-10-20 10:00:00', 'end_datetime' => '2026-10-20 11:00:00']);
+
+        $page = Livewire::test(ListCalendarEvents::class)
+            ->mountAction(TestAction::make('createSingle')->table())
+            ->fillForm(['title' => 'الثاني', 'start_datetime' => '2026-10-20 10:30:00', 'end_datetime' => '2026-10-20 11:30:00', 'sync_to_outlook' => false, 'location' => 'مكتب'])
+            ->callMountedAction();
+
+        // The question's Cancel (the footer's cancel action).
+        $page->call('mountAction', 'cancel');
+
+        // Back as the form — nothing made — with what was typed.
+        $mounted = $page->instance()->mountedActions;
+        $this->assertCount(1, $mounted);
+        $this->assertSame('createSingle', $mounted[0]['name']);
+        $this->assertArrayNotHasKey('overlap', $mounted[0]['arguments']);
+        $this->assertSame('الثاني', $mounted[0]['data']['title']);
+        $this->assertSame('مكتب', $mounted[0]['data']['location']);
+        $this->assertStringStartsWith('2026-10-20 10:30', (string) $mounted[0]['data']['start_datetime']);
+        $this->assertSame(1, CalendarEvent::count());
+
+        // Changed to a free time, it goes through.
+        $page->fillForm(['start_datetime' => '2026-10-20 13:00:00', 'end_datetime' => '2026-10-20 14:00:00'])->callMountedAction();
+        $this->assertSame(2, CalendarEvent::count());
+    }
 }

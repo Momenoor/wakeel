@@ -5,6 +5,7 @@ namespace App\Filament\Support;
 use Carbon\CarbonInterface;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Placeholder;
+use Filament\Schemas\Schema;
 use Illuminate\Support\Arr;
 use Illuminate\Support\HtmlString;
 
@@ -27,9 +28,11 @@ class OverlapConfirmation
      */
     public static function configure(Action $action, string $heading, ?string $submitLabel = null, ?string $width = null): Action
     {
-        // Its own form, as set (an array or a closure).
+        // Its own form, as set (an array or a closure), and how it is filled when it opens.
         $own = (fn () => $this->schema)->call($action);
+        $ownFill = (fn () => $this->mountUsing)->call($action);
         $asking = fn (array $arguments): bool => isset($arguments['overlap']);
+        $main = $action;
 
         return $action
             ->schema(fn (array $arguments) => $asking($arguments)
@@ -41,7 +44,47 @@ class OverlapConfirmation
             ->modalSubmitActionLabel(fn (array $arguments) => $asking($arguments) ? __('Create it anyway') : $submitLabel)
             // Named $action: Filament hands the modal's own submit button under that name (any other name gets the main action).
             ->modalSubmitAction(fn (Action $action, array $arguments) => $asking($arguments) ? $action->color('danger') : $action)
-            ->modalWidth(fn (array $arguments) => $asking($arguments) ? 'lg' : $width);
+            ->modalWidth(fn (array $arguments) => $asking($arguments) ? 'lg' : $width)
+            // Cancelling the question goes back to the form, filled as it was.
+            ->modalCancelAction(fn (Action $action, array $arguments) => $asking($arguments) ? self::backToForm($main) : $action)
+            ->mountUsing(function (Action $action, ?Schema $schema) use ($ownFill): void {
+                $restore = $action->getArguments()['restore'] ?? null;
+
+                if (is_array($restore)) {
+                    $schema?->fill($restore);
+
+                    return;
+                }
+
+                if (isset($action->getArguments()['overlap'])) {
+                    return;
+                }
+
+                $ownFill ? $action->evaluate($ownFill, ['action' => $action, 'schema' => $schema]) : $schema?->fill();
+            });
+    }
+
+    /**
+     * The question's Cancel: the same action again as its form, with what
+     * was filled in put back (the "restore" argument, which the form is
+     * filled from when it opens).
+     */
+    private static function backToForm(Action $main): Action
+    {
+        // Named cancel: Filament finds a footer action by its key, and the cancel one is under that.
+        // Made part of the modal (its page, record …) as Filament does for a footer action it is given.
+        return $main->prepareModalAction(Action::make('cancel')
+            ->label(__('filament-actions::modal.actions.cancel.label'))
+            ->color('gray')
+            ->button()
+            ->action(function (Action $action) {
+                // The page the modal is on (a footer action is not given it before it is mounted).
+                $livewire = \Livewire\Livewire::current() ?? $action->getLivewire();
+                $mounted = $livewire->mountedActions[0] ?? ['name' => null, 'arguments' => [], 'context' => []];
+                $arguments = Arr::except($mounted['arguments'] ?? [], ['overlap', 'overlap_data']);
+
+                $livewire->replaceMountedAction((string) $mounted['name'], [...$arguments, 'restore' => $mounted['arguments']['overlap_data'] ?? []], $mounted['context'] ?? []);
+            }));
     }
 
     /**

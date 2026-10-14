@@ -35,7 +35,7 @@ Route::middleware('auth')->group(function () {
 
     // An issued letter, rendered from its frozen copy.
     Route::get('letters/{letter}/pdf', function (MatterLetter $letter) {
-        abort_unless(auth()->user()->can('view', $letter->matter), 403);
+        abort_unless($letter->matter !== null && auth()->user()->can('view', $letter->matter), 403);
 
         $pdf = (new LetterPdf(LetterIssuer::composerFor($letter)))->render();
 
@@ -47,7 +47,7 @@ Route::middleware('auth')->group(function () {
     })->name('letters.pdf');
 
     Route::get('letters/{letter}/docx', function (MatterLetter $letter) {
-        abort_unless(auth()->user()->can('view', $letter->matter), 403);
+        abort_unless($letter->matter !== null && auth()->user()->can('view', $letter->matter), 403);
 
         $path = (new LetterDocx(LetterIssuer::composerFor($letter)))->save(storage_path('app/temp/letter-'.$letter->getKey().'-'.uniqid().'.docx'));
 
