@@ -4,9 +4,11 @@ namespace App\Services\MMS;
 
 use App\Models\BulkMailCampaign;
 use App\Models\BulkMailRecipient;
+use App\Models\ExpertiseArea;
 use App\Models\Matter;
 use App\Models\MatterParty;
 use App\Support\CompanyContact;
+use App\Support\Marks;
 use BackedEnum;
 use Carbon\CarbonInterface;
 use Filament\Support\Contracts\HasLabel;
@@ -66,13 +68,40 @@ class BulkMailPlaceholders
             'matter.implicate_litigants' => __('Implicate litigants'),
             'matter.parties' => __('All parties'),
             'matter.representatives' => __('Representatives'),
+            'matter.plaintiffs.representatives' => __('Plaintiffs\' representatives'),
+            'matter.defendants.representatives' => __('Defendants\' representatives'),
             'matter.experts' => __('Experts'),
+            'matter.expertise' => __('Expertise areas'),
             'matter.assistants' => __('Assistants'),
             'matter.parties.count' => __('All parties').' — '.__('how many'),
             'matter.plaintiffs.count' => __('Plaintiffs').' — '.__('how many'),
             'matter.defendants.count' => __('Defendants').' — '.__('how many'),
             'matter.experts.count' => __('Experts').' — '.__('how many'),
         ];
+    }
+
+    /**
+     * The areas of expertise of these experts, each once, with commas between
+     * ("المحاسبة, الهندسة"). An expert holds one, kept as a key on their
+     * role; named in the interface's language, or in Arabic / English as asked.
+     *
+     * @param  iterable<MatterParty>  $experts
+     */
+    public static function expertise(iterable $experts, ?bool $arabic = null): string
+    {
+        return collect($experts)
+            ->flatMap(function (MatterParty $mp): array {
+                $role = (array) $mp->party?->role;
+                // One object ({role, type, field}) — or, as older rows may hold, a list of them.
+                $roles = array_key_exists('field', $role) || array_key_exists('role', $role) ? [$role] : $role;
+
+                return collect($roles)->pluck('field')->flatten()->filter(fn ($key) => is_string($key) && $key !== '')->all();
+            })
+            ->unique()
+            ->map(fn (string $key): string => (string) ExpertiseArea::labelFor($key, $arabic))
+            ->filter()
+            ->unique()
+            ->implode(', ');
     }
 
     /**
@@ -94,6 +123,10 @@ class BulkMailPlaceholders
             ->map(fn (MatterParty $mp) => $mp->party?->name)
             ->filter()
             ->implode(', ');
+
+        // A side's representatives (its lawyers) — not those who only attended for it.
+        $representativesOf = fn (string $type): Collection => $parties->where('type', $type)
+            ->flatMap(fn (MatterParty $mp) => $mp->representatives->filter(fn (MatterParty $rep) => $rep->role !== 'attendee'));
 
         $values = [
             'matter.reference' => $matter->reference,
@@ -120,7 +153,11 @@ class BulkMailPlaceholders
             'matter.implicate_litigants' => $names($parties->where('type', 'implicate-litigant')),
             'matter.parties' => $names($parties),
             'matter.representatives' => $names($parties->flatMap(fn (MatterParty $mp) => $mp->representatives)),
+            'matter.plaintiffs.representatives' => $names($representativesOf('plaintiff')),
+            'matter.defendants.representatives' => $names($representativesOf('defendant')),
             'matter.experts' => $names($top->where('role', 'expert')->where('type', '!=', 'assistant')),
+            // The experts' areas of expertise, each once, with commas between.
+            'matter.expertise' => self::expertise($top->where('role', 'expert')->where('type', '!=', 'assistant')),
             // Assistants by their legal name (else their name).
             'matter.assistants' => $top->where('role', 'expert')->where('type', 'assistant')
                 ->map(fn (MatterParty $mp) => $mp->party?->legalName())
@@ -130,6 +167,8 @@ class BulkMailPlaceholders
             'matter.plaintiffs.count' => (string) $parties->where('type', 'plaintiff')->count(),
             'matter.defendants.count' => (string) $parties->where('type', 'defendant')->count(),
             'matter.implicate_litigants.count' => (string) $parties->where('type', 'implicate-litigant')->count(),
+            'matter.plaintiffs.representatives.count' => (string) $representativesOf('plaintiff')->count(),
+            'matter.defendants.representatives.count' => (string) $representativesOf('defendant')->count(),
             'matter.parties.count' => (string) $parties->count(),
             'matter.representatives.count' => (string) $parties->flatMap(fn (MatterParty $mp) => $mp->representatives)->count(),
             'matter.experts.count' => (string) $top->where('role', 'expert')->where('type', '!=', 'assistant')->count(),
@@ -142,6 +181,8 @@ class BulkMailPlaceholders
             'defendants' => $parties->where('type', 'defendant'),
             'implicate_litigants' => $parties->where('type', 'implicate-litigant'),
             'experts' => $top->where('role', 'expert')->where('type', '!=', 'assistant'),
+            'plaintiffs.representatives' => $representativesOf('plaintiff'),
+            'defendants.representatives' => $representativesOf('defendant'),
         ] as $name => $rows) {
             $values[self::EACH.'matter.'.$name] = $rows
                 ->map(fn (MatterParty $mp) => (string) $mp->party?->name)
@@ -186,6 +227,7 @@ class BulkMailPlaceholders
         $text = self::each($text, $values, $escape);
         $lookup = self::lookup($values);
         $text = self::choices($text, $values);
+        $text = self::marks($text, $values);
         $text = self::conditionals($text, $values);
 
         // A switch that is on counts as filled for <<…>> parts, but prints
@@ -262,8 +304,9 @@ class BulkMailPlaceholders
      *   {{if count(matter.plaintiffs) = 1 ? المدعي : المدعين}}
      *   {{if matter.experts.count >= 2 ? الخبراء : الخبير}}
      *
-     * = (or ==), !=, >, <, >=, <=; a tag alone is true when not empty. One
-     * whose tag isn't known here yet is left as it is, decided later.
+     * = (or ==), !=, >, <, >=, <=; a tag alone is true when not empty. = and !=
+     * also compare with a word — {{if input.meeting_type = online ? … : …}}.
+     * One whose tag isn't known here yet is left as it is, decided later.
      *
      * @param  array<string, string>  $values
      */
@@ -276,38 +319,101 @@ class BulkMailPlaceholders
         $lookup = self::lookup($values);
 
         return preg_replace_callback('/\{\{\s*if\s+(.+?)\s*[?؟]\s*(.*?)\s*:\s*(.*?)\s*\}\}/isu', function (array $m) use ($lookup): string {
-            // The editor writes > and < as &gt; &lt;.
-            $condition = trim(html_entity_decode(strip_tags($m[1]), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            $true = self::decide($m[1], $lookup);
 
-            if (! preg_match('/^(count\s*\(\s*(.+?)\s*\)|[^<>=!]+?)\s*(?:(==|=|!=|>=|<=|>|<)\s*(-?[\d.]+))?$/iu', $condition, $c)) {
+            return $true === null ? $m[0] : ($true ? $m[2] : $m[3]);
+        }, $text) ?? $text;
+    }
+
+    /**
+     * A tick or a dot, as a picture, where a condition holds — the same
+     * condition as {{if …}}'s:
+     *
+     *   {{box minutes.attendees.claimant.count > 0}}   a check box, ticked when someone did
+     *   {{radio input.meeting_type = online}}          a radio button, selected when it is
+     *
+     * (Text symbols print as empty boxes in the letters' font.) One whose
+     * tag isn't known here yet is left as it is, decided later.
+     *
+     * @param  array<string, string>  $values
+     */
+    public static function marks(string $text, array $values): string
+    {
+        if (! preg_match('/\{\{\s*(?:box|radio)\b/iu', $text)) {
+            return $text;
+        }
+
+        $lookup = self::lookup($values);
+
+        return preg_replace_callback('/\{\{\s*(box|radio)\s+(.+?)\s*\}\}/isu', function (array $m) use ($lookup): string {
+            $on = self::decide($m[2], $lookup);
+
+            if ($on === null) {
                 return $m[0];
             }
 
-            $counting = stripos($c[1], 'count') === 0 && isset($c[2]) && $c[2] !== '';
-            $key = self::normalize($counting ? $c[2] : $c[1]);
+            return strtolower($m[1]) === 'box' ? Marks::box($on) : Marks::radio($on);
+        }, $text) ?? $text;
+    }
 
-            if (! array_key_exists($key, $lookup)) {
-                return $m[0];
-            }
+    /**
+     * Whether a condition holds: a tag (true when not empty), or a tag or the
+     * count of its items compared with a number — or, with = and !=, with
+     * a word ("online", or "Court session" in quotes). Null when its tag
+     * isn't known here yet.
+     *
+     * @param  array<string, string>  $lookup
+     */
+    private static function decide(string $condition, array $lookup): ?bool
+    {
+        // The editor writes > and < as &gt; &lt;.
+        $condition = trim(html_entity_decode(strip_tags($condition), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
 
-            $value = $counting ? self::countOf($lookup[$key]) : self::numberOrText($lookup[$key]);
-            $operator = $c[3] ?? '';
-            $against = isset($c[4]) && $c[4] !== '' ? (float) $c[4] : null;
+        if (! preg_match('/^(count\s*\(\s*(.+?)\s*\)|[^<>=!]+?)\s*(?:(==|=|!=|>=|<=|>|<)\s*(-?[\d.]+|"[^"]*"|\'[^\']*\'|\S+))?$/iu', $condition, $c)) {
+            return null;
+        }
 
-            $true = match (true) {
-                $operator === '' => is_numeric($value) ? (float) $value != 0.0 : trim((string) $value) !== '',
-                ! is_numeric($value) => false,
-                $operator === '=' || $operator === '==' => (float) $value == $against,
-                $operator === '!=' => (float) $value != $against,
-                $operator === '>' => (float) $value > $against,
-                $operator === '<' => (float) $value < $against,
-                $operator === '>=' => (float) $value >= $against,
-                $operator === '<=' => (float) $value <= $against,
+        $counting = stripos($c[1], 'count') === 0 && isset($c[2]) && $c[2] !== '';
+        $key = self::normalize($counting ? $c[2] : $c[1]);
+
+        if (! array_key_exists($key, $lookup)) {
+            return null;
+        }
+
+        $value = $counting ? self::countOf($lookup[$key]) : self::numberOrText($lookup[$key]);
+        $operator = $c[3] ?? '';
+        $against = trim($c[4] ?? '', '"\'');
+
+        if ($operator === '') {
+            return is_numeric($value) ? (float) $value != 0.0 : trim((string) $value) !== '';
+        }
+
+        // A word: equal or not, whatever its case.
+        if (! is_numeric($against)) {
+            $same = mb_strtolower(trim((string) $value)) === mb_strtolower($against);
+
+            return match ($operator) {
+                '=', '==' => $same,
+                '!=' => ! $same,
                 default => false,
             };
+        }
 
-            return $true ? $m[2] : $m[3];
-        }, $text) ?? $text;
+        if (! is_numeric($value)) {
+            return false;
+        }
+
+        $number = (float) $against;
+
+        return match ($operator) {
+            '=', '==' => (float) $value == $number,
+            '!=' => (float) $value != $number,
+            '>' => (float) $value > $number,
+            '<' => (float) $value < $number,
+            '>=' => (float) $value >= $number,
+            '<=' => (float) $value <= $number,
+            default => false,
+        };
     }
 
     /**

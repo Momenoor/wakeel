@@ -173,6 +173,12 @@ class LetterComposer
             }
         }
 
+        // The experts' areas of expertise, in the letter's own language.
+        $values['matter.expertise'] = BulkMailPlaceholders::expertise(
+            $this->matter->loadMissing('matterParties.party')->matterParties->filter(fn (MatterParty $mp) => empty($mp->parent_id) && $mp->role === 'expert' && $mp->type !== 'assistant'),
+            $this->isArabic(),
+        );
+
         // The Teams meeting made when the letter was issued: in any template.
         // None made: nothing there, not "{{meeting.link}}" (the issuer says so).
         if (filled($meeting = $this->inputs[self::MEETING_LINK] ?? null)) {
@@ -195,6 +201,7 @@ class LetterComposer
         $values['minutes.attendees.count'] = (string) collect($minutes['attendees'] ?? [])
             ->filter(fn ($a) => is_array($a) && ! empty($a['present']) && filled($a['name'] ?? null))
             ->count();
+        $values = [...$values, ...$this->attendanceValues((array) ($minutes['attendees'] ?? []))];
         $values['minutes.qa'] = $this->questionsHtml((array) ($minutes['items'] ?? []));
         $values[self::SIGNATURES] = $this->signaturesHtml();
         $ended = filled($minutes['ended_at'] ?? null) ? Carbon::parse($minutes['ended_at']) : null;
@@ -385,6 +392,102 @@ class LetterComposer
         }
 
         return $html.$this->attentionHtml();
+    }
+
+    /** The groups a meeting's people are told apart in, as the Abu Dhabi form does. */
+    public const ATTENDANCE_GROUPS = ['claimant', 'defendant', 'interpreter', 'others'];
+
+    /**
+     * Who attended and who did not, by side — for a form that ticks a box
+     * for each: {{minutes.attendees.claimant}} the names, and
+     * {{minutes.attendees.claimant.count}} for {{box …}}; the same for
+     * defendant, interpreter and others, and for {{minutes.absentees.…}}.
+     *
+     * A side is the main party the attendee is or stands for — a plaintiff's
+     * agent is on the claimant's side. An interpreter is told by the word
+     * (مترجم, interpreter) in their capacity or title. Anyone else — an
+     * implicated litigant, an expert's people, someone unplaced — is "others".
+     *
+     * @param  list<array<string, mixed>>  $attendees
+     * @return array<string, string>
+     */
+    private function attendanceValues(array $attendees): array
+    {
+        $sides = $this->sidesByParty();
+        $separator = $this->isArabic() ? '، ' : ', ';
+        $people = collect($attendees)->filter(fn ($a) => is_array($a) && filled($a['name'] ?? null));
+        $values = ['minutes.absentees.count' => (string) $people->filter(fn (array $a) => empty($a['present']))->count()];
+
+        foreach (['attendees' => true, 'absentees' => false] as $name => $present) {
+            $byGroup = $people
+                ->filter(fn (array $a) => ! empty($a['present']) === $present)
+                ->groupBy(fn (array $a) => self::attendanceGroup($a, $sides));
+
+            foreach (self::ATTENDANCE_GROUPS as $group) {
+                $members = $byGroup->get($group, collect());
+                $values["minutes.{$name}.{$group}"] = $members
+                    ->map(fn (array $a) => trim(trim((string) ($a['title'] ?? '')).' '.trim((string) $a['name'])))
+                    ->implode($separator);
+                $values["minutes.{$name}.{$group}.count"] = (string) $members->count();
+            }
+        }
+
+        return $values;
+    }
+
+    /**
+     * Each of the matter's parties and their representatives, by the side of
+     * the main party they belong to: party id => claimant | defendant.
+     *
+     * @return array<int, string>
+     */
+    private function sidesByParty(): array
+    {
+        $this->matter->loadMissing('matterParties');
+        $rows = $this->matter->matterParties;
+        $sides = [];
+
+        foreach ($rows->filter(fn (MatterParty $mp) => empty($mp->parent_id) && $mp->role === 'party') as $main) {
+            $side = match ($main->type) {
+                'plaintiff' => 'claimant',
+                'defendant' => 'defendant',
+                default => null,
+            };
+
+            if ($side === null) {
+                continue;
+            }
+
+            $sides[(int) $main->party_id] = $side;
+
+            foreach ($rows->filter(fn (MatterParty $rep) => (int) $rep->parent_id === (int) $main->id) as $rep) {
+                $sides[(int) $rep->party_id] = $side;
+            }
+        }
+
+        return $sides;
+    }
+
+    /**
+     * @param  array<string, mixed>  $attendee
+     * @param  array<int, string>  $sides
+     */
+    public static function attendanceGroup(array $attendee, array $sides): string
+    {
+        $words = ($attendee['capacity'] ?? '').' '.($attendee['title'] ?? '').' '.($attendee['as'] ?? '');
+
+        if (preg_match('/مترجم|interpreter/iu', $words)) {
+            return 'interpreter';
+        }
+
+        // Whom they stand for first; otherwise they are the party.
+        foreach ([$attendee['represents'] ?? null, $attendee['party_id'] ?? null] as $partyId) {
+            if (filled($partyId) && isset($sides[(int) $partyId])) {
+                return $sides[(int) $partyId];
+            }
+        }
+
+        return 'others';
     }
 
     /**
@@ -734,6 +837,7 @@ class LetterComposer
             'minutes.number' => __('Minutes').' — '.__('number'),
             'minutes.attendees' => __('Minutes').' — '.__('attendees'),
             'minutes.attendees.count' => __('Minutes').' — '.__('how many attended'),
+            ...self::attendanceCatalog(),
             'minutes.qa' => __('Minutes').' — '.__('questions and answers'),
             'minutes.signatures' => __('Minutes').' — '.__('attendees\' signatures'),
             'minutes.opening' => __('Minutes').' — '.__('opening paragraph'),
@@ -762,6 +866,33 @@ class LetterComposer
                 $catalog['input.'.$input['key'].'.url'] = ($input['label'] ?? $input['key']).' — '.__('full address');
             }
         }
+
+        return $catalog;
+    }
+
+    /**
+     * The attendance of each side, for a form that ticks a box for each.
+     *
+     * @return array<string, string>
+     */
+    private static function attendanceCatalog(): array
+    {
+        $catalog = [];
+        $groups = [
+            'claimant' => __('Claimant / Lawyer'),
+            'defendant' => __('Defendant / Lawyer'),
+            'interpreter' => __('Interpreter'),
+            'others' => __('Others'),
+        ];
+
+        foreach (['attendees' => __('attended'), 'absentees' => __('absent')] as $name => $state) {
+            foreach ($groups as $group => $label) {
+                $catalog["minutes.{$name}.{$group}"] = __('Minutes').' — '.$label.' — '.$state;
+                $catalog["minutes.{$name}.{$group}.count"] = __('Minutes').' — '.$label.' — '.$state.' — '.__('how many');
+            }
+        }
+
+        $catalog['minutes.absentees.count'] = __('Minutes').' — '.__('how many were absent');
 
         return $catalog;
     }

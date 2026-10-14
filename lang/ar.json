@@ -3934,5 +3934,15 @@
     "Border sides": "جوانب الحدود",
     "All sides": "كل الجوانب",
     "Top and bottom": "أعلى وأسفل",
-    "Left and right": "يسار ويمين"
+    "Left and right": "يسار ويمين",
+    "Expertise areas": "مجالات الخبرة",
+    "Claimant / Lawyer": "المدعي / وكيله",
+    "Defendant / Lawyer": "المدعى عليه / وكيله",
+    "Interpreter": "المترجم",
+    "attended": "حضر",
+    "absent": "غاب",
+    "how many were absent": "كم غاب",
+    "Minutes as a form: {{box minutes.attendees.claimant.count > 0}} draws a check box, ticked when someone on the claimant's side attended (.defendant, .interpreter, .others the same; {{minutes.absentees.…}} for who was absent), and {{minutes.attendees.claimant}} their names with commas. {{radio input.meeting_type = \"عن بعد\"}} draws a radio button, selected when the Choice field \"meeting_type\" has that value. {{matter.expertise}} is the experts' areas of expertise, with commas.": "المحضر كنموذج: {{box minutes.attendees.claimant.count > 0}} يرسم مربع اختيار يُعلَّم إن حضر أحد من جانب المدعي (وكذلك .defendant و .interpreter و .others؛ و {{minutes.absentees.…}} لمن تغيّب)، و {{minutes.attendees.claimant}} أسماؤهم بفواصل. {{radio input.meeting_type = \"عن بعد\"}} يرسم زر اختيار يُحدَّد إن كانت قيمة حقل الاختيار \"meeting_type\" هي تلك. و {{matter.expertise}} مجالات خبرة الخبراء بفواصل.",
+    "Plaintiffs' representatives": "وكلاء المدعين",
+    "Defendants' representatives": "وكلاء المدعى عليهم"
 }

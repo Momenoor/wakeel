@@ -56,9 +56,11 @@ class ExpertiseArea extends Model
     /**
      * The name in the reader's language — English when there is no Arabic.
      */
-    public function label(): string
+    public function label(?bool $arabic = null): string
     {
-        return app()->getLocale() === 'ar' && filled($this->name_ar) ? $this->name_ar : $this->name_en;
+        $arabic ??= app()->getLocale() === 'ar';
+
+        return $arabic && filled($this->name_ar) ? $this->name_ar : $this->name_en;
     }
 
     /**
@@ -80,8 +82,9 @@ class ExpertiseArea extends Model
 
     /**
      * The name for a stored key; the key itself for one no longer listed.
+     * In the interface's language, or in Arabic / English when asked (a letter's own).
      */
-    public static function labelFor(?string $key): ?string
+    public static function labelFor(?string $key, ?bool $arabic = null): ?string
     {
         if (blank($key)) {
             return null;
@@ -91,7 +94,7 @@ class ExpertiseArea extends Model
 
         $area = self::$labels[$key] ?? null;
 
-        return $area instanceof self ? $area->label() : Str::headline($key);
+        return $area instanceof self ? $area->label($arabic) : Str::headline($key);
     }
 
     /**

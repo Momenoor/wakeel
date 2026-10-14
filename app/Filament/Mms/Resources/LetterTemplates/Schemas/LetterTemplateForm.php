@@ -293,6 +293,11 @@ class LetterTemplateForm
                         TextEntry::make('placeholder_help')
                             ->hiddenLabel()
                             ->state(new HtmlString(e(__('Insert placeholders from the { } menu, or type them: {{recipients}} puts the addressee block (put it alone on its own line), {{input.KEY}} what was filled in, {{input.KEY.day}} a date\'s weekday, {{signature}} and {{stamp}} the letterhead\'s images. The blocks menu has a ready signature block: the expert\'s name with the signature and stamp, placed where you drop it. Write a part between << and >> (or [[ and ]]) to print it only when its placeholders are filled — e.g. <<The meeting is at {{meeting.time}}.>>')))),
+                        // Minutes laid out as a form: ticks and dots that follow the meeting.
+                        TextEntry::make('marks_help')
+                            ->hiddenLabel()
+                            ->visible(fn (Get $get) => self::isMinutes($get('category')))
+                            ->state(new HtmlString(e(__('Minutes as a form: {{box minutes.attendees.claimant.count > 0}} draws a check box, ticked when someone on the claimant\'s side attended (.defendant, .interpreter, .others the same; {{minutes.absentees.…}} for who was absent), and {{minutes.attendees.claimant}} their names with commas. {{radio input.meeting_type = "عن بعد"}} draws a radio button, selected when the Choice field "meeting_type" has that value. {{matter.expertise}} is the experts\' areas of expertise, with commas.')))),
                     ]),
             ]);
     }
