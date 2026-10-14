@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Resources\CalendarEvents\Schemas;
 
 use App\Filament\Mms\Actions\Calendar\CalendarMatterActions;
 use App\Filament\Support\RichEditorDirection;
+use App\Filament\Support\SameDayMeetings;
 use App\Models\CalendarEvent;
 use App\Models\Matter;
 use App\Services\MMS\Calendar\EventMatterLinker;
@@ -125,6 +126,9 @@ class CalendarEventForm
                         ->live(onBlur: true)
                         ->afterStateUpdated(fn (Set $set, ?string $state) => $set('end_datetime', $state ? Carbon::parse($state)->addHour()->format('Y-m-d H:i:s') : null)
                         ),
+
+                    // What is already on that day.
+                    SameDayMeetings::placeholder(fn ($get) => $get('start_datetime')),
 
                     DateTimePicker::make('end_datetime')
                         ->label(__('End At'))

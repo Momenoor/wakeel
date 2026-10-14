@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Actions\Calendar;
 
+use App\Filament\Support\SameDayMeetings;
 use App\Models\CalendarEvent;
 use App\Models\Court;
 use App\Models\Matter;
@@ -74,7 +75,10 @@ class CreateBulkCalendarEventAction extends Action
                 DateTimePicker::make('start_datetime')
                     ->label(__('Session Date & Time'))
                     ->required()
+                    ->live(onBlur: true)
                     ->timezone(config('app.timezone')),
+                // What is already on that day.
+                SameDayMeetings::placeholder(fn ($get) => $get('start_datetime')),
                 DateTimePicker::make('end_datetime')
                     ->label(__('End Date & Time'))
                     ->timezone(config('app.timezone')),

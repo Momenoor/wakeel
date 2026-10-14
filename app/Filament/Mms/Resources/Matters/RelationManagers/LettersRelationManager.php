@@ -8,6 +8,7 @@ use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Concerns\RefreshesMatterPage;
 use App\Filament\Support\EmailSendFields;
 use App\Filament\Support\RichEditorDirection;
+use App\Filament\Support\SameDayMeetings;
 use App\Models\CalendarEvent;
 use App\Models\EmailTemplate;
 use App\Models\Letterhead;
@@ -956,12 +957,37 @@ class LettersRelationManager extends RelationManager
                 ->columnSpanFull()
                 ->columns(2)
                 ->schema([
+                    // A meeting already on this matter's calendar (put there directly), with no minutes yet.
+                    Select::make('existing_event_id')
+                        ->label(__('Use a meeting already on the calendar'))
+                        ->helperText(__('Meetings on this matter that have no minutes yet. Its date, time and Teams link go in the letter; no new meeting is made.'))
+                        ->options(fn (): array => self::meetingsWithoutMinutes($this->getOwnerRecord()))
+                        ->placeholder(__('None — make a new one'))
+                        ->live()
+                        ->afterStateUpdated(function ($state, Set $set) use ($fields): void {
+                            $event = filled($state) ? CalendarEvent::find($state) : null;
+                            $set('create_meeting', false);
+
+                            if (! $event) {
+                                return;
+                            }
+
+                            // The letter's own meeting date and time fields.
+                            foreach (['date' => 'Y-m-d', 'time' => 'H:i'] as $part => $format) {
+                                if (filled($fields[$part] ?? null)) {
+                                    $set('inputs.'.$fields[$part], $event->start_datetime->format($format));
+                                }
+                            }
+                        })
+                        ->visible(fn (): bool => self::meetingsWithoutMinutes($this->getOwnerRecord()) !== [])
+                        ->columnSpanFull(),
                     Toggle::make('create_meeting')
                         ->label(__('Create a Teams meeting in Outlook and put its link in the letter'))
                         ->helperText($askWhen
                             ? __('On this matter\'s calendar. The link goes where the letter has :placeholder.', ['placeholder' => '{'.'{meeting.link}'.'}'])
                             : __('On the meeting date and time above, on this matter\'s calendar. The link goes where the template has its link field or :placeholder.', ['placeholder' => '{'.'{meeting.link}'.'}']))
                         ->live()
+                        ->visible(fn (Get $get): bool => blank($get('existing_event_id')))
                         ->columnSpanFull(),
                     ...($askWhen ? [
                         DatePicker::make('meeting_date')
@@ -974,6 +1000,8 @@ class LettersRelationManager extends RelationManager
                             ->required($creating)
                             ->visible($creating),
                     ] : []),
+                    // What is already on the day chosen: the form's own date, or the template's.
+                    SameDayMeetings::placeholder(fn ($get) => filled($get('existing_event_id')) || ! $get('create_meeting') ? null : ($askWhen ? $get('meeting_date') : $get('inputs.'.($fields['date'] ?? '_')))),
                     TextInput::make('meeting_minutes')
                         ->label(__('Duration (minutes)'))
                         ->numeric()->minValue(15)->maxValue(480)
@@ -989,13 +1017,33 @@ class LettersRelationManager extends RelationManager
     }
 
     /**
+     * The matter's meetings on the calendar that no minutes were made for
+     * (put there directly, or by an invitation whose minutes were not
+     * started): id => "date time — title", the latest first.
+     *
+     * @return array<int, string>
+     */
+    public static function meetingsWithoutMinutes(Matter $matter): array
+    {
+        return CalendarEvent::query()
+            ->where(fn ($query) => $query->where('matter_id', $matter->getKey())
+                ->orWhereHas('matters', fn ($q) => $q->whereKey($matter->getKey())))
+            ->whereNotIn('id', \App\Models\MatterMinutes::query()->whereNotNull('calendar_event_id')->select('calendar_event_id'))
+            ->orderByDesc('start_datetime')
+            ->limit(30)
+            ->get()
+            ->mapWithKeys(fn (CalendarEvent $event) => [$event->getKey() => $event->start_datetime->format('d/m/Y H:i').' — '.$event->title.($event->is_teams_meeting ? ' · Teams' : '')])
+            ->all();
+    }
+
+    /**
      * The meeting section's starting values.
      *
      * @return array<string, mixed>
      */
     private static function meetingDefaults(): array
     {
-        return ['create_meeting' => false, 'meeting_minutes' => 60, 'invite_recipients' => false, 'meeting_date' => null, 'meeting_time' => null];
+        return ['create_meeting' => false, 'meeting_minutes' => 60, 'invite_recipients' => false, 'meeting_date' => null, 'meeting_time' => null, 'existing_event_id' => null];
     }
 
     /**
@@ -1075,8 +1123,28 @@ class LettersRelationManager extends RelationManager
             $inputs[$key] = [...array_values((array) ($inputs[$key] ?? [])), ...$more];
         }
 
+        // A meeting already on the calendar: its link and time go in the letter, none is made.
+        $existing = filled($data['existing_event_id'] ?? null)
+            ? CalendarEvent::query()->whereKey($data['existing_event_id'])->whereIn('id', array_keys(self::meetingsWithoutMinutes($matter)))->first()
+            : null;
+
+        if ($existing) {
+            $fields = LetterMeeting::fields($template) ?? ['links' => []];
+            $meetingLink = (string) $existing->online_meeting_url;
+
+            foreach ($fields['links'] as $key) {
+                $inputs[$key] = $meetingLink;
+            }
+            $inputs[LetterComposer::MEETING_LINK] = $meetingLink;
+            $inputs[LetterComposer::MEETING_START] = $existing->start_datetime->format('Y-m-d H:i');
+
+            if ($meetingLink === '') {
+                Notification::make()->warning()->title(__('That meeting has no Teams link'))->body(__('The letter was issued without one.'))->persistent()->send();
+            }
+        }
+
         // The meeting it invites to, made first: its link goes in the letter.
-        if (! empty($data['create_meeting'])) {
+        if (! $existing && ! empty($data['create_meeting'])) {
             $fields = LetterMeeting::fields($template) ?? ['links' => []];
             $start = filled($data['meeting_date'] ?? null) && filled($data['meeting_time'] ?? null)
                 ? Carbon::parse($data['meeting_date'].' '.$data['meeting_time'], config('app.timezone'))

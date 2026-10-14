@@ -35,7 +35,8 @@ class TeamsAutoRecordTest extends TestCase
         Http::assertSent(fn ($request) => $request->method() === 'PATCH'
             && str_ends_with($request->url(), '/users/user-guid/onlineMeetings/meeting-1')
             && $request['recordAutomatically'] === true);
-        Http::assertSent(fn ($request) => str_contains(urldecode($request->url()), "JoinWebUrl eq 'https://teams.microsoft.com/l/meetup-join/abc'"));
+        // The filter's spaces are %20 — a "+" is refused by Graph ("The specified filter against a single entity is invalid").
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'onlineMeetings?$filter=JoinWebUrl%20eq%20%27https%3A%2F%2Fteams.microsoft.com') && ! str_contains($request->url(), '+'));
     }
 
     public function test_an_edited_teams_meeting_is_told_again(): void
@@ -55,6 +56,14 @@ class TeamsAutoRecordTest extends TestCase
 
         config(['services.outlook.auto_record' => false]);
         $this->assertFalse((new OutlookCalendarService)->autoRecord('https://teams.microsoft.com/l/meetup-join/abc'));
+    }
+
+    public function test_the_meeting_id_can_be_built_from_the_join_link_when_the_lookup_finds_nothing(): void
+    {
+        $id = OutlookCalendarService::meetingId('user-guid', 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_AbC%40thread.v2/0?context=%7b%7d');
+
+        $this->assertSame('1*user-guid*0**19:meeting_AbC@thread.v2', base64_decode($id));
+        $this->assertNull(OutlookCalendarService::meetingId(null, 'x'));
     }
 
     public function test_when_teams_refuses_the_meeting_is_still_made(): void

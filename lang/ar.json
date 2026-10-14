@@ -3952,5 +3952,11 @@
     "Recipients lines": "أسطر المرسل إليهم",
     "Between emails": "الفاصل بين البريد",
     "Between phones": "الفاصل بين الهواتف",
-    "One line each; leave empty for the standard lines. Placeholders: :list. A | puts the rest of the line at the far end; a part between << >> shows only when its placeholder is filled; a line whose placeholder is empty is left out.": "سطر لكل خطوة؛ اتركه فارغاً للأسطر المعتادة. العناصر: :list. العلامة | تضع بقية السطر في الطرف الآخر؛ والجزء بين << >> يظهر فقط إذا امتلأ عنصره؛ والسطر الذي يفرغ عنصره يُحذف."
+    "One line each; leave empty for the standard lines. Placeholders: :list. A | puts the rest of the line at the far end; a part between << >> shows only when its placeholder is filled; a line whose placeholder is empty is left out.": "سطر لكل خطوة؛ اتركه فارغاً للأسطر المعتادة. العناصر: :list. العلامة | تضع بقية السطر في الطرف الآخر؛ والجزء بين << >> يظهر فقط إذا امتلأ عنصره؛ والسطر الذي يفرغ عنصره يُحذف.",
+    "Already on this day": "موجود في هذا اليوم",
+    "Use a meeting already on the calendar": "استخدام اجتماع موجود في التقويم",
+    "Meetings on this matter that have no minutes yet. Its date, time and Teams link go in the letter; no new meeting is made.": "اجتماعات هذه القضية التي لا محضر لها بعد. يوضع تاريخه ووقته ورابط Teams في الخطاب، ولا يُنشأ اجتماع جديد.",
+    "None — make a new one": "لا شيء — إنشاء اجتماع جديد",
+    "That meeting has no Teams link": "هذا الاجتماع بلا رابط Teams",
+    "The letter was issued without one.": "صدر الخطاب بدونه."
 }

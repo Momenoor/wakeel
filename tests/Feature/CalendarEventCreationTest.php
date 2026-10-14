@@ -210,4 +210,22 @@ class CalendarEventCreationTest extends TestCase
         $this->assertNull($event->online_meeting_url);
         $this->assertNotContains($elsewhere->id, $event->matters()->pluck('matters.id')->all());
     }
+
+    public function test_a_new_event_form_shows_what_is_already_on_its_day(): void
+    {
+        CalendarEvent::create(['title' => 'جلسة قائمة', 'type' => 'single', 'start_datetime' => '2026-10-20 09:00:00', 'end_datetime' => '2026-10-20 10:00:00']);
+
+        // The bulk form and the single one: the day's meetings under the date; a free day, nothing.
+        foreach (['createBulk', 'createSingle'] as $action) {
+            Livewire::test(ListCalendarEvents::class)
+                ->mountAction(TestAction::make($action)->table())
+                ->fillForm(['start_datetime' => '2026-10-20 12:00:00'])
+                ->assertSchemaComponentExists('same_day_meetings', 'mountedActionSchema0', fn ($box) => $box->isVisible() && str_contains((string) $box->getContent(), 'جلسة قائمة'));
+
+            Livewire::test(ListCalendarEvents::class)
+                ->mountAction(TestAction::make($action)->table())
+                ->fillForm(['start_datetime' => '2026-10-25 12:00:00'])
+                ->assertSchemaComponentExists('same_day_meetings', 'mountedActionSchema0', fn ($box) => ! $box->isVisible());
+        }
+    }
 }

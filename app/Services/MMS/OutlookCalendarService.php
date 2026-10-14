@@ -164,12 +164,11 @@ class OutlookCalendarService
             $token = $this->getAccessToken();
             // The user's id: the onlineMeetings API takes it, not the address.
             $userId = Http::withToken($token)->get("https://graph.microsoft.com/v1.0/users/{$this->getUserEmail()}", ['$select' => 'id'])->json('id');
-            $meetings = Http::withToken($token)->get("https://graph.microsoft.com/v1.0/users/{$userId}/onlineMeetings", [
-                '$filter' => "JoinWebUrl eq '".str_replace("'", "''", $joinUrl)."'",
-            ]);
-            $meetingId = $meetings->json('value.0.id');
+            // The filter written out: a space must be %20 (the client's own query encoding makes it "+", which Graph refuses).
+            $meetings = Http::withToken($token)->get("https://graph.microsoft.com/v1.0/users/{$userId}/onlineMeetings?\$filter=".rawurlencode("JoinWebUrl eq '".str_replace("'", "''", $joinUrl)."'"));
+            $meetingId = $meetings->json('value.0.id') ?: self::meetingId($userId, $joinUrl);
 
-            if (blank($userId) || $meetings->failed() || blank($meetingId)) {
+            if (blank($userId) || blank($meetingId)) {
                 Log::warning('Teams auto-record: the online meeting was not found', ['status' => $meetings->status(), 'body' => $meetings->body()]);
 
                 return false;
@@ -189,6 +188,19 @@ class OutlookCalendarService
         }
     }
 
+    /**
+     * The online meeting's id from its join link, for when the lookup finds
+     * nothing: base64 of "1*<organizer id>*0**<thread id>", the thread being
+     * the part of the link after meetup-join/ (19:meeting_…@thread.v2).
+     */
+    public static function meetingId(?string $userId, string $joinUrl): ?string
+    {
+        if (blank($userId) || ! preg_match('#meetup-join/([^/?]+)#i', $joinUrl, $m)) {
+            return null;
+        }
+
+        return base64_encode('1*'.$userId.'*0**'.urldecode($m[1]));
+    }
     /**
      * The Teams link of an event Outlook made — only a real online meeting
      * has one. (Its webLink opens the event in Outlook; it was kept as a
