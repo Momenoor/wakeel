@@ -2,9 +2,11 @@
 
 namespace App\Filament\Mms\Resources\LetterTemplates\Actions;
 
+use App\Enums\LetterTemplateCategories;
 use App\Models\LetterItem;
 use App\Models\LetterTemplate;
 use App\Models\Matter;
+use App\Models\MatterParty;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterPdf;
 use Filament\Actions\Action;
@@ -14,7 +16,9 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 /**
  * The template as a PDF for a real matter, before issuing anything: the
  * matter's details and parties filled in, the template's own fields with
- * sample values (their label, today's date, the first library items).
+ * sample values (their label, today's date, the first library items) — and,
+ * for minutes, a sample meeting: who attended (the claimant's side) and who
+ * did not (the others), so a form's check boxes and lists show filled in.
  */
 class PreviewLetterTemplateAction
 {
@@ -79,6 +83,51 @@ class PreviewLetterTemplateAction
             };
         }
 
+        if (($template->category instanceof LetterTemplateCategories ? $template->category : LetterTemplateCategories::tryFrom((string) $template->category)) === LetterTemplateCategories::MINUTES) {
+            $inputs[LetterComposer::MEETING_START] = now()->setTime(10, 30)->toDateTimeString();
+            $inputs[LetterComposer::MINUTES] = [
+                'number' => 1,
+                'attendees' => self::sampleAttendees($matter, $template->locale !== 'en'),
+                'items' => [],
+            ];
+        }
+
         return $inputs;
+    }
+
+    /**
+     * The matter's own people at a sample meeting: those on the plaintiffs'
+     * side attended, the others did not — and an interpreter was there.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function sampleAttendees(Matter $matter, bool $arabic): array
+    {
+        $matter->loadMissing('matterParties');
+        $plaintiffs = $matter->matterParties
+            ->filter(fn (MatterParty $mp) => empty($mp->parent_id) && $mp->role === 'party' && $mp->type === 'plaintiff')
+            ->pluck('id');
+
+        $attendees = collect(LetterComposer::candidates($matter, $arabic))
+            ->map(function (array $candidate, int|string $rowId) use ($matter, $plaintiffs): array {
+                // A main party's own row, or a representative's under it.
+                $mainRowId = (int) ($candidate['of'] ?? $rowId);
+                $main = $matter->matterParties->firstWhere('id', $mainRowId);
+
+                return [
+                    'present' => $plaintiffs->contains($mainRowId),
+                    'title' => '',
+                    'name' => (string) ($candidate['name'] ?? ''),
+                    'capacity' => (string) ($candidate['role'] ?? ''),
+                    'party_id' => $candidate['party_id'] ?? null,
+                    'represents' => isset($candidate['of']) ? $main?->party_id : null,
+                ];
+            })
+            ->values();
+
+        return [
+            ...$attendees->all(),
+            ['present' => true, 'title' => '', 'name' => $arabic ? 'مترجم (نموذج)' : 'Interpreter (sample)', 'capacity' => $arabic ? 'مترجم' : 'Interpreter'],
+        ];
     }
 }

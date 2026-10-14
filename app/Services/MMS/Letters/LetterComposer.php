@@ -324,6 +324,11 @@ class LetterComposer
     {
         $arabic = $this->isArabic();
         $recipients = array_values($this->recipients);
+
+        if ($this->template->recipients_layout === 'formal') {
+            return $this->formalRecipientsHtml($recipients, $arabic).$this->attentionHtml();
+        }
+
         $first = true;
         $done = [];
         $html = '';
@@ -392,6 +397,58 @@ class LetterComposer
         }
 
         return $html.$this->attentionHtml();
+    }
+
+    /**
+     * The formal layout, a block for each party:
+     *
+     *   السيدة / دعاء سعيد (المتنازعة)                       المحترمة
+     *   بوكالة السادة/ مكتب العامري للمحاماة                 المحترمين
+     *   بريد إلكتروني : a@x.com – b@y.com
+     *   هاتف/محمول : 0509746993 - 026222124
+     *
+     * The honorific is at the far end of the line; the party's and its
+     * representatives' emails and phones are joined on a line each.
+     *
+     * @param  list<array<string, mixed>>  $recipients
+     */
+    private function formalRecipientsHtml(array $recipients, bool $arabic): string
+    {
+        // A line: the text at the start, the honorific at the far end.
+        $row = fn (string $text, string $honorific): string => '<table dir="'.($arabic ? 'rtl' : 'ltr').'" style="width: 100%; border-collapse: collapse;"><tbody><tr>'
+            .'<td data-bw="0" style="border: 0; padding: 0; text-align: '.($arabic ? 'right' : 'left').';"><strong>'.$text.'</strong></td>'
+            .($honorific !== '' ? '<td data-bw="0" style="border: 0; padding: 0; width: 25%; text-align: '.($arabic ? 'left' : 'right').';"><strong>'.e($honorific).'</strong></td>' : '')
+            .'</tr></tbody></table>';
+        $joined = fn (string $label, array $list, string $separator): string => $list === [] ? '' : '<p class="recipient-email"><strong>'.e($label).'</strong> <span dir="ltr" style="unicode-bidi: isolate;">'.e(implode($separator, $list)).'</span></p>';
+        $title = fn (?string $title): string => $arabic ? (isset(Honorific::ARABIC[$title ?? '']) ? $title : 'السادة/') : ($title ?: 'Messrs.');
+
+        $html = '';
+        $first = true;
+
+        foreach ($recipients as $recipient) {
+            ['title' => $partyTitle, 'name' => $name] = Honorific::split((string) $recipient['name']);
+            $partyTitle = $title($partyTitle);
+            $role = filled($recipient['role'] ?? null) ? ' ('.e($recipient['role']).')' : '';
+            $html .= $row(($first ? '' : ($arabic ? 'و' : 'And ')).$partyTitle.' '.e($name).$role, Honorific::suffix($partyTitle, $arabic));
+            $first = false;
+
+            $representatives = collect($recipient['representatives'] ?? []);
+
+            if ($representatives->isNotEmpty()) {
+                $named = $representatives->map(fn (array $rep) => Honorific::split((string) $rep['name']));
+                // One lawyer is addressed by their own title; several, by the plural.
+                $repTitle = $named->count() === 1 ? $title($named->first()['title']) : $title(null);
+                $html .= $row(
+                    ($arabic ? 'بوكالة ' : 'Represented by ').$repTitle.' '.e($named->pluck('name')->implode($arabic ? ' و' : ' and ')),
+                    Honorific::suffix($repTitle, $arabic),
+                );
+            }
+
+            $html .= $joined($arabic ? 'بريد إلكتروني :' : 'Email:', collect([...($recipient['emails'] ?? []), ...$representatives->flatMap(fn ($rep) => $rep['emails'] ?? [])->all()])->filter()->unique()->values()->all(), ' – ')
+                .$joined($arabic ? 'هاتف/محمول :' : 'Phone:', collect([...($recipient['phones'] ?? []), ...$representatives->flatMap(fn ($rep) => $rep['phones'] ?? [])->all()])->filter()->unique()->values()->all(), ' - ');
+        }
+
+        return $html;
     }
 
     /** The groups a meeting's people are told apart in, as the Abu Dhabi form does. */

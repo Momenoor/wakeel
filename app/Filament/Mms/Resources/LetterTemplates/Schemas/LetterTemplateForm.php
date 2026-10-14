@@ -83,6 +83,11 @@ class LetterTemplateForm
                             ->relationship('arabicFont', 'name')
                             ->placeholder(__('As the English font, if it has Arabic letters; otherwise the standard one'))
                             ->preload(),
+                        Select::make('recipients_layout')
+                            ->label(__('Recipients layout'))
+                            ->options(['formal' => __('Formal — honorific at the end of the line, "بوكالة" for the lawyer, emails and phones on one line each')])
+                            ->placeholder(__('Standard lines'))
+                            ->helperText(__('How {{recipients}} addresses those the letter is for.')),
                         Select::make('email_template_id')
                             ->label(__('Covering email'))
                             ->relationship('emailTemplate', 'name', fn ($query) => $query->where('is_active', true)->where('purpose', EmailTemplate::LETTER))

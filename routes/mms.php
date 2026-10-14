@@ -87,6 +87,7 @@ Route::middleware('auth')->group(function () {
             // The text's own fingerprint: saves a second apart look the same by time.
             'version' => md5($html),
             'feed' => route('minutes.live.feed', $minutes),
+            'layout' => MinutesService::liveLayout($minutes),
             'rtl' => (($minutes->template?->locale) ?: 'ar') !== 'en',
         ]);
     })->name('minutes.live');

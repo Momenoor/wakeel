@@ -2,9 +2,12 @@
 
 namespace Tests\Feature\Letters;
 
+use App\Enums\LetterTemplateCategories;
+use App\Filament\Mms\Resources\LetterTemplates\Actions\PreviewLetterTemplateAction;
 use App\Models\ExpertiseArea;
 use App\Models\LetterTemplate;
 use App\Models\Matter;
+use App\Models\MatterMinutes;
 use App\Models\MatterParty;
 use App\Models\Party;
 use App\Models\User;
@@ -12,8 +15,10 @@ use App\Services\MMS\BulkMailPlaceholders;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterDocx;
 use App\Services\MMS\Letters\LetterPdf;
+use App\Services\MMS\Letters\MinutesService;
 use App\Support\Marks;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 use ZipArchive;
 
@@ -179,6 +184,77 @@ class MinutesAttendanceMarksTest extends TestCase
         $this->assertArrayHasKey('matter.plaintiffs.representatives', LetterComposer::catalog());
         // And one by one, for {{each …}}.
         $this->assertSame("ريما الجرشي\u{1F}محامٍ ثانٍ", $values[BulkMailPlaceholders::EACH.'matter.plaintiffs.representatives']);
+    }
+
+    public function test_the_templates_preview_of_minutes_has_a_sample_meeting(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $matter = Matter::factory()->create();
+        $claimant = $this->party($matter, 'plaintiff', 'شركة المدعي');
+        $this->party($matter, 'defendant', 'شركة المدعى عليه');
+        MatterParty::create(['matter_id' => $matter->id, 'role' => 'representative', 'type' => 'lawyer', 'parent_id' => $claimant->id, 'party_id' => Party::factory()->create(['name' => 'محامي المدعي'])->id]);
+        $matter = $matter->fresh();
+
+        $minutes = new LetterTemplate(['locale' => 'ar', 'subject' => 'S', 'category' => LetterTemplateCategories::MINUTES, 'body' => '<p>x</p>']);
+        $values = (new LetterComposer($minutes, $matter, PreviewLetterTemplateAction::sampleInputs($minutes, $matter)))->values();
+
+        // The claimant's side (the party and its lawyer) attended, the defendant did not, an interpreter did.
+        $this->assertSame('2', $values['minutes.attendees.claimant.count']);
+        $this->assertSame('0', $values['minutes.attendees.defendant.count']);
+        $this->assertSame('1', $values['minutes.absentees.defendant.count']);
+        $this->assertSame('1', $values['minutes.attendees.interpreter.count']);
+        $this->assertSame('1', $values['minutes.number']);
+        $this->assertNotSame('', $values['meeting.date']);
+        $this->assertNotSame('', $values['meeting.time']);
+
+        // A letter has no meeting: nothing added.
+        $letter = new LetterTemplate(['locale' => 'ar', 'subject' => 'S', 'category' => LetterTemplateCategories::LETTER, 'body' => '<p>x</p>']);
+        $this->assertArrayNotHasKey(LetterComposer::MINUTES, PreviewLetterTemplateAction::sampleInputs($letter, $matter));
+    }
+
+    public function test_the_live_view_of_minutes_keeps_the_forms_pictures_and_styles_its_tables(): void
+    {
+        $this->actingAs(User::factory()->create()->assignRole(Role::firstOrCreate(['name' => config('filament-shield.super_admin.name', 'super_admin'), 'guard_name' => 'web'])));
+        $matter = Matter::factory()->create();
+        $claimant = $this->party($matter, 'plaintiff', 'شركة المدعي');
+        $template = LetterTemplate::create(['name' => 'Form', 'slug' => 'form', 'category' => 'minutes', 'locale' => 'ar', 'subject' => 'S', 'is_active' => true,
+            'body' => '<table><tbody><tr><td data-bw="1"><p>{{box minutes.attendees.claimant.count > 0}}</p></td><td><p>{{minutes.attendees.claimant}}</p></td></tr></tbody></table>'
+                .'<p><img src="/storage/signature.png"></p>']);
+        $minutes = MatterMinutes::create([
+            'matter_id' => $matter->id, 'letter_template_id' => $template->id, 'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT,
+            'attendees' => [['present' => true, 'name' => 'مندوب المدعي', 'party_id' => $claimant->party_id]],
+        ]);
+
+        $html = MinutesService::liveHtml($minutes);
+        // The ticked box is there; a signature file is not (it is on the server, not for the screen).
+        $this->assertStringContainsString(Marks::box(true), $html);
+        $this->assertStringContainsString('مندوب المدعي', $html);
+        $this->assertStringNotContainsString('/storage/signature.png', $html);
+
+        // The page and its feed carry it, and the page styles tables as the PDF does.
+        $this->get(route('minutes.live', $minutes))->assertOk()
+            ->assertSee('border-collapse: collapse', false)
+            ->assertSee(substr(Marks::box(true), strpos(Marks::box(true), ',') + 1, 60), false);
+        $this->assertStringContainsString(Marks::box(true), (string) $this->getJson(route('minutes.live.feed', $minutes))->assertOk()->json('html'));
+    }
+
+    public function test_a_sides_capacity_is_a_placeholder_and_an_item_of_each(): void
+    {
+        $matter = Matter::factory()->create();
+        $matter->type->update(['party_capacities' => ['plaintiff' => 'المتنازع']]);
+        $this->party($matter->fresh(), 'plaintiff', 'شركة أ');
+        $this->party($matter, 'plaintiff', 'شركة ب');
+        $this->party($matter, 'defendant', 'شركة ج');
+        $matter = $matter->fresh();
+
+        $values = \App\Services\MMS\BulkMailPlaceholders::forMatter($matter);
+        $this->assertSame('المتنازع', $values['matter.plaintiff_capacity']);
+        $this->assertSame(\App\Models\Type::sideLabel($matter->type, 'defendant'), $values['matter.defendant_capacity']);
+
+        $text = '<p>{{each matter.plaintiffs}}</p><p>{{item.number}} {{item.name}} ({{item.capacity}})</p><p>{{/each}}</p>';
+        $out = \App\Services\MMS\BulkMailPlaceholders::each($text, $values);
+        $this->assertStringContainsString('1 شركة أ (المتنازع)', $out);
+        $this->assertStringContainsString('2 شركة ب (المتنازع)', $out);
     }
 
     private function party(Matter $matter, string $type, string $name): MatterParty

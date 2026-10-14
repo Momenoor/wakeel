@@ -155,6 +155,80 @@ class LetterPdf
     }
 
     /**
+     * The letterhead as a browser draws it — for the live view of minutes,
+     * which shows the letter on its pages: each page's background, its
+     * placed elements (the same ones the PDF places, in millimetres from the
+     * corner they are placed from), its margins, and the footer that follows
+     * the text. Pictures are inlined (the browser cannot read the server's
+     * files), and the page number is left for the page to fill in.
+     *
+     * @return array{rtl: bool, width: float, height: float, margins: array{first: array<string, float>, rest: array<string, float>}, background: array{first: ?string, rest: ?string}, first: string, rest: string, after: string}
+     */
+    public function liveLayout(): array
+    {
+        $letterhead = $this->composer->letterhead ?? Letterhead::fallback();
+        $rtl = $this->composer->isArabic();
+        $landscape = $letterhead->orientation === 'landscape';
+        $elements = $this->composer->elements();
+
+        $placed = fn (array $pages): string => $this->forBrowser(
+            $elements->filter(fn ($element) => in_array($element['page'] ?? 'first', $pages, true))
+                ->map(fn ($element) => $this->element($element, $letterhead, $rtl))
+                ->implode(''),
+        );
+        $first = $letterhead->file($letterhead->first_page_background);
+        $rest = $letterhead->file($letterhead->other_pages_background) ?? $first;
+
+        return [
+            'rtl' => $rtl,
+            'width' => (float) ($landscape ? Letterhead::PAGE_HEIGHT : Letterhead::PAGE_WIDTH),
+            'height' => (float) ($landscape ? Letterhead::PAGE_WIDTH : Letterhead::PAGE_HEIGHT),
+            'margins' => [
+                'first' => ['top' => (float) $letterhead->margin_top, 'right' => (float) $letterhead->margin_right, 'bottom' => (float) $letterhead->margin_bottom, 'left' => (float) $letterhead->margin_left],
+                'rest' => $letterhead->otherPagesMargins(),
+            ],
+            'background' => ['first' => $this->dataUri($first), 'rest' => $this->dataUri($rest)],
+            'first' => $placed(['first', 'all']),
+            'rest' => $placed(['rest', 'all']),
+            'after' => $this->forBrowser($elements
+                ->filter(fn ($element) => ($element['page'] ?? 'first') === Letterhead::AFTER_TEXT)
+                ->map(fn ($element) => $this->flowing($element, $rtl))
+                ->implode('')),
+        ];
+    }
+
+    /**
+     * An element's HTML for a browser: its picture files as data, and the
+     * PDF engine's page-number codes as places the page fills in.
+     */
+    private function forBrowser(string $html): string
+    {
+        $html = str_replace('{PAGENO} / {nbpg}', '<span dir="ltr" style="unicode-bidi:isolate"><span class="pageno"></span> / <span class="pagecount"></span></span>', $html);
+
+        return preg_replace_callback('/<img\b([^>]*?)\bsrc="([^"]+)"/i', function (array $m): string {
+            $path = html_entity_decode($m[2], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+            return '<img'.$m[1].'src="'.($this->dataUri($path) ?? $m[2]).'"';
+        }, $html) ?? $html;
+    }
+
+    private function dataUri(?string $path): ?string
+    {
+        if ($path === null || ! is_file($path)) {
+            return null;
+        }
+
+        $mime = match (strtolower(pathinfo($path, PATHINFO_EXTENSION))) {
+            'jpg', 'jpeg' => 'image/jpeg',
+            'gif' => 'image/gif',
+            'svg' => 'image/svg+xml',
+            'webp' => 'image/webp',
+            default => 'image/png',
+        };
+
+        return 'data:'.$mime.';base64,'.base64_encode((string) file_get_contents($path));
+    }
+    /**
      * The letter, its saved signature blocks placed exactly as designed:
      * mPDF can't position inside flowing text, so the text is written up
      * to each block, the block drawn where the page has got to — its

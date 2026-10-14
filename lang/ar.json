@@ -3944,5 +3944,9 @@
     "how many were absent": "كم غاب",
     "Minutes as a form: {{box minutes.attendees.claimant.count > 0}} draws a check box, ticked when someone on the claimant's side attended (.defendant, .interpreter, .others the same; {{minutes.absentees.…}} for who was absent), and {{minutes.attendees.claimant}} their names with commas. {{radio input.meeting_type = \"عن بعد\"}} draws a radio button, selected when the Choice field \"meeting_type\" has that value. {{matter.expertise}} is the experts' areas of expertise, with commas.": "المحضر كنموذج: {{box minutes.attendees.claimant.count > 0}} يرسم مربع اختيار يُعلَّم إن حضر أحد من جانب المدعي (وكذلك .defendant و .interpreter و .others؛ و {{minutes.absentees.…}} لمن تغيّب)، و {{minutes.attendees.claimant}} أسماؤهم بفواصل. {{radio input.meeting_type = \"عن بعد\"}} يرسم زر اختيار يُحدَّد إن كانت قيمة حقل الاختيار \"meeting_type\" هي تلك. و {{matter.expertise}} مجالات خبرة الخبراء بفواصل.",
     "Plaintiffs' representatives": "وكلاء المدعين",
-    "Defendants' representatives": "وكلاء المدعى عليهم"
+    "Defendants' representatives": "وكلاء المدعى عليهم",
+    "Recipients layout": "تنسيق المرسل إليهم",
+    "Standard lines": "أسطر عادية",
+    "Formal — honorific at the end of the line, \"بوكالة\" for the lawyer, emails and phones on one line each": "رسمي — المحترم في نهاية السطر، \"بوكالة\" للوكيل، والبريد والهاتف في سطر لكل منهما",
+    "How {{recipients}} addresses those the letter is for.": "كيف يخاطب {{recipients}} من وُجّه إليهم الخطاب."
 }

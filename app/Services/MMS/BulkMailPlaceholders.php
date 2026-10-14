@@ -7,6 +7,7 @@ use App\Models\BulkMailRecipient;
 use App\Models\ExpertiseArea;
 use App\Models\Matter;
 use App\Models\MatterParty;
+use App\Models\Type;
 use App\Support\CompanyContact;
 use App\Support\Marks;
 use BackedEnum;
@@ -33,6 +34,8 @@ class BulkMailPlaceholders
 {
     /** Prefix of the hidden values {{each …}} repeats over, and what separates their items. */
     public const EACH = '__each.';
+
+    public const EACH_CAPACITY = '__capacity.';
 
     public const EACH_SEPARATOR = "\u{1F}";
 
@@ -76,6 +79,9 @@ class BulkMailPlaceholders
             'matter.parties.count' => __('All parties').' — '.__('how many'),
             'matter.plaintiffs.count' => __('Plaintiffs').' — '.__('how many'),
             'matter.defendants.count' => __('Defendants').' — '.__('how many'),
+            'matter.plaintiff_capacity' => __('Plaintiff').' — '.__('Capacity'),
+            'matter.defendant_capacity' => __('Defendant').' — '.__('Capacity'),
+            'matter.implicate_capacity' => __('Implicate Litigant').' — '.__('Capacity'),
             'matter.experts.count' => __('Experts').' — '.__('how many'),
         ];
     }
@@ -163,6 +169,10 @@ class BulkMailPlaceholders
                 ->map(fn (MatterParty $mp) => $mp->party?->legalName())
                 ->filter()
                 ->implode(', '),
+            // What each side is called in this matter's type (المتنازع, الطاعن …), else the usual name.
+            'matter.plaintiff_capacity' => Type::sideLabel($matter->type, 'plaintiff'),
+            'matter.defendant_capacity' => Type::sideLabel($matter->type, 'defendant'),
+            'matter.implicate_capacity' => Type::sideLabel($matter->type, 'implicate-litigant'),
             // How many — for {{if matter.plaintiffs.count > 1 ? … : …}}.
             'matter.plaintiffs.count' => (string) $parties->where('type', 'plaintiff')->count(),
             'matter.defendants.count' => (string) $parties->where('type', 'defendant')->count(),
@@ -175,7 +185,12 @@ class BulkMailPlaceholders
             'matter.assistants.count' => (string) $top->where('role', 'expert')->where('type', 'assistant')->count(),
         ];
 
-        // The names one by one, for {{each matter.plaintiffs}}…{{/each}}.
+        // The names one by one, for {{each matter.plaintiffs}}…{{/each}}; {{item.capacity}} is the side's.
+        $capacities = [
+            'plaintiffs' => 'plaintiff', 'plaintiffs.representatives' => 'plaintiff',
+            'defendants' => 'defendant', 'defendants.representatives' => 'defendant',
+            'implicate_litigants' => 'implicate-litigant',
+        ];
         foreach ([
             'plaintiffs' => $parties->where('type', 'plaintiff'),
             'defendants' => $parties->where('type', 'defendant'),
@@ -188,6 +203,10 @@ class BulkMailPlaceholders
                 ->map(fn (MatterParty $mp) => (string) $mp->party?->name)
                 ->filter()
                 ->implode(self::EACH_SEPARATOR);
+
+            if (isset($capacities[$name])) {
+                $values[self::EACH_CAPACITY.'matter.'.$name] = Type::sideLabel($matter->type, $capacities[$name]);
+            }
         }
 
         // The matter type's own custom fields, e.g. {{matter.custom.Trustee}}.
@@ -270,11 +289,14 @@ class BulkMailPlaceholders
                 : null;
         };
 
-        $repeat = fn (string $part, array $list): string => collect($list)->map(fn (string $name, int $i) => preg_replace_callback(
-            '/\{\{\s*item[.\s_-](name|number|count)\s*\}\}/iu',
+        $capacityOf = fn (string $tag): string => $lookup[self::normalize(self::EACH_CAPACITY.html_entity_decode(strip_tags($tag), ENT_QUOTES | ENT_HTML5, 'UTF-8'))] ?? '';
+
+        $repeat = fn (string $part, array $list, string $capacity): string => collect($list)->map(fn (string $name, int $i) => preg_replace_callback(
+            '/\{\{\s*item[.\s_-](name|number|count|capacity)\s*\}\}/iu',
             fn (array $t) => match (mb_strtolower($t[1])) {
                 'name' => $escape ? e($name) : $name,
                 'number' => (string) ($i + 1),
+                'capacity' => $escape ? e($capacity) : $capacity,
                 default => (string) count($list),
             },
             $part,
@@ -283,14 +305,14 @@ class BulkMailPlaceholders
         // A table row holding both tags is repeated whole, once per item.
         $text = preg_replace_callback(
             '/(<tr\b[^>]*>(?:(?!<\/tr>).)*?)\{\{\s*each\s+([^{}]+?)\s*\}\}((?:(?!<\/tr>).)*?)\{\{\s*\/each\s*\}\}((?:(?!<\/tr>).)*?<\/tr>)/isu',
-            fn (array $m): string => ($list = $items($m[2])) === null ? $m[0] : $repeat($m[1].$m[3].$m[4], $list),
+            fn (array $m): string => ($list = $items($m[2])) === null ? $m[0] : $repeat($m[1].$m[3].$m[4], $list, $capacityOf($m[2])),
             $text,
         ) ?? $text;
 
         // Otherwise the part between the tags (their own paragraphs dropped).
         return preg_replace_callback(
             '/(?:<p[^>]*>\s*)?\{\{\s*each\s+([^{}]+?)\s*\}\}(?:\s*<\/p>)?(.*?)(?:<p[^>]*>\s*)?\{\{\s*\/each\s*\}\}(?:\s*<\/p>)?/isu',
-            fn (array $m): string => ($list = $items($m[1])) === null ? $m[0] : $repeat($m[2], $list),
+            fn (array $m): string => ($list = $items($m[1])) === null ? $m[0] : $repeat($m[2], $list, $capacityOf($m[1])),
             $text,
         ) ?? $text;
     }

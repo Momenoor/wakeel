@@ -116,11 +116,12 @@ class MinutesService
     /**
      * The minutes as they read now, for the live view shown to the
      * attendees: the same text as the PDF, without the signature and stamp
-     * (files on the server, not for the screen).
+     * (files on the server, not for the screen). Pictures that are in the text
+     * itself (data:) stay — a form's check boxes and radio buttons, its icons.
      */
     public static function liveHtml(MatterMinutes $minutes): string
     {
-        $html = preg_replace('/<img\b[^>]*>/i', '', self::composer($minutes)->bodyHtml()) ?? '';
+        $html = preg_replace('/<img\b(?![^>]*\bsrc="data:)[^>]*>/i', '', self::composer($minutes)->bodyHtml()) ?? '';
 
         // Sizes as written (pt) relative to the text's 12 pt — so they keep
         // their proportions on the screen and grow with its A+ / A−.
@@ -129,6 +130,17 @@ class MinutesService
             fn (array $m) => 'font-size: '.round((float) $m[1] / 12, 4).'em',
             $html,
         ) ?? $html;
+    }
+
+    /**
+     * The letterhead the live view draws the minutes on: its pages, margins,
+     * background and placed elements (see LetterPdf::liveLayout()).
+     *
+     * @return array<string, mixed>
+     */
+    public static function liveLayout(MatterMinutes $minutes): array
+    {
+        return (new LetterPdf(self::composer($minutes)))->liveLayout();
     }
 
     /**
