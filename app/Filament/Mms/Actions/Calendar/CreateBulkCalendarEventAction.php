@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Actions\Calendar;
 
+use App\Filament\Support\OverlapConfirmation;
 use App\Filament\Support\SameDayMeetings;
 use App\Models\CalendarEvent;
 use App\Models\Court;
@@ -114,6 +115,14 @@ class CreateBulkCalendarEventAction extends Action
                     ->visible(fn (callable $get) => app(OutlookCalendarService::class)->isConfigured() && $get('sync_to_outlook')),
             ])
             ->action(function (array $data, OutlookCalendarService $outlookService) {
+                // A meeting running during another asks first.
+                $data = OverlapConfirmation::check(
+                    $this,
+                    $data,
+                    filled($data['start_datetime'] ?? null) ? \Carbon\Carbon::parse($data['start_datetime'], config('app.timezone')) : null,
+                    filled($data['end_datetime'] ?? null) ? \Carbon\Carbon::parse($data['end_datetime'], config('app.timezone')) : null,
+                );
+
                 $toOutlook = ! empty($data['sync_to_outlook']) && $outlookService->isConfigured();
                 $teams = $toOutlook && ! empty($data['is_teams_meeting']);
                 $matters = Matter::whereIn('id', $data['matter_ids'])->get();
@@ -150,5 +159,7 @@ class CreateBulkCalendarEventAction extends Action
                     ->success()
                     ->send();
             });
+
+        OverlapConfirmation::configure($this, __('Create Bulk Calendar Event'));
     }
 }

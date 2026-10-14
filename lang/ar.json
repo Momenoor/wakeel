@@ -3958,5 +3958,9 @@
     "Meetings on this matter that have no minutes yet. Its date, time and Teams link go in the letter; no new meeting is made.": "اجتماعات هذه القضية التي لا محضر لها بعد. يوضع تاريخه ووقته ورابط Teams في الخطاب، ولا يُنشأ اجتماع جديد.",
     "None — make a new one": "لا شيء — إنشاء اجتماع جديد",
     "That meeting has no Teams link": "هذا الاجتماع بلا رابط Teams",
-    "The letter was issued without one.": "صدر الخطاب بدونه."
+    "The letter was issued without one.": "صدر الخطاب بدونه.",
+    "This meeting overlaps another one": "هذا الاجتماع يتداخل مع اجتماع آخر",
+    "This meeting will be running during another one:": "سيكون هذا الاجتماع قائماً أثناء اجتماع آخر:",
+    "Create it anyway?": "هل تريد إنشاءه رغم ذلك؟",
+    "Create it anyway": "إنشاؤه رغم ذلك"
 }

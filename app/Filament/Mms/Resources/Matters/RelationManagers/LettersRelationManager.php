@@ -8,6 +8,7 @@ use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Concerns\RefreshesMatterPage;
 use App\Filament\Support\EmailSendFields;
 use App\Filament\Support\RichEditorDirection;
+use App\Filament\Support\OverlapConfirmation;
 use App\Filament\Support\SameDayMeetings;
 use App\Models\CalendarEvent;
 use App\Models\EmailTemplate;
@@ -742,7 +743,8 @@ class LettersRelationManager extends RelationManager
             ])
             // …or issued and then sent: the Send by email screen for it.
             ->extraModalFooterActions(fn (Action $action): array => [self::issueAndSendButton($action)])
-            ->action(fn (array $data, Action $action, array $arguments) => $this->issueOrStop($data, $action, ! empty($arguments['send'])));
+            ->action(fn (array $data, Action $action, array $arguments) => $this->issueOrStop($data, $action, ! empty($arguments['send'])))
+            ->tap(fn (Action $action) => OverlapConfirmation::configure($action, __('Write a letter'), __('Issue'), '7xl'));
     }
 
     /**
@@ -766,7 +768,28 @@ class LettersRelationManager extends RelationManager
             ->schema(fn () => $this->issueForm($this->getOwnerRecord()))
             // …or issued and then sent: the Send by email screen for it.
             ->extraModalFooterActions(fn (Action $action): array => [self::issueAndSendButton($action)])
-            ->action(fn (array $data, Action $action, array $arguments) => $this->issueOrStop($data, $action, ! empty($arguments['send'])));
+            ->action(fn (array $data, Action $action, array $arguments) => $this->issueOrStop($data, $action, ! empty($arguments['send'])))
+            ->tap(fn (Action $action) => OverlapConfirmation::configure($action, __('Issue letter'), __('Issue'), '7xl'));
+    }
+
+    /**
+     * When the meeting this letter makes would start: its own date and time, or the template's —
+     * null when no meeting is to be made (none asked for, or an existing one used).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private static function newMeetingStart(array $data): ?Carbon
+    {
+        if (empty($data['create_meeting']) || filled($data['existing_event_id'] ?? null)) {
+            return null;
+        }
+
+        $template = filled($data['letter_template_id'] ?? null) ? LetterTemplate::find($data['letter_template_id']) : null;
+        $fields = LetterMeeting::fields($template) ?? [];
+        $date = $data['meeting_date'] ?? (filled($fields['date'] ?? null) ? ($data['inputs'][$fields['date']] ?? null) : null);
+        $time = $data['meeting_time'] ?? (filled($fields['time'] ?? null) ? ($data['inputs'][$fields['time']] ?? null) : null);
+
+        return filled($date) && filled($time) ? Carbon::parse($date.' '.$time, config('app.timezone')) : null;
     }
 
     /**
@@ -777,6 +800,10 @@ class LettersRelationManager extends RelationManager
      */
     private function issueOrStop(array $data, Action $action, bool $send = false): void
     {
+        // A new meeting running during another asks first.
+        $start = self::newMeetingStart($data);
+        $data = OverlapConfirmation::check($action, $data, $start, $start?->copy()->addMinutes(max(15, (int) ($data['meeting_minutes'] ?? 60))));
+
         try {
             $letters = $this->issue($this->getOwnerRecord(), $data);
             $this->notifyIssued($letters);
@@ -960,7 +987,7 @@ class LettersRelationManager extends RelationManager
                     // A meeting already on this matter's calendar (put there directly), with no minutes yet.
                     Select::make('existing_event_id')
                         ->label(__('Use a meeting already on the calendar'))
-                        ->helperText(__('Meetings on this matter that have no minutes yet. Its date, time and Teams link go in the letter; no new meeting is made.'))
+                        ->helperText(__('Current and upcoming meetings on this matter that have no minutes yet. Its date, time and Teams link go in the letter; no new meeting is made.'))
                         ->options(fn (): array => self::meetingsWithoutMinutes($this->getOwnerRecord()))
                         ->placeholder(__('None — make a new one'))
                         ->live()
@@ -1019,7 +1046,8 @@ class LettersRelationManager extends RelationManager
     /**
      * The matter's meetings on the calendar that no minutes were made for
      * (put there directly, or by an invitation whose minutes were not
-     * started): id => "date time — title", the latest first.
+     * started) and that are on now or still to come: id => "date time —
+     * title", the nearest first.
      *
      * @return array<int, string>
      */
@@ -1036,7 +1064,9 @@ class LettersRelationManager extends RelationManager
             ->where(fn ($query) => $query->where('matter_id', $matter->getKey())
                 ->orWhereHas('matters', fn ($q) => $q->whereKey($matter->getKey())))
             ->whereNotIn('id', \App\Models\MatterMinutes::query()->whereNotNull('calendar_event_id')->select('calendar_event_id'))
-            ->orderByDesc('start_datetime')
+            // Current or upcoming: not over yet (its end, else its start).
+            ->whereRaw('COALESCE(end_datetime, start_datetime) >= ?', [now()])
+            ->orderBy('start_datetime')
             ->limit(30)
             ->get()
             ->mapWithKeys(fn (CalendarEvent $event) => [$event->getKey() => $event->start_datetime->format('d/m/Y H:i').' — '.$event->title.($event->is_teams_meeting ? ' · Teams' : '')])

@@ -61,7 +61,7 @@ class ExistingMeetingTest extends TestCase
     {
         return CalendarEvent::create([
             'matter_id' => $this->matter->id, 'title' => 'اجتماع مباشر', 'type' => 'single',
-            'start_datetime' => '2026-10-20 10:00:00', 'end_datetime' => '2026-10-20 11:00:00',
+            'start_datetime' => now()->addDays(3)->setTime(10, 0), 'end_datetime' => now()->addDays(3)->setTime(11, 0),
             'is_teams_meeting' => true, 'online_meeting_url' => self::URL, ...$attributes,
         ]);
     }
@@ -70,8 +70,8 @@ class ExistingMeetingTest extends TestCase
     {
         $free = $this->event();
         $withMinutes = $this->event(['title' => 'له محضر']);
-        MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => $this->template->id, 'calendar_event_id' => $withMinutes->id, 'number' => 1, 'meeting_at' => '2026-10-20 10:00:00', 'status' => MatterMinutes::DRAFT]);
-        CalendarEvent::create(['matter_id' => Matter::factory()->create()->id, 'title' => 'قضية أخرى', 'type' => 'single', 'start_datetime' => '2026-10-21 10:00:00']);
+        MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => $this->template->id, 'calendar_event_id' => $withMinutes->id, 'number' => 1, 'meeting_at' => now()->addDays(3), 'status' => MatterMinutes::DRAFT]);
+        CalendarEvent::create(['matter_id' => Matter::factory()->create()->id, 'title' => 'قضية أخرى', 'type' => 'single', 'start_datetime' => now()->addDays(4)]);
 
         $this->assertSame([$free->id], array_keys(LettersRelationManager::meetingsWithoutMinutes($this->matter)));
     }
@@ -85,7 +85,7 @@ class ExistingMeetingTest extends TestCase
             ->mountTableAction('issue')
             ->setTableActionData(['letter_template_id' => $this->template->id])
             ->assertMountedActionModalSee('اجتماع مباشر')
-            ->setTableActionData(['recipients' => $candidateIds, 'inputs.meeting_date' => '2026-10-20', 'inputs.meeting_time' => '10:00', 'existing_event_id' => $event->id])
+            ->setTableActionData(['recipients' => $candidateIds, 'inputs.meeting_date' => now()->addDays(3)->format('Y-m-d'), 'inputs.meeting_time' => '10:00', 'existing_event_id' => $event->id])
             ->callMountedTableAction()
             ->assertHasNoTableActionErrors();
 
@@ -97,7 +97,7 @@ class ExistingMeetingTest extends TestCase
 
     public function test_a_meeting_of_another_matter_cannot_be_used(): void
     {
-        $other = CalendarEvent::create(['matter_id' => Matter::factory()->create()->id, 'title' => 'قضية أخرى', 'type' => 'single', 'start_datetime' => '2026-10-21 10:00:00', 'online_meeting_url' => 'https://teams.example/other']);
+        $other = CalendarEvent::create(['matter_id' => Matter::factory()->create()->id, 'title' => 'قضية أخرى', 'type' => 'single', 'start_datetime' => now()->addDays(4), 'online_meeting_url' => 'https://teams.example/other']);
         $candidateIds = array_keys(LetterComposer::candidates($this->matter));
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
@@ -111,7 +111,7 @@ class ExistingMeetingTest extends TestCase
 
     public function test_the_meetings_of_a_day_are_listed_under_a_new_one(): void
     {
-        $this->event();
+        $this->event(['start_datetime' => '2026-10-20 10:00:00', 'end_datetime' => '2026-10-20 11:00:00']);
         $this->event(['title' => 'في يوم آخر', 'start_datetime' => '2026-10-22 09:00:00', 'end_datetime' => '2026-10-22 10:00:00']);
 
         $html = SameDayMeetings::html('2026-10-20 15:00:00');
@@ -124,5 +124,68 @@ class ExistingMeetingTest extends TestCase
         $this->assertSame('', SameDayMeetings::html('2026-10-25'));
         $this->assertSame('', SameDayMeetings::html(null));
         $this->assertSame('', SameDayMeetings::html('2026-10-20', CalendarEvent::first()->id));
+    }
+
+    public function test_only_current_and_upcoming_meetings_are_offered_nearest_first(): void
+    {
+        $later = $this->event(['title' => 'بعد أسبوع', 'start_datetime' => now()->addWeek(), 'end_datetime' => now()->addWeek()->addHour()]);
+        $soon = $this->event(['title' => 'غداً', 'start_datetime' => now()->addDay(), 'end_datetime' => now()->addDay()->addHour()]);
+        $running = $this->event(['title' => 'جارٍ الآن', 'start_datetime' => now()->subMinutes(20), 'end_datetime' => now()->addMinutes(40)]);
+        $this->event(['title' => 'انتهى', 'start_datetime' => now()->subDay(), 'end_datetime' => now()->subDay()->addHour()]);
+        $this->event(['title' => 'بلا نهاية قديم', 'start_datetime' => now()->subHours(3), 'end_datetime' => null]);
+
+        $this->assertSame([$running->id, $soon->id, $later->id], array_keys(LettersRelationManager::meetingsWithoutMinutes($this->matter->fresh(), fresh: true)));
+    }
+
+    public function test_new_minutes_default_to_todays_meeting_closest_to_now_else_the_closest_day(): void
+    {
+        $this->travelTo(now()->setTime(12, 0));
+        $morning = $this->event(['title' => 'صباح اليوم', 'start_datetime' => now()->setTime(9, 0), 'end_datetime' => now()->setTime(10, 0)]);
+        $afternoon = $this->event(['title' => 'عصر اليوم', 'start_datetime' => now()->setTime(13, 0), 'end_datetime' => now()->setTime(14, 0)]);
+        $tomorrow = $this->event(['title' => 'غداً', 'start_datetime' => now()->addDay()->setTime(12, 0), 'end_datetime' => now()->addDay()->setTime(13, 0)]);
+
+        // Today's two: the one closest to now (13:00 is an hour away, 09:00 three).
+        $this->assertSame($afternoon->id, \App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager::closestMeeting($this->matter)->id);
+
+        // One that has minutes is not picked again.
+        MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => $this->template->id, 'calendar_event_id' => $afternoon->id, 'number' => 1, 'meeting_at' => $afternoon->start_datetime, 'status' => MatterMinutes::DRAFT]);
+        $this->assertSame($morning->id, \App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager::closestMeeting($this->matter)->id);
+
+        // Nothing today: the closest day and time, before or after.
+        $morning->update(['start_datetime' => now()->subDays(5)]);
+        $this->assertSame($tomorrow->id, \App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager::closestMeeting($this->matter)->id);
+
+        // None at all.
+        CalendarEvent::query()->delete();
+        $this->assertNull(\App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager::closestMeeting($this->matter));
+    }
+
+    public function test_a_letters_new_meeting_during_another_asks_first(): void
+    {
+        $this->event();
+        $candidateIds = array_keys(LetterComposer::candidates($this->matter));
+        $day = now()->addDays(3)->format('Y-m-d');
+
+        $page = Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('issue')
+            ->setTableActionData(['letter_template_id' => $this->template->id])
+            ->setTableActionData(['recipients' => $candidateIds, 'create_meeting' => true, 'inputs.meeting_date' => $day, 'inputs.meeting_time' => '10:30', 'meeting_minutes' => 60])
+            ->callMountedTableAction();
+
+        // Nothing made, nothing sent, no letter: the action now asks.
+        $this->assertSame(1, CalendarEvent::count());
+        $this->assertSame(0, MatterLetter::count());
+        Http::assertNothingSent();
+        $asking = $page->instance()->mountedActions[0] ?? [];
+        $this->assertSame('issue', $asking['name'] ?? null);
+        $this->assertStringContainsString('اجتماع مباشر', implode(' ', $asking['arguments']['overlap'] ?? []));
+
+        // After the meeting ends: no question (it goes on to make the meeting — Outlook is called).
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('issue')
+            ->setTableActionData(['letter_template_id' => $this->template->id])
+            ->setTableActionData(['recipients' => $candidateIds, 'create_meeting' => true, 'inputs.meeting_date' => $day, 'inputs.meeting_time' => '11:00', 'meeting_minutes' => 60])
+            ->callMountedTableAction();
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'microsoft'));
     }
 }

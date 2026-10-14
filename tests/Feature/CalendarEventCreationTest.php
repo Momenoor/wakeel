@@ -135,7 +135,8 @@ class CalendarEventCreationTest extends TestCase
         $this->createSingle(['matter_id' => $matter->id, 'sync_to_outlook' => false, 'update_next_session_date' => false]);
         $this->assertNull($matter->fresh()->next_session_date);
 
-        $this->createSingle(['matter_id' => $matter->id, 'sync_to_outlook' => false, 'update_next_session_date' => true]);
+        // Later that day: not during the first (that would ask first).
+        $this->createSingle(['matter_id' => $matter->id, 'sync_to_outlook' => false, 'update_next_session_date' => true, 'start_datetime' => '2026-10-20 12:00:00', 'end_datetime' => '2026-10-20 13:00:00']);
         $this->assertSame('2026-10-20', $matter->fresh()->next_session_date?->format('Y-m-d'));
     }
 
@@ -227,5 +228,39 @@ class CalendarEventCreationTest extends TestCase
                 ->fillForm(['start_datetime' => '2026-10-25 12:00:00'])
                 ->assertSchemaComponentExists('same_day_meetings', 'mountedActionSchema0', fn ($box) => ! $box->isVisible());
         }
+    }
+
+    public function test_a_meeting_running_during_another_asks_first_in_a_danger_modal(): void
+    {
+        $this->createSingle(['sync_to_outlook' => false, 'title' => 'الأول']);
+        $this->assertSame(1, CalendarEvent::count());
+
+        // 10:30–11:30 runs during the first (10:00–11:00): not made, asked.
+        $page = Livewire::test(ListCalendarEvents::class)
+            ->callAction(TestAction::make('createSingle')->table(), [
+                'title' => 'الثاني', 'start_datetime' => '2026-10-20 10:30:00', 'end_datetime' => '2026-10-20 11:30:00', 'sync_to_outlook' => false,
+            ]);
+
+        $this->assertSame(1, CalendarEvent::count());
+        // The same action, mounted again as the question — with the meeting it overlaps.
+        $asking = $page->instance()->mountedActions[0] ?? null;
+        $this->assertSame('createSingle', $asking['name'] ?? null);
+        $this->assertStringContainsString('الأول', implode(' ', $asking['arguments']['overlap'] ?? []));
+
+        // Confirmed: made, with what was filled in.
+        $page->callMountedAction();
+        $this->assertSame(2, CalendarEvent::count());
+        $this->assertSame('2026-10-20 10:30', CalendarEvent::where('title', 'الثاني')->sole()->start_datetime->format('Y-m-d H:i'));
+    }
+
+    public function test_back_to_back_or_other_days_do_not_ask(): void
+    {
+        $this->createSingle(['sync_to_outlook' => false, 'title' => 'الأول']);
+
+        // Starting when the first ends is not during it.
+        $this->createSingle(['sync_to_outlook' => false, 'title' => 'التالي', 'start_datetime' => '2026-10-20 11:00:00', 'end_datetime' => '2026-10-20 12:00:00']);
+        $this->createSingle(['sync_to_outlook' => false, 'title' => 'يوم آخر', 'start_datetime' => '2026-10-21 10:00:00', 'end_datetime' => '2026-10-21 11:00:00']);
+
+        $this->assertSame(3, CalendarEvent::count());
     }
 }

@@ -3,9 +3,11 @@
 namespace App\Filament\Mms\Actions\Calendar;
 
 use App\Filament\Mms\Resources\CalendarEvents\Schemas\CalendarEventForm;
+use App\Filament\Support\OverlapConfirmation;
 use App\Models\CalendarEvent;
 use App\Models\Matter;
 use App\Services\MMS\OutlookCalendarService;
+use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Arr;
@@ -29,6 +31,14 @@ class CreateSingleCalendarEventAction extends Action
             ->icon('heroicon-o-calendar')
             ->schema(CalendarEventForm::getFormSchema())
             ->action(function (array $data, OutlookCalendarService $outlookService, $record = null) {
+                // A meeting running during another asks first.
+                $data = OverlapConfirmation::check(
+                    $this,
+                    $data,
+                    empty($data['is_all_day']) && filled($data['start_datetime'] ?? null) ? Carbon::parse($data['start_datetime'], config('app.timezone')) : null,
+                    filled($data['end_datetime'] ?? null) ? Carbon::parse($data['end_datetime'], config('app.timezone')) : null,
+                );
+
                 if ($record instanceof Matter) {
                     $data['matter_id'] = $record->getKey();
                 }
@@ -60,5 +70,7 @@ class CreateSingleCalendarEventAction extends Action
                     ->success()
                     ->send();
             });
+
+        OverlapConfirmation::configure($this, __('Create Single Calendar Event'));
     }
 }

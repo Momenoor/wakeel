@@ -13,6 +13,7 @@ use App\Models\CalendarEvent;
 use App\Models\EmailTemplate;
 use App\Models\Letterhead;
 use App\Models\LetterTemplate;
+use App\Models\Matter;
 use App\Models\MatterMinutes;
 use App\Models\MinutesDelivery;
 use App\Models\WhatsAppTemplate;
@@ -151,6 +152,29 @@ class MinutesRelationManager extends RelationManager
     }
 
     /**
+     * The meeting new minutes are for, picked for the user (who can change
+     * it): among the matter's meetings with no minutes yet, one on today's
+     * date if there is — the nearest to the time now — otherwise the
+     * closest in day and time, before or after.
+     */
+    public static function closestMeeting(Matter $matter): ?CalendarEvent
+    {
+        $now = now();
+
+        $events = CalendarEvent::query()
+            ->where(fn ($query) => $query->where('matter_id', $matter->getKey())
+                ->orWhereHas('matters', fn ($q) => $q->whereKey($matter->getKey())))
+            ->whereNotIn('id', MatterMinutes::query()->whereNotNull('calendar_event_id')->select('calendar_event_id'))
+            ->whereNotNull('start_datetime')
+            ->get();
+
+        $distance = fn (CalendarEvent $event): int => abs($event->start_datetime->getTimestamp() - $now->getTimestamp());
+        $today = $events->filter(fn (CalendarEvent $event) => $event->start_datetime->isSameDay($now));
+
+        return ($today->isNotEmpty() ? $today : $events)->sortBy($distance)->first();
+    }
+
+    /**
      * New minutes: the template, the meeting (from the matter's calendar,
      * or a date and time), and the questions to ask.
      */
@@ -164,9 +188,8 @@ class MinutesRelationManager extends RelationManager
             ->modalWidth('6xl')
             ->visible(fn (): bool => $this->canChange())
             ->fillForm(function () use ($matter): array {
-                // The matter's next meeting, else its latest.
-                $event = CalendarEvent::query()->where('matter_id', $matter->getKey())->where('start_datetime', '>=', now()->startOfDay())->orderBy('start_datetime')->first()
-                    ?? CalendarEvent::query()->where('matter_id', $matter->getKey())->latest('start_datetime')->first();
+                // The meeting of today closest to this time, else the closest one in day and time.
+                $event = self::closestMeeting($matter);
 
                 // The default minutes template for its type and court, and its letterhead (else the default one).
                 $templateId = LetterTemplate::query()->minutesFor($matter)
@@ -195,7 +218,7 @@ class MinutesRelationManager extends RelationManager
                             ->columnSpanFull(),
                         Select::make('calendar_event_id')
                             ->label(__('The meeting'))
-                            ->options(fn () => CalendarEvent::query()->where('matter_id', $matter->getKey())->latest('start_datetime')->limit(50)->get()
+                            ->options(fn () => CalendarEvent::query()->where(fn ($query) => $query->where('matter_id', $matter->getKey())->orWhereHas('matters', fn ($q) => $q->whereKey($matter->getKey())))->latest('start_datetime')->limit(50)->get()
                                 ->mapWithKeys(fn (CalendarEvent $event) => [$event->getKey() => $event->start_datetime?->format('d/m/Y H:i').' — '.$event->title]))
                             ->placeholder(__('Not on the calendar'))
                             ->live()
