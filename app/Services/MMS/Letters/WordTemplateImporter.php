@@ -34,7 +34,10 @@ class WordTemplateImporter
         ]);
     }
 
-    /** The Word file's content as HTML (the part between <body> and </body>). */
+    /**
+     * The Word file's content as HTML (the part between <body> and </body>),
+     * its tables evened out so the rich editor has nothing to pad.
+     */
     public function html(string $path): string
     {
         $word = IOFactory::load($path, 'Word2007');
@@ -48,7 +51,7 @@ class WordTemplateImporter
             $html = $m[1];
         }
 
-        return $this->mendPlaceholders(trim($html));
+        return RaggedTables::even($this->mendPlaceholders(trim($html)));
     }
 
     /**
