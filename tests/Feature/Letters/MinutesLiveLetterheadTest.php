@@ -89,4 +89,69 @@ class MinutesLiveLetterheadTest extends TestCase
             ->assertSee('const layout = JSON.parse(', false)
             ->assertSee('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', false);
     }
+
+    public function test_saving_the_minutes_tells_the_live_view_over_pusher(): void
+    {
+        $minutes = $this->minutes();
+        config(['broadcasting.default' => 'pusher']);
+        \Illuminate\Support\Facades\Event::fake([\App\Events\MinutesLiveUpdated::class]);
+
+        $minutes->update(['opening' => 'نص جديد']);
+        \Illuminate\Support\Facades\Event::assertDispatched(\App\Events\MinutesLiveUpdated::class, fn ($event) => $event->minutesId === $minutes->id && $event->broadcastOn()->name === 'private-minutes.'.$minutes->id);
+
+        // Saved with nothing changed: nothing sent.
+        \Illuminate\Support\Facades\Event::fake([\App\Events\MinutesLiveUpdated::class]);
+        $minutes->update(['opening' => 'نص جديد']);
+        \Illuminate\Support\Facades\Event::assertNotDispatched(\App\Events\MinutesLiveUpdated::class);
+    }
+
+    public function test_without_pusher_nothing_is_broadcast_and_the_page_polls(): void
+    {
+        $minutes = $this->minutes();
+        \Illuminate\Support\Facades\Event::fake([\App\Events\MinutesLiveUpdated::class]);
+
+        $minutes->update(['opening' => 'x']);
+        \Illuminate\Support\Facades\Event::assertNotDispatched(\App\Events\MinutesLiveUpdated::class);
+
+        $this->get(route('minutes.live', $minutes))->assertOk()->assertSee('const echoConfig = null', false);
+    }
+
+    public function test_the_live_page_listens_on_the_minutes_channel_when_pusher_is_set_up(): void
+    {
+        $minutes = $this->minutes();
+        config(['filament.broadcasting.echo' => ['broadcaster' => 'pusher', 'key' => 'abc123', 'cluster' => 'eu', 'forceTLS' => true, 'authEndpoint' => 'http://wakeel.test/broadcasting/auth']]);
+
+        $this->get(route('minutes.live', $minutes))->assertOk()
+            ->assertSee('abc123', false)
+            ->assertSee("'minutes.{$minutes->id}'", false)
+            ->assertSee('minutes.updated', false);
+
+        // Only a viewer of the matter may listen.
+        $this->assertTrue(true);
+    }
+
+    public function test_a_question_switched_off_is_not_in_the_live_view_but_stays_in_the_minutes(): void
+    {
+        $minutes = $this->minutes();
+        $minutes->template->update(['body' => '<p>{{minutes.qa}}</p>']);
+        $minutes->update(['items' => [
+            ['type' => 'question', 'text' => 'سؤال ظاهر', 'answer' => 'جواب ظاهر', 'live' => true],
+            ['type' => 'question', 'text' => 'سؤال مخفي', 'answer' => 'جواب مخفي', 'live' => false],
+            ['type' => 'comment', 'text' => 'ملاحظة قديمة'],
+        ]]);
+        $minutes = $minutes->fresh();
+
+        $live = \App\Services\MMS\Letters\MinutesService::liveHtml($minutes);
+        $this->assertStringContainsString('سؤال ظاهر', $live);
+        $this->assertStringContainsString('ملاحظة قديمة', $live);
+        $this->assertStringNotContainsString('سؤال مخفي', $live);
+        $this->assertStringNotContainsString('جواب مخفي', $live);
+
+        // The PDF and the minutes themselves keep it.
+        $this->assertStringContainsString('سؤال مخفي', \App\Services\MMS\Letters\MinutesService::composer($minutes)->bodyHtml());
+
+        // Saved from the recording form: the switch is kept, and defaults to on.
+        \App\Services\MMS\Letters\MinutesService::saveRecorded($minutes, ['items' => [['type' => 'question', 'text' => 'a', 'live' => false], ['type' => 'question', 'text' => 'b']]]);
+        $this->assertSame([false, true], array_column($minutes->fresh()->items, 'live'));
+    }
 }

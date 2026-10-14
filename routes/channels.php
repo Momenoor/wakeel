@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\BulkMailCampaign;
+use App\Models\MatterMinutes;
 use Illuminate\Support\Facades\Broadcast;
 
 Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
@@ -12,6 +13,13 @@ Broadcast::channel('bulk-mail-campaign.{campaignId}', function ($user, $campaign
     $campaign = BulkMailCampaign::find($campaignId);
 
     return $campaign !== null && $user->can('view', $campaign);
+});
+
+// A meeting's minutes, for the live view the attendees watch — whoever may view the matter.
+Broadcast::channel('minutes.{minutesId}', function ($user, $minutesId) {
+    $minutes = MatterMinutes::with('matter')->find($minutesId);
+
+    return $minutes?->matter !== null && $user->can('view', $minutes->matter);
 });
 
 // Presence channel every signed-in user joins from the chat widget — who

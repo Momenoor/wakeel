@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Events\MinutesLiveUpdated;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -19,6 +20,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable('matter_id', 'letter_template_id', 'letterhead_id', 'calendar_event_id', 'number', 'meeting_at', 'meeting_link', 'attendees', 'items', 'inputs', 'body', 'status', 'attachment_id', 'created_by', 'finalized_at', 'opening', 'closing', 'ended_at')]
 class MatterMinutes extends Model
 {
+    protected static function booted(): void
+    {
+        // The live view the attendees watch refreshes on it.
+        // Only a save that changed something (updated does not fire for none).
+        static::created(fn (self $minutes) => MinutesLiveUpdated::announce($minutes->getKey()));
+        static::updated(fn (self $minutes) => MinutesLiveUpdated::announce($minutes->getKey()));
+    }
+
     public const DRAFT = 'draft';
 
     public const FINAL = 'final';

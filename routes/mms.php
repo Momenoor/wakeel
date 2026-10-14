@@ -87,6 +87,9 @@ Route::middleware('auth')->group(function () {
             // The text's own fingerprint: saves a second apart look the same by time.
             'version' => md5($html),
             'feed' => route('minutes.live.feed', $minutes),
+            // Pusher, when set up: the page then asks for the text only when it changes.
+            'echo' => config('filament.broadcasting.echo.broadcaster') === 'pusher' ? config('filament.broadcasting.echo') : null,
+            'channel' => 'minutes.'.$minutes->getKey(),
             'layout' => MinutesService::liveLayout($minutes),
             'rtl' => (($minutes->template?->locale) ?: 'ar') !== 'en',
         ]);

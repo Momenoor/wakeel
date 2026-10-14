@@ -66,6 +66,7 @@
 
     <script>
         const layout = @js($layout);
+        const echoConfig = @js($echo);
         const pagesEl = document.getElementById('pages');
         let version = @js($version);
         let zoom = null;     // set by A+ / A−; until then, as wide as the screen allows
@@ -218,7 +219,30 @@
 
         applyZoom();
         paginate(@js($html));
-        setInterval(refresh, 2000);
+        // Pusher: the text is asked for when it changes; the poll is a slow safety net.
+        // Without it, every two seconds.
+        let live = false;
+        const tick = () => { refresh(); setTimeout(tick, live ? 20000 : 2000); };
+        setTimeout(tick, live ? 20000 : 2000);
+
+        if (echoConfig && echoConfig.key) {
+            const script = document.createElement('script');
+            script.src = 'https://js.pusher.com/8.4.0/pusher.min.js';
+            script.onload = () => {
+                try {
+                    const pusher = new Pusher(echoConfig.key, {
+                        cluster: echoConfig.cluster,
+                        forceTLS: true,
+                        channelAuthorization: { endpoint: echoConfig.authEndpoint, headers: { 'X-CSRF-TOKEN': @js(csrf_token()), 'Accept': 'application/json' } },
+                    });
+                    pusher.connection.bind('state_change', (states) => { live = states.current === 'connected'; });
+                    pusher.subscribe('private-' + @js($channel)).bind('minutes.updated', () => refresh());
+                } catch (e) {
+                    live = false;
+                }
+            };
+            document.head.appendChild(script);
+        }
     </script>
 </body>
 </html>

@@ -23,7 +23,10 @@ use Illuminate\Support\Str;
  */
 class MinutesService
 {
-    public static function composer(MatterMinutes $minutes): LetterComposer
+    /**
+     * @param  bool  $live  for the live view: the questions and comments switched off there left out
+     */
+    public static function composer(MatterMinutes $minutes, bool $live = false): LetterComposer
     {
         $minutes->loadMissing(['template', 'matter', 'letterhead']);
 
@@ -45,7 +48,9 @@ class MinutesService
                 LetterComposer::MINUTES => [
                     'number' => $minutes->number,
                     'attendees' => $minutes->attendees ?? [],
-                    'items' => $minutes->items ?? [],
+                    'items' => $live
+                        ? array_values(array_filter((array) ($minutes->items ?? []), fn ($item) => ! is_array($item) || ($item['live'] ?? true) !== false))
+                        : ($minutes->items ?? []),
                     'opening' => self::opening($minutes),
                     'closing' => self::closing($minutes),
                     'ended_at' => $minutes->ended_at?->format('Y-m-d H:i'),
@@ -105,6 +110,8 @@ class MinutesService
             'items' => array_values(array_map(fn (array $item): array => [
                 'type' => ($item['type'] ?? 'question') === 'comment' ? 'comment' : 'question',
                 'text' => trim((string) ($item['text'] ?? '')),
+                // Shown in the live view the attendees watch (the PDF has them all).
+                'live' => (bool) ($item['live'] ?? true),
                 'answer' => ($item['type'] ?? 'question') === 'comment' ? null : (filled($item['answer'] ?? null) ? trim((string) $item['answer']) : null),
             ], array_filter((array) ($data['items'] ?? []), 'is_array'))),
             'inputs' => (array) ($data['inputs'] ?? $minutes->inputs ?? []),
@@ -121,7 +128,7 @@ class MinutesService
      */
     public static function liveHtml(MatterMinutes $minutes): string
     {
-        $html = preg_replace('/<img\b(?![^>]*\bsrc="data:)[^>]*>/i', '', self::composer($minutes)->bodyHtml()) ?? '';
+        $html = preg_replace('/<img\b(?![^>]*\bsrc="data:)[^>]*>/i', '', self::composer($minutes, true)->bodyHtml()) ?? '';
 
         // Sizes as written (pt) relative to the text's 12 pt — so they keep
         // their proportions on the screen and grow with its A+ / A−.

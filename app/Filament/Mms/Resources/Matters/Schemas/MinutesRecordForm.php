@@ -47,7 +47,8 @@ class MinutesRecordForm
             'meeting_link' => $minutes->meeting_link,
             // Not yet recorded: as the previous meeting, else the parties.
             'attendees' => $minutes->attendees ?: MinutesService::startingAttendees($minutes),
-            'items' => $minutes->items ?? [],
+            // Shown in the live view unless switched off (older items have no switch).
+            'items' => array_map(fn ($item) => is_array($item) ? [...$item, 'live' => $item['live'] ?? true] : $item, (array) ($minutes->items ?? [])),
             'inputs' => self::inputDefaults($minutes),
             'opening' => MinutesService::opening($minutes),
             'closing' => MinutesService::closing($minutes),
@@ -310,6 +311,11 @@ class MinutesRecordForm
                             ->rows(2)
                             ->required()
                             ->columnSpan(3),
+                        Toggle::make('live')
+                            ->label(__('Show in the live view'))
+                            ->helperText(__('Off: the attendees watching do not see it; the minutes still have it.'))
+                            ->default(true)
+                            ->columnSpanFull(),
                         Textarea::make('answer')
                             ->label(__('Answer'))
                             ->rows(4)
