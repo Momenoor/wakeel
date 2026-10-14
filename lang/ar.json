@@ -3948,5 +3948,9 @@
     "Recipients layout": "تنسيق المرسل إليهم",
     "Standard lines": "أسطر عادية",
     "Formal — honorific at the end of the line, \"بوكالة\" for the lawyer, emails and phones on one line each": "رسمي — المحترم في نهاية السطر، \"بوكالة\" للوكيل، والبريد والهاتف في سطر لكل منهما",
-    "How {{recipients}} addresses those the letter is for.": "كيف يخاطب {{recipients}} من وُجّه إليهم الخطاب."
+    "How {{recipients}} addresses those the letter is for.": "كيف يخاطب {{recipients}} من وُجّه إليهم الخطاب.",
+    "Recipients lines": "أسطر المرسل إليهم",
+    "Between emails": "الفاصل بين البريد",
+    "Between phones": "الفاصل بين الهواتف",
+    "One line each; leave empty for the standard lines. Placeholders: :list. A | puts the rest of the line at the far end; a part between << >> shows only when its placeholder is filled; a line whose placeholder is empty is left out.": "سطر لكل خطوة؛ اتركه فارغاً للأسطر المعتادة. العناصر: :list. العلامة | تضع بقية السطر في الطرف الآخر؛ والجزء بين << >> يظهر فقط إذا امتلأ عنصره؛ والسطر الذي يفرغ عنصره يُحذف."
 }

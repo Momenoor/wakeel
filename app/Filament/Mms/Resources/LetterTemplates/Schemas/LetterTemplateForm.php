@@ -87,7 +87,24 @@ class LetterTemplateForm
                             ->label(__('Recipients layout'))
                             ->options(['formal' => __('Formal — honorific at the end of the line, "بوكالة" for the lawyer, emails and phones on one line each')])
                             ->placeholder(__('Standard lines'))
-                            ->helperText(__('How {{recipients}} addresses those the letter is for.')),
+                            ->helperText(__('How {{recipients}} addresses those the letter is for.'))
+                            ->live(),
+                        Textarea::make('recipients_format.lines')
+                            ->label(__('Recipients lines'))
+                            ->placeholder(fn (Get $get) => LetterComposer::recipientsFormat($get('locale') !== 'en'))
+                            ->helperText(__('One line each; leave empty for the standard lines. Placeholders: :list. A | puts the rest of the line at the far end; a part between << >> shows only when its placeholder is filled; a line whose placeholder is empty is left out.', ['list' => '{{recipient.title}} {{recipient.name}} {{recipient.role}} {{recipient.suffix}} {{representative.title}} {{representative.name}} {{representative.suffix}} {{emails}} {{phones}}']))
+                            ->rows(5)
+                            ->columnSpanFull()
+                            ->extraInputAttributes(['dir' => 'auto'])
+                            ->visible(fn (Get $get) => $get('recipients_layout') === 'formal'),
+                        TextInput::make('recipients_format.email_separator')
+                            ->label(__('Between emails'))
+                            ->placeholder(' – ')
+                            ->visible(fn (Get $get) => $get('recipients_layout') === 'formal'),
+                        TextInput::make('recipients_format.phone_separator')
+                            ->label(__('Between phones'))
+                            ->placeholder(' - ')
+                            ->visible(fn (Get $get) => $get('recipients_layout') === 'formal'),
                         Select::make('email_template_id')
                             ->label(__('Covering email'))
                             ->relationship('emailTemplate', 'name', fn ($query) => $query->where('is_active', true)->where('purpose', EmailTemplate::LETTER))

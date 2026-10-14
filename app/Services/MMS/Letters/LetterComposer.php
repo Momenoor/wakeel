@@ -400,10 +400,59 @@ class LetterComposer
     }
 
     /**
-     * The formal layout, a block for each party:
+     * The words of the formal layout, one line each — a `|` splits a line
+     * into its start and the far end, `<<…>>` shows only when the
+     * placeholders in it are filled, and a line whose other placeholders
+     * are empty is left out:
      *
-     *   السيدة / دعاء سعيد (المتنازعة)                       المحترمة
-     *   بوكالة السادة/ مكتب العامري للمحاماة                 المحترمين
+     *   {{recipient.title}} {{recipient.name}}<< ({{recipient.role}})>> | {{recipient.suffix}}
+     *   بوكالة {{representative.title}} {{representative.name}} | {{representative.suffix}}
+     *   بريد إلكتروني : {{emails}}
+     *   هاتف/محمول : {{phones}}
+     */
+    public static function recipientsFormat(bool $arabic): string
+    {
+        return $arabic
+            ? "{{recipient.title}} {{recipient.name}}<< ({{recipient.role}})>> | {{recipient.suffix}}\nبوكالة {{representative.title}} {{representative.name}} | {{representative.suffix}}\nبريد إلكتروني : {{emails}}\nهاتف/محمول : {{phones}}"
+            : "{{recipient.title}} {{recipient.name}}<< ({{recipient.role}})>> |\nRepresented by {{representative.title}} {{representative.name}} |\nEmail:{{emails}}\nPhone: {{phones}}";
+    }
+
+    /**
+     * One part of a formal line with its placeholders filled; null when a
+     * placeholder outside <<…>> is empty. A <<…>> part with an empty one goes.
+     *
+     * @param  array<string, array{0: string, 1: string}>  $values  placeholder => [text, html]
+     */
+    private static function recipientPart(string $part, array $values): ?string
+    {
+        $missing = false;
+        $fill = function (string $text, bool &$missing) use ($values): string {
+            return preg_replace_callback('/\{\{\s*([a-z_.]+)\s*\}\}/iu', function (array $m) use ($values, &$missing): string {
+                $value = $values[strtolower($m[1])] ?? ['', ''];
+                $missing = $missing || $value[0] === '';
+
+                return $value[1];
+            }, $text) ?? $text;
+        };
+
+        // The optional parts first (the text is escaped, so << is &lt;&lt;).
+        $text = preg_replace_callback('/&lt;&lt;(.*?)&gt;&gt;/us', function (array $m) use ($fill): string {
+            $absent = false;
+            $filled = $fill($m[1], $absent);
+
+            return $absent ? '' : $filled;
+        }, e(trim($part))) ?? '';
+        $text = $fill($text, $missing);
+
+        return $missing ? null : trim($text);
+    }
+
+    /**
+     * The formal layout, a block for each party, in the template's words
+     * (recipientsFormat): by default
+     *
+     *   السيدة / دعاء سعيد علي محمد (المتنازعة)                    المحترمة
+     *   بوكالة السادة/ مكتب العامري للمحاماة                       المحترمين
      *   بريد إلكتروني : a@x.com – b@y.com
      *   هاتف/محمول : 0509746993 - 026222124
      *
@@ -414,13 +463,18 @@ class LetterComposer
      */
     private function formalRecipientsHtml(array $recipients, bool $arabic): string
     {
-        // A line: the text at the start, the honorific at the far end.
-        $row = fn (string $text, string $honorific): string => '<table dir="'.($arabic ? 'rtl' : 'ltr').'" style="width: 100%; border-collapse: collapse;"><tbody><tr>'
-            .'<td data-bw="0" style="border: 0; padding: 0; text-align: '.($arabic ? 'right' : 'left').';"><strong>'.$text.'</strong></td>'
-            .($honorific !== '' ? '<td data-bw="0" style="border: 0; padding: 0; width: 25%; text-align: '.($arabic ? 'left' : 'right').';"><strong>'.e($honorific).'</strong></td>' : '')
-            .'</tr></tbody></table>';
-        $joined = fn (string $label, array $list, string $separator): string => $list === [] ? '' : '<p class="recipient-email"><strong>'.e($label).'</strong> <span dir="ltr" style="unicode-bidi: isolate;">'.e(implode($separator, $list)).'</span></p>';
+        $options = (array) ($this->template->recipients_format ?? []);
+        $format = filled($options['lines'] ?? null) ? (string) $options['lines'] : self::recipientsFormat($arabic);
+        $emailSeparator = (string) (filled($options['email_separator'] ?? null) ? $options['email_separator'] : ' – ');
+        $phoneSeparator = (string) (filled($options['phone_separator'] ?? null) ? $options['phone_separator'] : ' - ');
         $title = fn (?string $title): string => $arabic ? (isset(Honorific::ARABIC[$title ?? '']) ? $title : 'السادة/') : ($title ?: 'Messrs.');
+        // Emails and numbers read left to right, even in an Arabic line.
+        $ltr = fn (array $list, string $separator): array => [
+            implode($separator, $list),
+            $list === [] ? '' : '<span dir="ltr" style="unicode-bidi: isolate;">'.e(implode($separator, $list)).'</span>',
+        ];
+        $plain = fn (string $text): array => [$text, e($text)];
+        $unique = fn ($list): array => collect($list)->filter()->unique()->values()->all();
 
         $html = '';
         $first = true;
@@ -428,24 +482,49 @@ class LetterComposer
         foreach ($recipients as $recipient) {
             ['title' => $partyTitle, 'name' => $name] = Honorific::split((string) $recipient['name']);
             $partyTitle = $title($partyTitle);
-            $role = filled($recipient['role'] ?? null) ? ' ('.e($recipient['role']).')' : '';
-            $html .= $row(($first ? '' : ($arabic ? 'و' : 'And ')).$partyTitle.' '.e($name).$role, Honorific::suffix($partyTitle, $arabic));
+            $representatives = collect($recipient['representatives'] ?? []);
+            $named = $representatives->map(fn (array $rep) => Honorific::split((string) $rep['name']));
+            // One lawyer is addressed by their own title; several, by the plural.
+            $repTitle = $named->isEmpty() ? '' : ($named->count() === 1 ? $title($named->first()['title']) : $title(null));
+
+            $values = [
+                'recipient.title' => $plain(($first ? '' : ($arabic ? 'و' : 'And ')).$partyTitle),
+                'recipient.name' => $plain($name),
+                'recipient.role' => $plain(trim((string) ($recipient['role'] ?? ''))),
+                'recipient.suffix' => $plain(Honorific::suffix($partyTitle, $arabic)),
+                'representative.title' => $plain($repTitle),
+                'representative.name' => $plain($named->pluck('name')->implode($arabic ? ' و' : ' and ')),
+                'representative.suffix' => $plain($repTitle === '' ? '' : Honorific::suffix($repTitle, $arabic)),
+                'emails' => $ltr($unique([...($recipient['emails'] ?? []), ...$representatives->flatMap(fn ($rep) => $rep['emails'] ?? [])->all()]), $emailSeparator),
+                'phones' => $ltr($unique([...($recipient['phones'] ?? []), ...$representatives->flatMap(fn ($rep) => $rep['phones'] ?? [])->all()]), $phoneSeparator),
+            ];
             $first = false;
 
-            $representatives = collect($recipient['representatives'] ?? []);
+            foreach (preg_split('/\R/u', $format) ?: [] as $line) {
+                if (trim($line) === '') {
+                    continue;
+                }
 
-            if ($representatives->isNotEmpty()) {
-                $named = $representatives->map(fn (array $rep) => Honorific::split((string) $rep['name']));
-                // One lawyer is addressed by their own title; several, by the plural.
-                $repTitle = $named->count() === 1 ? $title($named->first()['title']) : $title(null);
-                $html .= $row(
-                    ($arabic ? 'بوكالة ' : 'Represented by ').$repTitle.' '.e($named->pluck('name')->implode($arabic ? ' و' : ' and ')),
-                    Honorific::suffix($repTitle, $arabic),
-                );
+                [$start, $end] = array_pad(explode('|', $line, 2), 2, null);
+                $startHtml = self::recipientPart($start, $values);
+
+                if ($startHtml === null || $startHtml === '') {
+                    continue;
+                }
+
+                if ($end === null) {
+                    $html .= '<p class="recipient-email">'.$startHtml.'</p>';
+
+                    continue;
+                }
+
+                // The start of the line, and its far end.
+                $endHtml = self::recipientPart($end, $values) ?? '';
+                $html .= '<table dir="'.($arabic ? 'rtl' : 'ltr').'" style="width: 100%; border-collapse: collapse;"><tbody><tr>'
+                    .'<td data-bw="0" style="border: 0; padding: 0; text-align: '.($arabic ? 'right' : 'left').';"><strong>'.$startHtml.'</strong></td>'
+                    .($endHtml !== '' ? '<td data-bw="0" style="border: 0; padding: 0; width: 25%; text-align: '.($arabic ? 'left' : 'right').';"><strong>'.$endHtml.'</strong></td>' : '')
+                    .'</tr></tbody></table>';
             }
-
-            $html .= $joined($arabic ? 'بريد إلكتروني :' : 'Email:', collect([...($recipient['emails'] ?? []), ...$representatives->flatMap(fn ($rep) => $rep['emails'] ?? [])->all()])->filter()->unique()->values()->all(), ' – ')
-                .$joined($arabic ? 'هاتف/محمول :' : 'Phone:', collect([...($recipient['phones'] ?? []), ...$representatives->flatMap(fn ($rep) => $rep['phones'] ?? [])->all()])->filter()->unique()->values()->all(), ' - ');
         }
 
         return $html;

@@ -61,6 +61,11 @@ class RichHtml
 
     public static function colours(string $html): string
     {
+        // Filament's own palette is written in oklch(), which the PDF engine does not read.
+        if (str_contains($html, 'oklch(')) {
+            $html = preg_replace_callback('/oklch\(([^)]*)\)/i', fn (array $m): string => self::oklchToHex($m[1]) ?? $m[0], $html) ?? $html;
+        }
+
         if (! str_contains($html, '--color')) {
             return $html;
         }
@@ -75,5 +80,39 @@ class RichHtml
             },
             $html,
         ) ?? $html;
+    }
+    /**
+     * An oklch() colour ("0.577 0.245 27.325", lightness as a number or a
+     * percentage, an opacity after "/" ignored) as #rrggbb; null when it
+     * can't be read.
+     */
+    public static function oklchToHex(string $args): ?string
+    {
+        if (! preg_match('/^\s*([\d.]+)(%?)\s+([\d.]+)(%?)\s+([\d.]+)(?:deg)?\s*(?:\/.*)?$/', $args, $m)) {
+            return null;
+        }
+
+        $l = (float) $m[1] / ($m[2] === '%' ? 100 : 1);
+        $c = (float) $m[3] * ($m[4] === '%' ? 0.004 : 1);
+        $h = deg2rad((float) $m[5]);
+        $a = $c * cos($h);
+        $b = $c * sin($h);
+
+        $lc = ($l + 0.3963377774 * $a + 0.2158037573 * $b) ** 3;
+        $mc = ($l - 0.1055613458 * $a - 0.0638541728 * $b) ** 3;
+        $sc = ($l - 0.0894841775 * $a - 1.2914855480 * $b) ** 3;
+
+        $linear = [
+            4.0767416621 * $lc - 3.3077115913 * $mc + 0.2309699292 * $sc,
+            -1.2684380046 * $lc + 2.6097574011 * $mc - 0.3413193965 * $sc,
+            -0.0041960863 * $lc - 0.7034186147 * $mc + 1.7076147010 * $sc,
+        ];
+
+        return '#'.implode('', array_map(function (float $v): string {
+            $v = max(0.0, min(1.0, $v));
+            $v = $v <= 0.0031308 ? 12.92 * $v : 1.055 * ($v ** (1 / 2.4)) - 0.055;
+
+            return str_pad(dechex((int) round($v * 255)), 2, '0', STR_PAD_LEFT);
+        }, $linear));
     }
 }

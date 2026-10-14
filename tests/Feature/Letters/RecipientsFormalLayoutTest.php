@@ -15,9 +15,9 @@ class RecipientsFormalLayoutTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function html(?string $layout, string $locale = 'ar'): string
+    private function html(?string $layout, string $locale = 'ar', ?array $format = null): string
     {
-        $template = LetterTemplate::create(['name' => 'T', 'slug' => 't', 'category' => 'letter', 'locale' => $locale, 'subject' => 'S', 'is_active' => true, 'recipients_layout' => $layout, 'body' => '<p>{{recipients}}</p>']);
+        $template = LetterTemplate::create(['name' => 'T', 'slug' => 't', 'category' => 'letter', 'locale' => $locale, 'subject' => 'S', 'is_active' => true, 'recipients_layout' => $layout, 'recipients_format' => $format, 'body' => '<p>{{recipients}}</p>']);
         $recipient = [
             'name' => 'السيدة / دعاء سعيد علي محمد', 'role' => 'المتنازعة', 'emails' => ['doaa.s1986@hotmail.com'], 'phones' => ['0509746993'], 'party_id' => 1,
             'representatives' => [['name' => 'مكتب عبد العزيز العامري للمحاماة', 'emails' => ['a.alameri_advocate@hotmail.com'], 'phones' => ['026222124'], 'party_id' => 2]],
@@ -55,5 +55,20 @@ class RecipientsFormalLayoutTest extends TestCase
         $this->assertStringContainsString('Represented by', $html);
         $this->assertStringContainsString('Email:', $html);
         $this->assertStringContainsString('text-align: left;', $html);
+    }
+
+    public function test_the_lines_and_separators_can_be_written(): void
+    {
+        $html = $this->html('formal', 'ar', [
+            'lines' => "{{recipient.name}}<< - {{recipient.role}}>> | {{recipient.suffix}}\nالبريد: {{emails}}\nفاكس: {{fax}}",
+            'email_separator' => ' ; ',
+        ]);
+
+        $this->assertStringContainsString('دعاء سعيد علي محمد - المتنازعة</strong>', $html);
+        $this->assertStringContainsString('doaa.s1986@hotmail.com ; a.alameri_advocate@hotmail.com', $html);
+        // The lawyer's line and the phones were not asked for; a line with an unknown placeholder is left out.
+        $this->assertStringNotContainsString('بوكالة', $html);
+        $this->assertStringNotContainsString('فاكس', $html);
+        $this->assertStringNotContainsString('0509746993', $html);
     }
 }
