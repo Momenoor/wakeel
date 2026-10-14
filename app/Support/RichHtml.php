@@ -15,7 +15,54 @@ class RichHtml
 {
     public static function forOutput(string $html, bool $rtl): string
     {
-        return TextDirection::physicalAlignment(self::columnWidths(self::colours(self::emptyLines($html))), $rtl);
+        return self::cellAlignment(TextDirection::physicalAlignment(self::columnWidths(self::colours(self::emptyLines($html))), $rtl));
+    }
+
+    /**
+     * mPDF takes a paragraph's alignment in a table cell from the cell, not
+     * from the paragraph (a centred or left-aligned line in a cell came out
+     * at the start). A cell whose paragraphs are aligned the same way gets
+     * that alignment itself; where they differ, each aligned paragraph goes
+     * in a table of its own that carries it. Cells holding a table are left.
+     */
+    public static function cellAlignment(string $html): string
+    {
+        if (! str_contains($html, 'text-align') || ! preg_match('/<t[dh]\b/i', $html)) {
+            return $html;
+        }
+
+        return preg_replace_callback('/<(td|th)\b([^>]*)>((?:(?!<\/?(?:td|th|table)\b).)*)<\/\1>/isu', function (array $cell): string {
+            [$all, $tag, $attributes, $inner] = $cell;
+            $block = '/<(p|h[1-6])\b([^>]*)>(.*?)<\/\1>/isu';
+
+            if (! preg_match_all($block, $inner, $found, PREG_SET_ORDER) || trim((string) preg_replace($block, '', $inner)) !== '') {
+                return $all;
+            }
+
+            $aligns = array_map(fn (array $m): ?string => preg_match('/text-align:\s*(left|right|center|justify)/i', $m[2], $a) ? strtolower($a[1]) : null, $found);
+            $cellAligned = (bool) preg_match('/text-align:/i', $attributes);
+
+            if (count(array_unique($aligns)) === 1 && $aligns[0] !== null) {
+                if ($cellAligned) {
+                    return $all;
+                }
+
+                $attributes = preg_match('/style="([^"]*)"/', $attributes)
+                    ? preg_replace('/style="([^"]*)"/', 'style="text-align: '.$aligns[0].'; $1"', $attributes, 1)
+                    : $attributes.' style="text-align: '.$aligns[0].'"';
+
+                return '<'.$tag.$attributes.'>'.$inner.'</'.$tag.'>';
+            }
+
+            $i = 0;
+            $inner = preg_replace_callback($block, function (array $m) use (&$i, $aligns): string {
+                $align = $aligns[$i++];
+
+                return $align === null ? $m[0] : '<table style="width: 100%; border-collapse: collapse;"><tbody><tr><td data-bw="0" style="border: 0; padding: 0; text-align: '.$align.';">'.$m[0].'</td></tr></tbody></table>';
+            }, $inner) ?? $inner;
+
+            return '<'.$tag.$attributes.'>'.$inner.'</'.$tag.'>';
+        }, $html) ?? $html;
     }
 
     /**
