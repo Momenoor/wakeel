@@ -110,6 +110,7 @@ class AppServiceProvider extends ServiceProvider
         FilamentAsset::register([
             Js::make('rich-content-plugins/font-size', resource_path('js/filament/rich-content-plugins/font-size.js'))->loadedOnRequest(),
             Js::make('rich-content-plugins/cell-background', resource_path('js/filament/rich-content-plugins/cell-background.js'))->loadedOnRequest(),
+            Js::make('rich-content-plugins/table-format', resource_path('js/filament/rich-content-plugins/table-format.js'))->loadedOnRequest(),
         ]);
 
         // The font that draws the Dirham sign, on every panel page.

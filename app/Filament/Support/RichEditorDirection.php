@@ -36,8 +36,11 @@ class RichEditorDirection
 
         return $editor
             ->tools(self::tools())
-            // And a font size dropdown, in every editor.
-            ->plugins([EditorFontSize::make(), EditorCellBackground::make()])
+            // And a font size dropdown, table shading, borders and cell
+            // alignment, and the HTML source — in every editor — with images
+            // that can be dragged to a new size.
+            ->plugins([EditorFontSize::make(), EditorCellBackground::make(), EditorTableFormat::make(), EditorSourceCode::make()])
+            ->resizableImages()
             ->toolbarButtons(fn (RichEditor $component): array => self::toolbar(
                 $toolbar === null ? $component->getDefaultToolbarButtons() : $component->evaluate($toolbar),
             ));
@@ -74,11 +77,21 @@ class RichEditorDirection
         // The font size dropdown after the first group (bold, italic…).
         array_splice($toolbar, min(1, count($toolbar)), 0, [[EditorFontSize::toolbarGroup()]]);
 
-        // …and the cell shading one, only where the editor has a table button.
+        // …and the table ones — cell shading, border width and colour, cell
+        // alignment — only where the editor has a table button.
         $hasTable = collect($toolbar)->flatten()->contains(fn ($button) => $button === 'table');
         if ($hasTable) {
-            array_splice($toolbar, min(2, count($toolbar)), 0, [[EditorCellBackground::toolbarGroup()]]);
+            array_splice($toolbar, min(2, count($toolbar)), 0, [[
+                EditorCellBackground::toolbarGroup(),
+                EditorTableFormat::widthGroup(),
+                EditorTableFormat::sidesGroup(),
+                EditorTableFormat::colourGroup(),
+                EditorTableFormat::alignmentGroup(),
+            ]]);
         }
+
+        // The HTML source, last.
+        $toolbar[] = ['sourceCode'];
 
         return $toolbar;
     }
