@@ -55,6 +55,8 @@ return [
         'tenant_id' => env('MICROSOFT_TENANT_ID'),
         'redirect_uri' => env('MICROSOFT_REDIRECT_URI'),
         'user_email' => env('MICROSOFT_CALENDAR_EMAIL'),
+        // Teams meetings made from the system start recording by themselves.
+        'auto_record' => filter_var(env('OUTLOOK_AUTO_RECORD', true), FILTER_VALIDATE_BOOLEAN),
     ],
 
     'whatsapp' => [

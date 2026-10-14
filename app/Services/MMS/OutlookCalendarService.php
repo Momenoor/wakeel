@@ -7,6 +7,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class OutlookCalendarService
 {
@@ -131,7 +132,61 @@ class OutlookCalendarService
             throw new \RuntimeException('Failed to create Outlook event: '.$response->body());
         }
 
-        return $response->json();
+        $created = $response->json();
+
+        if ($payload['isOnlineMeeting']) {
+            $this->autoRecord(self::teamsLink($created));
+        }
+
+        return $created;
+    }
+
+    /**
+     * Makes a Teams meeting record itself when it starts: the online meeting
+     * behind the join link gets recordAutomatically (Microsoft Graph, the
+     * onlineMeetings API — it is not part of the calendar event). Done after
+     * the event is made and again after it is edited; it is idempotent.
+     *
+     * Never stops the meeting being made: when the tenant does not allow it
+     * (the OnlineMeetings.ReadWrite.All permission, an application access
+     * policy for the mailbox, a Teams licence that records automatically) it is
+     * logged and the meeting stays as it was.
+     *
+     * @return bool whether Teams was told to record automatically
+     */
+    public function autoRecord(?string $joinUrl): bool
+    {
+        if (blank($joinUrl) || ! config('services.outlook.auto_record')) {
+            return false;
+        }
+
+        try {
+            $token = $this->getAccessToken();
+            // The user's id: the onlineMeetings API takes it, not the address.
+            $userId = Http::withToken($token)->get("https://graph.microsoft.com/v1.0/users/{$this->getUserEmail()}", ['$select' => 'id'])->json('id');
+            $meetings = Http::withToken($token)->get("https://graph.microsoft.com/v1.0/users/{$userId}/onlineMeetings", [
+                '$filter' => "JoinWebUrl eq '".str_replace("'", "''", $joinUrl)."'",
+            ]);
+            $meetingId = $meetings->json('value.0.id');
+
+            if (blank($userId) || $meetings->failed() || blank($meetingId)) {
+                Log::warning('Teams auto-record: the online meeting was not found', ['status' => $meetings->status(), 'body' => $meetings->body()]);
+
+                return false;
+            }
+
+            $patched = Http::withToken($token)->patch("https://graph.microsoft.com/v1.0/users/{$userId}/onlineMeetings/{$meetingId}", ['recordAutomatically' => true]);
+
+            if ($patched->failed()) {
+                Log::warning('Teams auto-record: Teams refused', ['status' => $patched->status(), 'body' => $patched->body()]);
+            }
+
+            return $patched->successful();
+        } catch (\Throwable $e) {
+            Log::warning('Teams auto-record failed: '.$e->getMessage());
+
+            return false;
+        }
     }
 
     /**
@@ -181,6 +236,11 @@ class OutlookCalendarService
 
         if ($response->failed()) {
             throw new \RuntimeException('Failed to update Outlook event: '.$response->body());
+        }
+
+        // Edited: still recording by itself.
+        if (! empty($eventData['is_teams_meeting'])) {
+            $this->autoRecord($eventData['online_meeting_url'] ?? null);
         }
 
         return $response->json();
