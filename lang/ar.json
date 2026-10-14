@@ -3962,5 +3962,8 @@
     "This meeting overlaps another one": "هذا الاجتماع يتداخل مع اجتماع آخر",
     "This meeting will be running during another one:": "سيكون هذا الاجتماع قائماً أثناء اجتماع آخر:",
     "Create it anyway?": "هل تريد إنشاءه رغم ذلك؟",
-    "Create it anyway": "إنشاؤه رغم ذلك"
+    "Create it anyway": "إنشاؤه رغم ذلك",
+    "Current and upcoming meetings on this matter that have no minutes yet. Its date, time and Teams link go in the letter; no new meeting is made.": "الاجتماعات الحالية والقادمة لهذه القضية التي لا محضر لها بعد. يوضع تاريخه ووقته ورابط Teams في الخطاب، ولا يُنشأ اجتماع جديد.",
+    "Show in the live view": "إظهار في العرض المباشر",
+    "Off: the attendees watching do not see it; the minutes still have it.": "متوقف: لا يراه الحاضرون المتابعون، ويبقى في المحضر."
 }

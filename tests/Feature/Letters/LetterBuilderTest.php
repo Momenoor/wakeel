@@ -761,6 +761,19 @@ class LetterBuilderTest extends TestCase
         $this->get(LetterheadResource::getUrl('design', ['record' => $letterhead]))->assertSuccessful();
     }
 
+    public function test_the_designer_survives_an_emptied_number_box(): void
+    {
+        $letterhead = Letterhead::create(['name' => 'Main', 'elements' => Letterhead::defaultElements()]);
+
+        // A position or size cleared (or mistyped) is text, not a number: the page draws on, it does not fail.
+        Livewire::test(DesignLetterhead::class, ['record' => $letterhead->getRouteKey()])
+            ->set('elements.0.x', '')
+            ->set('elements.0.y', 'abc')
+            ->set('elements.0.width', '')
+            ->set('elements.0.font_size', '')
+            ->assertSuccessful();
+    }
+
     public function test_the_first_page_and_the_others_have_their_own_top_and_bottom_margins(): void
     {
         $letterhead = Letterhead::create([

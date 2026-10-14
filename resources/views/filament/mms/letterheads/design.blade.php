@@ -1,5 +1,7 @@
 @php
     [$pageWidth, $pageHeight] = $this->pageSize();
+    // A number box left empty or mistyped is text: it counts as its default, instead of breaking the page.
+    $num = fn ($value, $default = 0): float => is_numeric($value) ? (float) $value : (float) $default;
     $background = $this->record->url($this->record->first_page_background);
     $selectedElement = $selected !== null ? ($elements[$selected] ?? null) : null;
     $types = [
@@ -75,7 +77,7 @@
                 style="position: relative; width: 100%; aspect-ratio: {{ $pageWidth }} / {{ $pageHeight }}; container-type: inline-size; background: #fff {{ $background ? 'url('.e($background).') center / 100% 100% no-repeat' : '' }}; box-shadow: 0 1px 8px rgba(0,0,0,.25); user-select: none; touch-action: none;"
             >
                 {{-- The text area between the margins --}}
-                <div style="position: absolute; left: {{ $this->record->margin_left / $pageWidth * 100 }}%; right: {{ $this->record->margin_right / $pageWidth * 100 }}%; top: {{ $this->record->margin_top / $pageHeight * 100 }}%; bottom: {{ $this->record->margin_bottom / $pageHeight * 100 }}%; border: 1px dashed rgba(59,130,246,.45); pointer-events: none;"></div>
+                <div style="position: absolute; left: {{ $num($this->record->margin_left) / $pageWidth * 100 }}%; right: {{ $num($this->record->margin_right) / $pageWidth * 100 }}%; top: {{ $num($this->record->margin_top) / $pageHeight * 100 }}%; bottom: {{ $num($this->record->margin_bottom) / $pageHeight * 100 }}%; border: 1px dashed rgba(59,130,246,.45); pointer-events: none;"></div>
 
                 @foreach ($elements as $index => $element)
                     @continue(in_array($element['page'] ?? 'first', ['rest', \App\Models\Letterhead::AFTER_TEXT], true))
@@ -84,11 +86,11 @@
                         wire:key="element-{{ $index }}-{{ $element['type'] }}"
                         data-element="{{ $index }}"
                         x-on:pointerdown.prevent="start($event, {{ $index }})"
-                        style="position: absolute; cursor: move; {{ $horizontal }}: {{ ($element['x'] ?? 0) / $pageWidth * 100 }}%; {{ $vertical }}: {{ ($element['y'] ?? 0) / $pageHeight * 100 }}%; width: {{ ($element['width'] ?? 60) / $pageWidth * 100 }}%; font-size: {{ ($element['font_size'] ?? 11) * 0.168 }}cqw; color: {{ e($element['color'] ?? '#111827') }}; text-align: {{ e($element['align'] ?? 'left') }}; font-weight: {{ ! empty($element['bold']) ? 700 : 400 }}; outline: {{ $selected === $index ? '2px solid #2563eb' : '1px dashed rgba(107,114,128,.6)' }}; background: {{ $selected === $index ? 'rgba(37,99,235,.08)' : 'transparent' }}; line-height: 1.3; min-height: 1em;"
+                        style="position: absolute; cursor: move; {{ $horizontal }}: {{ $num($element['x'] ?? 0) / $pageWidth * 100 }}%; {{ $vertical }}: {{ $num($element['y'] ?? 0) / $pageHeight * 100 }}%; width: {{ $num($element['width'] ?? 60, 60) / $pageWidth * 100 }}%; font-size: {{ $num($element['font_size'] ?? 11, 11) * 0.168 }}cqw; color: {{ e($element['color'] ?? '#111827') }}; text-align: {{ e($element['align'] ?? 'left') }}; font-weight: {{ ! empty($element['bold']) ? 700 : 400 }}; outline: {{ $selected === $index ? '2px solid #2563eb' : '1px dashed rgba(107,114,128,.6)' }}; background: {{ $selected === $index ? 'rgba(37,99,235,.08)' : 'transparent' }}; line-height: 1.3; min-height: 1em;"
                         dir="{{ in_array($element['type'], ['reference', 'date', 'text']) ? 'rtl' : 'ltr' }}"
                     >
                         @if ($element['type'] === 'line')
-                            <div style="border-top: {{ max(1, ($element['font_size'] ?? 3) / 3) }}px solid {{ e($element['color'] ?? '#111827') }}; margin: 0.4em 0;"></div>
+                            <div style="border-top: {{ max(1, $num($element['font_size'] ?? 3, 3) / 3) }}px solid {{ e($element['color'] ?? '#111827') }}; margin: 0.4em 0;"></div>
                         @elseif ($element['type'] === 'image' && filled($element['content'] ?? null))
                             <img src="{{ $this->record->url($element['content']) }}" style="width: 100%; display: block; pointer-events: none;" alt="">
                         @elseif ($element['type'] === 'logo')

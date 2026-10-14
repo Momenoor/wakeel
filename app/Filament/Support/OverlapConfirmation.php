@@ -39,7 +39,8 @@ class OverlapConfirmation
             ->modalIcon(fn (array $arguments) => $asking($arguments) ? 'heroicon-o-exclamation-triangle' : null)
             ->modalIconColor('danger')
             ->modalSubmitActionLabel(fn (array $arguments) => $asking($arguments) ? __('Create it anyway') : $submitLabel)
-            ->modalSubmitAction(fn (Action $submit, array $arguments) => $asking($arguments) ? $submit->color('danger') : $submit)
+            // Named $action: Filament hands the modal's own submit button under that name (any other name gets the main action).
+            ->modalSubmitAction(fn (Action $action, array $arguments) => $asking($arguments) ? $action->color('danger') : $action)
             ->modalWidth(fn (array $arguments) => $asking($arguments) ? 'lg' : $width);
     }
 

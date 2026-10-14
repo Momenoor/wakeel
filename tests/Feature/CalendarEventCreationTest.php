@@ -263,4 +263,25 @@ class CalendarEventCreationTest extends TestCase
 
         $this->assertSame(3, CalendarEvent::count());
     }
+
+    public function test_the_modals_submit_button_is_the_submit_button_not_the_action_itself(): void
+    {
+        $page = Livewire::test(ListCalendarEvents::class)->mountAction(TestAction::make('createSingle')->table());
+        $submit = $page->instance()->getMountedAction()->getModalSubmitAction();
+
+        // The button that submits the form (not the main action, which would only open the modal again).
+        $this->assertSame('submit', $submit->getName());
+
+        // Asked about an overlap: the same button, in danger colour.
+        $first = CalendarEvent::create(['title' => 'الأول', 'type' => 'single', 'start_datetime' => '2026-10-20 10:00:00', 'end_datetime' => '2026-10-20 11:00:00']);
+        $asking = Livewire::test(ListCalendarEvents::class)
+            ->mountAction(TestAction::make('createSingle')->table())
+            ->fillForm(['title' => 'الثاني', 'start_datetime' => '2026-10-20 10:30:00', 'end_datetime' => '2026-10-20 11:30:00', 'sync_to_outlook' => false])
+            ->callMountedAction();
+        $button = $asking->instance()->getMountedAction()->getModalSubmitAction();
+        $this->assertSame('submit', $button->getName());
+        $this->assertSame('danger', $button->getColor());
+        $this->assertSame(1, CalendarEvent::count());
+        $this->assertNotNull($first);
+    }
 }
