@@ -330,7 +330,7 @@ class LetterPdf
             .($this->realBold()
                 ? 'strong, b, h1, h2, h3, th { font-weight: bold; }'
                 : 'strong, b, h1, h2, h3, th { font-weight: normal; text-outline-width: 0.12mm; text-outline-color: #111827; }')
-            .'.recipient { margin: 0; } .recipient-email { margin: 0 0 4pt 0; text-align: left; }'
+            .'.recipient { margin: 0; } .recipient-email { margin: 0 0 4pt 0; text-align: left; } .recipient-line { margin: 0 0 4pt 0; }'
             .'table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid #9ca3af; padding: 4pt; }';
 
         $header = fn (string $name, array $pages) => '<htmlpageheader name="'.$name.'">'

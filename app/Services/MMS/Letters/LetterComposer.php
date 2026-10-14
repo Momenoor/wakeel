@@ -513,7 +513,7 @@ class LetterComposer
                 }
 
                 if ($end === null) {
-                    $html .= '<p class="recipient-email">'.$startHtml.'</p>';
+                    $html .= '<p class="recipient-line" dir="'.($arabic ? 'rtl' : 'ltr').'" style="text-align: '.($arabic ? 'right' : 'left').';">'.$startHtml.'</p>';
 
                     continue;
                 }
