@@ -2,9 +2,10 @@
 
 namespace App\Filament\Pms\Resources\OwnerProfiles\Schemas;
 
+use App\Filament\Support\ContactFields;
+use App\Filament\Support\IbanField;
 use App\Models\OwnerGroup;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
@@ -29,15 +30,8 @@ class OwnerProfileForm
                             ->required()
                             ->maxLength(255)
                             ->columnSpanFull(),
-                        TagsInput::make('phone')
-                            ->label(__('Phone'))
-                            ->trim()
-                            ->splitKeys(['Tab', ' ', ',', 'Enter']),
-                        TagsInput::make('email')
-                            ->label(__('Email'))
-                            ->trim()
-                            ->splitKeys(['Tab', ' ', ',', 'Enter'])
-                            ->nestedRecursiveRules(['email']),
+                        ContactFields::phone(),
+                        ContactFields::email(),
                         TextInput::make('identification_number')
                             ->label(__('Identification Number (Emirates ID / Passport)'))
                             ->maxLength(255),
@@ -70,14 +64,7 @@ class OwnerProfileForm
                         TextInput::make('bank_account_no')
                             ->label(__('Account No'))
                             ->maxLength(255),
-                        TextInput::make('iban')
-                            ->label(__('IBAN'))
-                            ->maxLength(34)
-                            ->rule('regex:/^AE\d{21}$/')
-                            ->validationMessages([
-                                'regex' => __('A UAE IBAN is AE followed by 21 digits.'),
-                            ])
-                            ->placeholder('AE070331234567890123456'),
+                        IbanField::make(),
                     ])->columns(3),
             ]);
     }

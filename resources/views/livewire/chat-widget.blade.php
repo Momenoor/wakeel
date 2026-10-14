@@ -11,7 +11,7 @@
 --}}
 <div>
 <div
-    x-data="{
+    x-data="wkBubble('chat', {
         {{--
             The full Chat page fills exactly the rest of the screen: no page
             scrollbar, only the conversation list and the messages scroll
@@ -32,75 +32,6 @@
             }
         },
 
-        {{--
-            The popup's bubble can be dragged anywhere, so it never sits on
-            top of a page's own buttons. pos is the bubble's top-left in
-            viewport pixels (null = the default bottom corner), remembered
-            per browser. The panel opens on whichever side has room.
-        --}}
-        pos: null,
-        drag: null,
-        moved: false,
-        loadPos() {
-            try { this.pos = JSON.parse(localStorage.getItem('wakeel.chat.position')); } catch (e) { this.pos = null; }
-            this.clamp();
-        },
-        clamp() {
-            if (! this.pos) { return; }
-            this.pos = {
-                x: Math.max(8, Math.min(this.pos.x, window.innerWidth - 64)),
-                y: Math.max(8, Math.min(this.pos.y, window.innerHeight - 64)),
-            };
-        },
-        startDrag(e) {
-            if (e.button !== undefined && e.button !== 0) { return; }
-            const r = e.currentTarget.getBoundingClientRect();
-            this.drag = { dx: e.clientX - r.left, dy: e.clientY - r.top, sx: e.clientX, sy: e.clientY };
-            this.moved = false;
-            e.currentTarget.setPointerCapture(e.pointerId);
-        },
-        onDrag(e) {
-            if (! this.drag) { return; }
-            if (! this.moved && Math.hypot(e.clientX - this.drag.sx, e.clientY - this.drag.sy) < 5) { return; }
-            this.moved = true;
-            this.pos = { x: e.clientX - this.drag.dx, y: e.clientY - this.drag.dy };
-            this.clamp();
-        },
-        endDrag() {
-            if (this.drag && this.moved) {
-                try { localStorage.setItem('wakeel.chat.position', JSON.stringify(this.pos)); } catch (e) {}
-            }
-            this.drag = null;
-        },
-        clicked() {
-            if (this.moved) { this.moved = false; return; }
-            this.toggle(! this.$wire.isOpen);
-        },
-        {{-- Shown or hidden at once, here; the server keeps it (and fills
-             the panel when opened) meanwhile. Waiting for it first made
-             every open and close take a round trip. --}}
-        toggle(open) {
-            this.$wire.isOpen = open;
-            this.$wire.setOpen(open);
-            this.storeOpen(open);
-        },
-        {{-- Open or minimised, kept for this tab's next pages: the browser's
-             own word wins — the server's session could be written back by
-             another request running at the same time, and the bubble opened
-             again on the next page. Pinned: always open. --}}
-        storeOpen(open) {
-            try { sessionStorage.setItem('wakeel.chat.open', open ? '1' : '0'); } catch (e) {}
-        },
-        restoreOpen() {
-            let stored = null;
-            try { stored = sessionStorage.getItem('wakeel.chat.open'); } catch (e) {}
-            if (stored !== null && ! this.docked() && (stored === '1') !== this.$wire.isOpen) {
-                this.$wire.isOpen = stored === '1';
-                this.$wire.setOpen(stored === '1');
-            }
-            // Opened by the page itself (a new message): kept too.
-            this.$wire.$watch('isOpen', (open) => this.storeOpen(open));
-        },
         {{-- Two fingers on the popup (touch screens): its size follows the pinch,
              remembered in this browser. --}}
         scale: 1,
@@ -110,9 +41,6 @@
                 const s = parseFloat(localStorage.getItem('wakeel.chat.scale'));
                 if (s) { this.scale = Math.min(1.5, Math.max(0.75, s)); }
             } catch (e) {}
-        },
-        gap(e) {
-            return Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         },
         pinchStart(e) {
             if (this.docked() || e.touches.length !== 2) { return; }
@@ -147,7 +75,7 @@
                 'align-items:' + (left ? 'flex-start' : 'flex-end'),
             ].join('; ');
         },
-    }"
+    })"
     x-init="
         if (@js(! $isPopup)) {
             fillViewport();

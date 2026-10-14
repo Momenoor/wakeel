@@ -3905,5 +3905,7 @@
     "Play": "تشغيل",
     "Speed": "السرعة",
     "Create from Word file": "إنشاء من ملف Word",
-    "Word file (.docx)": "ملف Word ‏(.docx)"
+    "Word file (.docx)": "ملف Word ‏(.docx)",
+    "Cell shading": "تظليل الخلية",
+    "No shading": "بدون تظليل"
 }

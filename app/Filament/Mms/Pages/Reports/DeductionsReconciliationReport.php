@@ -4,9 +4,9 @@ namespace App\Filament\Mms\Pages\Reports;
 
 use App\Enums\FeeType;
 use App\Filament\Mms\Clusters\Reports;
-use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Models\Matter;
 use App\Support\ReportDateRangeFilter;
+use App\Support\ReportMatterColumns;
 use App\Support\ReportPrintAction;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
@@ -140,20 +140,9 @@ class DeductionsReconciliationReport extends Page implements HasTable
             ->emptyStateDescription(__('No matter matches these filters.'))
             ->emptyStateIcon('heroicon-o-check-circle')
             ->columns([
-                TextColumn::make('reference')
-                    ->label(__('Matter'))
-                    ->getStateUsing(fn (Matter $record) => $record->year.'/'.$record->number)
-                    ->url(fn (Matter $record) => MatterResource::getUrl('view', ['record' => $record]))
-                    ->weight('bold')
-                    ->searchable(query: fn (Builder $query, string $search) => $query->where(
-                        fn ($q) => $q->where('number', 'like', "%{$search}%")
-                            ->orWhere('year', 'like', "%{$search}%")
-                    )),
+                ReportMatterColumns::reference(),
 
-                TextColumn::make('court.name')
-                    ->label(__('Court / Type'))
-                    ->description(fn (Matter $record) => $record->type?->name)
-                    ->wrap(),
+                ReportMatterColumns::courtAndType(),
 
                 TextColumn::make('revenue_billed')
                     ->label(__('Net Billed'))

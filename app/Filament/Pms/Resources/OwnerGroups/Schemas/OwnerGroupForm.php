@@ -2,9 +2,10 @@
 
 namespace App\Filament\Pms\Resources\OwnerGroups\Schemas;
 
+use App\Filament\Support\ContactFields;
+use App\Filament\Support\IbanField;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Repeater\TableColumn;
-use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
@@ -29,15 +30,8 @@ class OwnerGroupForm
                             ->required()
                             ->maxLength(255)
                             ->columnSpanFull(),
-                        TagsInput::make('phone')
-                            ->label(__('Phone'))
-                            ->trim()
-                            ->splitKeys(['Tab', ' ', ',', 'Enter']),
-                        TagsInput::make('email')
-                            ->label(__('Email'))
-                            ->trim()
-                            ->splitKeys(['Tab', ' ', ',', 'Enter'])
-                            ->nestedRecursiveRules(['email']),
+                        ContactFields::phone(),
+                        ContactFields::email(),
                         TextInput::make('trn')
                             ->label(__('TRN'))
                             ->maxLength(255),
@@ -57,14 +51,7 @@ class OwnerGroupForm
                                 TextInput::make('account_no')
                                     ->label(__('Account No'))
                                     ->maxLength(255),
-                                TextInput::make('iban')
-                                    ->label(__('IBAN'))
-                                    ->maxLength(34)
-                                    ->rule('regex:/^AE\d{21}$/')
-                                    ->validationMessages([
-                                        'regex' => __('A UAE IBAN is AE followed by 21 digits.'),
-                                    ])
-                                    ->placeholder('AE070331234567890123456'),
+                                IbanField::make(),
                                 Toggle::make('is_default')
                                     ->label(__('Default')),
                             ])

@@ -4,14 +4,11 @@ namespace App\Filament\Pms\Pages;
 
 use App\Filament\Pms\Pages\Schemas\PMSSettingsForm;
 use App\Filament\Shared\Clusters\Settings;
+use App\Filament\Support\SettingsForm;
 use App\Models\Setting;
 use BackedEnum;
-use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Filament\Schemas\Components\Actions;
-use Filament\Schemas\Components\EmbeddedSchema;
-use Filament\Schemas\Components\Form;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 
@@ -67,21 +64,7 @@ class PMSSettings extends Page
     public function content(Schema $schema): Schema
     {
         return $schema->components([
-            Form::make([
-                EmbeddedSchema::make('form'),
-            ])
-                ->id('form')
-                ->livewireSubmitHandler('save')
-                ->footer([
-                    Actions::make([
-                        Action::make('save')
-                            ->label(__('Save Settings'))
-                            ->submit('save')
-                            ->icon(Heroicon::Check)
-                            ->color('primary')
-                            ->keyBindings(['mod+s']),
-                    ])->key('form-actions'),
-                ]),
+            SettingsForm::make(),
         ]);
     }
 

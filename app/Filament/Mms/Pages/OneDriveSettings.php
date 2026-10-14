@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Pages;
 use App\Filament\Mms\Pages\Concerns\ReviewsOneDriveFolders;
 use App\Filament\Mms\Resources\Types\Schemas\TypeForm;
 use App\Filament\Shared\Clusters\Settings;
+use App\Filament\Support\SettingsForm;
 use App\Models\Setting;
 use App\Models\Type;
 use App\Services\MMS\MatterOneDriveFolders;
@@ -19,9 +20,7 @@ use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions;
-use Filament\Schemas\Components\EmbeddedSchema;
 use Filament\Schemas\Components\EmbeddedTable;
-use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
@@ -201,21 +200,7 @@ class OneDriveSettings extends Page implements HasTable
     public function content(Schema $schema): Schema
     {
         return $schema->components([
-            Form::make([
-                EmbeddedSchema::make('form'),
-            ])
-                ->id('form')
-                ->livewireSubmitHandler('save')
-                ->footer([
-                    Actions::make([
-                        Action::make('save')
-                            ->label(__('Save Settings'))
-                            ->submit('save')
-                            ->icon(Heroicon::Check)
-                            ->color('primary')
-                            ->keyBindings(['mod+s']),
-                    ])->key('form-actions'),
-                ]),
+            SettingsForm::make(),
 
             // The active matters' existing folders: found by number and
             // year, standardised one decision at a time (ReviewsOneDriveFolders).

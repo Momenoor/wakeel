@@ -150,7 +150,7 @@ class ProgressRelationManager extends RelationManager
                             ->body(trim(($result['emails'] ? trans_choice(':count other email from the parties kept.|:count other emails from the parties kept.', $result['emails'], ['count' => $result['emails']]) : '')
                                 ."\n".implode("\n", $result['errors'])) ?: null)
                             ->status($result['errors'] ? 'warning' : 'success')
-                            ->persistent($result['errors'] !== [])
+                            ->duration($result['errors'] !== [] ? 'persistent' : 6000)
                             ->send();
                     }),
                 CreateAction::make()

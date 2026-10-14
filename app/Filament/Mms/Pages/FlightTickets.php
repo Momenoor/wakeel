@@ -6,13 +6,8 @@ use App\Enums\FlightTicketStatus;
 use App\Filament\Concerns\HasModuleGate;
 use App\Filament\Mms\Resources\EmployeeProfiles\EmployeeProfileResource;
 use App\Models\FlightTicket;
-use App\Services\MMS\FlightTicketService;
-use App\Support\Currency;
+use App\Support\FlightTicketTable;
 use BackedEnum;
-use Filament\Actions\Action;
-use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
@@ -20,8 +15,6 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Carbon;
-use Throwable;
 
 /**
  * Every employee's flight tickets in one list — what is due, what is in a
@@ -75,29 +68,8 @@ class FlightTickets extends Page implements HasTable
                     ->url(fn (FlightTicket $record): ?string => $record->party?->employeeProfile
                         ? EmployeeProfileResource::getUrl('edit', ['record' => $record->party->employeeProfile])
                         : null),
-                TextColumn::make('year')
-                    ->label(__('Year'))
-                    ->sortable(),
-                TextColumn::make('amount')
-                    ->label(Currency::label(__('Amount (AED)')))
-                    ->numeric(decimalPlaces: 2)
-                    ->description(fn (FlightTicket $record): ?string => $record->is_prorated ? __('pro-rated') : null),
-                TextColumn::make('status')
-                    ->label(__('Status'))
-                    ->state(fn (FlightTicket $record): FlightTicketStatus => $record->status())
-                    ->badge(),
-                TextColumn::make('payrollRun.period')
-                    ->label(__('Payroll Run'))
-                    ->placeholder('—'),
-                TextColumn::make('paid_at')
-                    ->label(__('Paid On'))
-                    ->date('d/m/Y')
-                    ->placeholder('—')
-                    ->description(fn (FlightTicket $record): ?string => match ($record->paid_via) {
-                        FlightTicket::PAID_VIA_PAYROLL => __('Through payroll'),
-                        FlightTicket::PAID_VIA_DIRECT => __('Paid directly'),
-                        default => null,
-                    }),
+                FlightTicketTable::yearColumn(),
+                ...FlightTicketTable::detailColumns(),
             ])
             ->defaultSort('year', 'desc')
             ->filters([
@@ -115,33 +87,7 @@ class FlightTickets extends Page implements HasTable
                     ->options(fn (): array => FlightTicket::query()->distinct()->orderByDesc('year')->pluck('year', 'year')->all()),
             ])
             ->recordActions([
-                Action::make('markPaid')
-                    ->label(__('Mark as paid'))
-                    ->icon('heroicon-o-check-circle')
-                    ->color('success')
-                    ->visible(fn (FlightTicket $record): bool => (auth()->user()?->can('Update:EmployeeProfile') ?? false)
-                        && $record->status() === FlightTicketStatus::DUE)
-                    ->modalHeading(__('Ticket paid outside payroll'))
-                    ->schema([
-                        DatePicker::make('paid_at')
-                            ->label(__('Paid On'))
-                            ->default(now())
-                            ->required(),
-                        TextInput::make('note')
-                            ->label(__('Note'))
-                            ->maxLength(255),
-                    ])
-                    ->action(function (FlightTicket $record, array $data): void {
-                        try {
-                            app(FlightTicketService::class)->markPaid($record, Carbon::parse($data['paid_at']), $data['note'] ?? null);
-                        } catch (Throwable $exception) {
-                            Notification::make()->danger()->title(__('Could not continue'))->body($exception->getMessage())->send();
-
-                            return;
-                        }
-
-                        Notification::make()->success()->title(__('Ticket marked as paid.'))->send();
-                    }),
+                FlightTicketTable::markPaidAction(fn (): bool => auth()->user()?->can('Update:EmployeeProfile') ?? false),
             ])
             ->emptyStateHeading(__('No flight tickets yet'));
     }

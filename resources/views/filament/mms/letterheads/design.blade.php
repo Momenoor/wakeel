@@ -157,33 +157,15 @@
                         </label>
 
                         @foreach (['x' => $horizontal === 'right' ? __('From right (mm)') : __('From left (mm)'), 'y' => $vertical === 'bottom' ? __('From bottom (mm)') : __('From top (mm)'), 'width' => __('Width (mm)'), 'font_size' => $selectedElement['type'] === 'line' ? __('Thickness') : __('Font size (pt)')] as $field => $label)
-                            <label style="font-size: .85rem;">{{ $label }}
-                                <x-filament::input.wrapper>
-                                    <x-filament::input type="number" step="0.5" wire:model.live.debounce.400ms="elements.{{ $selected }}.{{ $field }}" />
-                                </x-filament::input.wrapper>
-                            </label>
+                            <x-design.number-field :label="$label" :model="'elements.'.$selected.'.'.$field" />
                         @endforeach
 
                         @if (! in_array($selectedElement['type'], ['logo', 'image', 'line']))
-                            <label style="font-size: .85rem;">{{ __('Align') }}
-                                <x-filament::input.wrapper>
-                                    <x-filament::input.select wire:model.live="elements.{{ $selected }}.align">
-                                        <option value="left">{{ __('Left') }}</option>
-                                        <option value="center">{{ __('Center') }}</option>
-                                        <option value="right">{{ __('Right') }}</option>
-                                    </x-filament::input.select>
-                                </x-filament::input.wrapper>
-                            </label>
-                            <label style="font-size: .85rem; display: flex; align-items: center; gap: .4rem; margin-top: 1.4rem;">
-                                <x-filament::input.checkbox wire:model.live="elements.{{ $selected }}.bold" />
-                                {{ __('Bold') }}
-                            </label>
+                            <x-design.text-style :path="'elements.'.$selected" />
                         @endif
 
                         @if ($selectedElement['type'] !== 'image' && $selectedElement['type'] !== 'logo')
-                            <label style="font-size: .85rem;">{{ __('Colour') }}
-                                <input type="color" wire:model.live="elements.{{ $selected }}.color" style="width: 100%; height: 2.25rem; border-radius: .4rem;">
-                            </label>
+                            <x-design.colour-field :model="'elements.'.$selected.'.color'" />
                         @endif
 
                         @if ($selectedElement['type'] === 'text')

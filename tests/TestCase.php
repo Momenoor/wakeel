@@ -42,4 +42,24 @@ abstract class TestCase extends BaseTestCase
             );
         }
     }
+
+    /**
+     * The users plugin keeps the columns and entries registered at boot in
+     * statics, and LastSeen guards itself with one: the first test that listed
+     * users left its column object — with that test's rows — for every later
+     * test, and "the users table shows last seen" failed only in a full run.
+     * Emptied here, the next boot registers them fresh.
+     */
+    protected function tearDown(): void
+    {
+        foreach ([
+            [\TomatoPHP\FilamentUsers\Filament\Resources\Users\Tables\UsersTable::class, 'columns', []],
+            [\TomatoPHP\FilamentUsers\Filament\Resources\Users\Schemas\UserInfolist::class, 'schema', []],
+            [\App\Filament\Shared\Users\LastSeen::class, 'registered', false],
+        ] as [$class, $property, $empty]) {
+            (new \ReflectionProperty($class, $property))->setValue(null, $empty);
+        }
+
+        parent::tearDown();
+    }
 }

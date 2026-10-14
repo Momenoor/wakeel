@@ -20,6 +20,8 @@ use Illuminate\Support\Facades\Auth;
 
 class CreateBulkCalendarEventAction extends Action
 {
+    use SyncsEventToOutlook;
+
     public static function getDefaultName(): ?string
     {
         return 'createBulkEvent';
@@ -136,27 +138,7 @@ class CreateBulkCalendarEventAction extends Action
                 Matter::whereIn('id', $data['matter_ids'])->update(['next_session_date' => $data['start_datetime']]);
 
                 if ($toOutlook) {
-                    try {
-                        $outlookEvent = $outlookService->createEvent([
-                            'title' => $title,
-                            'start_datetime' => $data['start_datetime'],
-                            'end_datetime' => $data['end_datetime'] ?? null,
-                            'location' => $data['location'] ?? null,
-                            'is_teams_meeting' => $teams,
-                        ]);
-
-                        $event->update([
-                            'outlook_event_id' => $outlookEvent['id'],
-                            'synced_to_outlook' => true,
-                            'online_meeting_url' => $teams ? OutlookCalendarService::teamsLink($outlookEvent) : null,
-                        ]);
-                    } catch (\Exception $e) {
-                        Notification::make()
-                            ->title(__('Outlook Sync Failed'))
-                            ->body($e->getMessage())
-                            ->danger()
-                            ->send();
-                    }
+                    $this->pushToOutlook($outlookService, $event);
                 }
 
                 Notification::make()

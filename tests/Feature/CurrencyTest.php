@@ -52,7 +52,8 @@ class CurrencyTest extends TestCase
         $this->assertStringContainsString('fonts/aed.css', FilamentView::renderHook(PanelsRenderHook::HEAD_END)->toHtml());
 
         // The print pages that are documents of their own load it too.
-        foreach (['filament/pages/incentive/calculation-print.blade.php', 'filament/pages/incentive/calculation-print-assistant.blade.php', 'filament/pms/quotation-print.blade.php'] as $view) {
+        // (The two incentive documents share one layout, which holds the link.)
+        foreach (['components/incentive-print-layout.blade.php', 'filament/pms/quotation-print.blade.php'] as $view) {
             $this->assertStringContainsString('Currency::fontLink()', (string) file_get_contents(resource_path('views/'.$view)), $view);
         }
     }

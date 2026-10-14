@@ -2,11 +2,11 @@
 
 namespace App\Filament\Mms\Resources\Parties\Schemas;
 
+use App\Filament\Support\ContactFields;
 use App\Models\ExpertiseArea;
 use App\Models\Party;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Grid;
@@ -34,23 +34,14 @@ class PartyForm
                             ->helperText(__('As it must appear in letters and templates (e.g. an assistant\'s full registered name). Leave empty to use the name.'))
                             ->maxLength(255)
                             ->columnSpanFull(),
-                        TagsInput::make('phone')
-                            ->label(__('Phone'))
-                            ->trim()
-                            ->splitKeys(['Tab', ' ', ',', 'Enter'])
+                        ContactFields::phone()
                             ->nestedRecursiveRules([
                                 'min:9',
                                 'max:10',
                                 'starts_with:050,052,053,054,055,056,057,058,02,03,04,06,07,08,09',
                             ]),
-                        TagsInput::make('email')
-                            ->label(__('Email'))
-                            ->trim()
-                            ->placeholder(__('Enter email addresses separated by comma'))
-                            ->splitKeys(['Tab', ' ', ',', 'Enter'])
-                            ->nestedRecursiveRules([
-                                'email',
-                            ]),
+                        ContactFields::email()
+                            ->placeholder(__('Enter email addresses separated by comma')),
                         TextInput::make('fax')
                             ->label(__('Fax')),
                         // The company of an employee, the party an attendee came for.

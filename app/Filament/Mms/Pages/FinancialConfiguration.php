@@ -8,6 +8,7 @@ use App\Filament\Mms\Widgets\IncentiveExtraRulesOverviewWidget;
 use App\Filament\Mms\Widgets\IncentiveMetaAdjustmentsOverviewWidget;
 use App\Filament\Mms\Widgets\IncentiveTypeConfigsOverviewWidget;
 use App\Filament\Shared\Clusters\Settings;
+use App\Filament\Support\SettingsForm;
 use App\Models\Setting;
 use App\Support\ScreenPermissions;
 use BackedEnum;
@@ -211,12 +212,7 @@ class FinancialConfiguration extends Page
     protected function getIncentiveFormActions(): array
     {
         return [
-            Action::make('saveIncentive')
-                ->label(__('Save Settings'))
-                ->submit('saveIncentive')
-                ->icon(Heroicon::Check)
-                ->color('primary')
-                ->keyBindings(['mod+s']),
+            SettingsForm::saveAction('saveIncentive'),
         ];
     }
 
@@ -226,12 +222,7 @@ class FinancialConfiguration extends Page
     protected function getPayrollFormActions(): array
     {
         return [
-            Action::make('savePayroll')
-                ->label(__('Save Settings'))
-                ->submit('savePayroll')
-                ->icon(Heroicon::Check)
-                ->color('primary')
-                ->keyBindings(['mod+s']),
+            SettingsForm::saveAction('savePayroll'),
         ];
     }
 

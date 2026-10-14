@@ -57,7 +57,7 @@ class MatterForm
                                         ->required(),
                                     DateTimePicker::make('next_session_date')
                                         ->required()
-                                        ->format('Y-m-d h:m')
+                                        ->format('Y-m-d H:i')
                                         ->seconds(false)
                                         ->afterOrEqual('received_at')
                                         ->label(__('Next Session Date'))

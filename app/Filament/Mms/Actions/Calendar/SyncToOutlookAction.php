@@ -10,6 +10,8 @@ use Filament\Notifications\Notification;
 
 class SyncToOutlookAction extends Action
 {
+    use SyncsEventToOutlook;
+
     public static function getDefaultName(): ?string
     {
         return 'syncToOutlook';
@@ -31,32 +33,10 @@ class SyncToOutlookAction extends Action
                 if (! $record instanceof CalendarEvent) {
                     return;
                 }
-                try {
-                    $outlookEvent = $outlookService->createEvent([
-                        'title' => $record->title,
-                        'description' => $record->description,
-                        'start_datetime' => $record->start_datetime,
-                        'end_datetime' => $record->end_datetime,
-                        'location' => $record->location,
-                        'is_teams_meeting' => $record->is_teams_meeting,
-                    ]);
-
-                    $record->update([
-                        'outlook_event_id' => $outlookEvent['id'],
-                        'synced_to_outlook' => true,
-                        // A Teams link only for a meeting asked for and made.
-                        'online_meeting_url' => $record->is_teams_meeting ? OutlookCalendarService::teamsLink($outlookEvent) : null,
-                    ]);
-
+                if ($this->pushToOutlook($outlookService, $record)) {
                     Notification::make()
                         ->title(__('Synced to Outlook Successfully'))
                         ->success()
-                        ->send();
-                } catch (\Exception $e) {
-                    Notification::make()
-                        ->title(__('Outlook Sync Failed'))
-                        ->body($e->getMessage())
-                        ->danger()
                         ->send();
                 }
             });

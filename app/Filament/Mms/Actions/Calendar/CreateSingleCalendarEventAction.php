@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Auth;
 
 class CreateSingleCalendarEventAction extends Action
 {
+    use SyncsEventToOutlook;
+
     public static function getDefaultName(): ?string
     {
         return 'createSingleEvent';
@@ -50,28 +52,7 @@ class CreateSingleCalendarEventAction extends Action
                 }
 
                 if ($toOutlook) {
-                    try {
-                        $outlookEvent = $outlookService->createEvent([
-                            'title' => $data['title'],
-                            'description' => $data['description'] ?? null,
-                            'start_datetime' => $data['start_datetime'],
-                            'end_datetime' => $data['end_datetime'] ?? null,
-                            'location' => $data['location'] ?? null,
-                            'is_teams_meeting' => $teams,
-                        ]);
-
-                        $event->update([
-                            'outlook_event_id' => $outlookEvent['id'],
-                            'synced_to_outlook' => true,
-                            'online_meeting_url' => $teams ? OutlookCalendarService::teamsLink($outlookEvent) : null,
-                        ]);
-                    } catch (\Exception $e) {
-                        Notification::make()
-                            ->title(__('Outlook Sync Failed'))
-                            ->body($e->getMessage())
-                            ->danger()
-                            ->send();
-                    }
+                    $this->pushToOutlook($outlookService, $event);
                 }
 
                 Notification::make()

@@ -5,23 +5,23 @@ namespace App\Filament\Mms\Exports;
 use App\Enums\FeeType;
 use App\Models\Matter;
 use Filament\Actions\Exports\ExportColumn;
-use Filament\Actions\Exports\Exporter;
 use Filament\Actions\Exports\Models\Export;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Number;
-use OpenSpout\Common\Entity\Style\CellAlignment;
-use OpenSpout\Common\Entity\Style\Color;
-use OpenSpout\Common\Entity\Style\Style;
-use OpenSpout\Common\Exception\InvalidArgumentException;
-use OpenSpout\Writer\Exception\InvalidSheetNameException;
-use OpenSpout\Writer\Exception\WriterNotOpenedException;
-use OpenSpout\Writer\XLSX\Entity\SheetView;
 use OpenSpout\Writer\XLSX\Options;
-use OpenSpout\Writer\XLSX\Writer;
 
-class AssistantMattersExporter extends Exporter
+class AssistantMattersExporter extends MatterSpreadsheetExporter
 {
     protected static ?string $model = Matter::class;
+
+    protected function sheetName(): string
+    {
+        return 'Assistant Matters';
+    }
+
+    protected function sheetRightToLeft(): bool
+    {
+        return app()->getLocale() === 'ar';
+    }
 
     public static function getColumns(): array
     {
@@ -163,59 +163,6 @@ class AssistantMattersExporter extends Exporter
                 'mainExpertsOnly',
                 'matterParties' => fn ($q) => $q->with('party'),
             ]);
-    }
-
-    public function getXlsxCellStyle(): ?Style
-    {
-        return new Style()
-            ->setShouldWrapText()
-            ->setFontSize(11)
-            ->setFontName('Arial');
-    }
-
-    /**
-     * @throws InvalidArgumentException
-     */
-    public function getXlsxHeaderCellStyle(): ?Style
-    {
-        return new Style()
-            ->setFontBold()
-            ->setShouldWrapText()
-            ->setFontSize(11)
-            ->setFontName('Arial')
-            ->setFontColor(Color::rgb(255, 255, 255))
-            ->setBackgroundColor(Color::rgb(31, 56, 100))
-            ->setCellAlignment(CellAlignment::CENTER);
-    }
-
-    /**
-     * @throws InvalidSheetNameException
-     * @throws WriterNotOpenedException
-     * @throws InvalidArgumentException
-     */
-    public function configureXlsxWriterBeforeClose(Writer $writer): Writer
-    {
-        $sheetView = new SheetView;
-        $sheetView->setFreezeRow(2);
-        $sheetView->setRightToLeft(app()->getLocale() == 'ar');
-
-        $sheet = $writer->getCurrentSheet();
-        $sheet->setSheetView($sheetView);
-        $sheet->setName('Assistant Matters');
-
-        return $writer;
-    }
-
-    public static function getCompletedNotificationBody(Export $export): string
-    {
-        $body = trans_choice('export_completed', $export->successful_rows, ['count' => Number::format($export->successful_rows)]);
-
-        if ($failedRowsCount = $export->getFailedRowsCount()) {
-            $body .= ' '.trans_choice('export_failed', $failedRowsCount, ['count' => Number::format($failedRowsCount)]);
-
-        }
-
-        return $body;
     }
 
     public function getFileName(Export $export): string

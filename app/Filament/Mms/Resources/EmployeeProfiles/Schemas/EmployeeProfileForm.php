@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Resources\EmployeeProfiles\Schemas;
 
+use App\Filament\Support\IbanField;
 use App\Models\Party;
 use App\Support\Currency;
 use Filament\Forms\Components\DatePicker;
@@ -101,17 +102,7 @@ class EmployeeProfileForm
                         TextInput::make('bank_account_no')
                             ->label(__('Account No'))
                             ->maxLength(255),
-                        TextInput::make('iban')
-                            ->label(__('IBAN'))
-                            ->maxLength(34)
-                            // A UAE IBAN is AE plus 21 digits, always. Catching a
-                            // mistyped one here is the difference between a
-                            // rejected transfer and a salary paid to a stranger.
-                            ->rule('regex:/^AE\d{21}$/')
-                            ->validationMessages([
-                                'regex' => __('A UAE IBAN is AE followed by 21 digits.'),
-                            ])
-                            ->placeholder('AE070331234567890123456'),
+                        IbanField::make(),
                         TextInput::make('wps_routing_code')
                             ->label(__('Routing Code'))
                             ->maxLength(9)

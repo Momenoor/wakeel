@@ -3,12 +3,10 @@
 namespace App\Filament\Mms\Pages\Reports;
 
 use App\Filament\Mms\Clusters\Reports;
-use App\Filament\Mms\Resources\Matters\MatterResource;
-use App\Models\Court;
 use App\Models\Matter;
-use App\Models\Party;
-use App\Models\Type;
 use App\Support\ReportDateRangeFilter;
+use App\Support\ReportMatterColumns;
+use App\Support\ReportMatterFilters;
 use App\Support\ReportPrintAction;
 use App\Support\Sql;
 use BackedEnum;
@@ -128,26 +126,11 @@ class FeeCollectionAgingReport extends Page implements HasTable
             ->emptyStateDescription(__('No matter matches these filters with a balance owing.'))
             ->emptyStateIcon('heroicon-o-check-circle')
             ->columns([
-                TextColumn::make('reference')
-                    ->label(__('Matter'))
-                    ->getStateUsing(fn (Matter $record) => $record->year.'/'.$record->number)
-                    ->url(fn (Matter $record) => MatterResource::getUrl('view', ['record' => $record]))
-                    ->weight('bold')
-                    ->searchable(query: fn (Builder $query, string $search) => $query->where(
-                        fn ($q) => $q->where('matters.number', 'like', "%{$search}%")
-                            ->orWhere('matters.year', 'like', "%{$search}%")
-                    )),
+                ReportMatterColumns::reference(joined: true),
 
-                TextColumn::make('court.name')
-                    ->label(__('Court / Type'))
-                    ->description(fn (Matter $record) => $record->type?->name)
-                    ->wrap(),
+                ReportMatterColumns::courtAndType(),
 
-                TextColumn::make('assistants')
-                    ->label(__('Assistant'))
-                    ->getStateUsing(fn (Matter $record) => $record->assistantsOnly
-                        ->map(fn ($mp) => $mp->party?->name)->filter()->implode(', ') ?: '—')
-                    ->wrap(),
+                ReportMatterColumns::assistants(),
 
                 TextColumn::make('first_billed')
                     ->label(__('First Billed'))
@@ -224,31 +207,11 @@ class FeeCollectionAgingReport extends Page implements HasTable
                         };
                     }),
 
-                SelectFilter::make('court_id')
-                    ->label(__('Court'))
-                    ->options(fn () => Court::orderBy('name')->pluck('name', 'id'))
-                    ->searchable()
-                    ->preload(),
+                ReportMatterFilters::court(),
 
-                SelectFilter::make('type_id')
-                    ->label(__('Matter Type'))
-                    ->options(fn () => Type::orderBy('name')->pluck('name', 'id'))
-                    ->searchable()
-                    ->preload(),
+                ReportMatterFilters::matterType(),
 
-                SelectFilter::make('assistant')
-                    ->label(__('Assistant'))
-                    ->options(fn () => Party::withRole('expert', 'assistant')
-                        ->orderBy('name')->pluck('name', 'id'))
-                    ->searchable()
-                    ->preload()
-                    ->query(fn (Builder $query, array $data) => $query->when(
-                        $data['value'] ?? null,
-                        fn ($q, $partyId) => $q->whereHas(
-                            'assistantsOnly',
-                            fn ($a) => $a->where('party_id', $partyId)
-                        )
-                    )),
+                ReportMatterFilters::assistant(),
 
                 ReportDateRangeFilter::make(
                     column: 'billed.first_billed',

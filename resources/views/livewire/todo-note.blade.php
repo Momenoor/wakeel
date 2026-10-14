@@ -6,69 +6,7 @@
 --}}
 <div>
 <div
-    x-data="{
-        {{-- The bubble can be dragged anywhere (its own place, not the chat's), remembered per browser. --}}
-        pos: null,
-        drag: null,
-        moved: false,
-        loadPos() {
-            try { this.pos = JSON.parse(localStorage.getItem('wakeel.todo.position')); } catch (e) { this.pos = null; }
-            this.clamp();
-        },
-        clamp() {
-            if (! this.pos) { return; }
-            this.pos = {
-                x: Math.max(8, Math.min(this.pos.x, window.innerWidth - 64)),
-                y: Math.max(8, Math.min(this.pos.y, window.innerHeight - 64)),
-            };
-        },
-        startDrag(e) {
-            if (e.button !== undefined && e.button !== 0) { return; }
-            const r = e.currentTarget.getBoundingClientRect();
-            this.drag = { dx: e.clientX - r.left, dy: e.clientY - r.top, sx: e.clientX, sy: e.clientY };
-            this.moved = false;
-            e.currentTarget.setPointerCapture(e.pointerId);
-        },
-        onDrag(e) {
-            if (! this.drag) { return; }
-            if (! this.moved && Math.hypot(e.clientX - this.drag.sx, e.clientY - this.drag.sy) < 5) { return; }
-            this.moved = true;
-            this.pos = { x: e.clientX - this.drag.dx, y: e.clientY - this.drag.dy };
-            this.clamp();
-        },
-        endDrag() {
-            if (this.drag && this.moved) {
-                try { localStorage.setItem('wakeel.todo.position', JSON.stringify(this.pos)); } catch (e) {}
-            }
-            this.drag = null;
-        },
-        clicked() {
-            if (this.moved) { this.moved = false; return; }
-            this.toggle(! this.$wire.isOpen);
-        },
-        {{-- Shown or hidden at once; the server keeps it for the next page. --}}
-        toggle(open) {
-            this.$wire.isOpen = open;
-            this.$wire.setOpen(open);
-            this.storeOpen(open);
-        },
-        {{-- Open or minimised, kept for this tab's next pages: the browser's
-             own word wins — the server's session could be written back by
-             another request running at the same time, and the bubble opened
-             again on the next page. Pinned: always open. --}}
-        storeOpen(open) {
-            try { sessionStorage.setItem('wakeel.todo.open', open ? '1' : '0'); } catch (e) {}
-        },
-        restoreOpen() {
-            let stored = null;
-            try { stored = sessionStorage.getItem('wakeel.todo.open'); } catch (e) {}
-            if (stored !== null && ! this.docked() && (stored === '1') !== this.$wire.isOpen) {
-                this.$wire.isOpen = stored === '1';
-                this.$wire.setOpen(stored === '1');
-            }
-            // Opened by the page itself (a new message): kept too.
-            this.$wire.$watch('isOpen', (open) => this.storeOpen(open));
-        },
+    x-data="wkBubble('todo', {
         {{-- The note's width: dragged by either side border, saved for the user when let go. --}}
         width: @js($width),
         resizing: null,
@@ -89,9 +27,6 @@
         },
         {{-- Two fingers on the note (touch screens): the width follows the pinch, saved when let go. --}}
         pinch: null,
-        gap(e) {
-            return Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-        },
         pinchStart(e) {
             if (this.docked() || e.touches.length !== 2) { return; }
             this.pinch = { d: this.gap(e), w: this.width };
@@ -127,7 +62,7 @@
                 'align-items:' + (left ? 'flex-start' : 'flex-end'),
             ].join('; ');
         },
-    }"
+    })"
     x-init="loadPos(); restoreOpen(); window.addEventListener('resize', () => clamp())"
     x-on:keydown.escape.window="if ($wire.isOpen && ! docked()) { toggle(false) }"
     :style="placement()"

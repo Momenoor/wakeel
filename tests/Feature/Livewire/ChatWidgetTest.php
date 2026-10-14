@@ -16,6 +16,7 @@ use Filament\Facades\Filament;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
@@ -270,9 +271,10 @@ class ChatWidgetTest extends TestCase
         $this->assertTrue(ChatMessage::isAudio($voice->files()[0]));
         $this->assertSame('🎤 Voice note', $voice->preview());
 
-        // Played in the bubble — the voice note as sound, the video as video.
+        // Played in the bubble — the voice note by its WhatsApp-style player, the video as video.
         Livewire::test(ChatWidget::class)->call('selectConversation', $conversation->id)
-            ->assertSeeHtml('<audio controls preload="metadata" src="'.route('chat.attachment', [$voice, 0]).'"')
+            ->assertSeeHtml('wire:key="voice-'.($voice->id * 10).'"')
+            ->assertSeeHtml('wkVoice(')
             ->assertSeeHtml('<video controls preload="metadata" src="'.route('chat.attachment', [$video, 0]).'"');
 
         // Sent as a file the player can seek in.
@@ -420,6 +422,8 @@ class ChatWidgetTest extends TestCase
             ->assertSet('onlineUserIds', fn ($ids) => ! in_array($this->colleague->id, $ids));
 
         $this->colleague->forceFill(['last_seen_at' => now()])->save();
+        // The list is kept for a few seconds between checks: let it go to see the change.
+        Cache::forget('users.online');
 
         $widget->call('$refresh')
             ->assertSet('onlineUserIds', fn ($ids) => in_array($this->colleague->id, $ids));

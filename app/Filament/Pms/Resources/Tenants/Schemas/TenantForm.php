@@ -4,8 +4,8 @@ namespace App\Filament\Pms\Resources\Tenants\Schemas;
 
 use App\Enums\PMS\TenantIdentificationType;
 use App\Enums\PMS\TenantType;
+use App\Filament\Support\ContactFields;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -43,15 +43,8 @@ class TenantForm
                 ->required()
                 ->maxLength(255)
                 ->columnSpanFull(),
-            TagsInput::make('phone')
-                ->label(__('Phone'))
-                ->trim()
-                ->splitKeys(['Tab', ' ', ',', 'Enter']),
-            TagsInput::make('email')
-                ->label(__('Email'))
-                ->trim()
-                ->splitKeys(['Tab', ' ', ',', 'Enter'])
-                ->nestedRecursiveRules(['email']),
+            ContactFields::phone(),
+            ContactFields::email(),
             Select::make('tenant_type')
                 ->label(__('Tenant Type'))
                 ->options(TenantType::class)

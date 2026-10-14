@@ -24,9 +24,11 @@ class LetterTemplatesTable
                 TextColumn::make('name')
                     ->searchable(),
                 TextColumn::make('slug')
-                    ->searchable(),
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('subject')
-                    ->searchable(),
+                    ->searchable()
+                    ->limit(40),
                 TextColumn::make('locale')
                     ->searchable(),
                 IconColumn::make('is_active')
@@ -76,20 +78,20 @@ class LetterTemplatesTable
                     ->multiple(),
                 SelectFilter::make('type')
                     ->label(__('Matter type'))
-                    ->options(fn () => Type::query()->orderBy('name')->pluck('name', 'id'))
+                    ->options(fn() => Type::query()->orderBy('name')->pluck('name', 'id'))
                     ->searchable()
-                    ->query(fn (Builder $query, array $data) => filled($data['value'] ?? null)
-                        ? $query->where(fn (Builder $q) => $q->whereDoesntHave('types')->orWhereHas('types', fn (Builder $t) => $t->whereKey($data['value'])))
+                    ->query(fn(Builder $query, array $data) => filled($data['value'] ?? null)
+                        ? $query->where(fn(Builder $q) => $q->whereDoesntHave('types')->orWhereHas('types', fn(Builder $t) => $t->whereKey($data['value'])))
                         : $query),
                 SelectFilter::make('court')
                     ->label(__('Court'))
-                    ->options(fn () => Court::query()->orderBy('name')->pluck('name', 'id'))
+                    ->options(fn() => Court::query()->orderBy('name')->pluck('name', 'id'))
                     ->searchable()
-                    ->query(fn (Builder $query, array $data) => filled($data['value'] ?? null) ? $query->forCourt((int) $data['value']) : $query),
+                    ->query(fn(Builder $query, array $data) => filled($data['value'] ?? null) ? $query->forCourt((int)$data['value']) : $query),
                 // Written to these entities (police, the central bank …).
                 SelectFilter::make('entities')
                     ->label(__('External entity'))
-                    ->relationship('entities', 'name', fn (Builder $query) => $query->withRole('external'))
+                    ->relationship('entities', 'name', fn(Builder $query) => $query->withRole('external'))
                     ->multiple()
                     ->searchable()
                     ->preload(),

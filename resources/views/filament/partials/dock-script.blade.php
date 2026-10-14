@@ -26,6 +26,81 @@
         }
 
         document.addEventListener('alpine:init', () => {
+        // The to-do and chat bubbles: dragged anywhere on screen (the place is
+        // kept in this browser), clicked to open or shut (the answer is kept
+        // for this tab's next pages), and — on touch screens — pinched with two
+        // fingers. Each widget passes its own name ('todo', 'chat') for the
+        // keys it keeps, and its own parts as $extra (docked(), pin(), …).
+        Alpine.data('wkBubble', (name, extra = {}) => ({
+            pos: null,
+            drag: null,
+            moved: false,
+            loadPos() {
+                try { this.pos = JSON.parse(localStorage.getItem('wakeel.' + name + '.position')); } catch (e) { this.pos = null; }
+                this.clamp();
+            },
+            clamp() {
+                if (! this.pos) { return; }
+                this.pos = {
+                    x: Math.max(8, Math.min(this.pos.x, window.innerWidth - 64)),
+                    y: Math.max(8, Math.min(this.pos.y, window.innerHeight - 64)),
+                };
+            },
+            startDrag(e) {
+                if (e.button !== undefined && e.button !== 0) { return; }
+                const r = e.currentTarget.getBoundingClientRect();
+                this.drag = { dx: e.clientX - r.left, dy: e.clientY - r.top, sx: e.clientX, sy: e.clientY };
+                this.moved = false;
+                e.currentTarget.setPointerCapture(e.pointerId);
+            },
+            onDrag(e) {
+                if (! this.drag) { return; }
+                if (! this.moved && Math.hypot(e.clientX - this.drag.sx, e.clientY - this.drag.sy) < 5) { return; }
+                this.moved = true;
+                this.pos = { x: e.clientX - this.drag.dx, y: e.clientY - this.drag.dy };
+                this.clamp();
+            },
+            endDrag() {
+                if (this.drag && this.moved) {
+                    try { localStorage.setItem('wakeel.' + name + '.position', JSON.stringify(this.pos)); } catch (e) {}
+                }
+                this.drag = null;
+            },
+            clicked() {
+                if (this.moved) { this.moved = false; return; }
+                this.toggle(! this.$wire.isOpen);
+            },
+            // Shown or hidden at once, here; the server keeps it (and fills the
+            // panel when opened) meanwhile. Waiting for it first made every
+            // open and close take a round trip.
+            toggle(open) {
+                this.$wire.isOpen = open;
+                this.$wire.setOpen(open);
+                this.storeOpen(open);
+            },
+            // Open or minimised, kept for this tab's next pages: the browser's
+            // own word wins — the server's session could be written back by
+            // another request running at the same time, and the bubble opened
+            // again on the next page. Pinned: always open.
+            storeOpen(open) {
+                try { sessionStorage.setItem('wakeel.' + name + '.open', open ? '1' : '0'); } catch (e) {}
+            },
+            restoreOpen() {
+                let stored = null;
+                try { stored = sessionStorage.getItem('wakeel.' + name + '.open'); } catch (e) {}
+                if (stored !== null && ! this.docked() && (stored === '1') !== this.$wire.isOpen) {
+                    this.$wire.isOpen = stored === '1';
+                    this.$wire.setOpen(stored === '1');
+                }
+                // Opened by the page itself (a new message): kept too.
+                this.$wire.$watch('isOpen', (open) => this.storeOpen(open));
+            },
+            // The distance between two fingers, for a pinch.
+            gap(e) {
+                return Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+            },
+            ...extra,
+        }));
             Alpine.store('dock', {
                 todo: pinned.todo,
                 chat: pinned.chat,

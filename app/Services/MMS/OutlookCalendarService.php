@@ -2,6 +2,7 @@
 
 namespace App\Services\MMS;
 
+use App\Models\CalendarEvent;
 use Carbon\Carbon;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
@@ -46,11 +47,19 @@ class OutlookCalendarService
         });
     }
 
-    public function createEvent(array $eventData): array
+    /**
+     * What both creating and updating send for an event: subject, text body,
+     * start, end (an hour after the start when none) and location — always in
+     * the office's timezone, which Graph reads as UTC when it is left out.
+     *
+     * @param  array<string, mixed>  $eventData
+     * @return array<string, mixed>
+     */
+    private function eventPayload(array $eventData): array
     {
         $tz = $this->appTimezone();
 
-        $payload = [
+        return [
             'subject' => $eventData['title'],
             'body' => [
                 'contentType' => 'text',
@@ -70,6 +79,34 @@ class OutlookCalendarService
                 'displayName' => $eventData['location'] ?? '',
             ],
         ];
+    }
+
+    /**
+     * Puts a calendar event on Outlook and records what Outlook made of it:
+     * its id, and a Teams link only for a meeting asked for and made.
+     *
+     * @throws \RuntimeException when Outlook refuses
+     */
+    public function pushEvent(CalendarEvent $event): void
+    {
+        $outlookEvent = $this->createEvent([
+            'title' => $event->title,
+            'description' => $event->description,
+            'start_datetime' => $event->start_datetime,
+            'end_datetime' => $event->end_datetime,
+            'location' => $event->location,
+            'is_teams_meeting' => $event->is_teams_meeting,
+        ]);
+
+        $event->update([
+            'outlook_event_id' => $outlookEvent['id'],
+            'synced_to_outlook' => true,
+            'online_meeting_url' => $event->is_teams_meeting ? self::teamsLink($outlookEvent) : null,
+        ]);
+    }
+    public function createEvent(array $eventData): array
+    {
+        $payload = $this->eventPayload($eventData);
 
         // Said either way: left out, a mailbox set to add an online meeting
         // to every meeting gave a Teams one to events asked for without.
@@ -132,33 +169,9 @@ class OutlookCalendarService
 
     public function updateEvent(string $outlookEventId, array $eventData): array
     {
-        $tz = $this->appTimezone();
-
         $response = Http::withToken($this->getAccessToken())
             ->patch("https://graph.microsoft.com/v1.0/users/{$this->getUserEmail()}/events/{$outlookEventId}", [
-                'subject' => $eventData['title'],
-                'body' => [
-                    'contentType' => 'text',
-                    'content' => $eventData['description'] ?? '',
-                ],
-                'start' => [
-                    // Both the missing tz argument here and the 'Asia/Mascut'
-                    // typo below used to make Graph default this to UTC — four
-                    // hours off Asia/Muscat — for every field this method
-                    // touches, independently of createEvent()'s own (correct)
-                    // handling of the same data.
-                    'dateTime' => Carbon::parse($eventData['start_datetime'], $tz)->toIso8601String(),
-                    'timeZone' => $tz,
-                ],
-                'end' => [
-                    'dateTime' => isset($eventData['end_datetime'])
-                        ? Carbon::parse($eventData['end_datetime'], $tz)->toIso8601String()
-                        : Carbon::parse($eventData['start_datetime'], $tz)->addHour()->toIso8601String(),
-                    'timeZone' => $tz,
-                ],
-                'location' => [
-                    'displayName' => $eventData['location'] ?? '',
-                ],
+                ...$this->eventPayload($eventData),
                 'isOnlineMeeting' => $eventData['is_teams_meeting'] ?? false,
                 'onlineMeeting' => [
                     'joinUrl' => $eventData['online_meeting_url'] ?? '',

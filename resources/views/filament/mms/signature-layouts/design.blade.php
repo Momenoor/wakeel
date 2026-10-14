@@ -138,30 +138,12 @@
                             ? ['x' => __('From left (mm)'), 'y' => __('From top (mm)'), 'width' => __('Width (mm)'), 'font_size' => __('Font size (pt)')]
                             : ['x' => __('From left (mm)'), 'y' => __('From top (mm)'), 'height' => __('Height (mm)')])
                         @foreach ($fields as $field => $label)
-                            <label style="font-size: .85rem;">{{ $label }}
-                                <x-filament::input.wrapper>
-                                    <x-filament::input type="number" step="0.5" wire:model.live.debounce.400ms="elements.{{ $selected }}.{{ $field }}" />
-                                </x-filament::input.wrapper>
-                            </label>
+                            <x-design.number-field :label="$label" :model="'elements.'.$selected.'.'.$field" />
                         @endforeach
 
                         @if (($selectedElement['type'] ?? null) === 'text')
-                            <label style="font-size: .85rem;">{{ __('Align') }}
-                                <x-filament::input.wrapper>
-                                    <x-filament::input.select wire:model.live="elements.{{ $selected }}.align">
-                                        <option value="left">{{ __('Left') }}</option>
-                                        <option value="center">{{ __('Center') }}</option>
-                                        <option value="right">{{ __('Right') }}</option>
-                                    </x-filament::input.select>
-                                </x-filament::input.wrapper>
-                            </label>
-                            <label style="font-size: .85rem; display: flex; align-items: center; gap: .4rem; margin-top: 1.4rem;">
-                                <x-filament::input.checkbox wire:model.live="elements.{{ $selected }}.bold" />
-                                {{ __('Bold') }}
-                            </label>
-                            <label style="font-size: .85rem;">{{ __('Colour') }}
-                                <input type="color" wire:model.live="elements.{{ $selected }}.color" style="width: 100%; height: 2.25rem; border-radius: .4rem;">
-                            </label>
+                            <x-design.text-style :path="'elements.'.$selected" />
+                            <x-design.colour-field :model="'elements.'.$selected.'.color'" />
                             <label style="grid-column: span 2; font-size: .85rem;">{{ __('Text') }}
                                 <x-filament::input.wrapper>
                                     <input type="text" wire:model.live.debounce.500ms="elements.{{ $selected }}.content" dir="auto" style="width: 100%; border: 0; background: transparent; padding: .5rem;">

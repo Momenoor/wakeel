@@ -2,75 +2,45 @@
 
 namespace App\Providers\Filament;
 
-use AlizHarb\ActivityLog\ActivityLogPlugin;
 use AlizHarb\ActivityLog\RelationManagers\ActivitiesRelationManager;
 use App\Filament\Mms\Pages\AdminDashboard;
-use App\Filament\Mms\Pages\Auth\CustomLogin;
-use App\Filament\Mms\Pages\Auth\CustomProfile;
 use App\Filament\Mms\Pages\Chat;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\Pages\ListMatters;
-use App\Filament\Mms\Support\SystemSwitcher;
 use App\Filament\Shared\Actions\ForceSignOutActions;
-use App\Filament\Shared\ActivityLog\AuditDashboard;
-use App\Filament\Shared\Pages\Performance;
-use App\Filament\Shared\Pages\SystemSettings;
-use App\Filament\Shared\Pages\SystemUpdates;
-use App\Filament\Shared\Pages\UserGuide;
 use App\Filament\Shared\Users\LastSeen;
-use App\Filament\Shared\Users\TranslateUsersPluginLabels;
-use App\Http\Middleware\CheckSystemOffline;
-use App\Http\Middleware\EnsureLicenseIsValid;
-use App\Http\Middleware\RedirectToInstaller;
-use App\Http\Middleware\TrackCurrentSystem;
-use App\Http\Middleware\TrackPerformance;
-use App\Http\Middleware\TrackUserLastSeen;
 use App\Models\CalendarEvent;
 use App\Models\Setting;
 use App\Services\MMS\Calendar\UnmatchedEventReferences;
 use App\Services\Push\VapidKeys;
 use App\Support\Branding;
 use App\Support\Dock;
-use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use BezhanSalleh\FilamentShield\Support\Utils;
-use CraftForge\FilamentLanguageSwitcher\FilamentLanguageSwitcherPlugin;
 use Filament\Facades\Filament;
-use Filament\FontProviders\LocalFontProvider;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
-use Filament\Http\Middleware\Authenticate;
-use Filament\Http\Middleware\AuthenticateSession;
-use Filament\Http\Middleware\DisableBladeIconComponents;
-use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Navigation\NavigationGroup;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
-use Filament\Support\Enums\Width;
 use Filament\Support\Facades\FilamentTimezone;
 use Filament\Support\Facades\FilamentView;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Contracts\View\View;
-use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
-use Illuminate\Cookie\Middleware\EncryptCookies;
-use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
-use Illuminate\Routing\Middleware\SubstituteBindings;
-use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\View\Middleware\ShareErrorsFromSession;
-use Saade\FilamentFullCalendar\FilamentFullCalendarPlugin;
 use TomatoPHP\FilamentUsers\Filament\Resources\Users\Schemas\UserForm;
-use TomatoPHP\FilamentUsers\FilamentUsersPlugin;
 use TomatoPHP\FilamentUsers\Services\FilamentUserServices;
 
 class MmsPanelProvider extends PanelProvider
 {
+    use SharesPanelConfiguration;
+
     public function panel(Panel $panel): Panel
     {
         $panel = $panel->id('mms')->path('mms');
@@ -84,88 +54,22 @@ class MmsPanelProvider extends PanelProvider
             $panel = $panel->default();
         }
 
-        return $panel
+        $panel = $panel
             ->brandName(__('Matters Management System'))
-            ->viteTheme('resources/css/filament/admin/theme.css')
-            ->login(CustomLogin::class)
-            ->sidebarWidth('17rem')
-            ->colors([
-                'primary' => Color::Blue,
-            ])
-            ->sidebarCollapsibleOnDesktop()
-            ->font('Boutros MBC Dinkum', asset('fonts/Boutros.css'), provider: LocalFontProvider::class)
-            ->brandLogo(fn (): string => Branding::logoUrl())
-            ->darkModeBrandLogo(fn (): string => Branding::logoUrl(dark: true))
-            ->brandLogoHeight('4rem')
-            ->favicon(fn (): string => Branding::faviconUrl())
-            ->profile(CustomProfile::class)
             ->discoverResources(in: app_path('Filament/Mms/Resources'), for: 'App\Filament\Mms\Resources')
-            ->discoverPages(in: app_path('Filament/Mms/Pages'), for: 'App\Filament\Mms\Pages')
-            // Shared with the PMS panel — outside Filament/Mms so it survives
-            // an installation without MMS.
-            ->pages([
-                SystemSettings::class,
-                SystemUpdates::class,
-                Performance::class,
-                UserGuide::class,
-                AuditDashboard::class,
-            ])
-            ->renderHook(
-                PanelsRenderHook::CONTENT_START,
-                fn () => view('filament.shared.update-banner'),
-            )
-            // The new keyboard shortcuts, for their first two weeks.
-            ->renderHook(
-                PanelsRenderHook::CONTENT_START,
-                fn () => view('filament.shared.shortcuts-tip'),
-            )
+            ->discoverPages(in: app_path('Filament/Mms/Pages'), for: 'App\Filament\Mms\Pages');
+        $panel = $this->sharedPages($panel)
+            ->discoverClusters(in: app_path('Filament/Mms/Clusters'), for: 'App\Filament\Mms\Clusters');
+        $panel = $this->sharedClusters($panel)
+            ->discoverWidgets(in: app_path('Filament/Mms/Widgets'), for: 'App\Filament\Mms\Widgets');
+
+        return $this->applySharedConfiguration($panel, Color::Blue)
             // The matters' tab counts, kept current.
             ->renderHook(
                 PanelsRenderHook::PAGE_END,
                 fn () => view('filament.partials.live-tab-badges'),
                 scopes: ListMatters::class,
             )
-            ->discoverClusters(in: app_path('Filament/Mms/Clusters'), for: 'App\Filament\Mms\Clusters')
-            // The Settings cluster, shared with the other panel.
-            ->discoverClusters(in: app_path('Filament/Shared/Clusters'), for: 'App\Filament\Shared\Clusters')
-            ->discoverWidgets(in: app_path('Filament/Mms/Widgets'), for: 'App\Filament\Mms\Widgets')
-            ->renderHook(
-                PanelsRenderHook::USER_MENU_PROFILE_AFTER,
-                fn () => Blade::render('@livewire(\'font-size-slider\')')
-            )
-            ->renderHook(
-                PanelsRenderHook::GLOBAL_SEARCH_BEFORE,
-                fn () => SystemSwitcher::render()
-            )
-            ->middleware([
-                // What each request cost (the Performance page): around all the rest.
-                TrackPerformance::class,
-                // First, and ahead of everything session/auth-related — the
-                // panel's own middleware list runs independently of the app's
-                // `web` group, so the installer redirect has to be repeated
-                // here or `/admin` on an unmigrated database would hit a raw
-                // connection error instead of the wizard.
-                RedirectToInstaller::class,
-                // Likewise, the license check — without it here, the panels
-                // were never license-checked at all.
-                EnsureLicenseIsValid::class,
-                EncryptCookies::class,
-                AddQueuedCookiesToResponse::class,
-                StartSession::class,
-                AuthenticateSession::class,
-                ShareErrorsFromSession::class,
-                PreventRequestForgery::class,
-                SubstituteBindings::class,
-                DisableBladeIconComponents::class,
-                DispatchServingFilamentEvent::class,
-                CheckSystemOffline::class,
-                TrackUserLastSeen::class,
-                TrackCurrentSystem::class,
-            ])
-            // Also on the panel's Livewire requests — the notification and
-            // chat polling — so reading one page for a while doesn't turn
-            // a user "Offline"; page loads alone stamped it too rarely.
-            ->persistentMiddleware([TrackUserLastSeen::class])
             ->navigationGroups([
                 NavigationGroup::make(fn () => __('Communication')),
                 NavigationGroup::make(fn () => __('Financial')),
@@ -173,56 +77,20 @@ class MmsPanelProvider extends PanelProvider
                 // Administration: the Settings cluster, Users and Roles.
                 NavigationGroup::make(fn () => __('filament-shield::filament-shield.nav.group')),
             ])
-            ->authMiddleware([
-                Authenticate::class,
-            ])->plugins([
+            ->plugins([
                 // FilamentEnvEditorPlugin::make(),
                 //                FilamentPopupPlugin::make(),
                 //                FilamentInboxPlugin::make(),
                 //                FilamentCronManagerPlugin::make(),
-                FilamentUsersPlugin::make()
-                    ->useAvatar(),
-                FilamentShieldPlugin::make()
-                    ->navigationSort(2),
-                FilamentFullCalendarPlugin::make()
-                    ->timezone(config('app.timezone'))
-                    ->editable()
-                    ->selectable(),
-                // Beside Users and Roles, not inside the Settings cluster —
-                // the plugin works out its cluster before the panel exists,
-                // so a clustered log never made it into the cluster's menu.
-                // The plugin's getNavigationGroup() evaluates this closure on
-                // every request via Filament's evaluate(), so it always
-                // reflects the current locale rather than baking in whichever
-                // one was active if config/routes ever get cached. label()/
-                // pluralLabel() are deliberately left unset: the package ships
-                // its own proper Arabic translation for both
-                // (filament-activity-log::activity.label /.plural_label) —
-                // hardcoding 'Log'/'Logs' here only overrode that with
-                // untranslated English.
-                // Its Audit Dashboard has no access check of its own; ours
-                // (behind a Shield permission) is registered instead.
-                ActivityLogPlugin::make()
-                    ->dashboard(false)
-                    ->navigationGroup(fn () => __('filament-shield::filament-shield.nav.group'))
-                    ->navigationSort(90),
+                $this->usersPlugin(),
+                $this->shieldPlugin(),
+                $this->calendarPlugin(),
+                $this->activityLogPlugin(),
                 // FilamentUiSwitcherPlugin::make(),
-                FilamentLanguageSwitcherPlugin::make()
-                    ->locales(['en', ['code' => 'ar', 'name' => __('Arabic'), 'flag' => 'ae']]),
+                $this->languageSwitcherPlugin(),
                 //                FilamentTourPlugin::make()
                 //                    ->enableCssSelector()
             ])
-            // The users plugin fixes some labels at boot, in whatever language
-            // was active then; re-translated when drawn instead.
-            ->bootUsing(fn () => TranslateUsersPluginLabels::apply())
-            ->databaseNotifications()
-            // With Pusher, new notifications arrive live (NotificationsUpdated),
-            // so polling is only a slow safety net.
-            ->databaseNotificationsPolling(fn (): string => filled(config('filament.broadcasting.echo')) ? '60s' : '10s')
-            ->databaseTransactions()
-            // Ctrl+K anywhere. Only resources that declare
-            // $isGloballySearchable themselves are searched — the rest
-            // (settings, templates…) would only crowd the results.
             // On the dashboard, N / Ctrl+Alt+N (create-shortcut) makes a new matter.
             ->renderHook(
                 PanelsRenderHook::PAGE_START,
@@ -230,13 +98,7 @@ class MmsPanelProvider extends PanelProvider
                     ? '<a href="'.e(MatterResource::getUrl('create')).'" data-shortcut-create hidden></a>'
                     : '',
                 scopes: AdminDashboard::class,
-            )
-            ->globalSearch()
-            ->globalSearchResourceOptIn()
-            ->globalSearchKeyBindings(['ctrl+k'])
-            ->globalSearchFieldKeyBindingSuffix()
-            ->globalSearchDebounce('400ms')
-            ->maxContentWidth(Width::Full);
+            );
     }
 
     public function boot(): void

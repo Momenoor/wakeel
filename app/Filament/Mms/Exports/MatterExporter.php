@@ -5,23 +5,17 @@ namespace App\Filament\Mms\Exports;
 use App\Enums\FeeType;
 use App\Models\Matter;
 use Filament\Actions\Exports\ExportColumn;
-use Filament\Actions\Exports\Exporter;
-use Filament\Actions\Exports\Models\Export;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Number;
-use OpenSpout\Common\Entity\Style\CellAlignment;
-use OpenSpout\Common\Entity\Style\Color;
-use OpenSpout\Common\Entity\Style\Style;
-use OpenSpout\Common\Exception\InvalidArgumentException;
-use OpenSpout\Writer\Exception\InvalidSheetNameException;
-use OpenSpout\Writer\Exception\WriterNotOpenedException;
-use OpenSpout\Writer\XLSX\Entity\SheetView;
 use OpenSpout\Writer\XLSX\Options;
-use OpenSpout\Writer\XLSX\Writer;
 
-class MatterExporter extends Exporter
+class MatterExporter extends MatterSpreadsheetExporter
 {
     protected static ?string $model = Matter::class;
+
+    protected function sheetName(): string
+    {
+        return 'Matters';
+    }
 
     public static function getColumns(): array
     {
@@ -102,40 +96,6 @@ class MatterExporter extends Exporter
         ];
     }
 
-    public static function getCompletedNotificationBody(Export $export): string
-    {
-        $body = trans_choice('export_completed', $export->successful_rows, ['count' => Number::format($export->successful_rows)]);
-
-        if ($failedRowsCount = $export->getFailedRowsCount()) {
-            $body .= ' '.trans_choice('export_failed', $failedRowsCount, ['count' => Number::format($failedRowsCount)]);
-        }
-
-        return $body;
-    }
-
-    public function getXlsxCellStyle(): ?Style
-    {
-        return new Style()
-            ->setFontSize(11)
-            ->setShouldWrapText()
-            ->setFontName('Arial');
-    }
-
-    /**
-     * @throws InvalidArgumentException
-     */
-    public function getXlsxHeaderCellStyle(): ?Style
-    {
-        return new Style()
-            ->setFontBold()
-            ->setShouldWrapText()
-            ->setFontSize(11)
-            ->setFontName('Arial')
-            ->setFontColor(Color::rgb(255, 255, 255))
-            ->setBackgroundColor(Color::rgb(31, 56, 100))
-            ->setCellAlignment(CellAlignment::CENTER);
-    }
-
     public function getXlsxWriterOptions(): ?Options
     {
         $options = new Options;
@@ -155,23 +115,6 @@ class MatterExporter extends Exporter
         $options->setColumnWidth(20, 14); // Collection Status
 
         return $options;
-    }
-
-    /**
-     * @throws InvalidSheetNameException
-     * @throws WriterNotOpenedException
-     * @throws InvalidArgumentException
-     */
-    public function configureXlsxWriterBeforeClose(Writer $writer): Writer
-    {
-        $sheetView = new SheetView;
-        $sheetView->setFreezeRow(2);
-
-        $sheet = $writer->getCurrentSheet();
-        $sheet->setSheetView($sheetView);
-        $sheet->setName('Matters');
-
-        return $writer;
     }
 
     public static function modifyQuery(Builder $query): Builder
