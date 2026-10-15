@@ -142,15 +142,35 @@ class MatterReferenceMatcher
      */
     public static function matterIdsFor(array $refs): array
     {
+        $found = [];
+
+        // Several sharing it: the current one — not yet at its final
+        // report, the newest — else the one closed last.
+        foreach (self::allMattersFor($refs) as $key => $same) {
+            $found[$key] = (int) $same->sort(fn (Matter $a, Matter $b): int => [$a->final_report_at !== null, -($a->final_report_at?->getTimestamp() ?? 0), -$a->id]
+                <=> [$b->final_report_at !== null, -($b->final_report_at?->getTimestamp() ?? 0), -$b->id])->first()->id;
+        }
+
+        return $found;
+    }
+
+    /**
+     * Every matter each number/year means — all that share it, not one
+     * picked: "639/2025" => the matters. The number as the office keeps it
+     * can differ from the way a title writes it — "0986", " 986", Arabic-Indic
+     * digits, "986/2026" — so the database narrows it down (by year, and the
+     * digits anywhere in the number) and the comparison is made on the
+     * normalised number.
+     *
+     * @param  list<array{number: string, year: int}>  $refs
+     * @return array<string, \Illuminate\Support\Collection<int, Matter>>
+     */
+    public static function allMattersFor(array $refs): array
+    {
         $refs = collect($refs)->unique(fn (array $ref): string => self::key($ref))->values();
         $found = [];
 
         foreach ($refs->chunk(200) as $chunk) {
-            // The number as the office keeps it can differ from the way the
-            // title writes it — "0986", " 986", Arabic-Indic digits, "986/2026"
-            // — so the database narrows it down (by year, and the digits
-            // anywhere in the number) and the comparison is made on the
-            // normalised number.
             $matters = Matter::query()
                 ->where(function ($query) use ($chunk) {
                     foreach ($chunk as $ref) {
@@ -163,22 +183,30 @@ class MatterReferenceMatcher
                         });
                     }
                 })
-                ->get(['id', 'year', 'number', 'final_report_at'])
-                ->filter(fn (Matter $m): bool => self::normalise((string) $m->number, (int) $m->year) !== null);
+                ->get(['id', 'year', 'number', 'final_report_at']);
 
-            // Several sharing it: the current one — not yet at its final
-            // report, the newest — else the one closed last.
-            foreach ($matters->groupBy(fn (Matter $m): string => self::key(['number' => self::normalise((string) $m->number, (int) $m->year), 'year' => (int) $m->year])) as $key => $same) {
-                if (! $refs->contains(fn (array $ref): bool => self::key($ref) === $key)) {
-                    continue;
+            foreach ($matters->groupBy(fn (Matter $m): string => self::key(['number' => (string) self::normalise((string) $m->number, (int) $m->year), 'year' => (int) $m->year])) as $key => $same) {
+                if ($refs->contains(fn (array $ref): bool => self::key($ref) === $key)) {
+                    $found[$key] = $same;
                 }
-
-                $found[$key] = (int) $same->sort(fn (Matter $a, Matter $b): int => [$a->final_report_at !== null, -($a->final_report_at?->getTimestamp() ?? 0), -$a->id]
-                    <=> [$b->final_report_at !== null, -($b->final_report_at?->getTimestamp() ?? 0), -$b->id])->first()->id;
             }
         }
 
         return $found;
+    }
+
+    /**
+     * The ids of every matter with this number and year, however the number
+     * is stored — for searches typed by hand.
+     *
+     * @return list<int>
+     */
+    public static function idsOf(string $number, int $year): array
+    {
+        $number = ltrim(trim(strtr($number, self::DIGITS)), '0') ?: '0';
+        $same = self::allMattersFor([['number' => $number, 'year' => $year]])[self::key(['number' => $number, 'year' => $year])] ?? collect();
+
+        return $same->pluck('id')->map(fn ($id) => (int) $id)->all();
     }
 
     /**

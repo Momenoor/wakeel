@@ -65,6 +65,17 @@ class CalendarMatterLinkingTest extends TestCase
         $this->assertSame([$spaced->id], $event->matters()->pluck('matters.id')->all());
     }
 
+    public function test_emails_and_searches_find_a_matter_however_its_number_is_stored(): void
+    {
+        $zeros = Matter::factory()->create(['number' => '0986', 'year' => 2026]);
+        $other = Matter::factory()->create(['number' => '986', 'year' => 2025]);
+
+        $this->assertSame([$zeros->id], \App\Services\MMS\IncomingEmailMatcher::numbered('رد: الدعوى رقم 986 لسنة 2026'));
+        $this->assertSame([$zeros->id], MatterReferenceMatcher::idsOf('986', 2026));
+        $this->assertSame([$other->id], MatterReferenceMatcher::idsOf('٩٨٦', 2025));
+        $this->assertSame([], MatterReferenceMatcher::idsOf('98', 2026));
+    }
+
     private function matter(int $number, int $year): Matter
     {
         return Matter::factory()->create(['number' => $number, 'year' => $year]);

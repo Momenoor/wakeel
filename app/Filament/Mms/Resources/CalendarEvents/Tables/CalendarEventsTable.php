@@ -10,6 +10,7 @@ use App\Filament\Mms\Resources\CalendarEvents\Schemas\CalendarEventBulkInfolist;
 use App\Filament\Mms\Resources\CalendarEvents\Schemas\CalendarEventForm;
 use App\Filament\Mms\Resources\CalendarEvents\Schemas\CalendarEventInfolist;
 use App\Models\CalendarEvent;
+use App\Services\MMS\Calendar\MatterReferenceMatcher;
 use App\Services\MMS\OutlookCalendarService;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
@@ -57,7 +58,7 @@ class CalendarEventsTable
 
                         return $query->orWhereHas('matters', function (Builder $matters) use ($search): void {
                             if (preg_match('~^(\d+)\s*/\s*(\d{4})$~', $search, $m)) {
-                                $matters->where('matters.number', $m[1])->where('matters.year', $m[2]);
+                                $matters->whereIn('matters.id', MatterReferenceMatcher::idsOf($m[1], (int) $m[2]));
 
                                 return;
                             }

@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Pages;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Models\Matter;
 use App\Models\MatterEmail;
+use App\Services\MMS\Calendar\MatterReferenceMatcher;
 use App\Services\MMS\MatterReplyCollector;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -204,9 +205,11 @@ class UnfiledEmails extends Page implements HasTable
         $ids = MatterResource::getEloquentQuery()
             ->withoutTrashed()
             ->when(count($digits) === 1, fn (Builder $q) => $q->where('number', 'like', $digits[0].'%'))
-            ->when(count($digits) > 1, fn (Builder $q) => $q->where(fn (Builder $q) => $q
-                ->where(fn (Builder $q) => $q->where('number', $digits[0])->where('year', $digits[1]))
-                ->orWhere(fn (Builder $q) => $q->where('year', $digits[0])->where('number', $digits[1]))))
+            // "986/2026" or "2026/986": the matter however its number is stored.
+            ->when(count($digits) > 1, fn (Builder $q) => $q->whereIn('matters.id', [
+                ...MatterReferenceMatcher::idsOf($digits[0], (int) $digits[1]),
+                ...MatterReferenceMatcher::idsOf($digits[1], (int) $digits[0]),
+            ]))
             ->reorder()
             ->latest('id')
             ->limit(30)

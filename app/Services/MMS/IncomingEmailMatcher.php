@@ -151,15 +151,7 @@ class IncomingEmailMatcher
             return [];
         }
 
-        return Matter::query()
-            ->where(function ($q) use ($refs) {
-                foreach ($refs as $ref) {
-                    $q->orWhere(fn ($q) => $q->where('year', $ref['year'])->where('number', $ref['number']));
-                }
-            })
-            ->pluck('id')
-            ->map(fn ($id) => (int) $id)
-            ->all();
+        return collect(MatterReferenceMatcher::allMattersFor($refs))->flatMap(fn ($same) => $same->pluck('id'))->map(fn ($id) => (int) $id)->unique()->values()->all();
     }
 
     /**
