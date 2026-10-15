@@ -24,8 +24,10 @@ use Throwable;
  *
  * The site sits in the app's own offline mode for the duration, which
  * still lets administrators in to watch it — and to retry a failed step or
- * bring the site back up. Progress is kept in the `updater_state` setting,
- * so a reload (or a Livewire version change mid-update) can resume.
+ * bring the site back up — and in Laravel's native maintenance mode too (see
+ * NativeMaintenance), which holds visitors back even while `vendor/` is being
+ * replaced and the app cannot boot. Progress is kept in the `updater_state`
+ * setting, so a reload (or a Livewire version change mid-update) can resume.
  */
 class Updater
 {
@@ -132,6 +134,9 @@ class Updater
 
         @set_time_limit(0);
         @ignore_user_abort(true);
+
+        // This browser keeps its way in for as long as the update runs.
+        $this->nativeMaintenance()->letThisBrowserIn();
 
         $log = '== '.$this->steps()[$step]." ==\n";
 
@@ -241,13 +246,26 @@ class Updater
             Setting::set('updater_previous_offline', [
                 'app_offline' => (bool) Setting::get('app_offline', false),
                 'offline_message' => Setting::get('offline_message'),
+                // Down by hand before the update: it is left down after it.
+                'was_down' => $this->nativeMaintenance()->isDown(),
             ], 'system', 'json');
         }
 
         Setting::set('app_offline', true, 'system');
         Setting::set('offline_message', __('The system is being updated to version :version. Please check back in a few minutes.', ['version' => $version]), 'system');
 
-        return __('Maintenance mode is on — administrators can still sign in.')."\n";
+        // Last, once everything that needs the database is done: from here on
+        // requests are answered before the framework loads.
+        $native = $this->nativeMaintenance();
+        $native->down();
+
+        $output = __('Maintenance mode is on — administrators can still sign in.')."\n";
+
+        if ($native->isDown()) {
+            $output .= __('If you are locked out during the update, open :url to get back in. If the site stays down, delete storage/framework/down and storage/framework/maintenance.php.', ['url' => $native->bypassUrl()])."\n";
+        }
+
+        return $output;
     }
 
     private function checkout(string $version): string
@@ -439,7 +457,16 @@ class Updater
             Setting::set('app_offline', (bool) ($previous['app_offline'] ?? false), 'system');
             Setting::set('offline_message', $previous['offline_message'] ?? null, 'system');
             Setting::forget('updater_previous_offline');
+
+            if (! ($previous['was_down'] ?? false)) {
+                $this->nativeMaintenance()->up();
+            }
         }
+    }
+
+    private function nativeMaintenance(): NativeMaintenance
+    {
+        return app(NativeMaintenance::class);
     }
 
     /**

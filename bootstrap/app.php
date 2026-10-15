@@ -45,6 +45,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // RedirectToInstaller has already let an installed app through.
         $middleware->web(append: [EnsureLicenseIsValid::class]);
 
+        // The update's maintenance-mode bypass cookie is read by plain PHP in
+        // storage/framework/maintenance.php, before any of this runs — it
+        // cannot be encrypted.
+        $middleware->encryptCookies(except: ['laravel_maintenance']);
+
         $middleware->alias([
             'installer.guard' => RedirectIfInstalled::class,
         ]);
