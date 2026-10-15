@@ -117,7 +117,19 @@ class LetterMailer
             $email = $this->email($composer, $mode, $template, $unit['greet'], $files, $subject, $body, $unit['name'], $sender);
 
             try {
-                $sent = SenderMailer::using($sender, fn () => Mail::to($to ?: $groupCc)->cc($to ? $groupCc : [])->send($email));
+                try {
+                    $sent = SenderMailer::using($sender, fn () => Mail::to($to ?: $groupCc)->cc($to ? $groupCc : [])->send($email));
+                } catch (\Throwable $refusal) {
+                    if (! self::refusedAddress($refusal)) {
+                        throw $refusal;
+                    }
+
+                    // An address that does not exist stops the whole email at the mail server ("550 No Such User Here"):
+                    // each is tried on its own, the others get it, and the ones refused are named.
+                    [$sent, $to, $groupCc, $refused] = $this->withoutRefused($sender, $email, $to, $groupCc, $refusal);
+                    $result['errors'][] = __('The mail server refused these addresses (they do not exist or cannot receive): :addresses', ['addresses' => implode(', ', $refused)]);
+                }
+
                 // Remembered, for its replies.
                 MatterEmail::recordSent($letter->matter_id, $letter, $senderKey, $sent?->getMessageId(), $email->emailSubject, [...$to, ...$groupCc], auth()->id());
 
@@ -414,6 +426,66 @@ class LetterMailer
         }
 
         return $files;
+    }
+
+    /**
+     * Whether a send failed because the mail server refused an address: "550 No
+     * Such User Here", "user unknown", "mailbox unavailable" …
+     */
+    public static function refusedAddress(\Throwable $e): bool
+    {
+        for ($each = $e; $each !== null; $each = $each->getPrevious()) {
+            $message = $each->getMessage();
+
+            if (preg_match('/\b55[0-4]\b/', $message) && preg_match('/no such user|user unknown|unknown user|does not exist|no mailbox|invalid (recipient|address|mailbox)|recipient (address )?(rejected|refused|not found)|mailbox (unavailable|not found|unknown)|user not found|address rejected/i', $message)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The email sent to each address on its own, after the whole of it was refused for one: those that took it, and
+     * those that were refused. Nothing went before — the server turns the email away before it is sent.
+     *
+     * @param  list<string>  $to
+     * @param  list<string>  $cc
+     * @return array{0: mixed, 1: list<string>, 2: list<string>, 3: list<string>} the sent message, who it reached in To and in Cc, who was refused
+     *
+     * @throws \Throwable when no address took it, or for another reason
+     */
+    private function withoutRefused(array $sender, LetterEmail $email, array $to, array $cc, \Throwable $refusal): array
+    {
+        $sent = null;
+        $reached = [];
+        $refused = [];
+
+        foreach (array_values(array_unique([...$to, ...$cc])) as $address) {
+            // The email as built, with no one on it from the attempt before.
+            $fresh = clone $email;
+            $fresh->to = [];
+            $fresh->cc = [];
+            $fresh->bcc = [];
+
+            try {
+                $one = SenderMailer::using($sender, fn () => Mail::to($address)->send($fresh));
+                $sent ??= $one;
+                $reached[] = $address;
+            } catch (\Throwable $e) {
+                if (! self::refusedAddress($e)) {
+                    throw $e;
+                }
+
+                $refused[] = $address;
+            }
+        }
+
+        if ($sent === null) {
+            throw new \RuntimeException(__('The mail server refused every address (they do not exist or cannot receive): :addresses', ['addresses' => implode(', ', $refused)]), 0, $refusal);
+        }
+
+        return [$sent, array_values(array_intersect($to, $reached)), array_values(array_intersect($cc, $reached)), $refused];
     }
 
     /**

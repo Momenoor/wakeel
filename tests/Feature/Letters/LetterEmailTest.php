@@ -463,4 +463,45 @@ class LetterEmailTest extends TestCase
             ->callMountedTableAction()
             ->assertHasTableActionErrors(['recipients' => 'required']);
     }
+
+    public function test_an_address_the_server_refuses_does_not_stop_the_others_and_is_named(): void
+    {
+        // A mail server that turns an email away for one address that does not exist ("550 No Such User Here").
+        \Illuminate\Support\Facades\Mail::extend('refusing', fn () => new class extends \Symfony\Component\Mailer\Transport\AbstractTransport
+        {
+            protected function doSend(\Symfony\Component\Mailer\SentMessage $message): void
+            {
+                foreach ($message->getEnvelope()->getRecipients() as $recipient) {
+                    if ($recipient->getAddress() === 'gone@jpaemirates.com') {
+                        throw new \Symfony\Component\Mailer\Exception\TransportException('Expected response code "250/251/252" but got code "550", with message "550 No Such User Here".');
+                    }
+                }
+            }
+
+            public function __toString(): string
+            {
+                return 'refusing://';
+            }
+        });
+        config(['mail.mailers.smtp.transport' => 'refusing']);
+
+        $result = app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::ATTACHMENT, null, ['pdf'], [$this->letter->recipients->first()->id], cc: ['gone@jpaemirates.com', 'boss@jpa.ae']);
+
+        // The mailbox's server turned the one address away; the others were sent to, each on its own.
+        $this->assertSame(1, $result['sent']);
+        $this->assertCount(1, $result['errors']);
+        $this->assertStringContainsString('gone@jpaemirates.com', $result['errors'][0]);
+        $this->assertStringNotContainsString('boss@jpa.ae', $result['errors'][0]);
+        $to = collect($this->sent)->flatMap(fn ($email) => $email->getTo())->map(fn ($a) => $a->getAddress())->all();
+        $this->assertContains('mona@example.com', $to);
+        $this->assertContains('boss@jpa.ae', $to);
+        $this->assertNotContains('gone@jpaemirates.com', $to);
+        $this->assertSame(LetterStatus::SENT, $this->letter->fresh()->status);
+
+        // Told apart from other failures.
+        $this->assertTrue(LetterMailer::refusedAddress(new \RuntimeException('Expected response code "250/251/252" but got code "550", with message "550 No Such User Here".')));
+        $this->assertTrue(LetterMailer::refusedAddress(new \RuntimeException('outer', 0, new \RuntimeException('554 5.1.1 <x@y.ae>: Recipient address rejected: User unknown'))));
+        $this->assertFalse(LetterMailer::refusedAddress(new \RuntimeException('Connection could not be established with host mail.example.com')));
+        $this->assertFalse(LetterMailer::refusedAddress(new \RuntimeException('535 Authentication failed')));
+    }
 }

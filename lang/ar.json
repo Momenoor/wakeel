@@ -3976,5 +3976,7 @@
     "Not saved in OneDrive: this matter is not linked to a OneDrive folder, so the email and its files are kept in the system only.": "لم يُحفظ في OneDrive: هذه القضية غير مرتبطة بمجلد OneDrive، فحُفظ البريد وملفاته في النظام فقط.",
     "It may be about:": "قد تخص:",
     "Download the email": "تنزيل البريد",
-    "Download to put in OneDrive by hand:": "نزّل ثم ضعه في OneDrive يدوياً:"
+    "Download to put in OneDrive by hand:": "نزّل ثم ضعه في OneDrive يدوياً:",
+    "The mail server refused these addresses (they do not exist or cannot receive): :addresses": "رفض خادم البريد هذه العناوين (غير موجودة أو لا تستقبل): :addresses",
+    "The mail server refused every address (they do not exist or cannot receive): :addresses": "رفض خادم البريد كل العناوين (غير موجودة أو لا تستقبل): :addresses"
 }
