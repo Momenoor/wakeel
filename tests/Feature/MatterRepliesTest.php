@@ -301,6 +301,11 @@ class MatterRepliesTest extends TestCase
         $result = app(MatterReplyCollector::class)->collect($this->matter->id);
         $this->assertSame(1, $result['replies']);
         $this->assertSame(['2026/986'], array_column($result['unlinked'], 'label'));
+        // The email to download and put in OneDrive by hand: its PDF, from where it is kept.
+        $downloads = $result['unlinked'][0]['downloads'];
+        $this->assertCount(1, $downloads);
+        $this->assertStringEndsWith('.pdf', $downloads[0]['name']);
+        $this->assertStringContainsString('attachments/emails/'.$this->matter->id, $downloads[0]['url']);
         $this->assertSame(1, $this->matter->attachments()->where('type', 'correspondence')->count());
 
         // In the action, as a bullet list.

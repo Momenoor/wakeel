@@ -148,9 +148,16 @@ class ProgressRelationManager extends RelationManager
                         // One point each: what was kept, the matters with no OneDrive folder to keep it in, and what went wrong.
                         $points = [
                             $result['emails'] ? trans_choice(':count other email from the parties kept.|:count other emails from the parties kept.', $result['emails'], ['count' => $result['emails']]) : null,
+                            // No folder to find them in: the matter, and the emails to download and keep by hand.
                             ...array_map(fn (array $matter): HtmlString => new HtmlString(
                                 e(__('Matter :matter is not linked to a OneDrive folder: its emails were kept in the system only.', ['matter' => $matter['label']]))
                                 .' <a href="'.e($matter['url']).'" style="text-decoration: underline;">'.e(__('Open the matter')).'</a>'
+                                .($matter['downloads'] !== []
+                                    ? '<div>'.e(__('Download to put in OneDrive by hand:')).'</div>'.MatterReplyCollector::bullets(array_map(
+                                        fn (array $file): HtmlString => new HtmlString('<a href="'.e($file['url']).'" target="_blank" download style="text-decoration: underline;">'.e($file['name']).'</a>'),
+                                        $matter['downloads'],
+                                    ))->toHtml()
+                                    : '')
                             ), $result['unlinked']),
                             ...$result['errors'],
                         ];

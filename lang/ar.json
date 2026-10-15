@@ -3974,5 +3974,7 @@
     "Matter :matter is not linked to a OneDrive folder: its emails were kept in the system only.": "القضية :matter غير مرتبطة بمجلد OneDrive: حُفظت رسائلها في النظام فقط.",
     "Open the matter": "فتح القضية",
     "Not saved in OneDrive: this matter is not linked to a OneDrive folder, so the email and its files are kept in the system only.": "لم يُحفظ في OneDrive: هذه القضية غير مرتبطة بمجلد OneDrive، فحُفظ البريد وملفاته في النظام فقط.",
-    "It may be about:": "قد تخص:"
+    "It may be about:": "قد تخص:",
+    "Download the email": "تنزيل البريد",
+    "Download to put in OneDrive by hand:": "نزّل ثم ضعه في OneDrive يدوياً:"
 }

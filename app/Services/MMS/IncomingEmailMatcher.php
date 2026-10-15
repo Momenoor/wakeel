@@ -16,7 +16,9 @@ use Closure;
  * attendees …: anyone on a matter but its experts), by its email address.
  * Their matters are the candidates; then, in turn, until one says which:
  *
- *   1. a candidate's number written in the subject ("639/2025"),
+ *   1. a candidate's number written in the subject ("639/2025") — or a matter
+ *      the sender is not on, when the subject names exactly one matter in the
+ *      system (a lawyer writing about a case they were not added to yet),
  *   2. … or in the email's text,
  *   3. the name of a candidate's party (not the sender's own) in either,
  *   4. the sender has but the one matter — and the email names no other.
@@ -81,12 +83,23 @@ class IncomingEmailMatcher
             $found = $find();
             $mine = array_values(array_intersect($candidates, $found));
 
+            // The subject names one matter in the system: it is that matter's, whether or not the sender was added to it.
+            if ($mine === [] && $by === MatterEmail::BY_SUBJECT && $found !== []) {
+                // …and when several share the number, a person picks among those.
+                return ['matter' => count($found) === 1 ? $found[0] : null, 'candidates' => $found, 'by' => count($found) === 1 ? $by : null];
+            }
+
             if (count($mine) === 1) {
                 return ['matter' => $mine[0], 'candidates' => $mine, 'by' => $by];
             }
 
             if (count($mine) > 1) {
                 return ['matter' => null, 'candidates' => $mine, 'by' => null];
+            }
+
+            // The text (not the subject) names one matter in the system that is not the sender's: also that matter's, once the sender is a party somewhere.
+            if ($mine === [] && $by === MatterEmail::BY_BODY && count($found) === 1) {
+                return ['matter' => $found[0], 'candidates' => $found, 'by' => $by];
             }
 
             // A number of a matter not the sender's: not sure it's theirs.

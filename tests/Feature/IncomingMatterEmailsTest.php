@@ -199,9 +199,59 @@ class IncomingMatterEmailsTest extends TestCase
         $this->collect($this->email());
         $this->assertSame([$this->first->id, MatterEmail::BY_ADDRESS], [MatterEmail::sole()->matter_id, MatterEmail::sole()->matched_by]);
 
-        // It names a matter not theirs: not sure — a person decides.
-        $this->collect($this->email(['subject' => 'بخصوص 987/2026']));
+        // Its subject names a matter that is not theirs, the only one with that number: it is that matter's.
+        $this->collect($this->email(['subject' => 'بخصوص 987/2026', 'message_id' => '<other-1@albanna.ae>']));
+        $byNumber = MatterEmail::query()->latest('id')->first();
+        $this->assertSame([$this->second->id, MatterEmail::FILED, MatterEmail::BY_SUBJECT], [$byNumber->matter_id, $byNumber->status, $byNumber->matched_by]);
+
+        // Only in the text, the only one named: also that matter's.
+        $this->collect($this->email(['body' => '<p>بخصوص 987/2026</p>', 'message_id' => '<other-2@albanna.ae>']));
+        $byText = MatterEmail::query()->latest('id')->first();
+        $this->assertSame([$this->second->id, MatterEmail::BY_BODY], [$byText->matter_id, $byText->matched_by]);
+
+        // Two matters named in the text, neither theirs: not sure — a person decides.
+        Matter::factory()->create(['number' => '1500', 'year' => '2026']);
+        Matter::factory()->create(['number' => '1501', 'year' => '2026']);
+        $this->collect($this->email(['body' => '<p>بخصوص 1500/2026 و 1501/2026</p>', 'message_id' => '<other-3@albanna.ae>']));
         $this->assertSame(MatterEmail::PENDING, MatterEmail::query()->latest('id')->first()->status);
+    }
+
+    public function test_a_matter_with_no_onedrive_folder_gets_the_email_to_download_by_hand(): void
+    {
+        \App\Models\Setting::set(\App\Services\MMS\MatterOneDriveFolders::ENABLED, true, 'onedrive');
+        MatterOneDriveFolder::query()->where('matter_id', $this->second->id)->delete();
+        // Someone to tell: a person of the matter.
+        $user = User::factory()->create();
+        $party = Party::factory()->create(['user_id' => $user->id]);
+        MatterParty::create(['matter_id' => $this->second->id, 'party_id' => $party->id, 'role' => 'expert', 'type' => 'certified']);
+
+        $this->collect($this->email(['subject' => 'مستندات القضية 987/2026']));
+
+        $notice = $user->notifications()->sole();
+        $actions = array_column($notice->data['actions'], 'name');
+        $this->assertContains('download', $actions);
+        $download = collect($notice->data['actions'])->firstWhere('name', 'download');
+        $this->assertStringContainsString('storage/attachments/emails/'.$this->second->id, $download['url']);
+        $this->assertStringContainsString('Not saved in OneDrive', $notice->data['body']);
+    }
+
+    public function test_a_sender_on_several_matters_writing_the_number_of_one_they_are_not_on_is_filed_there_by_the_subject(): void
+    {
+        $third = Matter::factory()->create(['number' => '1500', 'year' => '2026']);
+
+        $this->collect($this->email(['subject' => 'رد: الدعوى رقم 1500 لسنة 2026 إجراءات الإعسار - دبي الابتدائية / إشعار بمأمورية الخبرة وطلب مستندات']));
+
+        $email = MatterEmail::sole();
+        $this->assertSame([$third->id, MatterEmail::FILED, MatterEmail::BY_SUBJECT], [$email->matter_id, $email->status, $email->matched_by]);
+
+        // Two matters share the number and year: which? — a person decides, the sender's matters or not.
+        Matter::factory()->create(['number' => '1500', 'year' => '2026']);
+        $this->collect($this->email(['subject' => 'بخصوص 1500/2026', 'message_id' => '<dup@albanna.ae>']));
+        $held = MatterEmail::query()->latest('id')->first();
+        $this->assertSame(MatterEmail::PENDING, $held->status);
+        // …among the matters with that number.
+        $this->assertCount(2, $held->candidates);
+        $this->assertContains($third->id, $held->candidates);
     }
 
     public function test_only_a_partys_emails_are_kept(): void

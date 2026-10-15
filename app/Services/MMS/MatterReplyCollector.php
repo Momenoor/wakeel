@@ -52,7 +52,7 @@ class MatterReplyCollector
     /** How far back a mailbox is first read for the parties' other emails. */
     private const FIRST_DAYS = 30;
 
-    /** @var array<int, array{matter: int, label: string, url: string}> matters whose emails were kept in the system only: they have no OneDrive folder */
+    /** @var array<int, array{matter: int, label: string, url: string, downloads: list<array{name: string, url: string}>}> matters whose emails were kept in the system only (they have no OneDrive folder), with the files to download and put there by hand */
     private array $unlinked = [];
 
     public function __construct(
@@ -68,7 +68,7 @@ class MatterReplyCollector
      * email from a matter's party. Or — for one matter — read back from its
      * first email (FIRST_DAYS at least), for its emails only.
      *
-     * @return array{replies: int, emails: int, unfiled: int, errors: list<string>, unlinked: list<array{matter: int, label: string, url: string}>}
+     * @return array{replies: int, emails: int, unfiled: int, errors: list<string>, unlinked: list<array{matter: int, label: string, url: string, downloads: list<array{name: string, url: string}>}>}
      */
     public function collect(?int $matterId = null): array
     {
@@ -121,21 +121,34 @@ class MatterReplyCollector
     }
 
     /**
-     * A matter whose email was kept without a OneDrive folder to go to: said at the end of the round.
+     * A matter whose email was kept without a OneDrive folder to go to: said at the end of the round,
+     * with the email's files to download and put there by hand.
+     *
+     * @param  list<array{name: string, path: string}>  $kept  where each file of the email was kept
+     * @return list<array{name: string, url: string}> those to download — empty when the matter has its folder
      */
-    private function noteUnlinked(Matter $matter): bool
+    private function noteUnlinked(Matter $matter, array $kept = []): array
     {
         if (! MatterOneDriveFolders::receivedEmailsNotInOneDrive($matter)) {
-            return false;
+            return [];
         }
 
-        $this->unlinked[$matter->getKey()] = [
+        $downloads = array_values(array_map(
+            fn (array $file): array => ['name' => (string) $file['name'], 'url' => Storage::disk('public')->url((string) $file['path'])],
+            array_filter($kept, fn (array $file) => filled($file['path'] ?? null)),
+        ));
+
+        $entry = $this->unlinked[$matter->getKey()] ?? [
             'matter' => (int) $matter->getKey(),
             'label' => $matter->year.'/'.$matter->number,
             'url' => MatterResource::getUrl('view', ['record' => $matter], panel: 'mms'),
+            'downloads' => [],
         ];
+        $entry['downloads'] = [...$entry['downloads'], ...$downloads];
+        $this->unlinked[$matter->getKey()] = $entry;
 
-        return true;
+        // At least the matter is told, even when nothing was kept to download.
+        return $downloads ?: [['name' => '', 'url' => '']];
     }
 
     /**
@@ -274,7 +287,7 @@ class MatterReplyCollector
 
         if ($matter) {
             $kept = $this->keepOnMatter($matter, $pdf, $files, $name, $answers->user_id);
-            $this->noteUnlinked($matter);
+            $this->noteUnlinked($matter, $kept);
             MatterProgressRecorder::replyReceived($reply->setRelation('parent', $answers));
             // Whoever they put in To or CC: theirs, on this matter.
             MatterContact::learn($reply);
@@ -299,10 +312,11 @@ class MatterReplyCollector
         $email = $this->record($message, $id, $senderKey, ['matter_id' => $matter->getKey(), 'status' => MatterEmail::FILED, 'matched_by' => $by]);
         [$pdf, $files, $name] = $this->rendered($message, $senderKey, false);
 
-        $email->update(['files' => $this->keepOnMatter($matter, $pdf, $files, $name, null)]);
+        $kept = $this->keepOnMatter($matter, $pdf, $files, $name, null);
+        $email->update(['files' => $kept]);
         MatterProgressRecorder::emailReceived($email);
         MatterContact::learn($email);
-        $this->tellMatter($email, $matter, count($files), $this->noteUnlinked($matter));
+        $this->tellMatter($email, $matter, count($files), $this->noteUnlinked($matter, $kept));
     }
 
     /**
@@ -548,8 +562,13 @@ class MatterReplyCollector
     }
 
     /** The matter's people: told of a party's email kept on it. */
-    private function tellMatter(MatterEmail $email, Matter $matter, int $files, bool $notInOneDrive = false): void
+    /**
+     * @param  list<array{name: string, url: string}>  $downloads  when the matter has no OneDrive folder: the email's files, to download and put there by hand
+     */
+    private function tellMatter(MatterEmail $email, Matter $matter, int $files, array $downloads = []): void
     {
+        $notInOneDrive = $downloads !== [];
+        $downloads = array_values(array_filter($downloads, fn (array $file) => filled($file['url'])));
         $users = self::matterUsers([(int) $matter->getKey()]);
         if ($users->isEmpty()) {
             return;
@@ -568,6 +587,8 @@ class MatterReplyCollector
                 ]))
                 ->actions([
                     Action::make('view')->label(__('View'))->url(MatterResource::getUrl('view', ['record' => $matter], panel: 'mms'))->markAsRead(),
+                    // No folder to find it in: the email, to download and keep by hand.
+                    ...($downloads !== [] ? [Action::make('download')->label(__('Download the email'))->icon('heroicon-o-arrow-down-tray')->url($downloads[0]['url'], shouldOpenInNewTab: true)] : []),
                 ])
                 ->sendToDatabase($users);
         } catch (Throwable $e) {
