@@ -161,10 +161,11 @@ class TypeInfolist
                         // Those linked to this type, then the general ones (linked to no type).
                         TextEntry::make('letter_templates_own')
                             ->label(__('For this type'))
-                            ->state(fn (Type $record): string => $record->letterTemplates->where('is_active', true)->pluck('name')->implode('، ') ?: __('None')),
+                            ->state(fn (Type $record): string => $record->letterTemplates->where('is_active', true)->where('types_except', false)->pluck('name')->implode('، ') ?: __('None')),
                         TextEntry::make('letter_templates_general')
                             ->label(__('General (for every type)'))
-                            ->state(fn (): string => LetterTemplate::query()->where('is_active', true)->whereDoesntHave('types')->orderBy('name')->pluck('name')->implode('، ') ?: __('None')),
+                            // For no type in particular: every type, or every type except others.
+                            ->state(fn (Type $record): string => LetterTemplate::query()->where('is_active', true)->offeredForType($record->getKey())->where(fn ($q) => $q->whereDoesntHave('types')->orWhere('types_except', true))->orderBy('name')->pluck('name')->implode('، ') ?: __('None')),
                     ]),
 
                 Section::make(__('Timestamps'))

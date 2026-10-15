@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * heading}] — type is text | textarea | date | time | url | number |
  * select | items (a numbered list ticked from the item library's group).
  */
-#[Fillable('name', 'slug', 'subject', 'body', 'placeholders', 'locale', 'is_active', 'is_default', 'category', 'letterhead_id', 'inputs', 'minutes_opening', 'minutes_closing', 'email_template_id', 'minutes_attendees', 'recipients_layout', 'recipients_format', 'letter_font_id', 'arabic_font_id')]
+#[Fillable('name', 'slug', 'subject', 'body', 'placeholders', 'locale', 'is_active', 'is_default', 'category', 'letterhead_id', 'inputs', 'minutes_opening', 'minutes_closing', 'email_template_id', 'minutes_attendees', 'recipients_layout', 'recipients_format', 'letter_font_id', 'arabic_font_id', 'types_except')]
 class LetterTemplate extends Model implements HasRichContent
 {
     use InteractsWithRichContent;
@@ -32,6 +32,7 @@ class LetterTemplate extends Model implements HasRichContent
         return [
             'is_active' => 'boolean',
             'is_default' => 'boolean',
+            'types_except' => 'boolean',
             'placeholders' => 'array',
             'inputs' => 'array',
             'minutes_attendees' => 'array',
@@ -108,16 +109,38 @@ class LetterTemplate extends Model implements HasRichContent
 
     /**
      * Active templates usable for a matter of this type: those linked to
-     * it, and those linked to no type at all.
+     * it, those for every type except others, and those linked to no type
+     * at all.
      *
      * @param  Builder<LetterTemplate>  $query
      */
     public function scopeForMatterType(Builder $query, ?int $typeId): void
     {
-        $query->where('is_active', true)
-            ->where(fn (Builder $q) => $q
-                ->whereDoesntHave('types')
-                ->when($typeId, fn (Builder $q) => $q->orWhereHas('types', fn (Builder $t) => $t->whereKey($typeId))));
+        $query->where('is_active', true)->offeredForType($typeId);
+    }
+
+    /**
+     * Those whose matter types take in this one: none selected (every type),
+     * the type among the selected, or — for "all except" — not among them.
+     * A matter with no type is in none that name types, but in every
+     * "all except".
+     *
+     * @param  Builder<LetterTemplate>  $query
+     */
+    public function scopeOfferedForType(Builder $query, ?int $typeId): void
+    {
+        $query->where(fn (Builder $q) => $q
+            ->whereDoesntHave('types')
+            ->orWhere(fn (Builder $q) => $q
+                ->where('types_except', false)
+                ->when(
+                    $typeId,
+                    fn (Builder $q) => $q->whereHas('types', fn (Builder $t) => $t->whereKey($typeId)),
+                    fn (Builder $q) => $q->whereRaw('1 = 0'),
+                ))
+            ->orWhere(fn (Builder $q) => $q
+                ->where('types_except', true)
+                ->when($typeId, fn (Builder $q) => $q->whereDoesntHave('types', fn (Builder $t) => $t->whereKey($typeId)))));
     }
 
     /**

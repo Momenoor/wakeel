@@ -3979,5 +3979,9 @@
     "Download to put in OneDrive by hand:": "نزّل ثم ضعه في OneDrive يدوياً:",
     "The mail server refused these addresses (they do not exist or cannot receive): :addresses": "رفض خادم البريد هذه العناوين (غير موجودة أو لا تستقبل): :addresses",
     "The mail server refused every address (they do not exist or cannot receive): :addresses": "رفض خادم البريد كل العناوين (غير موجودة أو لا تستقبل): :addresses",
-    "If you are locked out during the update, open :url to get back in. If the site stays down, delete storage/framework/down and storage/framework/maintenance.php.": "إذا مُنعت من الدخول أثناء التحديث فافتح :url للعودة. وإذا بقي الموقع متوقفاً فاحذف الملفين storage/framework/down و storage/framework/maintenance.php."
+    "If you are locked out during the update, open :url to get back in. If the site stays down, delete storage/framework/down and storage/framework/maintenance.php.": "إذا مُنعت من الدخول أثناء التحديث فافتح :url للعودة. وإذا بقي الموقع متوقفاً فاحذف الملفين storage/framework/down و storage/framework/maintenance.php.",
+    "All except": "الكل عدا",
+    "The selected types are": "الأنواع المختارة هي",
+    "All types except these": "كل الأنواع عدا هذه",
+    "Only these types": "هذه الأنواع فقط"
 }

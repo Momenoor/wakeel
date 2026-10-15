@@ -22,6 +22,7 @@ use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\ToggleButtons;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
@@ -122,7 +123,16 @@ class LetterTemplateForm
                             ->preload()
                             ->searchable()
                             ->placeholder(__('All matter types'))
+                            ->live()
                             ->helperText(__('Issuing a letter on a matter offers only the templates for its type. Leave empty to offer this one for every type.'))
+                            ->columnSpanFull(),
+                        // What the selected types mean: the ones it is for, or the ones it is not for.
+                        ToggleButtons::make('types_except')
+                            ->label(__('The selected types are'))
+                            ->boolean(trueLabel: __('All types except these'), falseLabel: __('Only these types'))
+                            ->inline()
+                            ->default(false)
+                            ->visible(fn (Get $get): bool => filled($get('types')))
                             ->columnSpanFull(),
                         Select::make('courts')
                             ->label(__('Courts'))

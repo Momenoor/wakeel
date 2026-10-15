@@ -117,4 +117,54 @@ class LetterTemplateCourtTest extends TestCase
             ->assertCanSeeTableRecords([$atSharjah])
             ->assertCanNotSeeTableRecords([$everywhere, $atDubai]);
     }
+
+    public function test_a_template_can_be_for_every_type_except_the_selected(): void
+    {
+        $civil = Type::factory()->create(['name' => 'Civil']);
+        $labour = Type::factory()->create(['name' => 'Labour']);
+        $civilMatter = Matter::factory()->create(['type_id' => $civil->id]);
+        $labourMatter = Matter::factory()->create(['type_id' => $labour->id]);
+
+        $onlyCivil = $this->template('Only civil', [], [$civil->id]);
+        $notCivil = $this->template('Not civil', [], [$civil->id]);
+        $notCivil->update(['types_except' => true]);
+        $notCivilOrLabour = $this->template('Not civil or labour', [], [$civil->id, $labour->id]);
+        $notCivilOrLabour->update(['types_except' => true]);
+        $this->template('Every type');
+
+        $names = ['Only civil', 'Not civil', 'Not civil or labour', 'Every type'];
+        $offered = fn (Matter $m): array => LetterTemplate::query()->forMatter($m)->whereIn('name', $names)->pluck('name')->all();
+
+        $this->assertEqualsCanonicalizing(['Only civil', 'Every type'], $offered($civilMatter));
+        $this->assertEqualsCanonicalizing(['Not civil', 'Every type'], $offered($labourMatter));
+
+        // A matter with no type: only those that name no types, or leave some out.
+        $this->assertEqualsCanonicalizing(['Not civil', 'Not civil or labour', 'Every type'], LetterTemplate::query()->forMatterType(null)->whereIn('name', $names)->pluck('name')->all());
+    }
+
+    public function test_the_templates_list_filter_and_form_know_all_except(): void
+    {
+        Gate::before(fn () => true);
+        Filament::setCurrentPanel('mms');
+        $this->actingAs(User::factory()->create());
+
+        $civil = Type::factory()->create(['name' => 'Civil']);
+        $labour = Type::factory()->create(['name' => 'Labour']);
+        $notCivil = $this->template('Not civil', [], [$civil->id]);
+        $notCivil->update(['types_except' => true]);
+        $onlyCivil = $this->template('Only civil', [], [$civil->id]);
+
+        Livewire::test(ListLetterTemplates::class)
+            ->filterTable('type', $labour->id)
+            ->assertCanSeeTableRecords([$notCivil])
+            ->assertCanNotSeeTableRecords([$onlyCivil]);
+
+        Livewire::test(\App\Filament\Mms\Resources\LetterTemplates\Pages\EditLetterTemplate::class, ['record' => $onlyCivil->getRouteKey()])
+            ->fillForm(['types' => [$civil->id, $labour->id], 'types_except' => true])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertTrue($onlyCivil->fresh()->types_except);
+        $this->assertEqualsCanonicalizing([$civil->id, $labour->id], $onlyCivil->types()->pluck('types.id')->all());
+    }
 }

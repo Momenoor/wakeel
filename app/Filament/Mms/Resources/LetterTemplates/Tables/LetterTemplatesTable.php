@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Resources\LetterTemplates\Tables;
 
 use App\Enums\LetterTemplateCategories;
 use App\Models\Court;
+use App\Models\LetterTemplate;
 use App\Models\Type;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -41,6 +42,9 @@ class LetterTemplatesTable
                 TextColumn::make('types.name')
                     ->label(__('Matter types'))
                     ->badge()
+                    // "All except" says so in front of the types it leaves out.
+                    ->prefix(fn (LetterTemplate $record): ?string => $record->types_except ? __('All except').': ' : null)
+                    ->color(fn (LetterTemplate $record): string => $record->types_except ? 'danger' : 'primary')
                     ->placeholder(__('All matter types'))
                     ->listWithLineBreaks()
                     ->limitList(5)
@@ -81,7 +85,7 @@ class LetterTemplatesTable
                     ->options(fn() => Type::query()->orderBy('name')->pluck('name', 'id'))
                     ->searchable()
                     ->query(fn(Builder $query, array $data) => filled($data['value'] ?? null)
-                        ? $query->where(fn(Builder $q) => $q->whereDoesntHave('types')->orWhereHas('types', fn(Builder $t) => $t->whereKey($data['value'])))
+                        ? $query->offeredForType((int) $data['value'])
                         : $query),
                 SelectFilter::make('court')
                     ->label(__('Court'))
