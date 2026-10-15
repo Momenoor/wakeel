@@ -146,22 +146,68 @@ class MatterReferenceMatcher
         $found = [];
 
         foreach ($refs->chunk(200) as $chunk) {
+            // The number as the office keeps it can differ from the way the
+            // title writes it — "0986", " 986", Arabic-Indic digits, "986/2026"
+            // — so the database narrows it down (by year, and the digits
+            // anywhere in the number) and the comparison is made on the
+            // normalised number.
             $matters = Matter::query()
                 ->where(function ($query) use ($chunk) {
                     foreach ($chunk as $ref) {
-                        $query->orWhere(fn ($q) => $q->where('year', $ref['year'])->where('number', $ref['number']));
+                        $query->orWhere(function ($q) use ($ref) {
+                            $q->where('year', $ref['year'])->where(function ($n) use ($ref) {
+                                foreach (self::spellings($ref['number']) as $spelling) {
+                                    $n->orWhere('number', 'like', '%'.$spelling.'%');
+                                }
+                            });
+                        });
                     }
                 })
-                ->get(['id', 'year', 'number', 'final_report_at']);
+                ->get(['id', 'year', 'number', 'final_report_at'])
+                ->filter(fn (Matter $m): bool => self::normalise((string) $m->number, (int) $m->year) !== null);
 
             // Several sharing it: the current one — not yet at its final
             // report, the newest — else the one closed last.
-            foreach ($matters->groupBy(fn (Matter $m): string => self::key(['number' => (string) $m->number, 'year' => (int) $m->year])) as $key => $same) {
+            foreach ($matters->groupBy(fn (Matter $m): string => self::key(['number' => self::normalise((string) $m->number, (int) $m->year), 'year' => (int) $m->year])) as $key => $same) {
+                if (! $refs->contains(fn (array $ref): bool => self::key($ref) === $key)) {
+                    continue;
+                }
+
                 $found[$key] = (int) $same->sort(fn (Matter $a, Matter $b): int => [$a->final_report_at !== null, -($a->final_report_at?->getTimestamp() ?? 0), -$a->id]
                     <=> [$b->final_report_at !== null, -($b->final_report_at?->getTimestamp() ?? 0), -$b->id])->first()->id;
             }
         }
 
         return $found;
+    }
+
+    /**
+     * A stored matter number as the plain number it means: "0986", " 986 ",
+     * "٩٨٦" and "986/2026" are all 986. Null for one that is not a number
+     * ("986-A", a number with letters).
+     */
+    private static function normalise(string $stored, int $year): ?string
+    {
+        $stored = trim(strtr($stored, self::DIGITS));
+
+        if (preg_match('~^0*(\d+)(?:\s*(?:/|-|–)\s*'.$year.')?$~', $stored, $m) !== 1) {
+            return null;
+        }
+
+        return ltrim($m[1], '0') ?: '0';
+    }
+
+    /**
+     * The ways a number may be written in the database, for narrowing the
+     * search: Western, Arabic-Indic and Persian digits.
+     *
+     * @return list<string>
+     */
+    private static function spellings(string $number): array
+    {
+        $arabic = array_flip(array_slice(self::DIGITS, 0, 10, true));
+        $persian = array_flip(array_slice(self::DIGITS, 10, 10, true));
+
+        return array_values(array_unique([$number, strtr($number, $arabic), strtr($number, $persian)]));
     }
 }

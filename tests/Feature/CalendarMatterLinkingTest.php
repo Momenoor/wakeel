@@ -44,6 +44,27 @@ class CalendarMatterLinkingTest extends TestCase
         cache()->forget('outlook_access_token');
     }
 
+    public function test_a_matter_is_found_however_its_number_is_stored(): void
+    {
+        $zeros = Matter::factory()->create(['number' => '0986', 'year' => 2026]);
+        $spaced = Matter::factory()->create(['number' => ' 2105 ', 'year' => 2026]);
+        $arabic = Matter::factory()->create(['number' => '٣١٥٣', 'year' => 2026]);
+        $withYear = Matter::factory()->create(['number' => '77/2026', 'year' => 2026]);
+        Matter::factory()->create(['number' => '2105-A', 'year' => 2026]);
+
+        $title = 'د. رضا- اجتماع خبرة الدعوى 2105-2026 عمالي جزئي دبي - أ.إ';
+        $this->assertSame([$spaced->id], MatterReferenceMatcher::matterIds($title));
+        $this->assertSame([$zeros->id], MatterReferenceMatcher::matterIds('الدعوى 986/2026'));
+        $this->assertSame([$arabic->id], MatterReferenceMatcher::matterIds('الدعوى 3153/2026'));
+        $this->assertSame([$withYear->id], MatterReferenceMatcher::matterIds('الدعوى 77/2026'));
+        // 98 is not 986.
+        $this->assertSame([], MatterReferenceMatcher::matterIds('الدعوى 98/2026'));
+
+        $event = $this->event($title);
+        app(EventMatterLinker::class)->link($event);
+        $this->assertSame([$spaced->id], $event->matters()->pluck('matters.id')->all());
+    }
+
     private function matter(int $number, int $year): Matter
     {
         return Matter::factory()->create(['number' => $number, 'year' => $year]);
