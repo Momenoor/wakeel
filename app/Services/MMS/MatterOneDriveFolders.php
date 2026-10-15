@@ -307,13 +307,12 @@ class MatterOneDriveFolders
     }
 
     /**
-     * A file into a subfolder of the matter's folder in its assistant's
-     * OneDrive (made when missing) — "a/b" for one inside another. Its
-     * link; null when the matter has no folder.
+     * The matter's folder in an assistant's OneDrive (made, with the assistant's
+     * OneDrive account on their profile) — null when the matter has none.
      */
-    public function uploadToSubfolder(Matter $matter, string $subfolder, string $name, string $contents, string $mime): ?string
+    public static function folderFor(Matter $matter): ?MatterOneDriveFolder
     {
-        $folder = MatterOneDriveFolder::query()
+        return MatterOneDriveFolder::query()
             ->where('matter_id', $matter->getKey())
             ->where('status', MatterOneDriveFolder::CREATED)
             ->whereNotNull('drive_item_id')
@@ -321,6 +320,26 @@ class MatterOneDriveFolders
             ->oldest('id')
             ->get()
             ->first(fn (MatterOneDriveFolder $f) => filled($f->party?->onedrive_email));
+    }
+
+    /**
+     * Whether the received emails of this matter are meant to go to OneDrive
+     * (the feature is on, with a folder for them) but the matter has no
+     * folder there — they are kept in the system only.
+     */
+    public static function receivedEmailsNotInOneDrive(Matter $matter): bool
+    {
+        return self::enabled() && self::receivedEmailsFolder() !== '' && self::folderFor($matter) === null;
+    }
+
+    /**
+     * A file into a subfolder of the matter's folder in its assistant's
+     * OneDrive (made when missing) — "a/b" for one inside another. Its
+     * link; null when the matter has no folder.
+     */
+    public function uploadToSubfolder(Matter $matter, string $subfolder, string $name, string $contents, string $mime): ?string
+    {
+        $folder = self::folderFor($matter);
 
         if (! $folder) {
             return null;

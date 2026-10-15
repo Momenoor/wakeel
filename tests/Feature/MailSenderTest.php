@@ -34,7 +34,6 @@ class MailSenderTest extends TestCase
         parent::setUp();
 
         config([
-            'mail_senders.senders' => ['iflas' => ['name' => 'Iflas', 'address' => 'iflas@jpaemirates.com', 'host' => 'mail.example.com', 'port' => 587, 'username' => 'iflas@jpaemirates.com', 'password' => 'x', 'encryption' => 'tls']],
             'mail.mailers.microsoft-graph.tenant_id' => 'tenant',
             'mail.mailers.microsoft-graph.client_id' => 'client',
             'mail.mailers.microsoft-graph.client_secret' => 'secret',
@@ -53,12 +52,15 @@ class MailSenderTest extends TestCase
         return MailSender::create(['key' => $key, 'name' => ucfirst($key), 'address' => $address, 'driver' => MailSender::MICROSOFT]);
     }
 
-    public function test_senders_added_in_the_app_join_the_config_ones(): void
+    public function test_active_senders_are_listed_and_senders_are_kept_in_the_database_only(): void
     {
+        \Tests\Support\MailSenders::add('iflas', ['name' => 'Iflas', 'address' => 'iflas@jpaemirates.com']);
         $this->microsoft('noreply', 'noreply@jpaemirates.com');
         MailSender::create(['key' => 'old', 'name' => 'Old', 'address' => 'old@x.com', 'driver' => MailSender::MICROSOFT, 'is_active' => false]);
 
-        $this->assertSame(['noreply', 'iflas'], array_keys(SenderMailer::options()));
+        // The inactive one is not offered; by name.
+        $this->assertSame(['iflas', 'noreply'], array_keys(SenderMailer::options()));
+        $this->assertSame([], config('mail_senders.senders', []));
         $this->assertSame('Noreply <noreply@jpaemirates.com> — Microsoft 365', SenderMailer::options()['noreply']);
         $this->assertSame('Iflas <iflas@jpaemirates.com> — cPanel', SenderMailer::options()['iflas']);
         $this->assertTrue(SenderMailer::isMicrosoft(SenderMailer::sender('noreply')));
@@ -155,9 +157,9 @@ class MailSenderTest extends TestCase
         $sender = MailSender::sole();
         $this->assertSame(MailSender::MICROSOFT, $sender->driver);
 
-        // A code already used by a config sender is refused.
+        // A code already used is refused.
         Livewire::test(ManageMailSenders::class)
-            ->callAction('create', ['driver' => MailSender::MICROSOFT, 'address' => 'i@x.com', 'name' => 'X', 'key' => 'iflas'])
+            ->callAction('create', ['driver' => MailSender::MICROSOFT, 'address' => 'i@x.com', 'name' => 'X', 'key' => 'noreply'])
             ->assertHasActionErrors(['key']);
 
         config(['mail.mailers.microsoft-graph.transport' => 'array']);

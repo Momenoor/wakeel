@@ -22,6 +22,10 @@ class CollectMatterReplies extends Command
         $this->info(__(':count replies kept.', ['count' => $result['replies']]));
         $this->info(__(':count other emails from the parties kept, :unfiled waiting for their matter.', ['count' => $result['emails'], 'unfiled' => $result['unfiled']]));
 
+        foreach ($result['unlinked'] as $matter) {
+            $this->warn(__('Matter :matter is not linked to a OneDrive folder: its emails were kept in the system only.', ['matter' => $matter['label']]));
+        }
+
         foreach ($result['errors'] as $error) {
             $this->warn($error);
         }

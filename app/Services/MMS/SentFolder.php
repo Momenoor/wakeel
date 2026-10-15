@@ -19,7 +19,7 @@ class SentFolder
     }
 
     /**
-     * For any sender in config/mail_senders.php.
+     * For any mail sender.
      */
     public function saveFor(string $senderKey, string $rawMessage): void
     {

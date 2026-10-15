@@ -3,6 +3,10 @@
 namespace App\Services\MMS;
 
 use App\Support\Branding;
+use App\Models\LetterFont;
+use Mpdf\Config\ConfigVariables;
+use Mpdf\Exception\FontException;
+use Mpdf\Config\FontVariables;
 use Carbon\CarbonInterface;
 use DOMDocument;
 use DOMElement;
@@ -41,6 +45,39 @@ class EmailPdf
         ?CarbonInterface $sentAt = null,
         ?string $mailbox = null,
     ): string {
+        $font = Branding::emailPdfFont();
+        $draw = fn (?LetterFont $font, bool $otl): string => self::draw($subject, $html, $sender, $toName, $to, $cc, $bcc, $attachments, $sentAt, $mailbox, $font, $otl);
+
+        // A font the PDF engine can't use (a file without the tables Arabic needs, one with PostScript outlines): without them, then the standard font — the email is kept all the same.
+        $attempts = $font ? [[$font, true], [$font, false], [null, false]] : [[null, false]];
+
+        foreach ($attempts as $i => [$try, $otl]) {
+            try {
+                return $draw($try, $otl);
+            } catch (FontException $e) {
+                if ($i === array_key_last($attempts)) {
+                    throw $e;
+                }
+
+                report($e);
+            }
+        }
+    }
+
+    private static function draw(
+        string $subject,
+        string $html,
+        array $sender,
+        string $toName,
+        array $to,
+        array $cc,
+        array $bcc,
+        array $attachments,
+        ?CarbonInterface $sentAt,
+        ?string $mailbox,
+        ?LetterFont $font,
+        bool $otl,
+    ): string {
         $sentAt ??= now();
         $attachments = self::files($attachments);
         $attachmentsSize = array_sum(array_map(fn (array $file): int => (int) ($file['size'] ?? 0), $attachments));
@@ -56,6 +93,21 @@ class EmailPdf
             mkdir($tempDir, 0755, true);
         }
 
+        // The office's font (Calibri, when uploaded under Letter fonts), else the standard.
+        $fontFamily = $font?->pdfKey();
+        $fontOptions = [];
+
+        if ($font) {
+            $files = $font->pdfFiles();
+            $fontOptions = [
+                'fontDir' => [...(new ConfigVariables)->getDefaults()['fontDir'], ...array_values(array_unique(array_map('dirname', $files)))],
+                'fontdata' => (new FontVariables)->getDefaults()['fontdata'] + [
+                    $font->pdfKey() => [...array_map('basename', $files), ...($otl ? ['useOTL' => 0xFF] : [])],
+                ],
+                'default_font' => $font->pdfKey(),
+            ];
+        }
+
         $mpdf = new Mpdf([
             'mode' => 'utf-8',
             'format' => 'A4',
@@ -65,9 +117,11 @@ class EmailPdf
             'margin_right' => 15,
             'direction' => 'ltr',
             'autoScriptToLang' => true,
-            'autoLangToFont' => true,
+            // A font with the Arabic letters (Calibri has) writes the Arabic too; otherwise it is found for it.
+            'autoLangToFont' => ! ($font && $font->coversArabic()),
             'autoArabic' => true,
             'tempDir' => $tempDir,
+            ...$fontOptions,
         ]);
 
         // Allow remote images (for logo/signature images from storage)
@@ -99,16 +153,17 @@ class EmailPdf
         $recipient = (object) ['name' => $toName, 'email' => $to];
 
         $mpdf->WriteHTML(view('mails.bulk-mail-pdf', compact(
-            'html', 'subject', 'sender', 'recipient', 'sentAt', 'cc', 'bcc', 'attachments', 'attachmentsSize', 'isRtl', 'brand',
+            'html', 'subject', 'sender', 'recipient', 'sentAt', 'cc', 'bcc', 'attachments', 'attachmentsSize', 'isRtl', 'brand', 'fontFamily',
         ))->render());
 
         return $mpdf->Output('', Destination::STRING_RETURN);
     }
 
     /**
-     * The email's blocks — paragraphs, list items, headings, cells, lists —
-     * each right to left when its own text is Arabic, left to right when
-     * not; one that says its direction keeps it.
+     * The email's blocks — paragraphs, list items, headings, cells, lists,
+     * and the tables of an Arabic email — each right to left when its own
+     * text is Arabic, left to right when not; one that says its direction
+     * keeps it. Text lying loose between the blocks is a block of its own.
      */
     public static function directed(string $html): string
     {
@@ -122,24 +177,96 @@ class EmailPdf
         libxml_clear_errors();
         libxml_use_internal_errors($previous);
 
-        foreach ((new DOMXPath($dom))->query('//p|//div[not(@id="email-root")]|//li|//ul|//ol|//h1|//h2|//h3|//h4|//h5|//h6|//td|//th|//blockquote') as $element) {
+        $root = $dom->getElementById('email-root');
+        self::wrapLoose($dom, $root);
+        $xpath = new DOMXPath($dom);
+
+        // What the email itself says is left to right (a signature) — before any is set here.
+        $said = [];
+        foreach ($xpath->query('//*[@dir]') as $element) {
+            $said[spl_object_id($element)] = true;
+        }
+        $underSaid = function (DOMElement $element) use ($xpath, $said): bool {
+            foreach ($xpath->query('ancestor::*[@dir]', $element) as $ancestor) {
+                if (isset($said[spl_object_id($ancestor)])) {
+                    return true;
+                }
+            }
+
+            return false;
+        };
+
+        foreach ($xpath->query('//p|//div[not(@id="email-root")]|//li|//ul|//ol|//h1|//h2|//h3|//h4|//h5|//h6|//td|//th|//blockquote|//table') as $element) {
             /** @var DOMElement $element */
-            if ($element->hasAttribute('dir')) {
+            $rtl = BulkMailService::containsArabic($element->textContent);
+
+            if ($element->tagName === 'table') {
+                // A table's columns run the way its text does — unless something around it (a signature) says otherwise.
+                if (! $element->hasAttribute('dir') && $rtl && ! $underSaid($element)) {
+                    $element->setAttribute('dir', 'rtl');
+                }
+
                 continue;
             }
 
-            $rtl = BulkMailService::containsArabic($element->textContent);
-            $element->setAttribute('dir', $rtl ? 'rtl' : 'ltr');
-            $element->setAttribute('style', trim($element->getAttribute('style').'; text-align: '.($rtl ? 'right' : 'left'), '; '));
+            if (! $element->hasAttribute('dir')) {
+                $element->setAttribute('dir', $rtl ? 'rtl' : 'ltr');
+            }
+
+            $direction = $element->getAttribute('dir');
+            $style = $element->getAttribute('style');
+
+            // Centred and justified stay; the rest starts where the text does.
+            if (! preg_match('/text-align:\s*(center|justify)/i', $style)) {
+                $style = trim((string) preg_replace('/text-align:\s*[a-z]+\s*;?/i', '', $style), '; ');
+                $element->setAttribute('style', trim($style.'; text-align: '.($direction === 'rtl' ? 'right' : 'left'), '; '));
+            }
         }
 
-        $root = $dom->getElementById('email-root');
         $out = '';
         foreach ($root?->childNodes ?? [] as $child) {
             $out .= $dom->saveHTML($child);
         }
 
         return $out;
+    }
+
+    /**
+     * Text and inline parts standing directly in the email (no block around
+     * them), each run put in a <div> of its own — so it can have a direction.
+     */
+    private static function wrapLoose(DOMDocument $dom, ?DOMElement $root): void
+    {
+        if (! $root) {
+            return;
+        }
+
+        $blocks = ['p', 'div', 'ul', 'ol', 'li', 'table', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'hr'];
+        $run = [];
+        $flush = function () use (&$run, $dom, $root): void {
+            if ($run === [] || trim(implode('', array_map(fn ($n) => $n->textContent, $run))) === '') {
+                $run = [];
+
+                return;
+            }
+
+            $wrapper = $dom->createElement('div');
+            $root->insertBefore($wrapper, $run[0]);
+            foreach ($run as $node) {
+                $wrapper->appendChild($node);
+            }
+            $run = [];
+        };
+
+        foreach (iterator_to_array($root->childNodes) as $node) {
+            $isBlock = $node instanceof DOMElement && in_array($node->tagName, $blocks, true);
+            if ($isBlock) {
+                $flush();
+            } else {
+                $run[] = $node;
+            }
+        }
+        $flush();
     }
 
     /**

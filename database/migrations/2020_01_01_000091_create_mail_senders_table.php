@@ -6,8 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Mailboxes letters and bulk mail can be sent from, managed in the app —
- * a cPanel mailbox (SMTP) or a Microsoft 365 one (Microsoft Graph). The
- * senders in config/mail_senders.php still work alongside these.
+ * a cPanel mailbox (SMTP) or a Microsoft 365 one (Microsoft Graph).
  */
 return new class extends Migration
 {

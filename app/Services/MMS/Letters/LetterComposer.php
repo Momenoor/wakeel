@@ -50,6 +50,9 @@ class LetterComposer
     /** A meeting's minutes ({{minutes.number}}, {{minutes.attendees}}, {{minutes.qa}}): {number, attendees, items}. */
     public const MINUTES = '__minutes';
 
+    /** Without the signature and stamp (the pictures, and the signature blocks): for a letter that is the email itself, which carries the mailbox's own signature. */
+    public bool $withoutSignature = false;
+
     public function __construct(
         public LetterTemplate $template,
         public Matter $matter,
@@ -160,8 +163,8 @@ class LetterComposer
             'date' => $this->date->format('d/m/Y'),
             'subject' => '',
             'recipients' => $this->recipientsHtml(),
-            'signature' => $this->imageHtml($this->letterhead?->file($this->letterhead?->signature_image), (float) ($this->letterhead?->signature_height ?: 45)),
-            'stamp' => $this->imageHtml($this->letterhead?->file($this->letterhead?->stamp_image), (float) ($this->letterhead?->stamp_height ?: 40)),
+            'signature' => $this->withoutSignature ? '' : $this->imageHtml($this->letterhead?->file($this->letterhead?->signature_image), (float) ($this->letterhead?->signature_height ?: 45)),
+            'stamp' => $this->withoutSignature ? '' : $this->imageHtml($this->letterhead?->file($this->letterhead?->stamp_image), (float) ($this->letterhead?->stamp_height ?: 40)),
         ];
 
         foreach ($this->template->inputs ?? [] as $input) {
@@ -888,7 +891,9 @@ class LetterComposer
         // before the placeholders, which their lines may hold.
         $letterhead = $this->letterhead ?? Letterhead::default() ?? Letterhead::fallback();
         $pageWidth = $letterhead->orientation === 'landscape' ? Letterhead::PAGE_HEIGHT : Letterhead::PAGE_WIDTH;
-        $html = SignatureLayouts::expand($html, $letterhead, $pageWidth - (float) $letterhead->margin_left - (float) $letterhead->margin_right);
+        $html = $this->withoutSignature
+            ? SignatureLayouts::remove($html)
+            : SignatureLayouts::expand($html, $letterhead, $pageWidth - (float) $letterhead->margin_left - (float) $letterhead->margin_right);
 
         // Parts written <<…>>: in only when their placeholders are filled.
         $html = BulkMailPlaceholders::conditionals($html, $values);

@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\LetterFont;
 use App\Models\Setting;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
@@ -30,6 +31,9 @@ class Branding
     /** How the PDF of an email is branded: as Outlook prints it, or as the office. */
     public const EMAIL_PDF = 'email_pdf_branding';
 
+    /** The font an email's PDF is written in: one of the office's fonts (Letter fonts). */
+    public const EMAIL_PDF_FONT = 'email_pdf_font';
+
     public const EMAIL_PDF_OUTLOOK = 'outlook';
 
     public const EMAIL_PDF_OFFICE = 'office';
@@ -41,6 +45,21 @@ class Branding
             self::EMAIL_PDF_OUTLOOK => __('Outlook — as Outlook prints an email'),
             self::EMAIL_PDF_OFFICE => __('The office — its logo and name'),
         ];
+    }
+
+    /**
+     * The font an email's PDF is written in: the one chosen in Settings, else
+     * Calibri when the office has uploaded it (Letter fonts); null: the
+     * standard one. Only a font whose files are there.
+     */
+    public static function emailPdfFont(): ?LetterFont
+    {
+        $chosen = Setting::get(self::EMAIL_PDF_FONT);
+        $font = filled($chosen)
+            ? LetterFont::find($chosen)
+            : LetterFont::query()->where('name', 'like', 'Calibri%')->orderByRaw("name = 'Calibri' desc")->first();
+
+        return $font && isset($font->pdfFiles()['R']) ? $font : null;
     }
 
     /**

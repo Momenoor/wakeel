@@ -82,6 +82,7 @@ class SystemSettings extends Page
             'letter_cc_expert_types' => MatterLetter::ccExpertTypes(),
             ...collect(Branding::KEYS)->mapWithKeys(fn (string $key): array => [$key => Setting::get($key)])->all(),
             Branding::EMAIL_PDF => Setting::get(Branding::EMAIL_PDF, Branding::EMAIL_PDF_OUTLOOK),
+            Branding::EMAIL_PDF_FONT => Setting::get(Branding::EMAIL_PDF_FONT),
 
             'mail_sender_key' => Setting::get('mail_sender_key'),
             EmailSendFields::DEFAULT_SENDER => Setting::get(EmailSendFields::DEFAULT_SENDER),

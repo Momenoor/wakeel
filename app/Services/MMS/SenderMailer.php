@@ -10,10 +10,9 @@ use Throwable;
 
 /**
  * Sends through one of the department mailboxes instead of the app's own
- * mailer — those added in the app (Mail senders) and those in
- * config/mail_senders.php. For the length of the callback the mailer is
- * that mailbox, then everything is put back. Shared by bulk mail and
- * letters.
+ * mailer — those kept in the mail_senders table (Settings → Mail senders).
+ * For the length of the callback the mailer is that mailbox, then everything
+ * is put back. Shared by bulk mail and letters.
  *
  *  - smtp: a cPanel mailbox, logged in with its password;
  *  - microsoft: a Microsoft 365 mailbox, sent through Microsoft Graph with
@@ -38,10 +37,6 @@ class SenderMailer
      */
     public static function all(): array
     {
-        $config = collect(config('mail_senders.senders', []))
-            ->map(fn (array $sender) => ['driver' => MailSender::SMTP, ...$sender])
-            ->all();
-
         try {
             $managed = MailSender::query()->where('is_active', true)->orderBy('name')->get()
                 ->mapWithKeys(fn (MailSender $sender) => [$sender->key => $sender->toSender()])
@@ -50,7 +45,7 @@ class SenderMailer
             $managed = []; // Before the table exists (e.g. mid-install).
         }
 
-        return [...$managed, ...$config];
+        return $managed;
     }
 
     /**

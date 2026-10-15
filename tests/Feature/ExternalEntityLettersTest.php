@@ -58,9 +58,9 @@ class ExternalEntityLettersTest extends TestCase
         Storage::fake('public');
         Storage::fake('local');
         $this->withoutDefer();
+        \Tests\Support\MailSenders::add('iflas', ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
         config([
             'mail.mailers.smtp.transport' => 'array',
-            'mail_senders.senders.iflas' => ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls'],
             'mail.mailers.microsoft-graph' => ['transport' => 'microsoft-graph', 'tenant_id' => 'tenant', 'client_id' => 'client', 'client_secret' => 'secret'],
         ]);
         $this->app->instance(SentFolder::class, Mockery::spy(SentFolder::class));

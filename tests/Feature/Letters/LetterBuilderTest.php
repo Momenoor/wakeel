@@ -391,10 +391,10 @@ class LetterBuilderTest extends TestCase
 
     public function test_a_written_letter_is_issued_then_sent_from_its_send_screen_and_both_are_progress(): void
     {
+        \Tests\Support\MailSenders::add('iflas', ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
         config([
             'mail.mailers.smtp.transport' => 'array',
-            'mail_senders.senders.iflas' => ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls'],
-        ]);
+            ]);
         $this->withoutDefer();
         $this->app->instance(SentFolder::class, Mockery::spy(SentFolder::class));
         $sent = [];

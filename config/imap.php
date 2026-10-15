@@ -82,60 +82,6 @@ return [
             'timeout' => 30,
             'extensions' => [],
         ],
-        'iflas' => [// account identifier
-            'host' => config('mail_senders.senders.iflas.host', 'localhost'),
-            'port' => env('IMAP_PORT', 993),
-            'protocol' => env('IMAP_PROTOCOL', 'imap'), // might also use imap, [pop3 or nntp (untested)]
-            'encryption' => config('mail_senders.senders.iflas.encryption', 'ssl'), // Supported: false, 'ssl', 'tls', 'notls', 'starttls'
-            'validate_cert' => env('IMAP_VALIDATE_CERT', true),
-            'username' => config('mail_senders.senders.iflas.username', 'root@example.com'),
-            'password' => config('mail_senders.senders.iflas.password', ''),
-            'authentication' => env('IMAP_AUTHENTICATION', null),
-            'proxy' => [
-                'socket' => null,
-                'request_fulluri' => false,
-                'username' => null,
-                'password' => null,
-            ],
-            'timeout' => 30,
-            'extensions' => [],
-        ],
-        'easar' => [// account identifier
-            'host' => config('mail_senders.senders.easar.host', 'localhost'),
-            'port' => env('IMAP_PORT', 993),
-            'protocol' => env('IMAP_PROTOCOL', 'imap'), // might also use imap, [pop3 or nntp (untested)]
-            'encryption' => config('mail_senders.senders.easar.encryption', 'ssl'), // Supported: false, 'ssl', 'tls', 'notls', 'starttls'
-            'validate_cert' => env('IMAP_VALIDATE_CERT', true),
-            'username' => config('mail_senders.senders.easar.username', 'root@example.com'),
-            'password' => config('mail_senders.senders.easar.password', ''),
-            'authentication' => env('IMAP_AUTHENTICATION', null),
-            'proxy' => [
-                'socket' => null,
-                'request_fulluri' => false,
-                'username' => null,
-                'password' => null,
-            ],
-            'timeout' => 30,
-            'extensions' => [],
-        ],
-        'haikala' => [
-            'host' => config('mail_senders.senders.haikala.host', 'localhost'),
-            'port' => env('IMAP_PORT', 993),
-            'protocol' => env('IMAP_PROTOCOL', 'imap'),
-            'encryption' => config('mail_senders.senders.haikala.encryption', 'ssl'),
-            'validate_cert' => env('IMAP_VALIDATE_CERT', true),
-            'username' => config('mail_senders.senders.haikala.username', 'root@example.com'),
-            'password' => config('mail_senders.senders.haikala.password', ''),
-            'authentication' => env('IMAP_AUTHENTICATION', null),
-            'proxy' => [
-                'socket' => null,
-                'request_fulluri' => false,
-                'username' => null,
-                'password' => null,
-            ],
-            'timeout' => 30,
-            'extensions' => [],
-        ],
 
         /*
         'gmail' => [ // account identifier

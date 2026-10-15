@@ -30,7 +30,7 @@ class MailSender extends Model
     }
 
     /**
-     * In the same shape as a sender in config/mail_senders.php.
+     * The sender as the mailer takes it.
      *
      * @return array<string, mixed>
      */

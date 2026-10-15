@@ -44,7 +44,7 @@ class LetterMailer
     public const BODY = 'body';
 
     /**
-     * @param  list<int>  $recipientIds  MatterLetterRecipient ids
+     * @param  list<int>|null  $recipientIds  MatterLetterRecipient ids — exactly these (none ticked: none of them); null: every recipient of the letter
      * @param  list<string>  $formats  'pdf' and/or 'docx'
      * @param  list<string>  $cc
      * @param  string|bool  $separate  EmailGrouping — one each, by party, or one for all (true: by party; false: all)
@@ -60,7 +60,7 @@ class LetterMailer
         string $mode = self::ATTACHMENT,
         ?EmailTemplate $template = null,
         array $formats = ['pdf'],
-        array $recipientIds = [],
+        ?array $recipientIds = null,
         array $cc = [],
         string|bool $separate = false,
         ?string $subject = null,
@@ -72,7 +72,7 @@ class LetterMailer
         $composer = LetterIssuer::composerFor($letter);
 
         $recipients = $letter->recipients
-            ->when($recipientIds !== [], fn (Collection $all) => $all->whereIn('id', $recipientIds))
+            ->when($recipientIds !== null, fn (Collection $all) => $all->whereIn('id', $recipientIds))
             ->values();
 
         $withEmail = $recipients->filter(fn (MatterLetterRecipient $r) => $this->emails($r) !== []);
@@ -114,7 +114,7 @@ class LetterMailer
             // …and whom these recipients brought into the matter.
             $theirs = MatterContact::copiedFor($letter->matter_id, $to, $group->pluck('recipient_id')->filter()->all(), $contactsCc);
             $groupCc = Addresses::without(Addresses::emails([...$cc, ...$theirs]), $to);
-            $email = $this->email($composer, $mode, $template, $unit['greet'], $files, $subject, $body, $unit['name']);
+            $email = $this->email($composer, $mode, $template, $unit['greet'], $files, $subject, $body, $unit['name'], $sender);
 
             try {
                 $sent = SenderMailer::using($sender, fn () => Mail::to($to ?: $groupCc)->cc($to ? $groupCc : [])->send($email));
@@ -223,9 +223,10 @@ class LetterMailer
      *
      * @return array{subject: string, html: string, rtl: bool}
      */
-    public function preview(MatterLetter $letter, string $mode, ?EmailTemplate $template, ?MatterLetterRecipient $recipient, ?string $subject = null, ?string $body = null, ?string $name = null): array
+    public function preview(MatterLetter $letter, string $mode, ?EmailTemplate $template, ?MatterLetterRecipient $recipient, ?string $subject = null, ?string $body = null, ?string $name = null, ?string $senderKey = null): array
     {
-        $email = $this->email(LetterIssuer::composerFor($letter), $mode, $template, $recipient, [], $subject, $body, $name);
+        $sender = filled($senderKey) ? (SenderMailer::all()[$senderKey] ?? null) : null;
+        $email = $this->email(LetterIssuer::composerFor($letter), $mode, $template, $recipient, [], $subject, $body, $name, $sender);
 
         $html = $email->letterHtml;
         foreach ($email->images as $token => $path) {
@@ -305,8 +306,11 @@ class LetterMailer
     /**
      * @param  list<array{name: string, data: string, mime: string}>  $files
      */
-    private function email(LetterComposer $composer, string $mode, ?EmailTemplate $template, ?MatterLetterRecipient $recipient, array $files, ?string $subjectOverride = null, ?string $bodyOverride = null, ?string $name = null): LetterEmail
+    private function email(LetterComposer $composer, string $mode, ?EmailTemplate $template, ?MatterLetterRecipient $recipient, array $files, ?string $subjectOverride = null, ?string $bodyOverride = null, ?string $name = null, ?array $sender = null): LetterEmail
     {
+        // The mailbox's own signature, at the end of the email — of the letter itself, or of the covering note.
+        $signature = filled($sender['signature'] ?? null) ? '<br>'.$sender['signature'] : '';
+
         $values = [
             ...$composer->values(),
             // A representative's own email: greeted by their name.
@@ -319,8 +323,11 @@ class LetterMailer
             $header = '<p style="margin: 0;">'.($arabic ? 'المرجع: ' : 'Ref: ').'<span dir="ltr">'.e($values['reference']).'</span></p>'
                 .'<p style="margin: 0 0 16px 0;">'.($arabic ? 'التاريخ: ' : 'Date: ').e($values['date']).'</p>';
 
-            // A signature block: its lines, then its picture — no layering in mail.
-            [$html, $images] = $this->embeddable($header.SignatureLayouts::forEmail($composer->bodyHtml()));
+            // The letter is the email: its own signature and stamp go, the mailbox's signature follows it.
+            $own = clone $composer;
+            $own->withoutSignature = true;
+
+            [$html, $images] = $this->embeddable($header.SignatureLayouts::forEmail($own->bodyHtml()).$signature);
 
             return new LetterEmail(
                 BulkMailPlaceholders::apply(filled($subjectOverride) ? $subjectOverride : self::bodySubject($values), array_map('strip_tags', $values)),
@@ -337,7 +344,7 @@ class LetterMailer
         $rtl = ($template?->locale ?? ($composer->isArabic() ? 'ar' : 'en')) !== 'en';
         $html = BulkMailPlaceholders::apply(LetterComposer::normalizeMergeTags($body), array_map('strip_tags', $values), escape: true);
         // Outlook knows no start or end: the editor's alignment as left/right.
-        [$html, $images] = $this->embeddable(RichHtml::forOutput($html, $rtl));
+        [$html, $images] = $this->embeddable(RichHtml::forOutput($html, $rtl).$signature);
 
         return new LetterEmail(
             BulkMailPlaceholders::apply($subject, array_map('strip_tags', $values)),

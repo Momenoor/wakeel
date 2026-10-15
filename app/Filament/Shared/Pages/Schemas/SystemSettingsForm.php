@@ -282,6 +282,12 @@ class SystemSettingsForm
                                         ->options(Branding::emailPdfOptions())
                                         ->default(Branding::EMAIL_PDF_OUTLOOK)
                                         ->columnSpanFull(),
+                                    Select::make(Branding::EMAIL_PDF_FONT)
+                                        ->label(__('Email PDF font'))
+                                        ->options(fn () => \App\Models\LetterFont::query()->orderBy('name')->pluck('name', 'id'))
+                                        ->placeholder(__('Calibri, when uploaded; otherwise the standard font'))
+                                        ->helperText(__('A font uploaded under Letter fonts. The emails kept as PDF are written in it.'))
+                                        ->columnSpanFull(),
                                 ]),
                         ]),
 

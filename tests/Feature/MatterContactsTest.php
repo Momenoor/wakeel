@@ -52,7 +52,7 @@ class MatterContactsTest extends TestCase
         Storage::fake('public');
         $this->withoutDefer();
         Http::fake();
-        config(['mail_senders.senders.iflas' => ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']]);
+        \Tests\Support\MailSenders::add('iflas', ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
         $this->app->instance(SentFolder::class, Mockery::spy(SentFolder::class));
         Gate::before(fn () => true);
         Filament::setCurrentPanel(Filament::getPanel('mms'));

@@ -228,10 +228,10 @@ class MatterOneDriveFilesTest extends TestCase
         Storage::fake('local');
         Storage::fake('public');
         $this->withoutDefer();
+        \Tests\Support\MailSenders::add('iflas', ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
         config([
             'mail.mailers.smtp.transport' => 'array',
-            'mail_senders.senders.iflas' => ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls'],
-        ]);
+            ]);
         $this->app->instance(SentFolder::class, Mockery::spy(SentFolder::class));
         $sent = [];
         Event::listen(MessageSent::class, function (MessageSent $event) use (&$sent) {

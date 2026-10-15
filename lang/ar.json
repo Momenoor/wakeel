@@ -3966,5 +3966,12 @@
     "Current and upcoming meetings on this matter that have no minutes yet. Its date, time and Teams link go in the letter; no new meeting is made.": "الاجتماعات الحالية والقادمة لهذه القضية التي لا محضر لها بعد. يوضع تاريخه ووقته ورابط Teams في الخطاب، ولا يُنشأ اجتماع جديد.",
     "Show in the live view": "إظهار في العرض المباشر",
     "Off: the attendees watching do not see it; the minutes still have it.": "متوقف: لا يراه الحاضرون المتابعون، ويبقى في المحضر.",
-    "This letter's matter no longer exists.": "لم تعد قضية هذا الخطاب موجودة."
+    "This letter's matter no longer exists.": "لم تعد قضية هذا الخطاب موجودة.",
+    "Tick whom it goes to, or add copy addresses.": "اختر المرسل إليهم، أو أضف عناوين النسخة.",
+    "Email PDF font": "خط ملفات البريد PDF",
+    "Calibri, when uploaded; otherwise the standard font": "Calibri إن كان مرفوعاً، وإلا الخط المعتاد",
+    "A font uploaded under Letter fonts. The emails kept as PDF are written in it.": "خط مرفوع في خطوط الخطابات. تُكتب به رسائل البريد المحفوظة بصيغة PDF.",
+    "Matter :matter is not linked to a OneDrive folder: its emails were kept in the system only.": "القضية :matter غير مرتبطة بمجلد OneDrive: حُفظت رسائلها في النظام فقط.",
+    "Open the matter": "فتح القضية",
+    "Not saved in OneDrive: this matter is not linked to a OneDrive folder, so the email and its files are kept in the system only.": "لم يُحفظ في OneDrive: هذه القضية غير مرتبطة بمجلد OneDrive، فحُفظ البريد وملفاته في النظام فقط."
 }

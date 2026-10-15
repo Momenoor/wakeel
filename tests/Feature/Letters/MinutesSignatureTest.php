@@ -60,14 +60,14 @@ class MinutesSignatureTest extends TestCase
         Storage::fake('public');
         $this->withoutDefer();
 
+        \Tests\Support\MailSenders::add('iflas', [
+                'username' => 'iflas@jpaemirates.com', 'address' => 'iflas@jpaemirates.com', 'name' => 'JPA Iflas',
+                'password' => 'secret', 'host' => 'mail.example.com', 'port' => 587, 'encryption' => 'tls',
+            ]);
         config([
             'services.whatsapp.token' => 'wa-token',
             'services.whatsapp.phone_id' => '1234',
             'mail.mailers.smtp.transport' => 'array',
-            'mail_senders.senders.iflas' => [
-                'username' => 'iflas@jpaemirates.com', 'address' => 'iflas@jpaemirates.com', 'name' => 'JPA Iflas',
-                'password' => 'secret', 'host' => 'mail.example.com', 'port' => 587, 'encryption' => 'tls',
-            ],
             'mail.mailers.microsoft-graph' => ['transport' => 'microsoft-graph', 'tenant_id' => 'tenant', 'client_id' => 'client', 'client_secret' => 'secret'],
         ]);
         Setting::clearCache();

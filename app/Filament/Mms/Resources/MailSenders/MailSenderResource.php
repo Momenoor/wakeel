@@ -139,7 +139,6 @@ class MailSenderResource extends Resource
                         ->required()
                         ->alphaDash()
                         ->unique(ignoreRecord: true)
-                        ->notIn(fn (?MailSender $record) => array_keys(config('mail_senders.senders', [])))
                         ->helperText(__('Short unique name, e.g. noreply.')),
                     Toggle::make('is_active')->label(__('Active'))->default(true)->inline(false),
 

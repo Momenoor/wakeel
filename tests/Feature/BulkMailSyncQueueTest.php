@@ -34,12 +34,7 @@ class BulkMailSyncQueueTest extends TestCase
     {
         parent::setUp();
 
-        config([
-            'queue.default' => 'sync',
-            // The campaign's sender switches the app to the smtp mailer —
-            // sent into memory here instead of to a real mail server.
-            'mail.mailers.smtp.transport' => 'array',
-            'mail_senders.senders.test' => [
+        \Tests\Support\MailSenders::add('test', [
                 'username' => 'sender@example.com',
                 'address' => 'sender@example.com',
                 'name' => 'Test Sender',
@@ -47,8 +42,13 @@ class BulkMailSyncQueueTest extends TestCase
                 'host' => 'mail.example.com',
                 'port' => 587,
                 'encryption' => 'tls',
-            ],
-        ]);
+            ]);
+        config([
+            'queue.default' => 'sync',
+            // The campaign's sender switches the app to the smtp mailer —
+            // sent into memory here instead of to a real mail server.
+            'mail.mailers.smtp.transport' => 'array',
+            ]);
 
         Event::listen(MessageSent::class, fn (MessageSent $event) => $this->sent[] = $event);
 

@@ -51,13 +51,13 @@ class MatterProgressTest extends TestCase
 
         Storage::fake('public');
         $this->withoutDefer();
-        config([
-            'mail.mailers.smtp.transport' => 'array',
-            'mail_senders.senders.iflas' => [
+        \Tests\Support\MailSenders::add('iflas', [
                 'username' => 'iflas@jpaemirates.com', 'address' => 'iflas@jpaemirates.com', 'name' => 'JPA Iflas',
                 'password' => 'secret', 'host' => 'mail.example.com', 'port' => 587, 'encryption' => 'tls',
-            ],
-        ]);
+            ]);
+        config([
+            'mail.mailers.smtp.transport' => 'array',
+            ]);
         $this->app->instance(SentFolder::class, Mockery::spy(SentFolder::class));
 
         $this->user = User::factory()->create()->assignRole(

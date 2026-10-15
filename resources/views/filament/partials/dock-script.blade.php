@@ -160,10 +160,13 @@
                     if (! sidebar || ! this.wide) {
                         return;
                     }
-                    if (this.any && sidebar.isOpen) {
-                        sidebar.close();
-                    } else if (changed && ! this.any && ! sidebar.isOpen) {
-                        sidebar.open();
+                    // The menu is out of the way while anything is pinned; otherwise it is as the
+                    // user left it (isOpenDesktop, which Filament keeps in this browser). Closed here
+                    // by isOpen alone — close() would write the user's choice too, and the menu
+                    // came back open after a pin the user had collapsed it before.
+                    const wanted = this.any ? false : sidebar.isOpenDesktop !== false;
+                    if (sidebar.isOpen !== wanted) {
+                        sidebar.isOpen = wanted;
                     }
                 },
             });

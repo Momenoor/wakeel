@@ -27,6 +27,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\HtmlString;
 
 /**
  * A matter's progress, newest first: what Wakeel recorded as it happened
@@ -144,14 +145,24 @@ class ProgressRelationManager extends RelationManager
                     ->action(function (): void {
                         @set_time_limit(300);
                         $result = app(MatterReplyCollector::class)->collect($this->getOwnerRecord()->getKey());
+                        // One point each: what was kept, the matters with no OneDrive folder to keep it in, and what went wrong.
+                        $points = [
+                            $result['emails'] ? trans_choice(':count other email from the parties kept.|:count other emails from the parties kept.', $result['emails'], ['count' => $result['emails']]) : null,
+                            ...array_map(fn (array $matter): HtmlString => new HtmlString(
+                                e(__('Matter :matter is not linked to a OneDrive folder: its emails were kept in the system only.', ['matter' => $matter['label']]))
+                                .' <a href="'.e($matter['url']).'" style="text-decoration: underline;">'.e(__('Open the matter')).'</a>'
+                            ), $result['unlinked']),
+                            ...$result['errors'],
+                        ];
+                        $warn = $result['errors'] !== [] || $result['unlinked'] !== [];
 
                         Notification::make()
                             ->title(trans_choice('No new replies.|:count new reply kept.|:count new replies kept.', $result['replies'], ['count' => $result['replies']]))
-                            ->body(trim(($result['emails'] ? trans_choice(':count other email from the parties kept.|:count other emails from the parties kept.', $result['emails'], ['count' => $result['emails']]) : '')
-                                ."\n".implode("\n", $result['errors'])) ?: null)
-                            ->status($result['errors'] ? 'warning' : 'success')
-                            ->duration($result['errors'] !== [] ? 'persistent' : 6000)
+                            ->body(array_filter($points) !== [] ? MatterReplyCollector::bullets($points) : null)
+                            ->status($warn ? 'warning' : 'success')
+                            ->duration($warn ? 'persistent' : 6000)
                             ->send();
+
                     }),
                 CreateAction::make()
                     ->label(__('Add progress'))

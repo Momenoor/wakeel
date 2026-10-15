@@ -55,6 +55,18 @@ class SignatureLayouts
     }
 
     /**
+     * The signature blocks taken out — saved ones as they are in a template, and
+     * those frozen into an issued letter. For a letter sent as the email
+     * itself: the mailbox's own signature follows it.
+     */
+    public static function remove(string $html): string
+    {
+        $html = self::eachBlock($html, fn (array $config, string $block): string => '');
+
+        return preg_replace('/<div data-sign-layout="[^"]*"[^>]*>.*?<\/div>/su', '', $html) ?? $html;
+    }
+
+    /**
      * For an email, which can't layer: the lines, then the picture.
      */
     public static function forEmail(string $html): string

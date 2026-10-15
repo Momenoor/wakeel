@@ -11,7 +11,7 @@
         }
 
         body {
-            font-family: 'Arial Unicode MS', Arial, sans-serif;
+            font-family: {!! $fontFamily ? "'".$fontFamily."'" : "'Arial Unicode MS', Arial, sans-serif" !!};
             font-size: 10pt;
             color: #000;
             /* The page left to right; each Arabic block of the email right to left (EmailPdf::directed()). */
@@ -100,7 +100,7 @@
 
         /* Arabic text inside body */
         .email-body p, .email-body div, .email-body span {
-            font-family: 'Arial Unicode MS', Arial, sans-serif;
+            font-family: {!! $fontFamily ? "'".$fontFamily."'" : "'Arial Unicode MS', Arial, sans-serif" !!};
         }
     </style>
 </head>

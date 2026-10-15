@@ -72,7 +72,7 @@ class BulkMailCampaign extends Model
     public function senderConfig(): Attribute
     {
         return new Attribute(
-            // Managed senders (Mail senders) and config/mail_senders.php.
+            // The sender (Mail senders) it goes from.
             get: fn () => filled($this->from_sender_key) ? (SenderMailer::all()[$this->from_sender_key] ?? null) : null
         );
     }

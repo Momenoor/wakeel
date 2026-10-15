@@ -52,14 +52,14 @@ class LetterEmailTest extends TestCase
         // The sent email's PDF is kept after the response: at once here.
         $this->withoutDefer();
 
+        \Tests\Support\MailSenders::add('iflas', [
+                'username' => 'iflas@jpaemirates.com', 'address' => 'iflas@jpaemirates.com', 'name' => 'JPA Iflas',
+                'password' => 'secret', 'host' => 'mail.example.com', 'port' => 587, 'encryption' => 'tls',
+            ]);
         config([
             // The mailbox's smtp mailer delivers into memory here.
             'mail.mailers.smtp.transport' => 'array',
-            'mail_senders.senders.iflas' => [
-                'username' => 'iflas@jpaemirates.com', 'address' => 'iflas@jpaemirates.com', 'name' => 'JPA Iflas',
-                'password' => 'secret', 'host' => 'mail.example.com', 'port' => 587, 'encryption' => 'tls',
-            ],
-        ]);
+            ]);
 
         Event::listen(MessageSent::class, fn (MessageSent $event) => $this->sent[] = $event->message);
         $this->app->instance(SentFolder::class, Mockery::spy(SentFolder::class));
@@ -114,18 +114,33 @@ class LetterEmailTest extends TestCase
         $this->assertSame([LetterStatus::SENT, LetterStatus::SENT, LetterStatus::DRAFT], $letter->recipients->pluck('delivery_status')->all());
     }
 
-    public function test_the_letter_itself_as_the_email_with_the_signature_embedded(): void
+    public function test_the_letter_itself_as_the_email_has_no_signature_of_its_own_but_the_mailboxs(): void
     {
+        \App\Models\MailSender::where('key', 'iflas')->update(['signature' => '<div dir="ltr" id="Signature"><p>Best Regards <b>JPA Iflas</b></p></div>']);
+
         app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::BODY);
 
         $email = $this->sent[0];
         $this->assertSame('JPA/2026/986/1 — إشعار الدعوى رقم 986/2026', $email->getSubject());
         $this->assertStringContainsString('نص الخطاب.', $email->getHtmlBody());
         $this->assertStringContainsString('المرجع: <span dir="ltr">JPA/2026/986/1</span>', $email->getHtmlBody());
-        // The signature travels with the email, not as a server path.
-        $this->assertStringContainsString('src="cid:', $email->getHtmlBody());
+        // The letter's own signature picture is left out — the mailbox's signature follows the letter instead.
+        $this->assertStringNotContainsString('src="cid:', $email->getHtmlBody());
         $this->assertStringNotContainsString(storage_path(), $email->getHtmlBody());
-        $this->assertCount(0, array_filter($email->getAttachments(), fn ($part) => ! $part->hasContentId()));
+        $this->assertStringContainsString('Best Regards <b>JPA Iflas</b>', $email->getHtmlBody());
+        $this->assertLessThan(strpos($email->getHtmlBody(), 'Best Regards'), strpos($email->getHtmlBody(), 'نص الخطاب.'));
+        $this->assertCount(0, $email->getAttachments());
+    }
+
+    public function test_the_mailboxs_signature_ends_the_covering_email_too_and_is_in_its_pdf(): void
+    {
+        \App\Models\MailSender::where('key', 'iflas')->update(['signature' => '<div dir="ltr" id="Signature"><p>Best Regards <b>JPA Iflas</b></p></div>']);
+
+        app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::ATTACHMENT, null, ['pdf']);
+
+        $this->assertStringContainsString('Best Regards <b>JPA Iflas</b>', $this->sent[0]->getHtmlBody());
+        // Kept on the matter as a PDF of the email, which has it.
+        $this->assertCount(1, $this->letter->matter->attachments);
     }
 
     public function test_separate_emails_greet_each_recipient(): void
@@ -197,7 +212,8 @@ class LetterEmailTest extends TestCase
 
     public function test_a_failed_send_is_recorded_per_recipient(): void
     {
-        config(['mail.mailers.smtp.transport' => 'smtp', 'mail_senders.senders.iflas.host' => '127.0.0.1', 'mail_senders.senders.iflas.port' => 9, 'mail.mailers.smtp.timeout' => 2]);
+        \App\Models\MailSender::where('key', 'iflas')->update(['host' => '127.0.0.1', 'port' => 9]);
+        config(['mail.mailers.smtp.transport' => 'smtp', 'mail.mailers.smtp.timeout' => 2]);
 
         $result = app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::ATTACHMENT, null, ['pdf']);
 
@@ -240,10 +256,9 @@ class LetterEmailTest extends TestCase
         $this->assertStringEndsWith('.pdf', $names[0]);
         $this->assertSame('كشف الحساب.pdf', $names[1]);
 
-        // The letter as the email: the file, not the letter (only its
-        // signature, embedded in the text).
+        // The letter as the email: the file, not the letter.
         app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::BODY, recipientIds: $mona, attachments: [$statement]);
-        $this->assertSame(['sig.png', 'كشف الحساب.pdf'], array_map(fn ($part) => $part->getFilename(), $this->sent[1]->getAttachments()));
+        $this->assertSame(['كشف الحساب.pdf'], array_map(fn ($part) => $part->getFilename(), $this->sent[1]->getAttachments()));
     }
 
     public function test_the_matters_assistants_are_copied_in_and_files_can_be_added(): void
@@ -355,15 +370,18 @@ class LetterEmailTest extends TestCase
         $this->assertStringContainsString('<p style="text-align: right">تحية طيبة</p><p style="text-align: left">المخلص</p>', $html);
     }
 
-    public function test_the_letter_as_the_email_is_previewed_with_its_signature(): void
+    public function test_the_letter_as_the_email_is_previewed_with_the_mailboxs_signature_not_its_own(): void
     {
+        \App\Models\MailSender::where('key', 'iflas')->update(['signature' => '<div id="Signature"><p>Best Regards <b>JPA Iflas</b></p></div>']);
+
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->letter->matter, 'pageClass' => ViewMatter::class])
             ->mountTableAction('email', $this->letter)
-            ->setTableActionData(['mode' => LetterMailer::BODY])
+            ->setTableActionData(['mode' => LetterMailer::BODY, 'sender' => 'iflas'])
             ->assertTableActionDataSet(['subject' => 'JPA/2026/986/1 — إشعار الدعوى رقم 986/2026'])
             ->assertMountedActionModalSee('نص الخطاب.')
-            // The signature, inline in the preview.
-            ->assertMountedActionModalSeeHtml('data:image/png;base64,');
+            // The mailbox's signature, as it will go; not the letter's own picture.
+            ->assertMountedActionModalSeeHtml('Best Regards')
+            ->assertMountedActionModalDontSeeHtml('data:image/png;base64,');
     }
 
     public function test_the_sent_email_is_kept_on_the_matter_as_a_pdf(): void
@@ -406,5 +424,36 @@ class LetterEmailTest extends TestCase
     public function test_the_email_templates_screen(): void
     {
         $this->get(EmailTemplateResource::getUrl())->assertSuccessful();
+    }
+
+    public function test_a_recipient_left_unticked_is_not_sent_to_even_when_none_is_ticked(): void
+    {
+        // Nobody ticked, only a copy address: it goes there — not to the letter's recipients.
+        $result = app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::ATTACHMENT, null, ['pdf'], [], cc: ['boss@jpa.ae']);
+
+        $this->assertSame(1, $result['sent']);
+        $addresses = collect($this->sent)->flatMap(fn ($email) => [...$email->getTo(), ...$email->getCc()])->map(fn ($a) => $a->getAddress())->all();
+        $this->assertNotContains('mona@example.com', $addresses);
+        $this->assertNotContains('a@law.ae', $addresses);
+        $this->assertSame(['boss@jpa.ae'], $addresses);
+
+        // Nobody ticked and no copy address: nothing goes.
+        $this->sent = [];
+        $result = app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::ATTACHMENT, null, ['pdf'], []);
+        $this->assertSame([], $this->sent);
+        $this->assertSame(0, $result['sent']);
+
+        // Not told which (null): every recipient, as it always was.
+        app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::ATTACHMENT, null, ['pdf']);
+        $this->assertNotEmpty($this->sent);
+    }
+
+    public function test_the_send_screen_asks_whom_it_goes_to_unless_copy_addresses_are_given(): void
+    {
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->letter->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('email', $this->letter)
+            ->setTableActionData(['recipients' => [], 'cc' => []])
+            ->callMountedTableAction()
+            ->assertHasTableActionErrors(['recipients' => 'required']);
     }
 }

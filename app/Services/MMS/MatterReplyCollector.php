@@ -20,6 +20,7 @@ use Filament\Notifications\Notification;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
@@ -51,6 +52,9 @@ class MatterReplyCollector
     /** How far back a mailbox is first read for the parties' other emails. */
     private const FIRST_DAYS = 30;
 
+    /** @var array<int, array{matter: int, label: string, url: string}> matters whose emails were kept in the system only: they have no OneDrive folder */
+    private array $unlinked = [];
+
     public function __construct(
         private readonly SentFolder $mailboxes,
         private readonly OutlookCalendarService $graph,
@@ -64,11 +68,12 @@ class MatterReplyCollector
      * email from a matter's party. Or — for one matter — read back from its
      * first email (FIRST_DAYS at least), for its emails only.
      *
-     * @return array{replies: int, emails: int, unfiled: int, errors: list<string>}
+     * @return array{replies: int, emails: int, unfiled: int, errors: list<string>, unlinked: list<array{matter: int, label: string, url: string}>}
      */
     public function collect(?int $matterId = null): array
     {
-        $result = ['replies' => 0, 'emails' => 0, 'unfiled' => 0, 'errors' => []];
+        $this->unlinked = [];
+        $result = ['replies' => 0, 'emails' => 0, 'unfiled' => 0, 'errors' => [], 'unlinked' => []];
 
         $sent = MatterEmail::query()
             ->where('direction', MatterEmail::SENT)
@@ -110,7 +115,27 @@ class MatterReplyCollector
             }
         }
 
+        $result['unlinked'] = array_values($this->unlinked);
+
         return $result;
+    }
+
+    /**
+     * A matter whose email was kept without a OneDrive folder to go to: said at the end of the round.
+     */
+    private function noteUnlinked(Matter $matter): bool
+    {
+        if (! MatterOneDriveFolders::receivedEmailsNotInOneDrive($matter)) {
+            return false;
+        }
+
+        $this->unlinked[$matter->getKey()] = [
+            'matter' => (int) $matter->getKey(),
+            'label' => $matter->year.'/'.$matter->number,
+            'url' => MatterResource::getUrl('view', ['record' => $matter], panel: 'mms'),
+        ];
+
+        return true;
     }
 
     /**
@@ -249,6 +274,7 @@ class MatterReplyCollector
 
         if ($matter) {
             $kept = $this->keepOnMatter($matter, $pdf, $files, $name, $answers->user_id);
+            $this->noteUnlinked($matter);
             MatterProgressRecorder::replyReceived($reply->setRelation('parent', $answers));
             // Whoever they put in To or CC: theirs, on this matter.
             MatterContact::learn($reply);
@@ -276,7 +302,7 @@ class MatterReplyCollector
         $email->update(['files' => $this->keepOnMatter($matter, $pdf, $files, $name, null)]);
         MatterProgressRecorder::emailReceived($email);
         MatterContact::learn($email);
-        $this->tellMatter($email, $matter, count($files));
+        $this->tellMatter($email, $matter, count($files), $this->noteUnlinked($matter));
     }
 
     /**
@@ -522,7 +548,7 @@ class MatterReplyCollector
     }
 
     /** The matter's people: told of a party's email kept on it. */
-    private function tellMatter(MatterEmail $email, Matter $matter, int $files): void
+    private function tellMatter(MatterEmail $email, Matter $matter, int $files, bool $notInOneDrive = false): void
     {
         $users = self::matterUsers([(int) $matter->getKey()]);
         if ($users->isEmpty()) {
@@ -534,7 +560,12 @@ class MatterReplyCollector
                 ->success()
                 ->icon('heroicon-o-inbox-arrow-down')
                 ->title(__(':name emailed on matter :matter', ['name' => $email->from, 'matter' => $matter->year.'/'.$matter->number]))
-                ->body(trim($email->subject.($files ? ' — '.trans_choice(':count file|:count files', $files, ['count' => $files]) : '')))
+                // What was kept, one point each.
+                ->body(self::bullets([
+                    trim($email->subject),
+                    $files ? trans_choice(':count file|:count files', $files, ['count' => $files]) : null,
+                    $notInOneDrive ? __('Not saved in OneDrive: this matter is not linked to a OneDrive folder, so the email and its files are kept in the system only.') : null,
+                ]))
                 ->actions([
                     Action::make('view')->label(__('View'))->url(MatterResource::getUrl('view', ['record' => $matter], panel: 'mms'))->markAsRead(),
                 ])
@@ -542,6 +573,18 @@ class MatterReplyCollector
         } catch (Throwable $e) {
             Log::info('Email notification not sent: '.$e->getMessage());
         }
+    }
+
+    /**
+     * Points as a bullet list (HTML), the empty ones left out.
+     *
+     * @param  list<string|HtmlString|null>  $points  text, or HTML already made
+     */
+    public static function bullets(array $points): HtmlString
+    {
+        return new HtmlString('<ul style="list-style: disc; padding-inline-start: 1.1rem; margin: 0;">'
+            .collect($points)->filter(fn ($point) => filled((string) $point))->map(fn ($point) => '<li>'.($point instanceof HtmlString ? $point->toHtml() : e($point)).'</li>')->implode('')
+            .'</ul>');
     }
 
     /** The people of each matter it may be about: asked to choose. */

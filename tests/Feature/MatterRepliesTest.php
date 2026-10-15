@@ -64,9 +64,9 @@ class MatterRepliesTest extends TestCase
 
         Storage::fake('public');
         $this->withoutDefer();
+        \Tests\Support\MailSenders::add('iflas', ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
         config([
             'mail.mailers.smtp.transport' => 'array',
-            'mail_senders.senders.iflas' => ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls'],
             'mail.mailers.microsoft-graph' => ['transport' => 'microsoft-graph', 'tenant_id' => 'tenant', 'client_id' => 'client', 'client_secret' => 'secret'],
             'services.outlook' => ['tenant_id' => 'tenant', 'client_id' => 'client', 'client_secret' => 'secret'],
         ]);
@@ -241,7 +241,7 @@ class MatterRepliesTest extends TestCase
 
     public function test_letters_minutes_and_bulk_mail_start_from_the_default_mailbox(): void
     {
-        config(['mail_senders.senders.legal' => ['username' => 'legal@jpa.ae', 'address' => 'legal@jpa.ae', 'name' => 'Legal', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']]);
+        \Tests\Support\MailSenders::add('legal', ['username' => 'legal@jpa.ae', 'address' => 'legal@jpa.ae', 'name' => 'Legal', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
         Setting::set(EmailSendFields::DEFAULT_SENDER, 'legal', 'mail');
 
         $this->assertSame('legal', EmailSendFields::defaultSender());
@@ -276,5 +276,40 @@ class MatterRepliesTest extends TestCase
         $result = app(MatterReplyCollector::class)->collect($this->matter->id);
         $this->assertSame(0, $result['replies']);
         $this->assertStringContainsString('Mail.Read', $result['errors'][0]);
+    }
+
+    public function test_a_matter_with_no_onedrive_folder_is_named_in_the_action_as_a_bullet_list(): void
+    {
+        \App\Models\Setting::set(\App\Services\MMS\MatterOneDriveFolders::ENABLED, true, 'onedrive');
+        MailSender::create(['driver' => MailSender::MICROSOFT, 'address' => 'no_reply@jpa.ae', 'name' => 'JPA', 'key' => 'noreply', 'is_active' => true]);
+        $this->sentEmail(['sender_key' => 'noreply', 'message_id' => 'graph-made-its-own@jpa.ae']);
+        $this->inbox = [[
+            'id' => 'AAMk1', 'subject' => 'RE: طلب بيانات — JPA/2026/986/1', 'internetMessageId' => '<r@police>', 'hasAttachments' => false,
+            'from' => ['emailAddress' => ['address' => 'info@dubaipolice.gov.ae', 'name' => 'شرطة دبي']],
+            'toRecipients' => [['emailAddress' => ['address' => 'no_reply@jpa.ae']]], 'receivedDateTime' => now()->toIso8601String(),
+            'body' => ['contentType' => 'html', 'content' => '<p>تم.</p>'], 'internetMessageHeaders' => [],
+        ]];
+
+        // Linked to its folder: nothing to say.
+        $this->assertTrue(\App\Services\MMS\MatterOneDriveFolders::folderFor($this->matter) !== null);
+        $this->assertFalse(\App\Services\MMS\MatterOneDriveFolders::receivedEmailsNotInOneDrive($this->matter));
+
+        // Not linked: kept in the system, and said — the matter named, with the way to it.
+        MatterOneDriveFolder::query()->delete();
+        $this->assertTrue(\App\Services\MMS\MatterOneDriveFolders::receivedEmailsNotInOneDrive($this->matter->fresh()));
+
+        $result = app(MatterReplyCollector::class)->collect($this->matter->id);
+        $this->assertSame(1, $result['replies']);
+        $this->assertSame(['2026/986'], array_column($result['unlinked'], 'label'));
+        $this->assertSame(1, $this->matter->attachments()->where('type', 'correspondence')->count());
+
+        // In the action, as a bullet list.
+        MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->delete();
+        $html = MatterReplyCollector::bullets(['One', new \Illuminate\Support\HtmlString('<b>Two</b>'), null, ''])->toHtml();
+        $this->assertSame('<ul style="list-style: disc; padding-inline-start: 1.1rem; margin: 0;"><li>One</li><li><b>Two</b></li></ul>', $html);
+
+        Livewire::test(ProgressRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->callTableAction('collectReplies')
+            ->assertNotified(trans_choice('No new replies.|:count new reply kept.|:count new replies kept.', 1, ['count' => 1]));
     }
 }

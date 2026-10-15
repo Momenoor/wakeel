@@ -200,6 +200,9 @@ class LettersRelationManager extends RelationManager
                     ->columns(2),
                 CheckboxList::make('recipients')
                     ->label(__('To'))
+                    // Nobody ticked is nobody (not everybody): then the copy addresses must say who it goes to.
+                    ->required(fn (Get $get): bool => blank($get('cc')))
+                    ->validationMessages(['required' => __('Tick whom it goes to, or add copy addresses.')])
                     ->options($record->recipients->mapWithKeys(fn ($r) => [$r->id => trim($r->name.($r->role ? ' ('.$r->role.')' : ''))]))
                     ->descriptions($record->recipients->mapWithKeys(fn ($r) => [$r->id => implode(' · ', $r->allEmails()) ?: __('No email')]))
                     ->bulkToggleable()
@@ -329,6 +332,7 @@ class LettersRelationManager extends RelationManager
             $get('subject'),
             $mode === LetterMailer::ATTACHMENT && is_string($body) ? $body : null,
             $first['name'] ?? null,
+            $get('sender'),
         );
 
         $addresses = fn (array $unit): string => trim(($unit['name'] ?? $unit['greet']?->name ?? '').' <'.implode(', ', $unit['emails']).'>', ' <>');

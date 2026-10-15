@@ -32,7 +32,7 @@ class BulkMailPdfTest extends TestCase
 
         Storage::fake('public');
 
-        config(['mail_senders.senders.test' => [
+        \Tests\Support\MailSenders::add('test', [
             'username' => 'sender@example.com',
             'address' => 'sender@example.com',
             'name' => 'Test Sender',
@@ -40,7 +40,7 @@ class BulkMailPdfTest extends TestCase
             'host' => 'mail.example.com',
             'port' => 587,
             'encryption' => 'tls',
-        ]]);
+        ]);
 
         $this->campaign = BulkMailCampaign::create([
             'name' => 'Creditors notice',

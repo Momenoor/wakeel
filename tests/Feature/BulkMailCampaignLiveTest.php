@@ -32,10 +32,10 @@ class BulkMailCampaignLiveTest extends TestCase
     {
         parent::setUp();
 
-        config(['mail_senders.senders.test' => [
+        \Tests\Support\MailSenders::add('test', [
             'username' => 'sender@example.com', 'address' => 'sender@example.com', 'name' => 'Test Sender',
             'password' => 'secret', 'host' => 'mail.example.com', 'port' => 587, 'encryption' => 'tls',
-        ]]);
+        ]);
 
         $this->actingAs(User::factory()->create()->assignRole(
             Role::firstOrCreate(['name' => config('filament-shield.super_admin.name', 'super_admin'), 'guard_name' => 'web'])
