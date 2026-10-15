@@ -180,7 +180,9 @@ class MailSenderResource extends Resource
                 ->collapsed()
                 ->columnSpanFull()
                 ->schema([
-                    RichEditor::make('signature')->hiddenLabel()->extraInputAttributes(['dir' => 'ltr'], merge: true)->tap(RichEditorDirection::apply(...)),
+                    // Its logos side by side stay so in the editor too.
+                    \Filament\Forms\Components\Placeholder::make('signature_css')->hiddenLabel()->content(new \Illuminate\Support\HtmlString(MailSender::previewCss())),
+                    RichEditor::make('signature')->hiddenLabel()->extraAttributes(['class' => 'wk-signature'], merge: true)->extraInputAttributes(['dir' => 'ltr'], merge: true)->tap(RichEditorDirection::apply(...)),
                 ]),
         ]);
     }

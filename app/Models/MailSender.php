@@ -50,6 +50,20 @@ class MailSender extends Model
     }
 
     /**
+     * For showing an email's HTML inside the app: the page's own styles put every
+     * image on a line of its own (display: block), so the logos of a signature that
+     * sit side by side in the email stacked in the preview. Inside .wk-mail they sit
+     * as they do in a mail program. Also for the signature's editor (.wk-signature).
+     */
+    public static function previewCss(): string
+    {
+        return '<style>'
+            .'.wk-mail img, .wk-signature .tiptap img { display: inline-block !important; vertical-align: middle; max-width: none; }'
+            .'.wk-signature .tiptap [data-resize-container], .wk-signature .tiptap [data-resize-wrapper], .wk-signature .tiptap [data-resize-state] { display: inline-block !important; vertical-align: middle; }'
+            .'</style>';
+    }
+
+    /**
      * A signature written left to right — and kept to the left — unless it says
      * its own direction as right to left: an office's signature is a card of
      * English lines and numbers (with the Arabic name in it), not a paragraph of

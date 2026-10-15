@@ -385,7 +385,10 @@ class LetterEmailTest extends TestCase
             ->assertMountedActionModalSeeHtml('Best Regards')
             // …kept to the left in the preview, whatever side the Arabic letter around it is on.
             ->assertMountedActionModalSeeHtml('<div dir="ltr" style="text-align: left;"><div id="Signature">')
-            ->assertMountedActionModalDontSeeHtml('data:image/png;base64,');
+            ->assertMountedActionModalDontSeeHtml('data:image/png;base64,')
+            // Its logos side by side stay so in the preview (the page's own styles would stack every image).
+            ->assertMountedActionModalSeeHtml('class="wk-mail"')
+            ->assertMountedActionModalSeeHtml('.wk-mail img');
     }
 
     public function test_the_sent_email_is_kept_on_the_matter_as_a_pdf(): void

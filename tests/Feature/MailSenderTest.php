@@ -187,5 +187,8 @@ class MailSenderTest extends TestCase
         // What is stored stays as written.
         $this->assertSame('<p>رضا درويش</p><p>Best Regards</p>', $plain->fresh()->signature);
         $this->assertStringContainsString('<div dir="ltr"', SenderMailer::sender('a')['signature']);
+        // For the previews and the editor: images stay inline.
+        $this->assertStringContainsString('.wk-mail img', MailSender::previewCss());
+        $this->assertStringContainsString('display: inline-block', MailSender::previewCss());
     }
 }

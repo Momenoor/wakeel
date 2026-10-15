@@ -62,7 +62,7 @@ class BulkMailCampaignSchema
 
                     TextEntry::make('sender_signature')
                         ->label(__('bulk_mail.fields.signature_preview'))
-                        ->state(fn ($get) => new HtmlString((string) (SenderMailer::all()[$get('from_sender_key')]['signature'] ?? '')))
+                        ->state(fn ($get) => new HtmlString(\App\Models\MailSender::previewCss().'<div class="wk-mail">'.(string) (SenderMailer::all()[$get('from_sender_key')]['signature'] ?? '').'</div>'))
                         ->visible(fn ($get) => filled($get('from_sender_key'))),
                 ])->columns(2),
 
