@@ -10,7 +10,7 @@
             <div><strong>{{ __('Attachments') }}:</strong> <span dir="auto">{{ implode(' · ', $attachments) }}</span></div>
         @endif
     </div>
-    <div dir="{{ $rtl ? 'rtl' : 'ltr' }}" style="padding: 1rem; background: #ffffff; color: #111827; font-family: Tahoma, Arial, sans-serif; font-size: 15px; line-height: 1.7; text-align: {{ $rtl ? 'right' : 'left' }}; max-height: 28rem; overflow: auto;">
+    <div dir="{{ $rtl ? 'rtl' : 'ltr' }}" style="padding: 1rem; background: #ffffff; color: #111827; font-family: {!! \App\Support\Branding::emailFontFamily() !!}; font-size: 15px; line-height: 1.7; text-align: {{ $rtl ? 'right' : 'left' }}; max-height: 28rem; overflow: auto;">
         {!! $html !!}
     </div>
 </div>

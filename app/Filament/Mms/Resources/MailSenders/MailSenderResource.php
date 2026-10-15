@@ -180,7 +180,7 @@ class MailSenderResource extends Resource
                 ->collapsed()
                 ->columnSpanFull()
                 ->schema([
-                    RichEditor::make('signature')->hiddenLabel()->extraInputAttributes(['dir' => 'auto'], merge: true)->tap(RichEditorDirection::apply(...)),
+                    RichEditor::make('signature')->hiddenLabel()->extraInputAttributes(['dir' => 'ltr'], merge: true)->tap(RichEditorDirection::apply(...)),
                 ]),
         ]);
     }

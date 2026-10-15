@@ -11,7 +11,7 @@
     <meta charset="UTF-8">
 </head>
 <body style="margin: 0; padding: 16px; background: #ffffff;">
-    <div dir="{{ $rtl ? 'rtl' : 'ltr' }}" style="font-family: Tahoma, Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #111827; text-align: {{ $rtl ? 'right' : 'left' }}; max-width: 760px;">
+    <div dir="{{ $rtl ? 'rtl' : 'ltr' }}" style="font-family: {!! \App\Support\Branding::emailFontFamily() !!}; font-size: 15px; line-height: 1.7; color: #111827; text-align: {{ $rtl ? 'right' : 'left' }}; max-width: 760px;">
         {!! $body !!}
     </div>
 </body>

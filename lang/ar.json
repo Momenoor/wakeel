@@ -3973,5 +3973,6 @@
     "A font uploaded under Letter fonts. The emails kept as PDF are written in it.": "خط مرفوع في خطوط الخطابات. تُكتب به رسائل البريد المحفوظة بصيغة PDF.",
     "Matter :matter is not linked to a OneDrive folder: its emails were kept in the system only.": "القضية :matter غير مرتبطة بمجلد OneDrive: حُفظت رسائلها في النظام فقط.",
     "Open the matter": "فتح القضية",
-    "Not saved in OneDrive: this matter is not linked to a OneDrive folder, so the email and its files are kept in the system only.": "لم يُحفظ في OneDrive: هذه القضية غير مرتبطة بمجلد OneDrive، فحُفظ البريد وملفاته في النظام فقط."
+    "Not saved in OneDrive: this matter is not linked to a OneDrive folder, so the email and its files are kept in the system only.": "لم يُحفظ في OneDrive: هذه القضية غير مرتبطة بمجلد OneDrive، فحُفظ البريد وملفاته في النظام فقط.",
+    "It may be about:": "قد تخص:"
 }

@@ -63,6 +63,21 @@ class Branding
     }
 
     /**
+     * The font the body of an email is written in, for its CSS: the office's
+     * (the one chosen for email PDFs, else Calibri from Letter fonts) by the name
+     * Word and Outlook know it by — and Calibri after it, which is what the
+     * office's emails are written in anyway. A mail program uses what is
+     * installed on the reader's computer; the font's file is not sent.
+     */
+    public static function emailFontFamily(): string
+    {
+        $name = trim((string) preg_replace('/[^\p{L}\p{N} \-]/u', '', (string) (self::emailPdfFont()?->name ?? '')));
+        $stack = "Calibri, 'Segoe UI', Tahoma, Arial, sans-serif";
+
+        return $name !== '' && strcasecmp($name, 'Calibri') !== 0 ? "'".$name."', ".$stack : $stack;
+    }
+
+    /**
      * An email PDF's brand: its picture (a file), the name beside it (none
      * with the office's logo, which carries it), and what the page header
      * calls the mail ("Mail - … - Outlook").

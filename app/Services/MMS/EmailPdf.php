@@ -186,6 +186,16 @@ class EmailPdf
         foreach ($xpath->query('//*[@dir]') as $element) {
             $said[spl_object_id($element)] = true;
         }
+        $nearestSaid = function (DOMElement $element) use ($xpath, $said): ?string {
+            $found = null;
+            foreach ($xpath->query('ancestor::*[@dir]', $element) as $ancestor) {
+                if (isset($said[spl_object_id($ancestor)])) {
+                    $found = $ancestor->getAttribute('dir');
+                }
+            }
+
+            return $found;
+        };
         $underSaid = function (DOMElement $element) use ($xpath, $said): bool {
             foreach ($xpath->query('ancestor::*[@dir]', $element) as $ancestor) {
                 if (isset($said[spl_object_id($ancestor)])) {
@@ -210,7 +220,8 @@ class EmailPdf
             }
 
             if (! $element->hasAttribute('dir')) {
-                $element->setAttribute('dir', $rtl ? 'rtl' : 'ltr');
+                // Inside something that says its direction (a signature: left to right) it is that too; elsewhere, by its own text.
+                $element->setAttribute('dir', $nearestSaid($element) ?? ($rtl ? 'rtl' : 'ltr'));
             }
 
             $direction = $element->getAttribute('dir');

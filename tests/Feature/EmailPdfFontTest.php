@@ -71,6 +71,21 @@ class EmailPdfFontTest extends TestCase
         $this->assertStringContainsString('<table dir="rtl">', $html);
         // …but not a signature that says left to right.
         $this->assertStringContainsString('<div dir="ltr" id="Signature" style="text-align: left"><table>', $html);
-        $this->assertStringContainsString('<p dir="rtl" style="text-align: right">رضا درويش</p>', $html);
+        // …and what is in it keeps that direction, Arabic lines too.
+        $this->assertStringContainsString('<p dir="ltr" style="text-align: left">رضا درويش</p>', $html);
+    }
+
+    public function test_the_body_of_an_email_is_written_in_calibri_or_the_offices_font(): void
+    {
+        // Calibri whether or not the file was uploaded: the mail program has it.
+        $this->assertSame("Calibri, 'Segoe UI', Tahoma, Arial, sans-serif", Branding::emailFontFamily());
+
+        $this->font('Calibri');
+        $this->assertSame("Calibri, 'Segoe UI', Tahoma, Arial, sans-serif", Branding::emailFontFamily());
+
+        // Another font chosen for the emails: by its name, Calibri after it.
+        $other = LetterFont::create(['name' => "Sakkal Majalla'; x", 'files' => ['regular' => Storage::disk(LetterFont::DISK)->putFileAs(LetterFont::DIRECTORY, new File(public_path('fonts/BoutrosMBCDinkum-Medium.ttf')), 'm.ttf')]]);
+        Setting::set(Branding::EMAIL_PDF_FONT, $other->getKey(), 'mail');
+        $this->assertSame("'Sakkal Majalla x', Calibri, 'Segoe UI', Tahoma, Arial, sans-serif", Branding::emailFontFamily());
     }
 }

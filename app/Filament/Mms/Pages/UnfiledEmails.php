@@ -118,9 +118,10 @@ class UnfiledEmails extends Page implements HasTable
                     ->wrap(),
                 TextColumn::make('candidates')
                     ->label(__('May be about'))
+                    // The matters it may be about, one point each.
                     ->state(fn (MatterEmail $record): array => array_values(self::matterLabels((array) $record->candidates)))
-                    ->badge()
-                    ->color('gray'),
+                    ->listWithLineBreaks()
+                    ->bulleted(),
             ])
             ->recordActions([
                 Action::make('open')

@@ -596,14 +596,15 @@ class MatterReplyCollector
             return;
         }
 
-        $matters = Matter::query()->whereKey($candidates)->get(['id', 'year', 'number'])->map(fn (Matter $m) => $m->year.'/'.$m->number)->implode('، ');
+        $matters = Matter::query()->whereKey($candidates)->get(['id', 'year', 'number'])->map(fn (Matter $m) => $m->year.'/'.$m->number)->all();
 
         try {
             Notification::make()
                 ->warning()
                 ->icon('heroicon-o-inbox-stack')
                 ->title(__('Which matter is this email from :name about?', ['name' => $email->from]))
-                ->body(trim($email->subject.' — '.__('It may be about :matters.', ['matters' => $matters])))
+                // The subject, then the matters it may be about, one point each.
+                ->body(self::bullets([trim($email->subject), new HtmlString(e(__('It may be about:')).self::bullets($matters)->toHtml())]))
                 ->actions([
                     Action::make('choose')->label(__('Choose its matter'))->url(UnfiledEmails::getUrl(panel: 'mms'))->markAsRead(),
                 ])

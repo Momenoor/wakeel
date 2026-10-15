@@ -170,4 +170,22 @@ class MailSenderTest extends TestCase
         $this->assertSame('noreply@jpaemirates.com', $this->sent[0]->message->getFrom()[0]->getAddress());
         $this->get(MailSenderResource::getUrl())->assertSuccessful();
     }
+
+    public function test_a_signature_is_left_to_right_unless_it_says_its_own_direction(): void
+    {
+        $plain = MailSender::create(['key' => 'a', 'name' => 'A', 'address' => 'a@x.com', 'driver' => MailSender::MICROSOFT, 'signature' => '<p>رضا درويش</p><p>Best Regards</p>']);
+        $own = MailSender::create(['key' => 'b', 'name' => 'B', 'address' => 'b@x.com', 'driver' => MailSender::MICROSOFT, 'signature' => '<div dir="rtl"><p>توقيع</p></div>']);
+        $none = MailSender::create(['key' => 'c', 'name' => 'C', 'address' => 'c@x.com', 'driver' => MailSender::MICROSOFT, 'signature' => '']);
+
+        $this->assertSame('<div dir="ltr" style="text-align: left;"><p>رضا درويش</p><p>Best Regards</p></div>', $plain->toSender()['signature']);
+        $this->assertSame('<div dir="rtl"><p>توقيع</p></div>', $own->toSender()['signature']);
+        $this->assertSame('', $none->toSender()['signature']);
+        // Left to right but not said to sit at the left (as the imported ones): said, so an Arabic email's right-aligned text does not carry it right.
+        $this->assertSame('<div dir="ltr" id="Signature" style="text-align: left; font-family: Calibri"><p>x</p></div>', MailSender::leftToRight('<div dir="ltr" id="Signature" style="font-family: Calibri"><p>x</p></div>'));
+        $this->assertSame('<div dir="ltr" style="text-align: left;"><p>x</p></div>', MailSender::leftToRight('<div dir="ltr"><p>x</p></div>'));
+        $this->assertSame('<div dir="ltr" style="text-align: center"><p>x</p></div>', MailSender::leftToRight('<div dir="ltr" style="text-align: center"><p>x</p></div>'));
+        // What is stored stays as written.
+        $this->assertSame('<p>رضا درويش</p><p>Best Regards</p>', $plain->fresh()->signature);
+        $this->assertStringContainsString('<div dir="ltr"', SenderMailer::sender('a')['signature']);
+    }
 }

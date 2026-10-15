@@ -139,6 +139,8 @@ class LetterEmailTest extends TestCase
         app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::ATTACHMENT, null, ['pdf']);
 
         $this->assertStringContainsString('Best Regards <b>JPA Iflas</b>', $this->sent[0]->getHtmlBody());
+        // The body in Calibri.
+        $this->assertStringContainsString("font-family: Calibri, 'Segoe UI'", $this->sent[0]->getHtmlBody());
         // Kept on the matter as a PDF of the email, which has it.
         $this->assertCount(1, $this->letter->matter->attachments);
     }
@@ -381,6 +383,8 @@ class LetterEmailTest extends TestCase
             ->assertMountedActionModalSee('نص الخطاب.')
             // The mailbox's signature, as it will go; not the letter's own picture.
             ->assertMountedActionModalSeeHtml('Best Regards')
+            // …kept to the left in the preview, whatever side the Arabic letter around it is on.
+            ->assertMountedActionModalSeeHtml('<div dir="ltr" style="text-align: left;"><div id="Signature">')
             ->assertMountedActionModalDontSeeHtml('data:image/png;base64,');
     }
 

@@ -45,7 +45,37 @@ class MailSender extends Model
             'host' => $this->host,
             'port' => $this->port,
             'encryption' => $this->encryption === 'none' ? null : $this->encryption,
-            'signature' => $this->signature,
+            'signature' => self::leftToRight($this->signature),
         ];
+    }
+
+    /**
+     * A signature written left to right — and kept to the left — unless it says
+     * its own direction as right to left: an office's signature is a card of
+     * English lines and numbers (with the Arabic name in it), not a paragraph of
+     * the email. In an Arabic email the text around it is right-aligned, which
+     * a signature that says only dir="ltr" would inherit.
+     */
+    public static function leftToRight(?string $html): ?string
+    {
+        if (blank(strip_tags((string) $html, '<img>'))) {
+            return $html;
+        }
+
+        // Its own outer element: a direction given, a side given?
+        if (preg_match('/^(\s*<[a-z0-9]+\b)([^>]*)>/i', (string) $html, $m) && preg_match('/\sdir=/i', $m[2])) {
+            if (! preg_match('/\sdir=["\']?ltr/i', $m[2]) || preg_match('/text-align\s*:/i', $m[2])) {
+                return $html;
+            }
+
+            // Left to right, but not said to sit at the left: said.
+            $attributes = preg_match('/\sstyle="([^"]*)"/i', $m[2])
+                ? preg_replace('/\sstyle="([^"]*)"/i', ' style="text-align: left; $1"', $m[2], 1)
+                : $m[2].' style="text-align: left;"';
+
+            return $m[1].$attributes.'>'.substr((string) $html, strlen($m[0]));
+        }
+
+        return '<div dir="ltr" style="text-align: left;">'.$html.'</div>';
     }
 }

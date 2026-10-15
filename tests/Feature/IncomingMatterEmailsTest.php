@@ -157,6 +157,13 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertSame(1, MatterEmail::pending([$this->second->id])->count());
         $this->assertSame(0, MatterEmail::pending([$this->second->id + 100])->count());
 
+        // The matters it may be about, as a bullet list — in the table and in the note to the people who can choose.
+        Livewire::test(UnfiledEmails::class)
+            ->assertTableColumnExists('candidates', fn ($column) => $column->isBulleted() && $column->isListWithLineBreaks() && ! $column->isBadge(), $email);
+        $body = \App\Services\MMS\MatterReplyCollector::bullets(['Subject', new \Illuminate\Support\HtmlString('It may be about:'.\App\Services\MMS\MatterReplyCollector::bullets(['2026/1', '2026/2'])->toHtml())])->toHtml();
+        $this->assertStringContainsString('<li>It may be about:<ul', $body);
+        $this->assertSame(2, substr_count($body, '<ul'));
+
         // A person chooses.
         Livewire::test(UnfiledEmails::class)
             ->assertCanSeeTableRecords([$email])
