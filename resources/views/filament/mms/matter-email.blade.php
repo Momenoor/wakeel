@@ -9,9 +9,9 @@
         __('Cc') => implode('، ', (array) $email->cc),
         __('Matter known by') => $sent ? null : MatterEmail::matchedByLabel($email->matched_by),
         // What was kept of an email that came in.
-        __('PDF') => $sent ? null : ($files !== [] ? __('Saved') : __('Not saved')),
-        __('EML') => $sent ? null : ($email->eml_saved ? __('Saved in OneDrive') : __('Not saved')),
-        __('Attachments') => $sent ? null : (count($email->attachmentFiles()) ?: __('None')),
+        __('PDF in OneDrive') => $email->oneDriveLabel('pdf'),
+        __('EML in OneDrive') => $email->oneDriveLabel('eml'),
+        __('Attachments in OneDrive') => $email->oneDriveLabel('attachments'),
     ], fn ($value) => filled($value));
 @endphp
 

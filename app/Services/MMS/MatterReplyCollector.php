@@ -312,10 +312,10 @@ class MatterReplyCollector
             'parent_id' => $answers->getKey(),
         ]);
         [$pdf, $files, $name, $source] = $this->rendered($message, (string) $answers->sender_key, true);
-        $sourceSaved = false;
+        $oneDrive = null;
 
         if ($matter) {
-            $kept = $this->keepOnMatter($matter, $pdf, $files, $name, $answers->user_id, $source, $sourceSaved);
+            $kept = $this->keepOnMatter($matter, $pdf, $files, $name, $answers->user_id, $source, $oneDrive);
             $this->noteUnlinked($matter, $kept);
             MatterProgressRecorder::replyReceived($reply->setRelation('parent', $answers));
             // Whoever they put in To or CC: theirs, on this matter.
@@ -326,7 +326,7 @@ class MatterReplyCollector
         }
 
         // Where each went — for the campaign's recipients list to open.
-        $reply->update(['files' => $kept, 'eml_saved' => $sourceSaved]);
+        $reply->update(['files' => $kept, 'onedrive' => $oneDrive]);
         $this->tell($reply, $answers, count($files));
     }
 
@@ -341,8 +341,8 @@ class MatterReplyCollector
         $email = $this->record($message, $id, $senderKey, ['matter_id' => $matter->getKey(), 'status' => MatterEmail::FILED, 'matched_by' => $by]);
         [$pdf, $files, $name, $source] = $this->rendered($message, $senderKey, false);
 
-        $kept = $this->keepOnMatter($matter, $pdf, $files, $name, null, $source, $sourceSaved);
-        $email->update(['files' => $kept, 'eml_saved' => $sourceSaved]);
+        $kept = $this->keepOnMatter($matter, $pdf, $files, $name, null, $source, $oneDrive);
+        $email->update(['files' => $kept, 'onedrive' => $oneDrive]);
         MatterProgressRecorder::emailReceived($email);
         MatterContact::learn($email);
         $this->tellMatter($email, $matter, count($files), $this->noteUnlinked($matter, $kept));
@@ -374,7 +374,7 @@ class MatterReplyCollector
         $stored = (array) ($email->files ?? []);
         $pdf = $stored[0] ?? null;
         $kept = [];
-        $sourceSaved = false;
+        $oneDrive = ['pdf' => false, 'eml' => false, 'attachments' => 0];
 
         foreach ($stored as $i => $file) {
             $path = (string) ($file['path'] ?? '');
@@ -387,22 +387,28 @@ class MatterReplyCollector
             $folder = MatterOneDriveFolders::receivedEmailsFolder();
             // The original email (.eml) goes to OneDrive only, beside the PDF; it is not kept in the system.
             if (($file['kind'] ?? null) === MatterEmail::SOURCE) {
-                $sourceSaved = $this->archive->keepInOneDrive($matter, (string) $file['name'], (string) $disk->get($path), 'message/rfc822', $folder);
+                $oneDrive['eml'] = $this->archive->keepInOneDrive($matter, (string) $file['name'], (string) $disk->get($path), 'message/rfc822', $folder);
                 $disk->delete($path);
 
                 continue;
             }
 
             $subfolder = $i === 0 || $folder === '' ? $folder : $folder.'/'.pathinfo((string) ($pdf['name'] ?? ''), PATHINFO_FILENAME);
-            $kept[] = ['name' => (string) $file['name'], 'path' => $this->archive->keepFile($matter, (string) $file['name'], (string) $disk->get($path), (string) ($disk->mimeType($path) ?: 'application/octet-stream'), $subfolder, $userId)];
+            $kept[] = ['name' => (string) $file['name'], 'path' => $this->archive->keepFile($matter, (string) $file['name'], (string) $disk->get($path), (string) ($disk->mimeType($path) ?: 'application/octet-stream'), $subfolder, $userId, inOneDrive: $saved)];
             $disk->delete($path);
+
+            if ($i === 0) {
+                $oneDrive['pdf'] = (bool) $saved;
+            } else {
+                $oneDrive['attachments'] += $saved ? 1 : 0;
+            }
         }
 
         $email->update([
             'matter_id' => $matter->getKey(),
             'status' => MatterEmail::FILED,
             'matched_by' => MatterEmail::BY_HAND,
-            'eml_saved' => $sourceSaved,
+            'onedrive' => $oneDrive,
             'files' => array_values(array_filter($kept, fn (array $file) => filled($file['path']))),
         ]);
 
@@ -482,22 +488,23 @@ class MatterReplyCollector
      *
      * @param  list<array{name: string, contents: string, mime?: string}>  $files
      * @param  ?string  $source  the original email (.eml), kept beside the PDF
-     * @param  bool  $sourceSaved  set to whether the original reached the matter's OneDrive
+     * @param  array<string, mixed>|null  $oneDrive  set to what reached the matter's OneDrive: {pdf, eml, attachments}
      * @return list<array{name: string, path: string}>
      */
-    private function keepOnMatter(Matter $matter, string $pdf, array $files, string $name, ?int $userId, ?string $source = null, &$sourceSaved = null): array
+    private function keepOnMatter(Matter $matter, string $pdf, array $files, string $name, ?int $userId, ?string $source = null, &$oneDrive = null): array
     {
-        $sourceSaved = false;
+        $oneDrive = ['pdf' => false, 'eml' => false, 'attachments' => 0];
         $folder = MatterOneDriveFolders::receivedEmailsFolder();
-        $kept = [['name' => $name.'.pdf', 'path' => $this->archive->keepFile($matter, $name.'.pdf', $pdf, 'application/pdf', $folder, $userId)]];
+        $kept = [['name' => $name.'.pdf', 'path' => $this->archive->keepFile($matter, $name.'.pdf', $pdf, 'application/pdf', $folder, $userId, inOneDrive: $oneDrive['pdf'])]];
 
         foreach ($files as $file) {
-            $kept[] = ['name' => (string) $file['name'], 'path' => $this->archive->keepFile($matter, (string) $file['name'], (string) $file['contents'], (string) ($file['mime'] ?? 'application/octet-stream'), $folder !== '' ? $folder.'/'.$name : '', $userId)];
+            $kept[] = ['name' => (string) $file['name'], 'path' => $this->archive->keepFile($matter, (string) $file['name'], (string) $file['contents'], (string) ($file['mime'] ?? 'application/octet-stream'), $folder !== '' ? $folder.'/'.$name : '', $userId, inOneDrive: $saved)];
+            $oneDrive['attachments'] += $saved ? 1 : 0;
         }
 
         // The original email goes to OneDrive only, beside the PDF — nowhere in the system.
         if ($source !== null) {
-            $sourceSaved = $this->archive->keepInOneDrive($matter, $name.'.eml', $source, 'message/rfc822', $folder);
+            $oneDrive['eml'] = $this->archive->keepInOneDrive($matter, $name.'.eml', $source, 'message/rfc822', $folder);
         }
 
         return array_values(array_filter($kept, fn (array $file) => filled($file['path'])));

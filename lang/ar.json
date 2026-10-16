@@ -4000,7 +4000,16 @@
     "PDF": "PDF",
     "EML": "EML",
     "Not saved": "غير محفوظ",
-    "Saved in OneDrive": "محفوظ في OneDrive",
     "The original email, saved in the matter's OneDrive": "البريد الأصلي، محفوظ في OneDrive الخاص بالقضية",
-    ":count attachment|:count attachments": ":count مرفق|:count مرفقات"
+    "Without attachment": "بدون مرفقات",
+    "Partly saved": "محفوظ جزئياً",
+    "Not checked": "لم يُفحص",
+    "PDF in OneDrive": "PDF في OneDrive",
+    "EML in OneDrive": "EML في OneDrive",
+    "Attachments in OneDrive": "المرفقات في OneDrive",
+    "Check OneDrive": "فحص OneDrive",
+    "Reads from OneDrive which PDFs, originals and attachments of the emails that came in are there": "يقرأ من OneDrive أي ملفات PDF والأصول والمرفقات للرسائل الواردة موجودة فيه",
+    "OneDrive checked": "تم فحص OneDrive",
+    "Nothing to check": "لا يوجد ما يُفحص",
+    "This matter has no OneDrive folder, or no folder is set for received emails.": "لا يوجد لهذه القضية مجلد في OneDrive، أو لم يُحدَّد مجلد للرسائل الواردة."
 }

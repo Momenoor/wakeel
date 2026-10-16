@@ -6,6 +6,7 @@ use App\Filament\Mms\Pages\OneDriveSettings;
 use App\Jobs\CreateMatterOneDriveFolder;
 use App\Jobs\MoveMatterOneDriveFolder;
 use App\Models\Matter;
+use App\Models\MatterEmail;
 use App\Models\MatterOneDriveFolder;
 use App\Models\MatterParty;
 use App\Models\OneDriveFolderReview;
@@ -18,6 +19,7 @@ use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 /**
  * A folder for each matter in its assistant's OneDrive:
@@ -278,6 +280,72 @@ class MatterOneDriveFolders
         }
 
         return $item;
+    }
+
+    /**
+     * What of these emails that came in is in the matter's OneDrive folder, read
+     * from OneDrive itself: the PDF and the original (.eml) in the received-emails
+     * folder, and how many of the files it came with in the folder of the PDF's
+     * name beside them. Kept on each email. False when there is nothing to read
+     * them from — no OneDrive folder for the matter, or no folder set for the
+     * received emails.
+     *
+     * @param  iterable<MatterEmail>  $emails
+     */
+    public function checkEmails(Matter $matter, iterable $emails): bool
+    {
+        $folder = self::folderFor($matter);
+        $received = self::receivedEmailsFolder();
+
+        if (! $folder || $received === '') {
+            return false;
+        }
+
+        $user = (string) $folder->party->onedrive_email;
+
+        // The received-emails folder: down the path from the matter's folder.
+        $id = (string) $folder->drive_item_id;
+        foreach (OneDriveClient::segments($received) as $segment) {
+            $next = collect($this->client->childFolders($user, $id))->first(fn (array $f): bool => mb_strtolower($f['name']) === mb_strtolower(self::clean($segment)));
+            $id = (string) ($next['id'] ?? '');
+
+            if ($id === '') {
+                break;
+            }
+        }
+
+        $listing = $id !== '' ? collect($this->client->children($user, $id)) : collect();
+        $names = $listing->where('folder', false)->pluck('name')->map(fn ($n) => mb_strtolower((string) $n))->flip();
+        $folders = $listing->where('folder', true)->keyBy(fn (array $f): string => mb_strtolower($f['name']));
+
+        foreach ($emails as $email) {
+            $base = pathinfo((string) ($email->files[0]['name'] ?? ''), PATHINFO_FILENAME);
+            $stem = $base !== '' ? mb_strtolower(MatterOneDriveExplorer::cleanName($base)) : null;
+
+            // The files it came with, by the names they were put in OneDrive under.
+            $expected = collect($email->attachmentFiles())->map(fn (array $file): string => mb_strtolower(self::oneDriveName((string) $file['name'])));
+            $inside = $stem !== null && $expected->isNotEmpty() && ($sub = $folders->get(mb_strtolower(self::clean($base))))
+                ? collect($this->client->children($user, $sub['id']))->where('folder', false)->pluck('name')->map(fn ($n) => mb_strtolower((string) $n))->flip()
+                : collect();
+
+            $email->update(['onedrive' => [
+                'pdf' => $stem !== null && $names->has($stem.'.pdf'),
+                'eml' => $stem !== null && $names->has($stem.'.eml'),
+                'attachments' => $expected->filter(fn (string $name): bool => $inside->has($name))->count(),
+                'checked_at' => now()->toDateTimeString(),
+            ]]);
+        }
+
+        return true;
+    }
+
+    /** A file's name as it is put in OneDrive (no "/" or other characters it refuses). */
+    private static function oneDriveName(string $name): string
+    {
+        $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+        $base = $extension !== '' ? Str::beforeLast($name, '.'.pathinfo($name, PATHINFO_EXTENSION)) : $name;
+
+        return MatterOneDriveExplorer::cleanName($base).($extension !== '' ? '.'.$extension : '');
     }
 
     /**

@@ -4,8 +4,10 @@ namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Models\MatterEmail;
+use App\Services\MMS\MatterOneDriveFolders;
 use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
+use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -84,25 +86,23 @@ class EmailsRelationManager extends RelationManager
                         ? trans_choice(':count file|:count files', $n, ['count' => $n]) : null)
                     ->searchable()
                     ->wrap(),
-                // What was kept of an email that came in — and where.
+                // What of an email that came in is in the matter's OneDrive.
                 TextColumn::make('pdf_saved')
-                    ->label(__('PDF'))
+                    ->label(__('PDF in OneDrive'))
                     ->badge()
-                    ->state(fn (MatterEmail $record): ?string => self::saved($record, self::pdfUrl($record) !== null))
-                    ->color(fn (?string $state): string => self::savedColor($state)),
+                    ->state(fn (MatterEmail $record): ?string => $record->oneDriveLabel('pdf'))
+                    ->color(fn (?string $state): string => self::color($state)),
                 TextColumn::make('eml_saved')
-                    ->label(__('EML'))
+                    ->label(__('EML in OneDrive'))
                     ->tooltip(__('The original email, saved in the matter\'s OneDrive'))
                     ->badge()
-                    ->state(fn (MatterEmail $record): ?string => self::saved($record, (bool) $record->eml_saved))
-                    ->color(fn (?string $state): string => self::savedColor($state)),
-                TextColumn::make('attachments')
-                    ->label(__('Attachments'))
+                    ->state(fn (MatterEmail $record): ?string => $record->oneDriveLabel('eml'))
+                    ->color(fn (?string $state): string => self::color($state)),
+                TextColumn::make('attachments_saved')
+                    ->label(__('Attachments in OneDrive'))
                     ->badge()
-                    ->state(fn (MatterEmail $record): ?string => $record->direction === MatterEmail::SENT
-                        ? null
-                        : ($record->attachmentFiles() !== [] ? trans_choice(':count attachment|:count attachments', count($record->attachmentFiles()), ['count' => count($record->attachmentFiles())]) : __('None')))
-                    ->color(fn (?string $state): string => $state === __('None') ? 'gray' : 'info'),
+                    ->state(fn (MatterEmail $record): ?string => $record->oneDriveLabel('attachments'))
+                    ->color(fn (?string $state): string => self::color($state)),
                 TextColumn::make('matched_by')
                     ->label(__('Matter known by'))
                     ->formatStateUsing(fn (?string $state): string => MatterEmail::matchedByLabel($state))
@@ -122,6 +122,13 @@ class EmailsRelationManager extends RelationManager
                     ->color('gray')
                     ->visible(fn (MatterEmail $record): bool => self::pdfUrl($record) !== null)
                     ->url(fn (MatterEmail $record): ?string => self::pdfUrl($record), shouldOpenInNewTab: true),
+                // Read from OneDrive itself what is there.
+                Action::make('checkOneDrive')
+                    ->label(__('Check OneDrive'))
+                    ->icon('heroicon-o-cloud-arrow-down')
+                    ->color('gray')
+                    ->visible(fn (MatterEmail $record): bool => $record->direction === MatterEmail::RECEIVED)
+                    ->action(fn (MatterEmail $record) => $this->checkOneDrive([$record])),
                 Action::make('view')
                     ->label(__('Details'))
                     ->icon('heroicon-o-eye')
@@ -133,21 +140,47 @@ class EmailsRelationManager extends RelationManager
                     ->modalSubmitAction(false)
                     ->modalCancelActionLabel(__('Close')),
             ])
+            ->headerActions([
+                Action::make('checkAllOneDrive')
+                    ->label(__('Check OneDrive'))
+                    ->tooltip(__('Reads from OneDrive which PDFs, originals and attachments of the emails that came in are there'))
+                    ->icon('heroicon-o-cloud-arrow-down')
+                    ->color('gray')
+                    ->action(fn () => $this->checkOneDrive($this->getOwnerRecord()->emails()->where('direction', MatterEmail::RECEIVED)->where('status', MatterEmail::FILED)->get()->all())),
+            ])
             ->emptyStateHeading(__('No emails yet'))
             ->emptyStateDescription(__('Emails sent from this matter, and those that come in from its parties, are listed here.'));
     }
 
-    /** "Saved" or "Not saved" for an email that came in; nothing for one that went out. */
-    private static function saved(MatterEmail $email, bool $saved): ?string
+    /**
+     * Reads from the matter's OneDrive what is there of these emails.
+     *
+     * @param  list<MatterEmail>  $emails
+     */
+    private function checkOneDrive(array $emails): void
     {
-        return $email->direction === MatterEmail::SENT ? null : ($saved ? __('Saved') : __('Not saved'));
+        try {
+            $read = app(MatterOneDriveFolders::class)->checkEmails($this->getOwnerRecord(), $emails);
+        } catch (\Throwable $e) {
+            Notification::make()->danger()->title(__('OneDrive could not be read'))->body($e->getMessage())->send();
+
+            return;
+        }
+
+        $read
+            ? Notification::make()->success()->title(__('OneDrive checked'))->send()
+            : Notification::make()->warning()->title(__('Nothing to check'))->body(__('This matter has no OneDrive folder, or no folder is set for received emails.'))->send();
     }
 
-    private static function savedColor(?string $state): string
+    private static function color(?string $state): string
     {
-        return $state === __('Saved') ? 'success' : 'gray';
+        return match ($state) {
+            __('Saved') => 'success',
+            __('Not saved') => 'danger',
+            __('Partly saved') => 'warning',
+            default => 'gray',
+        };
     }
-
     /** The URL of the email's PDF (the first file kept), when there is one. */
     private static function pdfUrl(MatterEmail $email): ?string
     {

@@ -285,19 +285,23 @@ class IncomingMatterEmailsTest extends TestCase
             ->assertCanNotSeeTableRecords([$sent])
             ->removeTableFilters();
 
-        // What was kept of each: the PDF, the original (.eml, in OneDrive), the files it came with.
+        // What of each is in OneDrive: the PDF, the original (.eml), the files it came with.
         $page->assertTableColumnStateSet('pdf_saved', 'Saved', $received)
             ->assertTableColumnStateSet('eml_saved', 'Not saved', $received)
-            ->assertTableColumnStateSet('attachments', '1 attachment', $received)
+            ->assertTableColumnStateSet('attachments_saved', 'Saved', $received)
             ->assertTableColumnStateSet('pdf_saved', null, $sent)
             ->assertTableColumnStateSet('eml_saved', null, $sent)
-            ->assertTableColumnStateSet('attachments', null, $sent);
-        $received->update(['eml_saved' => true]);
-        Livewire::test(\App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager::class, [
-            'ownerRecord' => $this->second,
-            'pageClass' => \App\Filament\Mms\Resources\Matters\Pages\ViewMatter::class,
-        ])->assertTableColumnStateSet('eml_saved', 'Saved', $received);
+            ->assertTableColumnStateSet('attachments_saved', null, $sent);
 
+        // One that came with nothing; one not saved; one never checked.
+        $plain = (new MatterEmail)->forceFill(['direction' => MatterEmail::RECEIVED, 'files' => [['name' => 'a.pdf', 'path' => 'x']], 'onedrive' => ['pdf' => true, 'eml' => false, 'attachments' => 0]]);
+        $this->assertSame('Without attachment', $plain->oneDriveLabel('attachments'));
+        $with = (clone $plain)->forceFill(['files' => [['name' => 'a.pdf', 'path' => 'x'], ['name' => 'b.pdf', 'path' => 'y'], ['name' => 'c.pdf', 'path' => 'z']]]);
+        $this->assertSame('Not saved', $with->oneDriveLabel('attachments'));
+        $this->assertSame('Partly saved', $with->forceFill(['onedrive' => ['attachments' => 1]])->oneDriveLabel('attachments'));
+        $this->assertSame('Saved', $with->forceFill(['onedrive' => ['attachments' => 2]])->oneDriveLabel('attachments'));
+        $this->assertSame('Not checked', $with->forceFill(['onedrive' => null])->oneDriveLabel('attachments'));
+        $this->assertSame('Not checked', $with->oneDriveLabel('pdf'));
         // The PDF of one that came in opens; its details list the files it came with.
         $page->assertTableActionVisible('open', $received)
             ->assertTableActionHidden('open', $sent)
@@ -308,7 +312,7 @@ class IncomingMatterEmailsTest extends TestCase
             'files' => [['name' => 'x.pdf', 'url' => 'https://x/x.pdf'], ['name' => 'عقد.pdf', 'url' => 'https://x/c.pdf']],
         ])->render();
         $this->assertStringContainsString('عقد.pdf', $details);
-        $this->assertMatchesRegularExpression('/PDF.*?Saved.*?EML.*?Saved in OneDrive.*?Attachments.*?>1</s', $details);
+        $this->assertMatchesRegularExpression('/PDF in OneDrive.*?Saved.*?EML in OneDrive.*?Not saved.*?Attachments in OneDrive.*?Saved/s', $details);
         $this->assertStringContainsString(__('the email as PDF'), $details);
         $this->assertStringContainsString(e($received->from), $details);
         $this->assertStringContainsString('/storage/attachments/emails/'.$this->second->id, Storage::disk('public')->url($received->files[0]['path']));
@@ -340,7 +344,7 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertSame([], array_values(array_filter(Storage::disk('public')->allFiles(), fn (string $path) => str_ends_with($path, '.eml') && ! str_starts_with($path, 'email-unfiled'))));
         $this->assertTrue(collect($this->uploads)->contains(fn (string $url) => str_contains($url, '.eml:/content')));
         $this->assertCount(1, $filed->attachmentFiles());
-        $this->assertTrue($filed->eml_saved);
+        $this->assertSame(['pdf' => true, 'eml' => true, 'attachments' => 1], $filed->onedrive);
 
         // Held: kept aside with it for the time being, and filed by hand, it goes to OneDrive and is gone from the system.
         $held = MatterEmail::where('status', MatterEmail::PENDING)->sole();
@@ -349,7 +353,7 @@ class IncomingMatterEmailsTest extends TestCase
         Livewire::test(UnfiledEmails::class)->callTableAction('file', $held, ['matter_id' => $this->first->id]);
 
         $held->refresh();
-        $this->assertTrue($held->eml_saved);
+        $this->assertSame(['pdf' => true, 'eml' => true, 'attachments' => 1], $held->onedrive);
         $this->assertNull(collect($held->files)->firstWhere('kind', 'source'));
         $this->assertSame([], $this->first->attachments()->where('name', 'like', '%.eml')->pluck('name')->all());
         $this->assertCount($uploads + 3, $this->uploads);
@@ -366,6 +370,43 @@ class IncomingMatterEmailsTest extends TestCase
         ]));
 
         $this->assertSame(MatterEmail::FILED, MatterEmail::sole()->status);
+    }
+
+    public function test_onedrive_can_be_read_for_what_of_an_email_is_there(): void
+    {
+        $this->collect($this->email(['subject' => 'مستندات القضية 987/2026']));
+        $email = MatterEmail::where('status', MatterEmail::FILED)->sole();
+        $stem = pathinfo($email->files[0]['name'], PATHINFO_FILENAME);
+        $received = \App\Services\MMS\MatterOneDriveFolders::receivedEmailsFolder();
+        $email->update(['onedrive' => null]);
+
+        // OneDrive has the PDF and the file it came with — not the original.
+        Http::swap(new \Illuminate\Http\Client\Factory);
+        Http::fake(function (Request $request) use ($stem, $received) {
+            $url = rawurldecode($request->url());
+
+            return match (true) {
+                str_contains($url, 'login.microsoftonline.com') => Http::response(['access_token' => 'token']),
+                str_contains($url, '/items/root-987/children') => Http::response(['value' => [['id' => 'recv', 'name' => $received, 'folder' => ['childCount' => 2]]]]),
+                str_contains($url, '/items/recv/children') => Http::response(['value' => [
+                    ['id' => 'f1', 'name' => $stem.'.pdf', 'file' => ['mimeType' => 'application/pdf']],
+                    ['id' => 'sub', 'name' => $stem, 'folder' => ['childCount' => 1]],
+                ]]),
+                str_contains($url, '/items/sub/children') => Http::response(['value' => [['id' => 'a1', 'name' => 'عقد.pdf', 'file' => ['mimeType' => 'application/pdf']]]]),
+                default => Http::response(['value' => []]),
+            };
+        });
+
+        $this->assertTrue(app(\App\Services\MMS\MatterOneDriveFolders::class)->checkEmails($this->second, [$email]));
+
+        $email->refresh();
+        $this->assertSame([true, false, 1], [$email->onedrive['pdf'], $email->onedrive['eml'], $email->onedrive['attachments']]);
+        $this->assertNotNull($email->onedrive['checked_at']);
+        $this->assertSame(['Saved', 'Not saved', 'Saved'], [$email->oneDriveLabel('pdf') === 'Saved' ? 'Saved' : 'x', $email->oneDriveLabel('eml'), $email->oneDriveLabel('attachments')]);
+
+        // No OneDrive folder on the matter: nothing to read, nothing changed.
+        MatterOneDriveFolder::query()->where('matter_id', $this->second->id)->delete();
+        $this->assertFalse(app(\App\Services\MMS\MatterOneDriveFolders::class)->checkEmails($this->second, [$email]));
     }
 
     public function test_a_matter_with_no_onedrive_folder_gets_the_email_to_download_by_hand(): void

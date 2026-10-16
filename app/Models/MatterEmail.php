@@ -44,7 +44,7 @@ class MatterEmail extends Model
 
     public const BY_HAND = 'hand';
 
-    protected $fillable = ['matter_id', 'direction', 'status', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'cc', 'files', 'eml_saved', 'candidates', 'matched_by', 'at', 'user_id'];
+    protected $fillable = ['matter_id', 'direction', 'status', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'cc', 'files', 'onedrive', 'candidates', 'matched_by', 'at', 'user_id'];
 
     protected function casts(): array
     {
@@ -52,7 +52,7 @@ class MatterEmail extends Model
             'to' => 'array',
             'cc' => 'array',
             'files' => 'array',
-            'eml_saved' => 'boolean',
+            'onedrive' => 'array',
             'candidates' => 'array',
             'at' => 'datetime',
         ];
@@ -97,6 +97,72 @@ class MatterEmail extends Model
             ->filter(fn ($file): bool => ($file['kind'] ?? null) !== self::SOURCE)
             ->values()
             ->all();
+    }
+
+    /**
+     * Whether the email's PDF (`pdf`) or its original (`eml`) is in the matter's
+     * OneDrive — null when that was never checked.
+     */
+    public function inOneDrive(string $what): ?bool
+    {
+        $value = ((array) $this->onedrive)[$what] ?? null;
+
+        return $value === null ? null : (bool) $value;
+    }
+
+    /** How many of the files it came with are in the matter's OneDrive — null when never checked. */
+    public function attachmentsInOneDrive(): ?int
+    {
+        $value = ((array) $this->onedrive)['attachments'] ?? null;
+
+        return $value === null ? null : (int) $value;
+    }
+
+    /**
+     * What became of the files it came with: `none` (it came with none), `saved`,
+     * `partly`, `not_saved` in OneDrive, or `unknown` when never checked.
+     */
+    public function attachmentsState(): string
+    {
+        $has = count($this->attachmentFiles());
+        $in = $this->attachmentsInOneDrive();
+
+        return match (true) {
+            $has === 0 => 'none',
+            $in === null => 'unknown',
+            $in >= $has => 'saved',
+            $in > 0 => 'partly',
+            default => 'not_saved',
+        };
+    }
+
+    /**
+     * What to say of an email that came in as to its OneDrive copies — `pdf`, `eml` or
+     * `attachments`: Saved / Not saved (and, for the files it came with, Without
+     * attachment or Partly saved); Not checked when never read from OneDrive. Null
+     * for one that went out.
+     */
+    public function oneDriveLabel(string $what): ?string
+    {
+        if ($this->direction === self::SENT) {
+            return null;
+        }
+
+        if ($what === 'attachments') {
+            return match ($this->attachmentsState()) {
+                'none' => __('Without attachment'),
+                'saved' => __('Saved'),
+                'partly' => __('Partly saved'),
+                'not_saved' => __('Not saved'),
+                default => __('Not checked'),
+            };
+        }
+
+        return match ($this->inOneDrive($what)) {
+            true => __('Saved'),
+            false => __('Not saved'),
+            default => __('Not checked'),
+        };
     }
 
     public static function matchedByLabel(?string $how): string

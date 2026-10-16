@@ -91,7 +91,7 @@ class SentEmailArchive
      * attachments (unless kept elsewhere), and in this subfolder of its
      * OneDrive folder (none: not there).
      */
-    public function keepFile(Matter $matter, string $name, string $contents, string $mime, string $subfolder, ?int $userId, bool $asAttachment = true): ?string
+    public function keepFile(Matter $matter, string $name, string $contents, string $mime, string $subfolder, ?int $userId, bool $asAttachment = true, ?bool &$inOneDrive = null): ?string
     {
         $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
         $path = null;
@@ -115,7 +115,7 @@ class SentEmailArchive
             }
         }
 
-        $this->keepInOneDrive($matter, $name, $contents, $mime, $subfolder);
+        $inOneDrive = $this->keepInOneDrive($matter, $name, $contents, $mime, $subfolder);
 
         return $path;
     }
