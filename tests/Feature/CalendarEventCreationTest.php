@@ -212,6 +212,58 @@ class CalendarEventCreationTest extends TestCase
         $this->assertNotContains($elsewhere->id, $event->matters()->pluck('matters.id')->all());
     }
 
+    public function test_the_bulk_events_toggle_lists_only_in_progress_matters_when_on_and_all_when_off(): void
+    {
+        $type = Type::factory()->create();
+        $court = Court::factory()->create();
+        $make = fn (array $dates) => Matter::factory()->create(['type_id' => $type->id, 'court_id' => $court->id, ...$dates]);
+
+        $inProgress = $make(['initial_report_at' => null, 'final_report_at' => null]);
+        $initialed = $make(['initial_report_at' => now()->subWeek(), 'final_report_at' => null]);
+        $finalised = $make(['initial_report_at' => now()->subMonth(), 'final_report_at' => now()->subWeek()]);
+        // The status the matter shows is the same rule.
+        $this->assertSame(\App\Enums\MatterStatus::IN_PROGRESS, $inProgress->status);
+        $this->assertSame([$inProgress->id], Matter::query()->inProgress()->pluck('id')->all());
+
+        $listed = fn ($field) => collect(array_keys($field->getOptions()))->sort()->values()->all();
+        $all = collect([$inProgress, $initialed, $finalised])->pluck('id')->sort()->values()->all();
+
+        $page = Livewire::test(ListCalendarEvents::class)
+            ->mountAction(TestAction::make('createBulk')->table())
+            ->fillForm(['matter_type_id' => $type->id, 'court_id' => $court->id, 'only_current' => false])
+            ->assertFormFieldExists('matter_ids', fn ($field) => $listed($field) === $all);
+
+        // On: in progress only, and what was ticked is cleared.
+        $page->fillForm(['matter_ids' => [$finalised->id]])
+            ->fillForm(['only_current' => true])
+            ->assertFormFieldExists('matter_ids', fn ($field) => $listed($field) === [$inProgress->id])
+            ->assertFormSet(['matter_ids' => fn ($state) => blank($state)])
+            // Off again: all of them.
+            ->fillForm(['only_current' => false])
+            ->assertFormFieldExists('matter_ids', fn ($field) => $listed($field) === $all);
+    }
+
+    public function test_the_bulk_events_location_follows_the_courts_name(): void
+    {
+        $type = Type::factory()->create();
+        $dubai = Court::factory()->create(['name' => 'محاكم دبي']);
+        $sharjah = Court::factory()->create(['name' => 'محاكم الشارقة']);
+
+        $page = Livewire::test(ListCalendarEvents::class)
+            ->mountAction(TestAction::make('createBulk')->table())
+            ->fillForm(['matter_type_id' => $type->id, 'court_id' => $dubai->id])
+            // The court's name — not its id — as a remote session.
+            ->assertSchemaStateSet(['location' => 'محاكم دبي '.__('remotely')], 'mountedActionSchema0')
+            // Another court: the location follows.
+            ->fillForm(['court_id' => $sharjah->id])
+            ->assertSchemaStateSet(['location' => 'محاكم الشارقة '.__('remotely')], 'mountedActionSchema0');
+
+        // A place typed by hand is kept when the court changes.
+        $page->fillForm(['location' => 'قاعة 4 - محاكم الشارقة'])
+            ->fillForm(['court_id' => $dubai->id])
+            ->assertSchemaStateSet(['location' => 'قاعة 4 - محاكم الشارقة'], 'mountedActionSchema0');
+    }
+
     public function test_a_new_event_form_shows_what_is_already_on_its_day(): void
     {
         CalendarEvent::create(['title' => 'جلسة قائمة', 'type' => 'single', 'start_datetime' => '2026-10-20 09:00:00', 'end_datetime' => '2026-10-20 10:00:00']);

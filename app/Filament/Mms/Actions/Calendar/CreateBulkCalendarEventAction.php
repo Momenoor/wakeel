@@ -18,6 +18,10 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 
 class CreateBulkCalendarEventAction extends Action
@@ -36,32 +40,54 @@ class CreateBulkCalendarEventAction extends Action
         $this->label(__('Create Bulk Event'))
             ->modalHeading(__('Create Bulk Calendar Event'))
             ->icon('heroicon-o-rectangle-stack')
-            ->form([
+            ->schema([
                 // Read when the form opens — not on every load of the page.
                 Select::make('matter_type_id')
                     ->label(__('Matter Type'))
-                    ->options(fn () => Type::pluck('name', 'id'))
+                    ->options(fn() => Type::pluck('name', 'id'))
                     ->required()
                     ->live(),
                 Select::make('court_id')
                     ->label(__('Court'))
-                    ->options(fn () => Court::pluck('name', 'id'))
+                    ->options(fn() => Court::pluck('name', 'id'))
                     ->required()
+                    // The location follows the court: its name — unless a place was typed that is not
+                    // the previous court's name (or Teams', for a meeting).
+                    ->afterStateUpdated(function (Set $set, Get $get, $state, $old): void {
+                        // What this fill puts for a court: "<court name> remotely".
+                        $placeOf = fn ($id): ?string => $id && ($name = Court::find($id)?->name) ? $name.' '.__('remotely') : null;
+                        $current = trim((string) $get('location'));
+
+                        // Only a blank location, or the one the previous court filled in, follows the court.
+                        if ($current === '' || $current === $placeOf($old)) {
+                            $set('location', $placeOf($state));
+                        }
+                    })
                     ->live(),
+                Toggle::make('only_current')
+                    ->label(__('Only In-Progress Matters'))
+                    ->helperText(__('On: matters whose status is In progress. Off: all matters.'))
+                    ->live()
+                    ->default(true)
+                    // The list is rebuilt, so anything ticked that is no longer shown is cleared.
+                    ->afterStateUpdated(fn(Set $set) => $set('matter_ids', [])),
                 CheckboxList::make('matter_ids')
                     ->label(__('Matters'))
+                    ->searchable()
                     ->options(function (callable $get) {
                         $typeId = $get('matter_type_id');
-                        if (! $typeId) {
+                        if (!$typeId) {
                             return [];
                         }
-
+                        $current = $get('only_current');
                         // That type's matters at that court (the court was asked
                         // for, then every court's were listed).
                         return Matter::where('type_id', $typeId)
-                            ->when($get('court_id'), fn ($query, $courtId) => $query->where('court_id', $courtId))
+                            // On: in progress only. Off: no condition, so all of them.
+                            ->when($current, fn(Builder $query) => $query->inProgress())
+                            ->when($get('court_id'), fn($query, $courtId) => $query->where('court_id', $courtId))
                             ->get()
-                            ->mapWithKeys(fn ($m) => [$m->id => "{$m->number}/{$m->year}"])
+                            ->mapWithKeys(fn($m) => [$m->id => "{$m->number}/{$m->year}"])
                             ->toArray();
                     })
                     ->required()
@@ -76,12 +102,15 @@ class CreateBulkCalendarEventAction extends Action
                 DateTimePicker::make('start_datetime')
                     ->label(__('Session Date & Time'))
                     ->required()
+                    ->seconds(false)
                     ->live(onBlur: true)
+                    ->afterStateUpdated(fn(Set $set, $state) => $set('end_datetime', Carbon::createFromDate($state)->addHour()))
                     ->timezone(config('app.timezone')),
                 // What is already on that day.
-                SameDayMeetings::placeholder(fn ($get) => $get('start_datetime')),
+                SameDayMeetings::placeholder(fn($get) => $get('start_datetime')),
                 DateTimePicker::make('end_datetime')
                     ->label(__('End Date & Time'))
+                    ->seconds(false)
                     ->timezone(config('app.timezone')),
                 TextInput::make('location')
                     ->label(__('Location')),
@@ -89,30 +118,28 @@ class CreateBulkCalendarEventAction extends Action
                     ->label(__('Generated Title'))
                     ->content(function (callable $get) {
                         $matterIds = $get('matter_ids');
-                        $courtId = $get('court_id');
                         $typeId = $get('matter_type_id');
 
-                        if (empty($matterIds) || ! $courtId || ! $typeId) {
+                        if (empty($matterIds) || !$typeId) {
                             return '—';
                         }
 
                         $matters = Matter::whereIn('id', $matterIds)->get();
-                        $matterNumbers = $matters->map(fn ($m) => "{$m->number}/{$m->year}")->join(', ');
-                        $courtName = Court::find($courtId)?->name;
+                        $matterNumbers = $matters->map(fn($m) => "{$m->number}/{$m->year}")->join(', ');
                         $typeName = Type::find($typeId)?->name;
 
-                        return "{$matterNumbers} ({$courtName}) ({$typeName}) (جلسات المحكمة)";
+                        return " د.رضا {$matterNumbers} ({$typeName}) (جلسات المحكمة)";
                     }),
                 // Only with Microsoft 365 set up (System Settings → Integrations).
                 Toggle::make('sync_to_outlook')
                     ->label(__('Sync to Outlook Calendar'))
-                    ->default(fn (): bool => app(OutlookCalendarService::class)->isConfigured())
-                    ->visible(fn (): bool => app(OutlookCalendarService::class)->isConfigured())
+                    ->default(fn(): bool => app(OutlookCalendarService::class)->isConfigured())
+                    ->visible(fn(): bool => app(OutlookCalendarService::class)->isConfigured())
                     ->live(),
                 Toggle::make('is_teams_meeting')
                     ->label(__('Create Teams Meeting'))
                     ->default(false)
-                    ->visible(fn (callable $get) => app(OutlookCalendarService::class)->isConfigured() && $get('sync_to_outlook')),
+                    ->visible(fn(callable $get) => app(OutlookCalendarService::class)->isConfigured() && $get('sync_to_outlook')),
             ])
             ->action(function (array $data, OutlookCalendarService $outlookService) {
                 // A meeting running during another asks first.
@@ -123,10 +150,10 @@ class CreateBulkCalendarEventAction extends Action
                     filled($data['end_datetime'] ?? null) ? \Carbon\Carbon::parse($data['end_datetime'], config('app.timezone')) : null,
                 );
 
-                $toOutlook = ! empty($data['sync_to_outlook']) && $outlookService->isConfigured();
-                $teams = $toOutlook && ! empty($data['is_teams_meeting']);
+                $toOutlook = !empty($data['sync_to_outlook']) && $outlookService->isConfigured();
+                $teams = $toOutlook && !empty($data['is_teams_meeting']);
                 $matters = Matter::whereIn('id', $data['matter_ids'])->get();
-                $matterNumbers = $matters->map(fn ($m) => "{$m->number}/{$m->year}")->join(', ');
+                $matterNumbers = $matters->map(fn($m) => "{$m->number}/{$m->year}")->join(', ');
                 $courtName = Court::find($data['court_id'])?->name;
                 $typeName = Type::find($data['matter_type_id'])?->name;
 

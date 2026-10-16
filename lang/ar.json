@@ -4011,5 +4011,8 @@
     "Reads from OneDrive which PDFs, originals and attachments of the emails that came in are there": "يقرأ من OneDrive أي ملفات PDF والأصول والمرفقات للرسائل الواردة موجودة فيه",
     "OneDrive checked": "تم فحص OneDrive",
     "Nothing to check": "لا يوجد ما يُفحص",
-    "This matter has no OneDrive folder, or no folder is set for received emails.": "لا يوجد لهذه القضية مجلد في OneDrive، أو لم يُحدَّد مجلد للرسائل الواردة."
+    "This matter has no OneDrive folder, or no folder is set for received emails.": "لا يوجد لهذه القضية مجلد في OneDrive، أو لم يُحدَّد مجلد للرسائل الواردة.",
+    "Only In-Progress Matters": "القضايا قيد العمل فقط",
+    "On: matters whose status is In progress. Off: all matters.": "مفعّل: القضايا التي حالتها «قيد العمل». معطّل: كل القضايا.",
+    "remotely": "عن بعد"
 }

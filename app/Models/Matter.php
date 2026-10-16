@@ -90,6 +90,17 @@ class Matter extends Model
 
     public $timestamps = true;
 
+    /**
+     * Matters whose status is "In progress": no initial report yet — the same
+     * rule as the In progress tab of the matters list and the status accessor.
+     *
+     * @param  Builder<Matter>  $query
+     */
+    public function scopeInProgress(Builder $query): void
+    {
+        $query->whereNull(['initial_report_at','final_report_at','final_report_memo_date']);
+    }
+
     protected static function booted()
     {
         static::saved(function (Matter $matter) {
