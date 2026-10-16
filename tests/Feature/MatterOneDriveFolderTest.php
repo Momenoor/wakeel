@@ -337,6 +337,37 @@ class MatterOneDriveFolderTest extends TestCase
         $this->assertNotNull($second->fresh()->moved_at);
     }
 
+    public function test_sent_emails_and_signed_minutes_folders_take_the_placeholders_and_the_day(): void
+    {
+        \Illuminate\Support\Carbon::setTestNow('2026-10-17 09:30:00');
+        $this->switchOn('{{matter.custom.Phase}}/01 system');
+        $od = (new \Tests\Support\FakeOneDrive)->install();
+        $matter = $this->phaseOf('phase1');
+        $this->assign($matter, $this->assistant());
+        $main = '2026-1010 - خبرة - محاكم دبي';
+
+        Setting::set(MatterOneDriveFolders::SENT_EMAILS, '{{matter.custom.Phase}}/04 المراسلات/المراسلات الصادرة/{{day}}', 'onedrive');
+        Setting::set(MatterOneDriveFolders::SIGNED_MINUTES, '{{matter.custom.Phase}}/06 محاضر موقعة', 'onedrive');
+        Setting::clearCache();
+
+        $this->assertSame('phase1/04 المراسلات/المراسلات الصادرة/2026-10-17', MatterOneDriveFolders::sentEmailsFolderFor($matter->fresh()));
+        $this->assertSame('phase1/06 محاضر موقعة', MatterOneDriveFolders::signedMinutesFolderFor($matter->fresh()));
+
+        // A sent email's PDF goes in that day's folder — no folder is named after a placeholder.
+        app(\App\Services\MMS\SentEmailArchive::class)->keep($matter->fresh(), '%PDF', 'مكتب البنا', 'مستندات', null, asAttachment: false);
+
+        $this->assertContains("Work/Matters/{$main}/phase1/04 المراسلات/المراسلات الصادرة/2026-10-17", $od->tree());
+        $this->assertSame([], array_values(array_filter($od->tree(), fn (string $path) => str_contains($path, '{{'))));
+
+        // Empty: not saved in OneDrive; nothing resolved to: the usual folder.
+        Setting::set(MatterOneDriveFolders::SENT_EMAILS, '', 'onedrive');
+        Setting::set(MatterOneDriveFolders::SIGNED_MINUTES, '{{matter.custom.none}}', 'onedrive');
+        Setting::clearCache();
+        $this->assertSame('', MatterOneDriveFolders::sentEmailsFolderFor($matter->fresh()));
+        $this->assertSame(MatterOneDriveFolders::DEFAULT_SIGNED_MINUTES, MatterOneDriveFolders::signedMinutesFolderFor($matter->fresh()));
+        \Illuminate\Support\Carbon::setTestNow();
+    }
+
     public function test_a_child_matter_shares_its_parents_main_folder_whatever_its_number(): void
     {
         $this->switchOn('{{matter.custom.Phase}}/01 system');

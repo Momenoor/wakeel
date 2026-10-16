@@ -622,7 +622,7 @@ class MatterOneDriveFolders
      * field the matter has no value for) is left out, and so is a placeholder that is not
      * known. When nothing is left, the default folder.
      */
-    public static function resolvePath(string $template, Matter $matter, ?CarbonInterface $at = null): string
+    public static function resolvePath(string $template, Matter $matter, ?CarbonInterface $at = null, string $fallback = self::DEFAULT_RECEIVED_EMAILS): string
     {
         if (! str_contains($template, '{{')) {
             return $template;
@@ -638,7 +638,7 @@ class MatterOneDriveFolders
 
         $parts = self::resolveParts($template, $matter, [...BulkMailPlaceholders::forMatter($matter), ...$dates]);
 
-        return $parts !== [] ? implode('/', $parts) : self::DEFAULT_RECEIVED_EMAILS;
+        return $parts !== [] ? implode('/', $parts) : $fallback;
     }
 
     /**
@@ -697,6 +697,30 @@ class MatterOneDriveFolders
         return array_values(array_unique($resolved));
     }
 
+    /** Where sent emails go when the setting has not been changed. */
+    public const DEFAULT_SENT_EMAILS = 'المراسلات الصادرة';
+
+    /** Where signed minutes go when the setting has not been changed. */
+    public const DEFAULT_SIGNED_MINUTES = 'محاضر موقعة';
+
+    /**
+     * The folder sent emails are saved in, for this matter: the setting with the matter's
+     * placeholders filled in, and {{day}} (…) as the day it is sent — see resolvePath().
+     * Empty when they are not saved in OneDrive.
+     */
+    public static function sentEmailsFolderFor(Matter $matter, ?CarbonInterface $at = null): string
+    {
+        $template = self::sentEmailsFolder();
+
+        return $template === '' ? '' : self::resolvePath($template, $matter, $at ?? now(), self::DEFAULT_SENT_EMAILS);
+    }
+
+    /** The folder signed minutes are saved in, for this matter — the setting with the matter's placeholders filled in. */
+    public static function signedMinutesFolderFor(Matter $matter): string
+    {
+        return self::resolvePath(self::signedMinutesFolder(), $matter, now(), self::DEFAULT_SIGNED_MINUTES);
+    }
+
     /** The subfolder sent emails are kept in — empty when they aren't. */
     public static function sentEmailsFolder(): string
     {
@@ -710,7 +734,7 @@ class MatterOneDriveFolders
      */
     public function uploadSignedMinutes(Matter $matter, string $name, string $contents, string $mime): ?string
     {
-        return $this->uploadToSubfolder($matter, self::signedMinutesFolder(), $name, $contents, $mime);
+        return $this->uploadToSubfolder($matter, self::signedMinutesFolderFor($matter), $name, $contents, $mime);
     }
 
     /**

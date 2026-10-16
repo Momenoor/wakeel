@@ -143,12 +143,12 @@ class OneDriveSettings extends Page implements HasTable
                             ),
                         TextInput::make('signed_minutes')
                             ->label(__('Signed minutes subfolder'))
-                            ->helperText(__('Signed minutes sent back on WhatsApp are saved here, inside the matter\'s folder (made when missing). Use "/" for a folder inside another.'))
+                            ->helperText(__('Signed minutes sent back on WhatsApp are saved here, inside the matter\'s folder (made when missing). Use "/" for a folder inside another.').' '.__('A folder may use the matter\'s placeholders, like the letters do; {{day}} is the day it is saved.'))
                             ->required()
                             ->extraInputAttributes(['dir' => 'auto']),
                         TextInput::make('sent_emails')
                             ->label(__('Sent emails subfolder'))
-                            ->helperText(__('Every email sent from a matter — letters, minutes, bulk mail — is saved here as a PDF, inside the matter\'s folder (made when missing). Leave empty not to save them in OneDrive.'))
+                            ->helperText(__('Every email sent from a matter — letters, minutes, bulk mail — is saved here as a PDF, inside the matter\'s folder (made when missing). Leave empty not to save them in OneDrive.').' '.__('A folder may use the matter\'s placeholders, like the letters do; {{day}} is the day it is sent.'))
                             ->extraInputAttributes(['dir' => 'auto']),
                         TextInput::make('received_emails')
                             ->label(__('Received emails folder structure'))

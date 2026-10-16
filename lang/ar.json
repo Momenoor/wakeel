@@ -4034,5 +4034,7 @@
     "Show when adding a supplementary matter": "يظهر عند إضافة قضية مكمّلة",
     "The field is shown in the form that adds a supplementary matter from its parent, to be filled for the new matter. A field not shown keeps the parent's value.": "يظهر الحقل في نموذج إضافة قضية مكمّلة من القضية الأصلية ليُملأ للقضية الجديدة. والحقل الذي لا يظهر يحتفظ بقيمة القضية الأصلية.",
     "Supplementary matter": "قضية مكمّلة",
-    "Shown when adding a supplementary matter": "يظهر عند إضافة قضية مكمّلة"
+    "Shown when adding a supplementary matter": "يظهر عند إضافة قضية مكمّلة",
+    "A folder may use the matter's placeholders, like the letters do; {{day}} is the day it is saved.": "يجوز أن يستخدم المجلد متغيرات القضية كما في الخطابات؛ والمتغير {{day}} هو يوم الحفظ.",
+    "A folder may use the matter's placeholders, like the letters do; {{day}} is the day it is sent.": "يجوز أن يستخدم المجلد متغيرات القضية كما في الخطابات؛ والمتغير {{day}} هو يوم الإرسال."
 }
