@@ -194,6 +194,220 @@ class MatterOneDriveFolderTest extends TestCase
         $this->assertStringContainsString('Access denied', (string) $folder->move_error);
     }
 
+    public function test_the_received_emails_structure_takes_the_matters_placeholders(): void
+    {
+        $matter = $this->matter();
+        $matter->update(['custom_fields' => ['phase' => 'التنفيذ']]);
+        $template = '{{matter.custom.phase}}/01 system + 02/{{matter.plaintiff_capacity}}';
+
+        $path = MatterOneDriveFolders::resolvePath($template, $matter->fresh());
+        $this->assertSame(['التنفيذ', '01 system + 02', \App\Models\Type::sideLabel($matter->type, 'plaintiff')], explode('/', $path));
+
+        // A part with no value is left out; a placeholder that is not known too.
+        $matter->update(['custom_fields' => []]);
+        $this->assertSame('01 system + 02', MatterOneDriveFolders::resolvePath('{{matter.custom.phase}}/01 system + 02/{{matter.no_such_thing}}', $matter->fresh()));
+
+        // A value with a "/" does not make folders.
+        $matter->update(['custom_fields' => ['phase' => 'أ/ب']]);
+        $this->assertSame('أ ب', MatterOneDriveFolders::resolvePath('{{matter.custom.phase}}', $matter->fresh()));
+        $matter->update(['custom_fields' => []]);
+
+        // Nothing left: the default folder; no placeholders: as written.
+        $this->assertSame(MatterOneDriveFolders::DEFAULT_RECEIVED_EMAILS, MatterOneDriveFolders::resolvePath('{{matter.custom.phase}}', $matter->fresh()));
+        $this->assertSame('رسائل/واردة', MatterOneDriveFolders::resolvePath('رسائل/واردة', $matter->fresh()));
+
+        // The setting, for a matter.
+        Setting::set(MatterOneDriveFolders::RECEIVED_EMAILS, '{{matter.year}}/{{matter.type}}', 'onedrive');
+        Setting::clearCache();
+        $this->assertSame('2026/خبرة', MatterOneDriveFolders::receivedEmailsFolderFor($matter->fresh()));
+        Setting::set(MatterOneDriveFolders::RECEIVED_EMAILS, '', 'onedrive');
+        Setting::clearCache();
+        $this->assertSame('', MatterOneDriveFolders::receivedEmailsFolderFor($matter->fresh()));
+    }
+
+    public function test_any_custom_field_can_be_used_by_its_own_name(): void
+    {
+        $matter = $this->matter();
+        $matter->update(['custom_fields' => ['المرحلة' => 'التنفيذ', 'Case phase' => 'Appeal', 'Hearing date' => '2026-10-20']]);
+        $matter = $matter->fresh();
+
+        $this->assertSame('التنفيذ', MatterOneDriveFolders::resolvePath('{{matter.custom.المرحلة}}', $matter));
+        $this->assertSame('Appeal/2026-10-20', MatterOneDriveFolders::resolvePath('{{matter.custom.Case phase}}/{{matter.custom.Hearing date}}', $matter));
+    }
+
+    public function test_received_emails_can_go_in_a_folder_of_the_day_they_reached_us(): void
+    {
+        $matter = $this->matter();
+        $at = \Illuminate\Support\Carbon::parse('2026-10-16 22:30:00', 'UTC');
+        // 22:30 UTC is already the 17th in the app's zone (UTC+4).
+        config(['app.timezone' => 'Asia/Dubai']);
+
+        $this->assertSame('2026-10-17', MatterOneDriveFolders::resolvePath('{{day}}', $matter, $at));
+        $this->assertSame('2026-10/2026/2026-10-17', MatterOneDriveFolders::resolvePath('{{month}}/{{year}}/{{day}}', $matter, $at));
+        // Only the double braces: one pair is just text.
+        $this->assertSame('{day}', MatterOneDriveFolders::resolvePath('{day}', $matter, $at));
+        // Written in the path with the matter's own placeholders; the day is the same for every email of it.
+        $this->assertSame('01 system + 02/2026-10-17', MatterOneDriveFolders::resolvePath('01 system + 02/{{day}}', $matter, $at));
+        // The matter's folder structure has no day: left out.
+        $this->assertSame('02 2026', MatterOneDriveFolders::resolvePath('02 {{matter.year}}/{{day}}', $matter));
+    }
+
+    public function test_a_matter_type_can_have_its_own_received_emails_structure(): void
+    {
+        $matter = $this->matter();
+        Setting::set(MatterOneDriveFolders::RECEIVED_EMAILS, 'الافتراضي', 'onedrive');
+        Setting::clearCache();
+
+        $this->assertSame('الافتراضي', MatterOneDriveFolders::receivedEmailsFolderFor($matter->fresh()));
+
+        // The type's own wins; empty: back to the default.
+        $matter->type->update(['onedrive_received_emails' => '{{matter.year}}/{{day}}']);
+        $this->assertSame('{{matter.year}}/{{day}}', MatterOneDriveFolders::receivedEmailsTemplate($matter->fresh()));
+        $this->assertSame('2026/2026-10-16', MatterOneDriveFolders::receivedEmailsFolderFor($matter->fresh(), \Illuminate\Support\Carbon::parse('2026-10-16 10:00')));
+        $matter->type->update(['onedrive_received_emails' => '']);
+        $this->assertSame('الافتراضي', MatterOneDriveFolders::receivedEmailsFolderFor($matter->fresh()));
+
+        // Set on the type's form, shown on its page.
+        \Illuminate\Support\Facades\Gate::before(fn () => true);
+        Filament::setCurrentPanel('mms');
+        $this->actingAs(User::factory()->create());
+        Livewire::test(\App\Filament\Mms\Resources\Types\Pages\EditType::class, ['record' => $matter->type->getRouteKey()])
+            ->fillForm(['onedrive_received_emails' => '{{day}}'])
+            ->call('save')
+            ->assertHasNoFormErrors();
+        $this->assertSame('{{day}}', $matter->type->fresh()->onedrive_received_emails);
+    }
+
+    /** A matter of the case 1010/2026 in a phase. */
+    private function phaseOf(string $phase, array $attributes = []): Matter
+    {
+        return Matter::factory()->create([
+            'year' => 2026,
+            'number' => 1010,
+            'type_id' => Type::firstOrCreate(['name' => 'خبرة'])->id,
+            'court_id' => Court::firstOrCreate(['name' => 'محاكم دبي'])->id,
+            'custom_fields' => ['Phase' => $phase],
+            ...$attributes,
+        ]);
+    }
+
+    public function test_another_phase_of_a_case_goes_in_the_same_main_folder_and_moves_alone_when_finished(): void
+    {
+        $this->switchOn("{{matter.custom.Phase}}/01 system\n{{matter.custom.Phase}}/02 documents");
+        $od = (new \Tests\Support\FakeOneDrive)->install();
+        $assistant = $this->assistant(['onedrive_finished_path' => 'Work/Finished']);
+        $main = '2026-1010 - خبرة - محاكم دبي';
+
+        $one = $this->phaseOf('phase1');
+        $this->assign($one, $assistant);
+
+        $this->assertSame([$main], $od->names('Work/Matters'));
+        $this->assertSame(['phase1'], $od->names("Work/Matters/{$main}"));
+
+        // A new phase of the same case: the same main folder, a subfolder of its own — no second main folder.
+        $two = $this->phaseOf('phase2');
+        $this->assign($two, $assistant);
+
+        $this->assertSame([$main], $od->names('Work/Matters'));
+        $this->assertSame(['phase1', 'phase2'], $od->names("Work/Matters/{$main}"));
+        $this->assertSame(['01 system', '02 documents'], $od->names("Work/Matters/{$main}/phase2"));
+        [$first, $second] = [MatterOneDriveFolder::where('matter_id', $one->id)->sole(), MatterOneDriveFolder::where('matter_id', $two->id)->sole()];
+        $this->assertSame([$first->drive_item_id, $first->web_url, $first->folder_name], [$second->drive_item_id, $second->web_url, $second->folder_name]);
+        $this->assertSame(MatterOneDriveFolder::CREATED, $second->status);
+
+        // Phase 1 finished while phase 2 is current: only its subfolder goes, to a main folder of the same name.
+        $one->finalReportSubmission();
+
+        $this->assertSame(['phase2'], $od->names("Work/Matters/{$main}"));
+        $this->assertSame(['phase1'], $od->names("Work/Finished/{$main}"));
+        $this->assertSame(['01 system', '02 documents'], $od->names("Work/Finished/{$main}/phase1"));
+        $first->refresh();
+        $this->assertNotNull($first->moved_at);
+        $this->assertSame($od->find("Work/Finished/{$main}"), $first->drive_item_id);
+        // Phase 2 is where it was.
+        $this->assertNull($second->fresh()->moved_at);
+        $this->assertSame($od->find("Work/Matters/{$main}"), $second->fresh()->drive_item_id);
+
+        // The last phase finished: what is left goes in too, and the emptied main folder is gone.
+        $two->finalReportSubmission();
+
+        $this->assertSame([], $od->names('Work/Matters'));
+        $this->assertSame(['phase1', 'phase2'], $od->names("Work/Finished/{$main}"));
+        $this->assertSame($od->find("Work/Finished/{$main}"), $second->fresh()->drive_item_id);
+        $this->assertNotNull($second->fresh()->moved_at);
+    }
+
+    public function test_a_child_matter_shares_its_parents_main_folder_whatever_its_number(): void
+    {
+        $this->switchOn('{{matter.custom.Phase}}/01 system');
+        $od = (new \Tests\Support\FakeOneDrive)->install();
+        $assistant = $this->assistant();
+
+        $parent = $this->phaseOf('phase1');
+        $this->assign($parent, $assistant);
+        $child = $this->phaseOf('appeal', ['number' => 2222, 'parent_id' => $parent->id]);
+        $this->assign($child, $assistant);
+        // Another case altogether: a main folder of its own.
+        $other = $this->phaseOf('phase1', ['number' => 3333]);
+        $this->assign($other, $assistant);
+
+        $this->assertCount(2, $od->names('Work/Matters'));
+        $this->assertSame(
+            MatterOneDriveFolder::where('matter_id', $parent->id)->value('drive_item_id'),
+            MatterOneDriveFolder::where('matter_id', $child->id)->value('drive_item_id'),
+        );
+        $this->assertNotSame(
+            MatterOneDriveFolder::where('matter_id', $parent->id)->value('drive_item_id'),
+            MatterOneDriveFolder::where('matter_id', $other->id)->value('drive_item_id'),
+        );
+    }
+
+    public function test_a_shared_folder_with_no_phase_folder_of_its_own_is_not_moved_and_says_why(): void
+    {
+        // A structure with no placeholder: nothing to tell one phase's folders from the other's.
+        $this->switchOn("01 system\n02 documents");
+        $od = (new \Tests\Support\FakeOneDrive)->install();
+        $assistant = $this->assistant(['onedrive_finished_path' => 'Work/Finished']);
+        $main = '2026-1010 - خبرة - محاكم دبي';
+
+        $one = $this->phaseOf('phase1');
+        $this->assign($one, $assistant);
+        $this->assign($this->phaseOf('phase2'), $assistant);
+
+        $one->finalReportSubmission();
+
+        $folder = MatterOneDriveFolder::where('matter_id', $one->id)->sole();
+        $this->assertNull($folder->moved_at);
+        $this->assertStringContainsString('shared with a matter still in progress', (string) $folder->move_error);
+        $this->assertSame([$main], $od->names('Work/Matters'));
+    }
+
+    public function test_the_standard_subfolders_take_the_matters_placeholders(): void
+    {
+        $this->switchOn("{{matter.custom.phase}}/01 المراسلات\n02 {{matter.year}}\n{{matter.custom.none}}\n03 ثابت");
+        $this->fakeGraph();
+
+        $matter = $this->matter();
+        $matter->update(['custom_fields' => ['phase' => 'التنفيذ']]);
+
+        $this->assertSame(['التنفيذ/01 المراسلات', '02 2026', '03 ثابت'], MatterOneDriveFolders::subfoldersFor($matter->fresh()));
+
+        // The matter type's own structure takes them too.
+        $matter->type->update(['onedrive_subfolders' => '{{matter.court}}']);
+        $this->assertSame(['محاكم دبي'], MatterOneDriveFolders::subfoldersFor($matter->fresh()));
+        $matter->type->update(['onedrive_subfolders' => null]);
+
+        // The folder made for the matter has them.
+        $this->assign($matter->fresh(), $this->assistant());
+        $made = $this->createdFolders();
+        $matterFolder = 'id-2026-123 - خبرة - محاكم دبي';
+        $this->assertContains("/items/{$matterFolder}/children > التنفيذ", $made);
+        $this->assertContains('/items/id-التنفيذ/children > 01 المراسلات', $made);
+        $this->assertContains("/items/{$matterFolder}/children > 02 2026", $made);
+        $this->assertContains("/items/{$matterFolder}/children > 03 ثابت", $made);
+        $this->assertNotContains("/items/{$matterFolder}/children > {{matter.custom.none}}", $made);
+    }
+
     public function test_assigning_an_assistant_makes_the_folder_with_its_subfolders(): void
     {
         $this->switchOn();

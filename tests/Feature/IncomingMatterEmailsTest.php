@@ -409,6 +409,56 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertFalse(app(\App\Services\MMS\MatterOneDriveFolders::class)->checkEmails($this->second, [$email]));
     }
 
+    public function test_an_email_is_saved_in_the_folder_structure_set_for_the_matter(): void
+    {
+        $this->second->update(['custom_fields' => ['phase' => 'التنفيذ']]);
+        \App\Models\Setting::set(\App\Services\MMS\MatterOneDriveFolders::RECEIVED_EMAILS, '{{matter.custom.phase}}/01 system + 02/{{matter.plaintiff_capacity}}', 'onedrive');
+        \App\Models\Setting::clearCache();
+
+        $this->collect($this->email(['subject' => 'مستندات القضية 987/2026']));
+
+        // The folders made inside the matter's folder, one in the other, in that order.
+        $made = Http::recorded()
+            ->filter(fn ($pair) => $pair[0]->method() === 'POST' && str_contains($pair[0]->url(), '/children'))
+            ->map(fn ($pair) => $pair[0]->data()['name'] ?? null)
+            ->values()
+            ->all();
+        $capacity = \App\Models\Type::sideLabel($this->second->type, 'plaintiff');
+        $this->assertSame(['التنفيذ', '01 system + 02', $capacity], array_slice($made, 0, 3));
+
+        // And what is saved there is found there.
+        $email = MatterEmail::where('status', MatterEmail::FILED)->sole();
+        $this->assertSame(['pdf' => true, 'eml' => false, 'attachments' => 1], $email->onedrive);
+    }
+
+    public function test_emails_of_a_day_are_saved_in_that_days_folder(): void
+    {
+        \App\Models\Setting::set(\App\Services\MMS\MatterOneDriveFolders::RECEIVED_EMAILS, 'واردة/{{day}}', 'onedrive');
+        \App\Models\Setting::clearCache();
+
+        $this->collect(
+            $this->email(['subject' => 'القضية 987/2026 أولى', 'at' => '2026-10-16 09:00:00']),
+            $this->email(['subject' => 'القضية 987/2026 ثانية', 'at' => '2026-10-16 15:00:00', 'message_id' => '<two@albanna.ae>']),
+            $this->email(['subject' => 'القضية 987/2026 ثالثة', 'at' => '2026-10-17 09:00:00', 'message_id' => '<three@albanna.ae>']),
+        );
+
+        $made = Http::recorded()
+            ->filter(fn ($pair) => $pair[0]->method() === 'POST' && str_contains($pair[0]->url(), '/children'))
+            ->map(fn ($pair) => $pair[0]->data()['name'] ?? null)
+            ->unique()
+            ->values()
+            ->all();
+        $this->assertContains('2026-10-16', $made);
+        $this->assertContains('2026-10-17', $made);
+
+        // Each in its day's folder when checked, too.
+        $emails = MatterEmail::where('status', MatterEmail::FILED)->orderBy('at')->get();
+        $this->assertSame(
+            ['واردة/2026-10-16', 'واردة/2026-10-16', 'واردة/2026-10-17'],
+            $emails->map(fn (MatterEmail $e) => \App\Services\MMS\MatterOneDriveFolders::receivedEmailsFolderFor($this->second, $e->at))->all(),
+        );
+    }
+
     public function test_a_matter_with_no_onedrive_folder_gets_the_email_to_download_by_hand(): void
     {
         \App\Models\Setting::set(\App\Services\MMS\MatterOneDriveFolders::ENABLED, true, 'onedrive');

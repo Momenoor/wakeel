@@ -153,6 +153,14 @@ class TypeInfolist
                             ->hiddenLabel()
                             ->state(fn (Type $record): HtmlString => self::tree(MatterOneDriveFolders::subfolders($record)))
                             ->html(),
+                        // Where the emails that come in are saved: its own structure, or the default.
+                        TextEntry::make('onedrive_received_emails')
+                            ->label(__('Received emails folder structure'))
+                            ->state(fn (Type $record): string => filled($record->onedrive_received_emails)
+                                ? $record->onedrive_received_emails
+                                : (MatterOneDriveFolders::receivedEmailsFolder() ?: __('Not saved in OneDrive')))
+                            ->helperText(fn (Type $record): string => filled($record->onedrive_received_emails) ? __('This type\'s own structure') : __('The default structure (Settings → OneDrive Folders)'))
+                            ->extraAttributes(['dir' => 'auto']),
                     ]),
 
                 Section::make(__('Custom fields'))

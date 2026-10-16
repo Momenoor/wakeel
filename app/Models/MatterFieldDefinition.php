@@ -11,11 +11,13 @@ class MatterFieldDefinition extends Model
         'label',
         'type',
         'required',
+        'show_in_supplementary',
         'options',
     ];
 
     protected $casts = [
         'required' => 'boolean',
+        'show_in_supplementary' => 'boolean',
         'options' => 'json',
     ];
 

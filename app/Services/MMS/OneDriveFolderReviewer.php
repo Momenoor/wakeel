@@ -254,7 +254,7 @@ class OneDriveFolderReviewer
             }
 
             if ($folderId === null) {
-                $item = $this->folders->makeFolder($party, $review->standard_name, MatterOneDriveFolders::subfolders($review->matter));
+                $item = $this->folders->makeFolder($party, $review->standard_name, MatterOneDriveFolders::subfoldersFor($review->matter));
                 $log[] = ['action' => 'create', 'from' => null, 'to' => $review->standard_name];
             } else {
                 $folder = collect($review->candidates ?? [])->firstWhere('id', $folderId)
@@ -368,7 +368,7 @@ class OneDriveFolderReviewer
     {
         return array_values(array_unique(array_filter(array_map(
             fn (string $line): string => implode('/', array_map([MatterOneDriveFolders::class, 'clean'], OneDriveClient::segments($line))),
-            MatterOneDriveFolders::subfolders($matter),
+            $matter ? MatterOneDriveFolders::subfoldersFor($matter) : MatterOneDriveFolders::subfolders(),
         ))));
     }
 

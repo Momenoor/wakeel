@@ -95,8 +95,25 @@ class TypeForm
                     ->icon(Heroicon::OutlinedFolderOpen)
                     ->columnSpanFull()
                     ->collapsed()
-                    ->schema([self::oneDriveStructureField()]),
+                    ->schema([
+                        self::oneDriveStructureField(),
+                        self::receivedEmailsField(),
+                    ]),
             ]);
+    }
+
+    /**
+     * Where the emails that come in are saved inside the matter's folder, for this type:
+     * a path whose folders may use the matter's placeholders. Empty: the default one.
+     */
+    public static function receivedEmailsField(string $name = 'onedrive_received_emails'): TextInput
+    {
+        return TextInput::make($name)
+            ->label(__('Received emails folder structure'))
+            ->helperText(__('Where the emails that come in are saved inside the matter\'s folder, for this type\'s matters. Folders are separated by "/", and each may use the matter\'s placeholders, like the letters do, e.g. {{matter.custom.Phase}}/01 system. {{day}} is the day the email reached us, so the emails of one day go in the same folder. Leave empty for the default one (Settings → OneDrive Folders).'))
+            ->placeholder(fn (): string => MatterOneDriveFolders::receivedEmailsFolder())
+            ->maxLength(500)
+            ->extraInputAttributes(['dir' => 'ltr']);
     }
 
     /**
@@ -107,7 +124,7 @@ class TypeForm
     {
         return Textarea::make($name)
             ->label(__('Subfolders'))
-            ->helperText(__('One per line, in order. Use "/" for a folder inside another, e.g. "02 المستندات/من المدعي". Changes apply to folders made from now on.'))
+            ->helperText(__('One per line, in order. Use "/" for a folder inside another, e.g. "02 المستندات/من المدعي". Changes apply to folders made from now on.').' '.__('A folder may use the matter\'s placeholders, like the letters do, e.g. {{matter.custom.phase}}/01 المراسلات; one the matter has no value for is left out.'))
             ->placeholder(fn (): string => Setting::get(MatterOneDriveFolders::SUBFOLDERS, ''))
             ->rows(8)
             ->extraInputAttributes(['dir' => 'auto']);

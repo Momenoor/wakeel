@@ -7,6 +7,7 @@ use App\Enums\MatterDifficulty;
 use App\Enums\MatterLevel;
 use App\Filament\Mms\Resources\Parties\Schemas\PartyForm;
 use App\Models\Party;
+use App\Filament\Support\CustomFieldInput;
 use App\Models\Type;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
@@ -141,23 +142,7 @@ class MatterForm
                                             $components = [];
 
                                             foreach ($fields as $field) {
-                                                $component = match ($field->type) {
-                                                    'select_input' => Select::make("custom_fields.{$field->label}")
-                                                        ->options($field->options ?? [])
-                                                        ->label($field->label),
-                                                    'date_input' => DatePicker::make("custom_fields.{$field->label}")
-                                                        ->label($field->label),
-                                                    'toggle_input' => Toggle::make("custom_fields.{$field->label}")
-                                                        ->label($field->label),
-                                                    default => TextInput::make("custom_fields.{$field->label}")
-                                                        ->label($field->label),
-                                                };
-
-                                                if ($field->required) {
-                                                    $component->required();
-                                                }
-
-                                                $components[] = $component;
+                                                $components[] = CustomFieldInput::make($field);
                                             }
 
                                             return $components;

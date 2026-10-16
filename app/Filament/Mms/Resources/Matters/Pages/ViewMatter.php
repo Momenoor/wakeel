@@ -8,8 +8,10 @@ use App\Filament\Mms\Actions\Calendar\CreateSingleCalendarEventAction;
 use App\Filament\Mms\Actions\Calendar\SyncToOutlookAction;
 use App\Filament\Mms\Resources\CalendarEvents\Schemas\CalendarEventForm;
 use App\Filament\Mms\Resources\Matters\MatterResource;
+use App\Filament\Support\CustomFieldInput;
 use App\Helpers\FileUploadHelper;
 use App\Models\Matter;
+use App\Models\MatterFieldDefinition;
 use App\Services\MMS\MatterContactsExport;
 use App\Support\MatterEvents;
 use Filament\Actions\Action;
@@ -25,6 +27,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Section;
 use Filament\Support\Colors\Color;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -149,6 +152,14 @@ class ViewMatter extends ViewRecord
                                 ->default($record->level)
                                 ->required(),
                         ]),
+                    // The custom fields marked to be asked for here (on the matter type): filled for the
+                    // new matter, starting from the parent's value; the others keep the parent's.
+                    ...(($fields = $this->supplementaryFields($record))->isEmpty() ? [] : [
+                        Section::make(__('Custom fields'))
+                            ->columns(2)
+                            ->schema($fields->map(fn (MatterFieldDefinition $field) => CustomFieldInput::make($field, 'custom_fields.'.$field->label)
+                                ->default(($record->custom_fields ?? [])[$field->label] ?? null))->all()),
+                    ]),
                 ])
                 ->action(fn ($record, $data) => $this->cloneMatter($record, $data)),
             EditAction::make(),
@@ -158,6 +169,19 @@ class ViewMatter extends ViewRecord
             RestoreAction::make()
                 ->visible(fn ($record) => $record->trashed()),
         ];
+    }
+
+    /**
+     * The custom fields of the matter's type that are asked for when a supplementary
+     * matter is added from it.
+     *
+     * @return Collection<int, MatterFieldDefinition>
+     */
+    private function supplementaryFields($record): Collection
+    {
+        return $record->type
+            ? $record->type->fieldDefinitions()->where('show_in_supplementary', true)->orderBy('label')->get()
+            : new Collection;
     }
 
     private function cloneMatter($record, $data): void
@@ -175,6 +199,16 @@ class ViewMatter extends ViewRecord
             $newMatter->number = $data['number'];
             $newMatter->year = $data['year'];
             $newMatter->level = $data['level'];
+
+            // What was filled in for the fields asked for here replaces the parent's value; no other field changes.
+            $asked = $this->supplementaryFields($record)->pluck('label')->all();
+            $custom = (array) ($newMatter->custom_fields ?? []);
+            foreach ((array) ($data['custom_fields'] ?? []) as $label => $value) {
+                if (in_array($label, $asked, true)) {
+                    $custom[$label] = $value;
+                }
+            }
+            $newMatter->custom_fields = $custom;
 
             // Reset status fields
             $newMatter->collection_status = MatterCollectionStatus::NO_FEES;

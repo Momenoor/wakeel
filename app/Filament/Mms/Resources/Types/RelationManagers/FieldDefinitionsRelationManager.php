@@ -75,6 +75,10 @@ class FieldDefinitionsRelationManager extends RelationManager
                     ->live(),
                 Toggle::make('required')
                     ->label(__('Required')),
+                // Asked for when a supplementary matter is added from a parent matter.
+                Toggle::make('show_in_supplementary')
+                    ->label(__('Show when adding a supplementary matter'))
+                    ->helperText(__('The field is shown in the form that adds a supplementary matter from its parent, to be filled for the new matter. A field not shown keeps the parent\'s value.')),
                 KeyValue::make('options')
                     ->label(__('Options'))
                     ->visible(fn (Get $get) => $get('type') === 'select_input'),
@@ -92,6 +96,9 @@ class FieldDefinitionsRelationManager extends RelationManager
                     ->formatStateUsing(fn ($state) => __($state)),
                 IconEntry::make('required')
                     ->label(__('Required'))
+                    ->boolean(),
+                IconEntry::make('show_in_supplementary')
+                    ->label(__('Show when adding a supplementary matter'))
                     ->boolean(),
                 KeyValueEntry::make('options')
                     ->label(__('Options'))
@@ -121,6 +128,10 @@ class FieldDefinitionsRelationManager extends RelationManager
                     ->searchable(),
                 IconColumn::make('required')
                     ->label(__('Required'))
+                    ->boolean(),
+                IconColumn::make('show_in_supplementary')
+                    ->label(__('Supplementary matter'))
+                    ->tooltip(__('Shown when adding a supplementary matter'))
                     ->boolean(),
                 TextColumn::make('created_at')
                     ->label(__('Created At'))

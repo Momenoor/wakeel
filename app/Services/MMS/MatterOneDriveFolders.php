@@ -13,10 +13,12 @@ use App\Models\OneDriveFolderReview;
 use App\Models\Party;
 use App\Models\Setting;
 use App\Models\Type;
+use App\Services\MMS\Calendar\MatterReferenceMatcher;
 use App\Models\User;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Collection;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -187,6 +189,22 @@ class MatterOneDriveFolders
         $folder->loadMissing(['matter', 'party']);
         $review = null;
 
+        // Another phase of a case that already has its main folder: it goes in that one, in a
+        // subfolder of its own (named by the standard structure, e.g. its phase).
+        if ($folder->matter && $folder->party && filled($folder->party->onedrive_email) && ($shared = self::sharedFolderFor($folder))) {
+            $this->makeSubfolders($folder->party, (string) $shared->drive_item_id, self::subfoldersFor($folder->matter));
+
+            $folder->update([
+                'status' => MatterOneDriveFolder::CREATED,
+                'drive_item_id' => $shared->drive_item_id,
+                'web_url' => $shared->web_url,
+                'folder_name' => $shared->folder_name,
+                'error' => null,
+            ]);
+
+            return;
+        }
+
         if ($folder->matter && $folder->party && filled($folder->party->onedrive_email)) {
             $review = app(OneDriveFolderReviewer::class)->check($folder->matter, $folder->party);
             $candidates = $review->candidates ?? [];
@@ -205,7 +223,7 @@ class MatterOneDriveFolders
             }
         }
 
-        $item = $this->makeFolder($folder->party, $folder->folder_name, self::subfolders($folder->matter));
+        $item = $this->makeFolder($folder->party, $folder->folder_name, self::subfoldersFor($folder->matter));
 
         $folder->update([
             'status' => MatterOneDriveFolder::CREATED,
@@ -271,15 +289,65 @@ class MatterOneDriveFolders
         $parent = $this->client->ensureFolder($party->onedrive_email, (string) $party->onedrive_path);
         $item = $this->client->ensureFolder($party->onedrive_email, self::clean($name), $parent['id']);
 
-        foreach ($subfolders ?? self::subfolders() as $subfolder) {
+        $this->makeSubfolders($party, $item['id'], $subfolders ?? self::subfolders());
+
+        return $item;
+    }
+
+    /**
+     * The standard subfolders inside a folder (by id); those already there are reused.
+     *
+     * @param  list<string>  $subfolders
+     */
+    private function makeSubfolders(Party $party, string $folderId, array $subfolders): void
+    {
+        foreach ($subfolders as $subfolder) {
             $path = implode('/', array_map([self::class, 'clean'], OneDriveClient::segments($subfolder)));
 
             if ($path !== '') {
-                $this->client->ensureFolder($party->onedrive_email, $path, $item['id']);
+                $this->client->ensureFolder($party->onedrive_email, $path, $folderId);
             }
         }
+    }
 
-        return $item;
+    /**
+     * The folder of another matter of the same case that this assistant already has: the
+     * same year and number (however the number is written), or the same parent matter
+     * (its parent, its children, or its siblings). A new phase of a case is put in that
+     * main folder, not in one of its own. A folder already moved to the finished
+     * matters is not one to join.
+     */
+    public static function sharedFolderFor(MatterOneDriveFolder $folder): ?MatterOneDriveFolder
+    {
+        $matter = $folder->matter;
+
+        if (! $matter) {
+            return null;
+        }
+
+        $ids = collect(MatterReferenceMatcher::idsOf((string) $matter->number, (int) $matter->year));
+
+        // Top-level matters have a parent id of null — or 0, in older data.
+        if (filled($matter->parent_id)) {
+            $ids->push((int) $matter->parent_id);
+            $ids = $ids->merge(Matter::query()->where('parent_id', $matter->parent_id)->pluck('id'));
+        }
+        $ids = $ids->merge(Matter::query()->where('parent_id', $matter->getKey())->pluck('id'));
+
+        $ids = $ids->map(fn ($id) => (int) $id)->reject(fn (int $id): bool => $id === (int) $matter->getKey())->unique()->values();
+
+        if ($ids->isEmpty()) {
+            return null;
+        }
+
+        return MatterOneDriveFolder::query()
+            ->where('party_id', $folder->party_id)
+            ->where('status', MatterOneDriveFolder::CREATED)
+            ->whereNotNull('drive_item_id')
+            ->whereNull('moved_at')
+            ->whereIn('matter_id', $ids)
+            ->oldest('id')
+            ->first();
     }
 
     /**
@@ -295,50 +363,53 @@ class MatterOneDriveFolders
     public function checkEmails(Matter $matter, iterable $emails): bool
     {
         $folder = self::folderFor($matter);
-        $received = self::receivedEmailsFolder();
 
-        if (! $folder || $received === '') {
+        if (! $folder || self::receivedEmailsTemplate($matter) === '') {
             return false;
         }
 
         $user = (string) $folder->party->onedrive_email;
 
-        // The received-emails folder: down the path from the matter's folder.
-        $id = (string) $folder->drive_item_id;
-        foreach (OneDriveClient::segments($received) as $segment) {
-            $next = collect($this->client->childFolders($user, $id))->first(fn (array $f): bool => mb_strtolower($f['name']) === mb_strtolower(self::clean($segment)));
-            $id = (string) ($next['id'] ?? '');
+        // Emails saved in the same folder (a day's, say) are read from it together.
+        $byFolder = collect($emails)->groupBy(fn (MatterEmail $email): string => self::receivedEmailsFolderFor($matter, $email->at));
 
-            if ($id === '') {
-                break;
+        foreach ($byFolder as $received => $inFolder) {
+            // The folder: down the path from the matter's folder.
+            $id = (string) $folder->drive_item_id;
+            foreach (OneDriveClient::segments((string) $received) as $segment) {
+                $next = collect($this->client->childFolders($user, $id))->first(fn (array $f): bool => mb_strtolower($f['name']) === mb_strtolower(self::clean($segment)));
+                $id = (string) ($next['id'] ?? '');
+
+                if ($id === '') {
+                    break;
+                }
             }
-        }
 
-        $listing = $id !== '' ? collect($this->client->children($user, $id)) : collect();
-        $names = $listing->where('folder', false)->pluck('name')->map(fn ($n) => mb_strtolower((string) $n))->flip();
-        $folders = $listing->where('folder', true)->keyBy(fn (array $f): string => mb_strtolower($f['name']));
+            $listing = $id !== '' ? collect($this->client->children($user, $id)) : collect();
+            $names = $listing->where('folder', false)->pluck('name')->map(fn ($n) => mb_strtolower((string) $n))->flip();
+            $folders = $listing->where('folder', true)->keyBy(fn (array $f): string => mb_strtolower($f['name']));
 
-        foreach ($emails as $email) {
-            $base = pathinfo((string) ($email->files[0]['name'] ?? ''), PATHINFO_FILENAME);
-            $stem = $base !== '' ? mb_strtolower(MatterOneDriveExplorer::cleanName($base)) : null;
+            foreach ($inFolder as $email) {
+                $base = pathinfo((string) ($email->files[0]['name'] ?? ''), PATHINFO_FILENAME);
+                $stem = $base !== '' ? mb_strtolower(MatterOneDriveExplorer::cleanName($base)) : null;
 
-            // The files it came with, by the names they were put in OneDrive under.
-            $expected = collect($email->attachmentFiles())->map(fn (array $file): string => mb_strtolower(self::oneDriveName((string) $file['name'])));
-            $inside = $stem !== null && $expected->isNotEmpty() && ($sub = $folders->get(mb_strtolower(self::clean($base))))
-                ? collect($this->client->children($user, $sub['id']))->where('folder', false)->pluck('name')->map(fn ($n) => mb_strtolower((string) $n))->flip()
-                : collect();
+                // The files it came with, by the names they were put in OneDrive under.
+                $expected = collect($email->attachmentFiles())->map(fn (array $file): string => mb_strtolower(self::oneDriveName((string) $file['name'])));
+                $inside = $stem !== null && $expected->isNotEmpty() && ($sub = $folders->get(mb_strtolower(self::clean($base))))
+                    ? collect($this->client->children($user, $sub['id']))->where('folder', false)->pluck('name')->map(fn ($n) => mb_strtolower((string) $n))->flip()
+                    : collect();
 
-            $email->update(['onedrive' => [
-                'pdf' => $stem !== null && $names->has($stem.'.pdf'),
-                'eml' => $stem !== null && $names->has($stem.'.eml'),
-                'attachments' => $expected->filter(fn (string $name): bool => $inside->has($name))->count(),
-                'checked_at' => now()->toDateTimeString(),
-            ]]);
+                $email->update(['onedrive' => [
+                    'pdf' => $stem !== null && $names->has($stem.'.pdf'),
+                    'eml' => $stem !== null && $names->has($stem.'.eml'),
+                    'attachments' => $expected->filter(fn (string $name): bool => $inside->has($name))->count(),
+                    'checked_at' => now()->toDateTimeString(),
+                ]]);
+            }
         }
 
         return true;
     }
-
     /** A file's name as it is put in OneDrive (no "/" or other characters it refuses). */
     private static function oneDriveName(string $name): string
     {
@@ -365,15 +436,20 @@ class MatterOneDriveFolders
     }
 
     /**
-     * Moves a matter's folder to its assistant's folder for finished matters
-     * (made when missing) and points the matter's link at the new place. The
-     * folder keeps its id, so everything linked to it by id keeps working.
-     * False when there is nothing to do: not made yet, already moved, or no
-     * folder for finished matters on the assistant's profile.
+     * Moves a finished matter's folder to its assistant's folder for finished matters
+     * (made when missing) and points the matter's link at the new place. The folder
+     * keeps its id, so everything linked to it by id keeps working.
+     *
+     * A main folder shared with a matter still in progress (another phase of the case)
+     * stays where it is; only this matter's own phase folders go — into a main folder
+     * of the same name under the finished matters (made when missing) — and its link
+     * follows them. When the last matter of the case is finished, what is left of the
+     * main folder goes there too. False when there is nothing to do: not made yet,
+     * already moved, or no folder for finished matters on the assistant's profile.
      */
     public function moveToFinished(MatterOneDriveFolder $folder): bool
     {
-        $folder->loadMissing('party');
+        $folder->loadMissing(['party', 'matter']);
         $party = $folder->party;
 
         if (! $folder->isCreated() || blank($folder->drive_item_id) || $folder->moved_at !== null
@@ -381,29 +457,244 @@ class MatterOneDriveFolders
             return false;
         }
 
-        $target = $this->client->ensureFolder($party->onedrive_email, (string) $party->onedrive_finished_path);
-        $moved = $this->client->move($party->onedrive_email, $folder->drive_item_id, $target['id']);
+        $user = (string) $party->onedrive_email;
+        $target = $this->client->ensureFolder($user, (string) $party->onedrive_finished_path);
 
-        $folder->update([
-            'drive_item_id' => $moved['id'] ?: $folder->drive_item_id,
-            'web_url' => $moved['webUrl'] ?: $folder->web_url,
-            'folder_name' => $moved['name'] ?: $folder->folder_name,
-            'moved_at' => now(),
-            'move_error' => null,
-        ]);
+        // The others using this main folder: those still in progress decide what is moved.
+        $others = MatterOneDriveFolder::query()
+            ->where('party_id', $folder->party_id)
+            ->where('drive_item_id', $folder->drive_item_id)
+            ->whereKeyNot($folder->getKey())
+            ->whereNull('moved_at')
+            ->with('matter')
+            ->get();
+        $inProgress = $others->filter(fn (MatterOneDriveFolder $other): bool => $other->matter !== null && $other->matter->final_report_at === null);
+
+        if ($inProgress->isNotEmpty()) {
+            $this->movePhaseOnly($folder, $user, $target['id']);
+
+            return true;
+        }
+
+        $name = self::clean($folder->folder_name);
+        $inFinished = collect($this->client->childFolders($user, $target['id']))->first(fn (array $f): bool => mb_strtolower($f['name']) === mb_strtolower($name));
+
+        if ($inFinished === null) {
+            // The whole folder; every finished matter of the case that shares it follows.
+            $moved = $this->client->move($user, $folder->drive_item_id, $target['id']);
+            $into = ['id' => $moved['id'] ?: $folder->drive_item_id, 'webUrl' => $moved['webUrl'] ?: $folder->web_url, 'name' => $moved['name'] ?: $folder->folder_name];
+        } else {
+            // A main folder of this case is there already (the earlier phases went into it): what is left goes in too.
+            $this->mergeInto($user, (string) $folder->drive_item_id, $inFinished['id']);
+            $into = ['id' => $inFinished['id'], 'webUrl' => $inFinished['webUrl'], 'name' => $inFinished['name']];
+        }
+
+        $old = $folder->drive_item_id;
+        foreach ([$folder, ...$others->all()] as $row) {
+            if ($row->drive_item_id === $old) {
+                $row->update([
+                    'drive_item_id' => $into['id'],
+                    'web_url' => $into['webUrl'] ?: $row->web_url,
+                    'folder_name' => $into['name'] ?: $row->folder_name,
+                    'moved_at' => now(),
+                    'move_error' => null,
+                ]);
+            }
+        }
 
         return true;
     }
 
+    /**
+     * Only this matter's phase folders — the first folder of each line of the standard
+     * structure that holds a placeholder, e.g. "{{matter.custom.Phase}}" — go to a main
+     * folder of the same name under the finished matters; the main folder stays with
+     * the matters still in progress. The matter's link follows them.
+     */
+    private function movePhaseOnly(MatterOneDriveFolder $folder, string $user, string $finishedParentId): void
+    {
+        $matter = $folder->matter;
+        $phases = $matter ? self::phaseFolders($matter) : [];
+
+        if ($phases === []) {
+            throw new \RuntimeException(__('This main folder is shared with a matter still in progress, and this matter has no folder of its own in it to move (a folder named by a placeholder, like its phase, in the folder structure).'));
+        }
+
+        $main = $this->client->ensureFolder($user, self::clean($folder->folder_name), $finishedParentId);
+        $inside = collect($this->client->childFolders($user, (string) $folder->drive_item_id))->keyBy(fn (array $f): string => mb_strtolower($f['name']));
+
+        foreach ($phases as $phase) {
+            if ($found = $inside->get(mb_strtolower($phase))) {
+                $this->client->move($user, $found['id'], $main['id']);
+            }
+        }
+
+        $folder->update([
+            'drive_item_id' => $main['id'],
+            'web_url' => $main['webUrl'] ?: $folder->web_url,
+            'moved_at' => now(),
+            'move_error' => null,
+        ]);
+    }
+
+    /**
+     * What is in a folder moved into another, and the emptied folder removed (to the
+     * OneDrive recycle bin) — only when nothing is left in it.
+     */
+    private function mergeInto(string $user, string $fromId, string $toId): void
+    {
+        foreach ($this->client->children($user, $fromId) as $child) {
+            $this->client->move($user, $child['id'], $toId);
+        }
+
+        if ($this->client->children($user, $fromId) === []) {
+            $this->client->delete($user, $fromId);
+        }
+    }
+
+    /**
+     * The folders at the top of a matter's folder that are its own because their name
+     * comes from the matter (its phase …): the first folder of each line of the standard
+     * structure, and of the received emails structure, that holds a placeholder — a day,
+     * month or year, which are the emails', do not count.
+     *
+     * @return list<string>
+     */
+    public static function phaseFolders(Matter $matter): array
+    {
+        $values = BulkMailPlaceholders::forMatter($matter);
+        $firsts = [];
+
+        foreach ([...self::subfolders($matter), self::receivedEmailsTemplate($matter)] as $line) {
+            $first = OneDriveClient::segments($line)[0] ?? '';
+
+            if (str_contains($first, '{{') && ! preg_match('/\{\{\s*(day|month|year)\s*\}\}/iu', $first)) {
+                $firsts[] = self::resolveParts($first, $matter, $values)[0] ?? '';
+            }
+        }
+
+        return array_values(array_unique(array_filter($firsts)));
+    }
     public static function signedMinutesFolder(): string
     {
         return trim((string) Setting::get(self::SIGNED_MINUTES, '')) ?: 'محاضر موقعة';
     }
 
-    /** The subfolder replies are kept in — empty when they aren't. */
+    /** Where received emails go when the setting has not been changed. */
+    public const DEFAULT_RECEIVED_EMAILS = 'المراسلات الواردة';
+
+    /**
+     * The folder structure replies are kept in, inside a matter's folder, as it is
+     * set — a path whose parts may hold placeholders — empty when they aren't kept.
+     */
     public static function receivedEmailsFolder(): string
     {
-        return trim((string) Setting::get(self::RECEIVED_EMAILS, 'المراسلات الواردة'));
+        return trim((string) Setting::get(self::RECEIVED_EMAILS, self::DEFAULT_RECEIVED_EMAILS));
+    }
+
+    /**
+     * The folder structure for this matter, inside its OneDrive folder: the setting, with
+     * its placeholders filled in from the matter (see resolvePath()).
+     */
+    public static function receivedEmailsFolderFor(Matter $matter, ?CarbonInterface $at = null): string
+    {
+        $template = self::receivedEmailsTemplate($matter);
+
+        return $template === '' ? '' : self::resolvePath($template, $matter, $at ?? now());
+    }
+
+    /**
+     * The structure as it is set for this matter: its type's own, else the default one
+     * (Settings → OneDrive Folders). Empty: received emails are not saved in OneDrive.
+     */
+    public static function receivedEmailsTemplate(?Matter $matter = null): string
+    {
+        $own = $matter ? trim((string) $matter->loadMissing('type')->type?->getAttribute('onedrive_received_emails')) : '';
+
+        return $own !== '' ? $own : self::receivedEmailsFolder();
+    }
+
+    /**
+     * A folder path whose parts may hold the matter's placeholders — the ones letters
+     * use: "{{matter.custom.phase}}/01 system + 02/{{matter.plaintiff_capacity}}" for
+     * "Execution/01 system + 02/المدعي". Each part is made on its own, so a value with a
+     * "/" in it ("2026/123") does not make folders; a part that comes out empty (a custom
+     * field the matter has no value for) is left out, and so is a placeholder that is not
+     * known. When nothing is left, the default folder.
+     */
+    public static function resolvePath(string $template, Matter $matter, ?CarbonInterface $at = null): string
+    {
+        if (! str_contains($template, '{{')) {
+            return $template;
+        }
+
+        // For an email that came in, the day it reached us too: {{day}} (2026-10-16),
+        // {{month}} (2026-10) and {{year}}.
+        $dates = [];
+        if ($at !== null) {
+            $at = Carbon::instance($at)->setTimezone(config('app.timezone'));
+            $dates = ['day' => $at->format('Y-m-d'), 'month' => $at->format('Y-m'), 'year' => $at->format('Y')];
+        }
+
+        $parts = self::resolveParts($template, $matter, [...BulkMailPlaceholders::forMatter($matter), ...$dates]);
+
+        return $parts !== [] ? implode('/', $parts) : self::DEFAULT_RECEIVED_EMAILS;
+    }
+
+    /**
+     * The folders of a path, one by one, with the matter's placeholders filled in (see
+     * resolvePath()) — those that come out empty left out.
+     *
+     * @param  array<string, string>  $values  the matter's placeholders (BulkMailPlaceholders::forMatter())
+     * @return list<string>
+     */
+    private static function resolveParts(string $template, Matter $matter, array $values): array
+    {
+        $parts = [];
+
+        foreach (OneDriveClient::segments($template) as $segment) {
+            $resolved = (string) preg_replace('/\{\{[^{}]*\}\}/u', '', BulkMailPlaceholders::apply($segment, $values));
+            $resolved = self::clean($resolved);
+
+            if ($resolved !== '') {
+                $parts[] = $resolved;
+            }
+        }
+
+        return $parts;
+    }
+
+    /**
+     * The standard subfolders of this matter's folder: the list of its type (else the
+     * default one), each line with the matter's placeholders filled in —
+     * "{{matter.custom.phase}}/01 المراسلات". A line that comes out empty is left out.
+     *
+     * @return list<string>
+     */
+    public static function subfoldersFor(Matter $matter): array
+    {
+        $lines = self::subfolders($matter);
+
+        // Read once, and only when some line asks for them.
+        $values = null;
+        $resolved = [];
+
+        foreach ($lines as $line) {
+            if (! str_contains($line, '{{')) {
+                $resolved[] = $line;
+
+                continue;
+            }
+
+            $values ??= BulkMailPlaceholders::forMatter($matter);
+            $path = implode('/', self::resolveParts($line, $matter, $values));
+
+            if ($path !== '') {
+                $resolved[] = $path;
+            }
+        }
+
+        return array_values(array_unique($resolved));
     }
 
     /** The subfolder sent emails are kept in — empty when they aren't. */
@@ -445,7 +736,7 @@ class MatterOneDriveFolders
      */
     public static function receivedEmailsNotInOneDrive(Matter $matter): bool
     {
-        return self::enabled() && self::receivedEmailsFolder() !== '' && self::folderFor($matter) === null;
+        return self::enabled() && self::receivedEmailsTemplate($matter) !== '' && self::folderFor($matter) === null;
     }
 
     /**

@@ -315,7 +315,7 @@ class MatterReplyCollector
         $oneDrive = null;
 
         if ($matter) {
-            $kept = $this->keepOnMatter($matter, $pdf, $files, $name, $answers->user_id, $source, $oneDrive);
+            $kept = $this->keepOnMatter($matter, $pdf, $files, $name, $answers->user_id, $source, $oneDrive, self::arrivedAt($message));
             $this->noteUnlinked($matter, $kept);
             MatterProgressRecorder::replyReceived($reply->setRelation('parent', $answers));
             // Whoever they put in To or CC: theirs, on this matter.
@@ -341,7 +341,7 @@ class MatterReplyCollector
         $email = $this->record($message, $id, $senderKey, ['matter_id' => $matter->getKey(), 'status' => MatterEmail::FILED, 'matched_by' => $by]);
         [$pdf, $files, $name, $source] = $this->rendered($message, $senderKey, false);
 
-        $kept = $this->keepOnMatter($matter, $pdf, $files, $name, null, $source, $oneDrive);
+        $kept = $this->keepOnMatter($matter, $pdf, $files, $name, null, $source, $oneDrive, self::arrivedAt($message));
         $email->update(['files' => $kept, 'onedrive' => $oneDrive]);
         MatterProgressRecorder::emailReceived($email);
         MatterContact::learn($email);
@@ -384,7 +384,7 @@ class MatterReplyCollector
 
             // The PDF in the received-emails folder; the files it came with
             // in a folder of the PDF's name beside it.
-            $folder = MatterOneDriveFolders::receivedEmailsFolder();
+            $folder = MatterOneDriveFolders::receivedEmailsFolderFor($matter, $email->at);
             // The original email (.eml) goes to OneDrive only, beside the PDF; it is not kept in the system.
             if (($file['kind'] ?? null) === MatterEmail::SOURCE) {
                 $oneDrive['eml'] = $this->archive->keepInOneDrive($matter, (string) $file['name'], (string) $disk->get($path), 'message/rfc822', $folder);
@@ -445,7 +445,7 @@ class MatterReplyCollector
             'from' => mb_substr(trim($fromName.($fromName !== $from ? ' <'.$from.'>' : '')), 0, 255),
             'to' => array_values(array_filter((array) ($message['to'] ?? []))),
             'cc' => array_values(array_filter((array) ($message['cc'] ?? []))),
-            'at' => isset($message['at']) ? Carbon::parse($message['at']) : now(),
+            'at' => self::arrivedAt($message),
             ...$attributes,
         ]);
     }
@@ -491,10 +491,10 @@ class MatterReplyCollector
      * @param  array<string, mixed>|null  $oneDrive  set to what reached the matter's OneDrive: {pdf, eml, attachments}
      * @return list<array{name: string, path: string}>
      */
-    private function keepOnMatter(Matter $matter, string $pdf, array $files, string $name, ?int $userId, ?string $source = null, &$oneDrive = null): array
+    private function keepOnMatter(Matter $matter, string $pdf, array $files, string $name, ?int $userId, ?string $source = null, &$oneDrive = null, ?CarbonInterface $at = null): array
     {
         $oneDrive = ['pdf' => false, 'eml' => false, 'attachments' => 0];
-        $folder = MatterOneDriveFolders::receivedEmailsFolder();
+        $folder = MatterOneDriveFolders::receivedEmailsFolderFor($matter, $at);
         $kept = [['name' => $name.'.pdf', 'path' => $this->archive->keepFile($matter, $name.'.pdf', $pdf, 'application/pdf', $folder, $userId, inOneDrive: $oneDrive['pdf'])]];
 
         foreach ($files as $file) {
@@ -529,6 +529,12 @@ class MatterReplyCollector
         }
 
         return $kept;
+    }
+
+    /** When a message reached the mailbox, in the app's timezone — the day it is saved under. */
+    private static function arrivedAt(array $message): CarbonInterface
+    {
+        return (isset($message['at']) ? Carbon::parse($message['at']) : now())->setTimezone(config('app.timezone'));
     }
 
     /**

@@ -57,6 +57,7 @@ class Type extends Model
         'incentive_config_id',
         'party_capacities',
         'onedrive_subfolders',
+        'onedrive_received_emails',
     ];
 
     /**

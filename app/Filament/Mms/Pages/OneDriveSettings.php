@@ -6,10 +6,13 @@ use App\Filament\Mms\Pages\Concerns\ReviewsOneDriveFolders;
 use App\Filament\Mms\Resources\Types\Schemas\TypeForm;
 use App\Filament\Shared\Clusters\Settings;
 use App\Filament\Support\SettingsForm;
+use App\Models\Matter;
+use App\Models\MatterFieldDefinition;
 use App\Models\Setting;
 use App\Models\Type;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\OneDriveClient;
+use App\Support\MatterSearch;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Placeholder;
@@ -95,7 +98,7 @@ class OneDriveSettings extends Page implements HasTable
             ->statePath('data')
             ->components([
                 Section::make(__('Matter folders'))
-                    ->description(__('When an assistant is assigned to a new matter, a folder named like "2026-123 - matter type - court" is made in their OneDrive, under the path on their profile, with the subfolders below.'))
+                    ->description(__('When an assistant is assigned to a new matter, a folder named like "2026-123 - matter type - court" is made in their OneDrive, under the path on their profile, with the subfolders below.').' '.__('Another phase of a case — a matter with the same year and number, or the same parent matter — goes in that case\'s main folder, in a subfolder of its own named by the structure (e.g. {{matter.custom.Phase}}). When a phase is finished, only its subfolder moves to the assistant\'s folder for finished matters, into a main folder of the same name.'))
                     ->icon(Heroicon::OutlinedFolderPlus)
                     ->schema([
                         Toggle::make('enabled')
@@ -106,7 +109,7 @@ class OneDriveSettings extends Page implements HasTable
                             ->helperText(__('Matters created before the feature was switched on are not touched.')),
                         Textarea::make('subfolders')
                             ->label(__('Standard subfolders'))
-                            ->helperText(__('One per line, in order. Use "/" for a folder inside another, e.g. "02 المستندات/من المدعي". Changes apply to folders made from now on; existing folders stay as they are.').' '.__('The default — a matter type can have its own (below, or on the type).'))
+                            ->helperText(__('One per line, in order. Use "/" for a folder inside another, e.g. "02 المستندات/من المدعي". Changes apply to folders made from now on; existing folders stay as they are.').' '.__('The default — a matter type can have its own (below, or on the type).').' '.__('A folder may use the matter\'s placeholders, like the letters do, e.g. {{matter.custom.phase}}/01 المراسلات; one the matter has no value for is left out.'))
                             ->rows(10)
                             ->extraInputAttributes(['dir' => 'auto']),
                         Placeholder::make('type_structures')
@@ -148,9 +151,50 @@ class OneDriveSettings extends Page implements HasTable
                             ->helperText(__('Every email sent from a matter — letters, minutes, bulk mail — is saved here as a PDF, inside the matter\'s folder (made when missing). Leave empty not to save them in OneDrive.'))
                             ->extraInputAttributes(['dir' => 'auto']),
                         TextInput::make('received_emails')
-                            ->label(__('Replies subfolder'))
-                            ->helperText(__('Replies to those emails, collected from the mailbox, are saved here as a PDF with every file they came with. Leave empty not to save them in OneDrive.'))
-                            ->extraInputAttributes(['dir' => 'auto']),
+                            ->label(__('Received emails folder structure'))
+                            ->helperText(new HtmlString(
+                                e(__('Where the emails that come in — replies and any other email from a matter\'s parties — are saved as a PDF with every file they came with, inside the matter\'s folder (made when missing). Folders are separated by "/", and each may use the matter\'s placeholders, like the letters do. Leave empty not to save them in OneDrive.'))
+                                .'<br><code dir="ltr">{{matter.custom.'.e(__('Phase')).'}}/01 system + 02/{{matter.plaintiff_capacity}}</code>'
+                                .'<br>'.e(__('"Phase" stands for the name of any custom field — pick from the list below.'))
+                                .'<br>'.e(__('A part with no value for the matter (e.g. a custom field it has none of) is left out.'))
+                                .'<br>'.e(__('{{day}} is the day the email reached us (2026-10-16), {{month}} the month and {{year}} the year: the emails of one day go in the same folder.'))
+                            ))
+                            ->live(debounce: 500)
+                            ->extraInputAttributes(['dir' => 'ltr']),
+                        Placeholder::make('type_received_structures')
+                            ->label(__('Matter types with their own received emails folder'))
+                            ->content(fn (): string => Type::query()->whereNotNull('onedrive_received_emails')->where('onedrive_received_emails', '!=', '')->orderBy('name')->pluck('name')->implode('، ') ?: __('None — every type uses the structure above.')),
+                        // The custom fields that exist, ready to use: the placeholder is the field's name as it is on the type.
+                        Placeholder::make('custom_field_placeholders')
+                            ->label(__('Custom fields you can use'))
+                            ->content(function (): HtmlString {
+                                $labels = MatterFieldDefinition::query()->orderBy('label')->pluck('label')->unique()->values();
+
+                                return new HtmlString($labels->isEmpty()
+                                    ? e(__('No custom fields yet (Settings → Matter types).'))
+                                    : $labels->map(fn (string $label): string => '<code dir="auto" style="margin-inline-end: .75rem;">{{matter.custom.'.e($label).'}}</code>')->implode(' '));
+                            }),
+                        // Not saved: only to see what the structure above makes for a matter.
+                        Select::make('received_preview_matter')
+                            ->label(__('Try it on a matter'))
+                            ->searchable()
+                            ->live()
+                            ->dehydrated(false)
+                            ->getSearchResultsUsing(fn (string $search): array => MatterSearch::options($search))
+                            ->getOptionLabelUsing(fn ($value): ?string => MatterSearch::labels([(int) $value])[(int) $value] ?? null),
+                        Placeholder::make('received_preview')
+                            ->label(__('The folder for that matter'))
+                            ->visible(fn (Get $get): bool => filled($get('received_preview_matter')))
+                            ->content(function (Get $get): HtmlString {
+                                $matter = Matter::find($get('received_preview_matter'));
+                                $template = trim((string) $get('received_emails'));
+
+                                if (! $matter || $template === '') {
+                                    return new HtmlString('—');
+                                }
+
+                                return new HtmlString('<code dir="auto">'.e(MatterOneDriveFolders::folderName($matter).'/'.MatterOneDriveFolders::resolvePath($template, $matter, now())).'</code>');
+                            }),
                     ]),
 
                 Section::make(__('Test folder'))
