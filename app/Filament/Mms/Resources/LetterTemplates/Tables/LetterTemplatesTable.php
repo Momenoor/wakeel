@@ -42,9 +42,9 @@ class LetterTemplatesTable
                 TextColumn::make('types.name')
                     ->label(__('Matter types'))
                     ->badge()
-                    // "All except" says so in front of the types it leaves out.
-                    ->prefix(fn (LetterTemplate $record): ?string => $record->types_except ? __('All except').': ' : null)
-                    ->color(fn (LetterTemplate $record): string => $record->types_except ? 'danger' : 'primary')
+                    // A type it is left out of says so: "All except: Civil".
+                    ->formatStateUsing(fn ($state, LetterTemplate $record): string => $record->types->firstWhere('name', $state)?->pivot?->excluded ? __('All except').': '.$state : (string) $state)
+                    ->color(fn ($state, LetterTemplate $record): string => $record->types->firstWhere('name', $state)?->pivot?->excluded ? 'danger' : 'primary')
                     ->placeholder(__('All matter types'))
                     ->listWithLineBreaks()
                     ->limitList(5)

@@ -53,6 +53,39 @@ class IncentiveImportAndCalculateTest extends TestCase
         $this->assertEquals($matterA->id, $matters->first()->id);
     }
 
+    public function test_finding_qualifying_matters_does_not_query_per_matter(): void
+    {
+        $config = MatterTypeIncentiveConfig::create([
+            'name' => 'Fixed 10', 'calculation_type' => 'fixed', 'fixed_percentage' => 10.0, 'assistant_rate' => 100.0,
+        ]);
+        $type = Type::create(['name' => 'Fixed Type', 'incentive_config_id' => $config->id, 'incentive_trigger_type' => 'final_report_date']);
+        $assistant = Party::create(['name' => 'Assistant', 'role' => ['role' => ['expert'], 'type' => ['assistant']]]);
+
+        $service = new IncentiveService;
+        $count = function (int $matters) use ($type, $assistant, $service): int {
+            for ($i = 0; $i < $matters; $i++) {
+                $matter = Matter::create(['number' => (string) (100 + $i + Matter::count()), 'year' => '2026', 'type_id' => $type->id, 'final_report_at' => '2026-06-10']);
+                MatterParty::create(['matter_id' => $matter->id, 'party_id' => $assistant->id, 'role' => 'expert', 'type' => 'assistant']);
+                Fee::create(['matter_id' => $matter->id, 'amount' => 1000, 'date' => '2026-06-10', 'status' => 'unpaid']);
+            }
+
+            \Illuminate\Support\Facades\DB::flushQueryLog();
+            \Illuminate\Support\Facades\DB::enableQueryLog();
+            $found = $service->getQualifyingMatters(Carbon::parse('2026-06-01'), Carbon::parse('2026-06-30'), ['assistant_ids' => [$assistant->id]]);
+            $queries = count(\Illuminate\Support\Facades\DB::getQueryLog());
+            \Illuminate\Support\Facades\DB::disableQueryLog();
+
+            $this->assertCount(Matter::count(), $found);
+
+            return $queries;
+        };
+
+        $few = $count(3);
+        $many = $count(20);
+
+        $this->assertSame($few, $many, 'The queries grow with the number of matters.');
+    }
+
     public function test_fees_registered_date_trigger_uses_the_fees_own_date_not_the_collection_date(): void
     {
         // Regression: the "fees_registered_date" trigger type must scope a

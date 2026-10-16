@@ -21,7 +21,13 @@ class ChatAttachmentController extends Controller
         $file = $message->files()[$index] ?? null;
         abort_unless($file && Storage::disk(ChatMessage::DISK)->exists($file['path']), 404);
 
-        $headers = ['Content-Type' => $file['mime'] ?: 'application/octet-stream', 'X-Content-Type-Options' => 'nosniff'];
+        // A sent file never changes, and a chat shows the same ones over and over (each
+        // costs a session lookup and queries): the browser keeps its own copy for a week.
+        // Private — only that browser's cache, never a shared one.
+        $headers = [
+            'Content-Type' => $file['mime'] ?: 'application/octet-stream',
+            'X-Content-Type-Options' => 'nosniff',
+        ];
 
         // Only what a browser shows safely is shown; the rest downloads.
         $inline = ! $request->boolean('download')
@@ -30,11 +36,25 @@ class ChatAttachmentController extends Controller
         // Sound and video play in the page — sent as a file, so the player
         // can seek (Safari won't play without it).
         if (! $request->boolean('download') && (ChatMessage::isAudio($file) || ChatMessage::isVideo($file))) {
-            return response()->file(Storage::disk(ChatMessage::DISK)->path($file['path']), $headers);
+            return $this->kept(response()->file(Storage::disk(ChatMessage::DISK)->path($file['path']), $headers));
         }
 
-        return $inline
+        return $this->kept($inline
             ? Storage::disk(ChatMessage::DISK)->response($file['path'], $file['name'], $headers)
-            : Storage::disk(ChatMessage::DISK)->download($file['path'], $file['name'], $headers);
+            : Storage::disk(ChatMessage::DISK)->download($file['path'], $file['name'], $headers));
+    }
+
+    /**
+     * The browser keeps its own copy for a week: a sent file never changes, and a chat
+     * shows the same ones over and over (each fetch costs a session lookup and queries).
+     * Private — that browser's cache only, never a shared one (file responses default to public).
+     */
+    private function kept(StreamedResponse|BinaryFileResponse $response): StreamedResponse|BinaryFileResponse
+    {
+        $response->setPrivate();
+        $response->setMaxAge(604800);
+        $response->headers->addCacheControlDirective('immutable');
+
+        return $response;
     }
 }

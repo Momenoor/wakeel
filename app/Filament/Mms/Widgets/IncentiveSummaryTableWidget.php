@@ -67,14 +67,27 @@ class IncentiveSummaryTableWidget extends TableWidget
         //
     }
 
+    private ?IncentiveCalculation $calculationCache = null;
+
+    private bool $calculationRead = false;
+
     protected function isCalculationDraft(): bool
     {
-        return IncentiveCalculation::find($this->calculationId)?->isDraft() ?? false;
+        return $this->calculation()?->isDraft() ?? false;
     }
 
+    /**
+     * Read once for the request: every row of the table asks for it (159
+     * times for a page of lines).
+     */
     protected function calculation(): ?IncentiveCalculation
     {
-        return IncentiveCalculation::find($this->calculationId);
+        if (! $this->calculationRead) {
+            $this->calculationCache = IncentiveCalculation::find($this->calculationId);
+            $this->calculationRead = true;
+        }
+
+        return $this->calculationCache;
     }
 
     /**

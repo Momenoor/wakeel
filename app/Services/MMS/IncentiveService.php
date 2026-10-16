@@ -95,12 +95,24 @@ class IncentiveService
             ->concat($currentStatusQuery->get())
             ->unique('id');
 
+        $matters = $matters->values()->load('type');
+
+        // Each matter's eligible fees, and which already have a fee-less line
+        // — read for all the matters at once, not one query per matter.
+        $eligibleByMatter = Fee::query()
+            ->whereIn('matter_id', $matters->pluck('id'))
+            ->where(fn ($q) => $q->whereNull('type')->orWhereNotIn('type', FeeType::excludedFromIncentiveValues()))
+            ->get(['id', 'matter_id'])
+            ->groupBy('matter_id');
+        $withFeelessLine = IncentiveLine::query()
+            ->whereIn('matter_id', $matters->pluck('id'))
+            ->whereNull('fee_id')
+            ->pluck('matter_id')
+            ->flip();
+
         // Filter out matters where ALL eligible fees are already imported
-        return $matters->values()->filter(function (Matter $matter) use ($importedFeeIds) {
-            $eligibleFees = $matter->fees()
-                ->where(fn ($q) => $q->whereNull('type')->orWhereNotIn('type', FeeType::excludedFromIncentiveValues()))
-                ->pluck('id')
-                ->toArray();
+        return $matters->filter(function (Matter $matter) use ($importedFeeIds, $eligibleByMatter, $withFeelessLine) {
+            $eligibleFees = ($eligibleByMatter[$matter->id] ?? collect())->pluck('id')->toArray();
 
             if (empty($eligibleFees)) {
                 // A finished matter (final_report_date trigger) with NO fees
@@ -110,7 +122,7 @@ class IncentiveService
                 // types have nothing to import without a fee.
                 return $matter->type?->incentive_trigger_type === 'final_report_date'
                     && $matter->final_report_at !== null
-                    && ! $matter->incentiveLines()->whereNull('fee_id')->exists();
+                    && ! $withFeelessLine->has($matter->id);
             }
 
             // If at least one eligible fee is NOT imported, show it.
@@ -212,8 +224,11 @@ class IncentiveService
         }
 
         DB::transaction(function () use ($calculation, $matterIds) {
+            // All the matters at once, in the order asked for.
+            $matters = Matter::with('type')->whereIn('id', $matterIds)->get()->keyBy('id');
+
             foreach ($matterIds as $matterId) {
-                $matter = Matter::with('type')->find($matterId);
+                $matter = $matters->get($matterId);
                 if (! $matter) {
                     continue;
                 }
@@ -277,9 +292,10 @@ class IncentiveService
             ->pluck('matter_id');
 
         $imported = 0;
+        $matters = Matter::with('type')->whereIn('id', $matterIds)->get()->keyBy('id');
 
         foreach ($matterIds as $matterId) {
-            $matter = Matter::with('type')->find($matterId);
+            $matter = $matters->get($matterId);
             if (! $matter) {
                 continue;
             }
@@ -361,8 +377,11 @@ class IncentiveService
             return $imported;
         }
 
+        // Which of these fees already have a line, in one query (and as lines are made below).
+        $taken = IncentiveLine::whereIn('fee_id', $fees->pluck('id'))->pluck('fee_id')->flip();
+
         foreach ($fees as $fee) {
-            if (IncentiveLine::where('fee_id', $fee->id)->exists()) {
+            if ($taken->has($fee->id)) {
                 Log::info("Skipping duplicate incentive line for fee_id {$fee->id}.");
 
                 continue;

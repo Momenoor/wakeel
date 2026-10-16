@@ -4,6 +4,7 @@ namespace App\Services\MMS;
 
 use App\Filament\Mms\Pages\OneDriveSettings;
 use App\Jobs\CreateMatterOneDriveFolder;
+use App\Jobs\MoveMatterOneDriveFolder;
 use App\Models\Matter;
 use App\Models\MatterOneDriveFolder;
 use App\Models\MatterParty;
@@ -277,6 +278,53 @@ class MatterOneDriveFolders
         }
 
         return $item;
+    }
+
+    /**
+     * Queues the move of a finished matter's folders (one for each assistant who
+     * has one and a folder for finished matters on their profile).
+     */
+    public static function queueMoveToFinished(Matter $matter): void
+    {
+        MatterOneDriveFolder::query()
+            ->where('matter_id', $matter->getKey())
+            ->where('status', MatterOneDriveFolder::CREATED)
+            ->whereNotNull('drive_item_id')
+            ->whereNull('moved_at')
+            ->whereHas('party', fn ($q) => $q->whereNotNull('onedrive_email')->where('onedrive_email', '!=', '')->whereNotNull('onedrive_finished_path')->where('onedrive_finished_path', '!=', ''))
+            ->pluck('id')
+            ->each(fn ($id) => MoveMatterOneDriveFolder::dispatch($id)->afterCommit());
+    }
+
+    /**
+     * Moves a matter's folder to its assistant's folder for finished matters
+     * (made when missing) and points the matter's link at the new place. The
+     * folder keeps its id, so everything linked to it by id keeps working.
+     * False when there is nothing to do: not made yet, already moved, or no
+     * folder for finished matters on the assistant's profile.
+     */
+    public function moveToFinished(MatterOneDriveFolder $folder): bool
+    {
+        $folder->loadMissing('party');
+        $party = $folder->party;
+
+        if (! $folder->isCreated() || blank($folder->drive_item_id) || $folder->moved_at !== null
+            || ! $party || blank($party->onedrive_email) || blank($party->onedrive_finished_path)) {
+            return false;
+        }
+
+        $target = $this->client->ensureFolder($party->onedrive_email, (string) $party->onedrive_finished_path);
+        $moved = $this->client->move($party->onedrive_email, $folder->drive_item_id, $target['id']);
+
+        $folder->update([
+            'drive_item_id' => $moved['id'] ?: $folder->drive_item_id,
+            'web_url' => $moved['webUrl'] ?: $folder->web_url,
+            'folder_name' => $moved['name'] ?: $folder->folder_name,
+            'moved_at' => now(),
+            'move_error' => null,
+        ]);
+
+        return true;
     }
 
     public static function signedMinutesFolder(): string

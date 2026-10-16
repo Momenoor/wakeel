@@ -277,6 +277,22 @@ class OneDriveClient
     }
 
     /**
+     * Moves a file or folder into another folder, contents and id unchanged —
+     * renamed ("name 1") when one of that name is there already.
+     *
+     * @return array{id: string, webUrl: string, name: string}
+     */
+    public function move(string $user, string $itemId, string $parentId): array
+    {
+        $response = $this->request('patch', "/users/{$this->user($user)}/drive/items/".rawurlencode($itemId), [
+            'parentReference' => ['id' => $parentId],
+            '@microsoft.graph.conflictBehavior' => 'rename',
+        ]);
+
+        return [...$this->item($response), 'name' => (string) $response->json('name')];
+    }
+
+    /**
      * Deletes a file or folder — OneDrive keeps it in the user's recycle
      * bin, from where it can be restored.
      */

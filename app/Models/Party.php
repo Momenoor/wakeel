@@ -40,6 +40,7 @@ class Party extends Model
         'old_id',
         'onedrive_email',
         'onedrive_path',
+        'onedrive_finished_path',
     ];
 
     protected $casts = [

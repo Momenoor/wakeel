@@ -143,9 +143,9 @@ class TypesTable
                             $ids = array_map('intval', (array) $data['templates']);
 
                             $records->each(fn (Type $type) => match ($data['mode'] ?? 'add') {
-                                'replace' => $type->letterTemplates()->sync($ids),
+                                'replace' => $type->assignLetterTemplates($ids, $type->excludedLetterTemplates()->pluck('letter_templates.id')->all()),
                                 'remove' => $type->letterTemplates()->detach($ids),
-                                default => $type->letterTemplates()->syncWithoutDetaching($ids),
+                                default => $type->assignLetterTemplates($ids, [], detach: false),
                             });
 
                             Notification::make()->success()->title(__('Saved'))->send();

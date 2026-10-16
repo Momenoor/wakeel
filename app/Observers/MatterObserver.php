@@ -4,6 +4,7 @@ namespace App\Observers;
 
 use App\Enums\MatterCollectionStatus;
 use App\Models\Matter;
+use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterProgressRecorder;
 use App\Services\MMS\NewMatterNotification;
 use Illuminate\Support\Facades\Log;
@@ -67,6 +68,11 @@ class MatterObserver
         if ($matter->wasChanged(['initial_report_at', 'final_report_at'])
             || ($matter->wasRecentlyCreated && ($matter->initial_report_at || $matter->final_report_at))) {
             MatterProgressRecorder::reports($matter);
+        }
+
+        // Finished: its OneDrive folder goes to the assistant's folder for finished matters.
+        if ($matter->final_report_at !== null && $matter->wasChanged('final_report_at')) {
+            MatterOneDriveFolders::queueMoveToFinished($matter);
         }
 
     }

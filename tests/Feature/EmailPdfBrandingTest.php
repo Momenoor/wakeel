@@ -22,7 +22,7 @@ class EmailPdfBrandingTest extends TestCase
         return view('mails.bulk-mail-pdf', [
             'html' => '<p>نص</p>', 'subject' => 'FW: تعديل', 'sender' => ['name' => 'Mohamed El Baz', 'address' => 'm@jpa.ae'],
             'recipient' => (object) ['name' => 'Momen Noor', 'email' => ['momen@jpa.ae']], 'sentAt' => '2026-10-09 20:28',
-            'cc' => [], 'bcc' => [], 'isRtl' => true, 'brand' => Branding::emailPdf(),
+            'cc' => [], 'bcc' => [], 'isRtl' => true, 'brand' => Branding::emailPdf(), 'fontFamily' => null,
             'attachments' => [['name' => '2342-2019.PDF', 'size' => 812000], ['name' => 'سفاري.pdf', 'size' => 1250000]], 'attachmentsSize' => 2062000,
         ])->render();
     }

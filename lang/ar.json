@@ -3981,7 +3981,11 @@
     "The mail server refused every address (they do not exist or cannot receive): :addresses": "رفض خادم البريد كل العناوين (غير موجودة أو لا تستقبل): :addresses",
     "If you are locked out during the update, open :url to get back in. If the site stays down, delete storage/framework/down and storage/framework/maintenance.php.": "إذا مُنعت من الدخول أثناء التحديث فافتح :url للعودة. وإذا بقي الموقع متوقفاً فاحذف الملفين storage/framework/down و storage/framework/maintenance.php.",
     "All except": "الكل عدا",
-    "The selected types are": "الأنواع المختارة هي",
-    "All types except these": "كل الأنواع عدا هذه",
-    "Only these types": "هذه الأنواع فقط"
+    "The letter templates offered on this type's matters. A template linked to no type is offered for every type; linking it to types here limits it to those.": "قوالب الخطابات المعروضة في قضايا هذا النوع. القالب غير المرتبط بأي نوع يُعرض لكل الأنواع؛ وربطه بأنواع هنا يقصره عليها.",
+    "Offered for this type": "معروضة لهذا النوع",
+    "Offered for every type except this one": "معروضة لكل الأنواع عدا هذا النوع",
+    "A template for all types except the ones it is left out for.": "قالب لكل الأنواع عدا الأنواع المستثناة منه.",
+    "Folder for finished matters in their OneDrive": "مجلد القضايا المنتهية في OneDrive الخاص به",
+    "When a matter is finished, its folder is moved here and the matter link follows it. Leave empty to keep the folders of finished matters where they are.": "عند انتهاء القضية (تقديم التقرير النهائي) يُنقل مجلدها إلى هذا المجلد ويتبعه رابط القضية. اتركه فارغاً لإبقاء مجلدات القضايا المنتهية في مكانها.",
+    "Left out for this type": "مستثناة من هذا النوع"
 }

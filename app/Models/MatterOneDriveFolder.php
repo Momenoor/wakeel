@@ -27,7 +27,14 @@ class MatterOneDriveFolder extends Model
         'drive_item_id',
         'web_url',
         'error',
+        'moved_at',
+        'move_error',
     ];
+
+    protected function casts(): array
+    {
+        return ['moved_at' => 'datetime'];
+    }
 
     /**
      * @return BelongsTo<Matter, $this>

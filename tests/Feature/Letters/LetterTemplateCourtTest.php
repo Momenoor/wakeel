@@ -118,6 +118,12 @@ class LetterTemplateCourtTest extends TestCase
             ->assertCanNotSeeTableRecords([$everywhere, $atDubai]);
     }
 
+    /** Links a template to types as excluded ("every type but these"). */
+    private function excludeFrom(LetterTemplate $template, array $types): void
+    {
+        $template->types()->sync(array_fill_keys($types, ['excluded' => true]));
+    }
+
     public function test_a_template_can_be_for_every_type_except_the_selected(): void
     {
         $civil = Type::factory()->create(['name' => 'Civil']);
@@ -125,11 +131,9 @@ class LetterTemplateCourtTest extends TestCase
         $civilMatter = Matter::factory()->create(['type_id' => $civil->id]);
         $labourMatter = Matter::factory()->create(['type_id' => $labour->id]);
 
-        $onlyCivil = $this->template('Only civil', [], [$civil->id]);
-        $notCivil = $this->template('Not civil', [], [$civil->id]);
-        $notCivil->update(['types_except' => true]);
-        $notCivilOrLabour = $this->template('Not civil or labour', [], [$civil->id, $labour->id]);
-        $notCivilOrLabour->update(['types_except' => true]);
+        $this->template('Only civil', [], [$civil->id]);
+        $this->excludeFrom($this->template('Not civil'), [$civil->id]);
+        $this->excludeFrom($this->template('Not civil or labour'), [$civil->id, $labour->id]);
         $this->template('Every type');
 
         $names = ['Only civil', 'Not civil', 'Not civil or labour', 'Every type'];
@@ -142,7 +146,7 @@ class LetterTemplateCourtTest extends TestCase
         $this->assertEqualsCanonicalizing(['Not civil', 'Not civil or labour', 'Every type'], LetterTemplate::query()->forMatterType(null)->whereIn('name', $names)->pluck('name')->all());
     }
 
-    public function test_the_templates_list_filter_and_form_know_all_except(): void
+    public function test_the_templates_list_filter_knows_all_except_and_the_form_has_no_types(): void
     {
         Gate::before(fn () => true);
         Filament::setCurrentPanel('mms');
@@ -150,8 +154,8 @@ class LetterTemplateCourtTest extends TestCase
 
         $civil = Type::factory()->create(['name' => 'Civil']);
         $labour = Type::factory()->create(['name' => 'Labour']);
-        $notCivil = $this->template('Not civil', [], [$civil->id]);
-        $notCivil->update(['types_except' => true]);
+        $notCivil = $this->template('Not civil');
+        $this->excludeFrom($notCivil, [$civil->id]);
         $onlyCivil = $this->template('Only civil', [], [$civil->id]);
 
         Livewire::test(ListLetterTemplates::class)
@@ -159,12 +163,41 @@ class LetterTemplateCourtTest extends TestCase
             ->assertCanSeeTableRecords([$notCivil])
             ->assertCanNotSeeTableRecords([$onlyCivil]);
 
+        // The types are set from the matter type, not here.
         Livewire::test(\App\Filament\Mms\Resources\LetterTemplates\Pages\EditLetterTemplate::class, ['record' => $onlyCivil->getRouteKey()])
-            ->fillForm(['types' => [$civil->id, $labour->id], 'types_except' => true])
+            ->assertFormFieldDoesNotExist('types')
+            ->assertFormFieldDoesNotExist('types_except');
+    }
+
+    public function test_letter_templates_are_set_from_the_matter_type(): void
+    {
+        Gate::before(fn () => true);
+        Filament::setCurrentPanel('mms');
+        $this->actingAs(User::factory()->create());
+
+        $civil = Type::factory()->create(['name' => 'Civil']);
+        $offered = $this->template('Offered');
+        $left = $this->template('Left out');
+        $other = $this->template('Other', [], [Type::factory()->create()->id]);
+
+        Livewire::test(\App\Filament\Mms\Resources\Types\Pages\EditType::class, ['record' => $civil->getRouteKey()])
+            ->fillForm(['letter_templates_offered' => [$offered->id], 'letter_templates_excluded' => [$left->id]])
             ->call('save')
             ->assertHasNoFormErrors();
 
-        $this->assertTrue($onlyCivil->fresh()->types_except);
-        $this->assertEqualsCanonicalizing([$civil->id, $labour->id], $onlyCivil->types()->pluck('types.id')->all());
+        $this->assertSame([$offered->id], $civil->offeredLetterTemplates()->pluck('letter_templates.id')->all());
+        $this->assertSame([$left->id], $civil->excludedLetterTemplates()->pluck('letter_templates.id')->all());
+
+        $matter = Matter::factory()->create(['type_id' => $civil->id]);
+        $names = ['Offered', 'Left out', 'Other'];
+        $this->assertSame(['Offered'], LetterTemplate::query()->forMatter($matter)->whereIn('name', $names)->pluck('name')->all());
+
+        // The form opens with what is set, and it can be changed or cleared.
+        Livewire::test(\App\Filament\Mms\Resources\Types\Pages\EditType::class, ['record' => $civil->getRouteKey()])
+            ->assertFormSet(['letter_templates_offered' => [$offered->id], 'letter_templates_excluded' => [$left->id]])
+            ->fillForm(['letter_templates_offered' => [], 'letter_templates_excluded' => []])
+            ->call('save');
+
+        $this->assertSame(0, $civil->letterTemplates()->count());
     }
 }

@@ -87,6 +87,14 @@ class PartyForm
                             ->maxLength(255)
                             ->extraInputAttributes(['dir' => 'auto'])
                             ->visible(fn ($get) => in_array('assistant', $get('role.type') ?? [])),
+                        // A matter's folder is moved here once the matter is finished (its final report).
+                        TextInput::make('onedrive_finished_path')
+                            ->label(__('Folder for finished matters in their OneDrive'))
+                            ->placeholder('Work/Finished matters')
+                            ->helperText(__('When a matter is finished, its folder is moved here and the matter link follows it. Leave empty to keep the folders of finished matters where they are.'))
+                            ->maxLength(255)
+                            ->extraInputAttributes(['dir' => 'auto'])
+                            ->visible(fn ($get) => in_array('assistant', $get('role.type') ?? [])),
                         //                        Toggle::make('black_list')
                         //                            ->label(__('Black List'))
                         //                            ->default(false)

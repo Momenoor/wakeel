@@ -25,11 +25,12 @@ class TypeInfolist
     public static function configure(Schema $schema): Schema
     {
         return $schema
+            ->columns(2)
             ->components([
                 Section::make(__('General Information'))
                     ->icon(Heroicon::OutlinedInformationCircle)
-                    ->columns(3)
-                    ->columnSpanFull()
+                    ->columns(2)
+                    ->columnSpan(1)
                     ->components([
                         TextEntry::make('name')
                             ->label(__('Name'))
@@ -54,8 +55,8 @@ class TypeInfolist
 
                 Section::make(__('Incentive Configuration'))
                     ->icon(Heroicon::OutlinedCalculator)
-                    ->columns(3)
-                    ->columnSpanFull()
+                    ->columns(2)
+                    ->columnSpan(1)
                     ->components([
                         TextEntry::make('incentive_trigger_type')
                             ->label(__('Incentive Trigger Type'))
@@ -110,8 +111,8 @@ class TypeInfolist
                 Section::make(__('Party capacities'))
                     ->description(__('What each side is called in this type\'s matters — in letters, minutes and the matter page.'))
                     ->icon(Heroicon::OutlinedUsers)
-                    ->columns(3)
-                    ->columnSpanFull()
+                    ->columns(1)
+                    ->columnSpan(1)
                     ->components(collect(Type::SIDES)->map(fn (string $side) => TextEntry::make('capacity_'.$side)
                         ->label(Type::sideLabel(null, $side))
                         ->state(fn (Type $record): string => Type::sideLabel($record, $side))
@@ -120,10 +121,28 @@ class TypeInfolist
                         ->weight(fn (Type $record): ?string => $record->capacity($side) ? 'bold' : null))
                         ->all()),
 
+                Section::make(__('Letter templates'))
+                    ->description(__('The letter templates offered for this type\'s matters.'))
+                    ->icon(Heroicon::OutlinedDocumentText)
+                    ->columnSpan(1)
+                    ->components([
+                        // Those linked to this type, then the general ones (linked to no type).
+                        TextEntry::make('letter_templates_own')
+                            ->label(__('For this type'))
+                            ->state(fn (Type $record): string => $record->offeredLetterTemplates->where('is_active', true)->pluck('name')->implode('، ') ?: __('None')),
+                        TextEntry::make('letter_templates_excluded')
+                            ->label(__('Left out for this type'))
+                            ->state(fn (Type $record): string => $record->excludedLetterTemplates->where('is_active', true)->pluck('name')->implode('، ') ?: __('None')),
+                        TextEntry::make('letter_templates_general')
+                            ->label(__('General (for every type)'))
+                            // For no type in particular: every type, or every type except others.
+                            ->state(fn (Type $record): string => LetterTemplate::query()->where('is_active', true)->offeredForType($record->getKey())->whereDoesntHave('types', fn ($t) => $t->whereKey($record->getKey())->where('letter_template_type.excluded', false))->orderBy('name')->pluck('name')->implode('، ') ?: __('None')),
+                    ]),
+
                 Section::make(__('OneDrive folder structure'))
                     ->description(__('The subfolders made in each of this type\'s matter folders in the assistants\' OneDrive.'))
                     ->icon(Heroicon::OutlinedFolderOpen)
-                    ->columnSpanFull()
+                    ->columnSpan(1)
                     ->components([
                         TextEntry::make('onedrive_source')
                             ->hiddenLabel()
@@ -139,8 +158,7 @@ class TypeInfolist
                 Section::make(__('Custom fields'))
                     ->description(__('The fields this type\'s matters have besides the usual ones.'))
                     ->icon(Heroicon::OutlinedRectangleStack)
-                    ->columnSpanFull()
-                    ->collapsible()
+                    ->columnSpan(1)
                     ->components([
                         TextEntry::make('custom_fields')
                             ->hiddenLabel()
@@ -150,22 +168,6 @@ class TypeInfolist
                                     ->map(fn ($field): string => '<li>'.e($field->label).' <span style="opacity: .65;">('.e(__(ucfirst((string) $field->type))).($field->required ? ' · '.e(__('Required')) : '').')</span></li>')
                                     ->implode('').'</ul>'))
                             ->html(),
-                    ]),
-
-                Section::make(__('Letter templates'))
-                    ->description(__('The letter templates offered for this type\'s matters.'))
-                    ->icon(Heroicon::OutlinedDocumentText)
-                    ->columnSpanFull()
-                    ->collapsible()
-                    ->components([
-                        // Those linked to this type, then the general ones (linked to no type).
-                        TextEntry::make('letter_templates_own')
-                            ->label(__('For this type'))
-                            ->state(fn (Type $record): string => $record->letterTemplates->where('is_active', true)->where('types_except', false)->pluck('name')->implode('، ') ?: __('None')),
-                        TextEntry::make('letter_templates_general')
-                            ->label(__('General (for every type)'))
-                            // For no type in particular: every type, or every type except others.
-                            ->state(fn (Type $record): string => LetterTemplate::query()->where('is_active', true)->offeredForType($record->getKey())->where(fn ($q) => $q->whereDoesntHave('types')->orWhere('types_except', true))->orderBy('name')->pluck('name')->implode('، ') ?: __('None')),
                     ]),
 
                 Section::make(__('Timestamps'))

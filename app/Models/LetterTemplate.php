@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * heading}] — type is text | textarea | date | time | url | number |
  * select | items (a numbered list ticked from the item library's group).
  */
-#[Fillable('name', 'slug', 'subject', 'body', 'placeholders', 'locale', 'is_active', 'is_default', 'category', 'letterhead_id', 'inputs', 'minutes_opening', 'minutes_closing', 'email_template_id', 'minutes_attendees', 'recipients_layout', 'recipients_format', 'letter_font_id', 'arabic_font_id', 'types_except')]
+#[Fillable('name', 'slug', 'subject', 'body', 'placeholders', 'locale', 'is_active', 'is_default', 'category', 'letterhead_id', 'inputs', 'minutes_opening', 'minutes_closing', 'email_template_id', 'minutes_attendees', 'recipients_layout', 'recipients_format', 'letter_font_id', 'arabic_font_id')]
 class LetterTemplate extends Model implements HasRichContent
 {
     use InteractsWithRichContent;
@@ -32,7 +32,6 @@ class LetterTemplate extends Model implements HasRichContent
         return [
             'is_active' => 'boolean',
             'is_default' => 'boolean',
-            'types_except' => 'boolean',
             'placeholders' => 'array',
             'inputs' => 'array',
             'minutes_attendees' => 'array',
@@ -74,7 +73,8 @@ class LetterTemplate extends Model implements HasRichContent
 
     public function types(): BelongsToMany
     {
-        return $this->belongsToMany(Type::class, 'letter_template_type');
+        // Set from the matter type; `excluded`: the template is NOT offered for that type.
+        return $this->belongsToMany(Type::class, 'letter_template_type')->withPivot('excluded');
     }
 
     /** The courts it is for; none: every court. */
@@ -120,10 +120,10 @@ class LetterTemplate extends Model implements HasRichContent
     }
 
     /**
-     * Those whose matter types take in this one: none selected (every type),
-     * the type among the selected, or — for "all except" — not among them.
-     * A matter with no type is in none that name types, but in every
-     * "all except".
+     * Those offered for this type. Linked to no type: every type. Linked to
+     * types: those only (the type is among them). Linked only as excluded
+     * from types ("all except"): every type but those. A matter with no type
+     * gets those linked to no type, and the "all except" ones.
      *
      * @param  Builder<LetterTemplate>  $query
      */
@@ -131,15 +131,11 @@ class LetterTemplate extends Model implements HasRichContent
     {
         $query->where(fn (Builder $q) => $q
             ->whereDoesntHave('types')
+            ->when($typeId, fn (Builder $q) => $q->orWhereHas('types', fn (Builder $t) => $t->whereKey($typeId)->where('letter_template_type.excluded', false)))
             ->orWhere(fn (Builder $q) => $q
-                ->where('types_except', false)
-                ->when(
-                    $typeId,
-                    fn (Builder $q) => $q->whereHas('types', fn (Builder $t) => $t->whereKey($typeId)),
-                    fn (Builder $q) => $q->whereRaw('1 = 0'),
-                ))
-            ->orWhere(fn (Builder $q) => $q
-                ->where('types_except', true)
+                // Only exclusions: every type but the excluded.
+                ->whereDoesntHave('types', fn (Builder $t) => $t->where('letter_template_type.excluded', false))
+                ->whereHas('types')
                 ->when($typeId, fn (Builder $q) => $q->whereDoesntHave('types', fn (Builder $t) => $t->whereKey($typeId)))));
     }
 

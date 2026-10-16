@@ -84,6 +84,19 @@ class Performance extends Page
         );
     }
 
+    /**
+     * The requests the server answered. What the browser reports (method CLIENT) is
+     * how long it WAITED — hours, when a connection stayed down — which says nothing
+     * of how fast the server is, so it stays out of the summary and the slowest list
+     * (it is still in the screens, and in the failed requests).
+     *
+     * @return Builder<PerformanceSample>
+     */
+    private function serverSamples(): Builder
+    {
+        return $this->samples()->where('method', '!=', 'CLIENT');
+    }
+
     private function since(): Carbon
     {
         return match ($this->period) {
@@ -98,17 +111,17 @@ class Performance extends Page
      */
     public function stats(): array
     {
-        $count = $this->samples()->count();
+        $count = $this->serverSamples()->count();
 
         // The time 95 in 100 requests were within (no percentile in SQL).
-        $p95 = $count ? (int) $this->samples()->orderBy('duration_ms')->skip((int) floor(0.95 * ($count - 1)))->value('duration_ms') : 0;
+        $p95 = $count ? (int) $this->serverSamples()->orderBy('duration_ms')->skip((int) floor(0.95 * ($count - 1)))->value('duration_ms') : 0;
 
         return [
             'requests' => $count,
-            'avg' => (int) round((float) $this->samples()->avg('duration_ms')),
+            'avg' => (int) round((float) $this->serverSamples()->avg('duration_ms')),
             'p95' => $p95,
-            'slow' => $this->samples()->where('duration_ms', '>=', TrackPerformance::SLOW_MS)->count(),
-            'queries' => round((float) $this->samples()->avg('queries'), 1),
+            'slow' => $this->serverSamples()->where('duration_ms', '>=', TrackPerformance::SLOW_MS)->count(),
+            'queries' => round((float) $this->serverSamples()->avg('queries'), 1),
         ];
     }
 
@@ -143,7 +156,7 @@ class Performance extends Page
      */
     public function slowest(int $limit = 25): Collection
     {
-        return $this->samples()
+        return $this->serverSamples()
             ->with('user:id,name,display_name')
             ->orderByDesc('duration_ms')
             ->limit($limit)

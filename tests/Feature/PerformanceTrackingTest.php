@@ -93,6 +93,23 @@ class PerformanceTrackingTest extends TestCase
         $this->assertStringContainsString('status '.$failed->status.' — '.$failed->name, $report);
     }
 
+    public function test_what_the_browser_waited_does_not_count_as_the_servers_speed(): void
+    {
+        PerformanceSample::query()->delete();
+        $row = fn (array $with) => PerformanceSample::create($with + ['method' => 'GET', 'path' => '/', 'name' => 'a page', 'status' => 200, 'duration_ms' => 100, 'queries' => 4, 'repeated' => 0, 'memory_mb' => 1, 'response_kb' => 1]);
+        $row([]);
+        $row(['duration_ms' => 300]);
+        // A connection that stayed down for 12 hours, as the browser tells it.
+        $row(['method' => 'CLIENT', 'name' => 'browser: echo: connection unavailable', 'status' => 0, 'duration_ms' => 43_000_000, 'queries' => 0]);
+
+        $page = Livewire::test(Performance::class)->instance();
+
+        $this->assertSame(['requests' => 2, 'avg' => 200, 'p95' => 100, 'slow' => 0, 'queries' => 4.0], $page->stats());
+        $this->assertSame([300, 100], $page->slowest()->pluck('duration_ms')->all());
+        // Still reported as a failure.
+        $this->assertStringContainsString('browser: echo: connection unavailable', $page->report());
+    }
+
     public function test_measuring_can_be_stopped(): void
     {
         Setting::set(TrackPerformance::SETTING, false, 'system', 'boolean');

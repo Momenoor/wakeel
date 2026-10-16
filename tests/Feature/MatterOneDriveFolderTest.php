@@ -113,6 +113,87 @@ class MatterOneDriveFolderTest extends TestCase
             ->all();
     }
 
+    /**
+     * Graph making every folder and, for a move, answering with the new address —
+     * or refusing the move while $refuse is set.
+     */
+    private function fakeGraphWithMoves(bool &$refuse): void
+    {
+        Http::fake(function (Request $request) use (&$refuse) {
+            if (str_contains($request->url(), 'login.microsoftonline.com')) {
+                return Http::response(['access_token' => 'token']);
+            }
+
+            if ($request->method() === 'PATCH') {
+                return $refuse
+                    ? Http::response(['error' => ['message' => 'Access denied']], 403)
+                    : Http::response(['id' => 'id-2026-123 - خبرة - محاكم دبي', 'name' => '2026-123 - خبرة - محاكم دبي', 'webUrl' => 'https://onedrive.test/finished/2026-123']);
+            }
+
+            $name = $request->data()['name'] ?? 'x';
+
+            return Http::response(['id' => 'id-'.$name, 'webUrl' => 'https://onedrive.test/'.rawurlencode($name)], 201);
+        });
+    }
+
+    public function test_a_finished_matters_folder_moves_to_the_assistants_finished_folder_and_the_link_follows(): void
+    {
+        $this->switchOn();
+        $refuse = false;
+        $this->fakeGraphWithMoves($refuse);
+
+        $matter = $this->matter();
+        $this->assign($matter, $this->assistant(['onedrive_finished_path' => 'Work/Finished']));
+        $folder = MatterOneDriveFolder::sole();
+        $this->assertNull($folder->moved_at);
+
+        $matter->finalReportSubmission();
+
+        $folder->refresh();
+        $this->assertSame('https://onedrive.test/finished/2026-123', $folder->web_url);
+        $this->assertNotNull($folder->moved_at);
+        $this->assertNull($folder->move_error);
+
+        // The finished folder was made (when missing) and the item moved into it, by id.
+        $this->assertContains('/root/children > Work', $this->createdFolders());
+        $this->assertContains('/items/id-Work/children > Finished', $this->createdFolders());
+        Http::assertSent(fn (Request $request) => $request->method() === 'PATCH'
+            && str_contains($request->url(), '/users/amr%40firm.ae/drive/items/')
+            && $request->data()['parentReference']['id'] === 'id-Finished');
+
+        // Once only: a later change of the report date moves nothing.
+        $moves = fn (): int => Http::recorded()->filter(fn ($pair) => $pair[0]->method() === 'PATCH')->count();
+        $before = $moves();
+        $matter->update(['final_report_at' => now()->addDay()]);
+        $this->assertSame($before, $moves());
+    }
+
+    public function test_without_a_finished_folder_on_the_profile_nothing_moves_and_a_failure_is_kept(): void
+    {
+        $this->switchOn();
+        $refuse = false;
+        $this->fakeGraphWithMoves($refuse);
+
+        $matter = $this->matter();
+        $this->assign($matter, $this->assistant());
+        $matter->finalReportSubmission();
+
+        $this->assertNull(MatterOneDriveFolder::sole()->moved_at);
+        Http::assertNotSent(fn (Request $request) => $request->method() === 'PATCH');
+
+        // With one on the profile, but Microsoft refusing: the reason is kept, the link stays.
+        Party::query()->update(['onedrive_finished_path' => 'Work/Finished']);
+        $link = MatterOneDriveFolder::sole()->web_url;
+        $refuse = true;
+
+        MatterOneDriveFolders::queueMoveToFinished($matter->fresh());
+
+        $folder = MatterOneDriveFolder::sole();
+        $this->assertNull($folder->moved_at);
+        $this->assertSame($link, $folder->web_url);
+        $this->assertStringContainsString('Access denied', (string) $folder->move_error);
+    }
+
     public function test_assigning_an_assistant_makes_the_folder_with_its_subfolders(): void
     {
         $this->switchOn();

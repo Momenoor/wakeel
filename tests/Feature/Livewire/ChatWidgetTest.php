@@ -279,6 +279,11 @@ class ChatWidgetTest extends TestCase
 
         // Sent as a file the player can seek in.
         $this->get(route('chat.attachment', [$voice, 0]))->assertOk()->assertHeader('Accept-Ranges', 'bytes');
+
+        // The browser keeps a sent file (it never changes) — privately, not in a shared cache.
+        $cache = $this->get(route('chat.attachment', [$voice, 0]))->headers->get('Cache-Control');
+        $this->assertStringContainsString('private', $cache);
+        $this->assertStringContainsString('max-age=604800', $cache);
         $this->get(route('chat.attachment', [$video, 0]).'?download=1')->assertDownload('clip.mp4');
     }
 

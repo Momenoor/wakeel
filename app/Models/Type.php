@@ -132,9 +132,39 @@ class Type extends Model
         return $this->belongsToMany(MatterFieldDefinition::class, 'matter_field_definition_type');
     }
 
-    /** The letter templates offered for this type's matters. */
+    /** The letter templates linked to this type — offered for it, or (`excluded`) left out for it. */
     public function letterTemplates(): BelongsToMany
     {
-        return $this->belongsToMany(LetterTemplate::class, 'letter_template_type');
+        return $this->belongsToMany(LetterTemplate::class, 'letter_template_type')->withPivot('excluded');
+    }
+
+    /** The letter templates offered for this type's matters (linked to it). */
+    public function offeredLetterTemplates(): BelongsToMany
+    {
+        return $this->letterTemplates()->wherePivot('excluded', false);
+    }
+
+    /** The letter templates that are for every type except this one (and others). */
+    public function excludedLetterTemplates(): BelongsToMany
+    {
+        return $this->letterTemplates()->wherePivot('excluded', true);
+    }
+
+    /**
+     * Sets which letter templates are offered for this type and which are
+     * left out for it. Without $detach the others stay as they are.
+     *
+     * @param  list<int|string>  $offered
+     * @param  list<int|string>  $excluded
+     */
+    public function assignLetterTemplates(array $offered, array $excluded = [], bool $detach = true): void
+    {
+        $offered = array_map('intval', $offered);
+        // Offered wins when a template is in both.
+        $excluded = array_values(array_diff(array_map('intval', $excluded), $offered));
+
+        $this->letterTemplates()->{$detach ? 'sync' : 'syncWithoutDetaching'}(
+            array_fill_keys($offered, ['excluded' => false]) + array_fill_keys($excluded, ['excluded' => true]),
+        );
     }
 }
