@@ -210,8 +210,10 @@ class BulkMailPlaceholders
         }
 
         // The matter type's own custom fields, e.g. {{matter.custom.Trustee}}.
+        // A dropdown prints its option's label, not the key it is saved under.
+        $definitions = $matter->type?->fieldDefinitions->keyBy('label') ?? collect();
         foreach ((array) ($matter->custom_fields ?? []) as $label => $value) {
-            $values['matter.custom.'.$label] = self::format($value);
+            $values['matter.custom.'.$label] = self::format($definitions->get($label)?->displayValue($value) ?? $value);
         }
 
         return $values;

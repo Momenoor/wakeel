@@ -158,7 +158,7 @@ class ViewMatter extends ViewRecord
                         Section::make(__('Custom fields'))
                             ->columns(2)
                             ->schema($fields->map(fn (MatterFieldDefinition $field) => CustomFieldInput::make($field, 'custom_fields.'.$field->label)
-                                ->default(($record->custom_fields ?? [])[$field->label] ?? null))->all()),
+                                ->default($field->optionKey(($record->custom_fields ?? [])[$field->label] ?? null)))->all()),
                     ]),
                 ])
                 ->action(fn ($record, $data) => $this->cloneMatter($record, $data)),

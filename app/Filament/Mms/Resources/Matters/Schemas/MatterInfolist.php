@@ -460,7 +460,7 @@ class MatterInfolist
                                 ->label($field->label);
 
                             if ($field->type === 'select_input') {
-                                $entry->formatStateUsing(fn ($state) => $field->options[$state] ?? $state);
+                                $entry->formatStateUsing(fn ($state) => $field->displayValue($state));
                             }
 
                             $entries[] = $entry;

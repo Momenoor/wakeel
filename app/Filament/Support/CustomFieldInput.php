@@ -20,7 +20,16 @@ class CustomFieldInput
         $statePath ??= 'custom_fields.'.$field->label;
 
         $component = match ($field->type) {
-            'select_input' => Select::make($statePath)->options($field->options ?? []),
+            // A value saved as the option's label is read as the option, so it is not asked for again.
+            'select_input' => Select::make($statePath)
+                ->options($field->options ?? [])
+                ->afterStateHydrated(function (Select $component, mixed $state) use ($field): void {
+                    $key = $field->optionKey($state);
+
+                    if ($key !== $state) {
+                        $component->state($key);
+                    }
+                }),
             'date_input' => DatePicker::make($statePath),
             'toggle_input' => Toggle::make($statePath),
             default => TextInput::make($statePath),

@@ -81,6 +81,145 @@ class SupplementaryMatterFieldsTest extends TestCase
         $this->assertSame(['Phase' => 'phase1', 'Stage' => 'a', 'Notes' => 'kept as is'], $this->parent->fresh()->custom_fields);
     }
 
+    public function test_a_required_custom_field_named_in_arabic_passes_when_filled(): void
+    {
+        $phase = MatterFieldDefinition::create(['label' => 'المرحلة', 'type' => 'text_input', 'required' => true, 'show_in_supplementary' => true]);
+        $this->type->fieldDefinitions()->attach($phase->id);
+        $this->parent->update(['custom_fields' => [...$this->parent->custom_fields, 'المرحلة' => 'مرحلة ثانية']]);
+
+        Livewire::test(ViewMatter::class, ['record' => $this->parent->getRouteKey()])
+            ->callAction('clone', [
+                'number' => 1010, 'year' => 2026, 'received_at' => '2026-10-20', 'distributed_at' => '2026-10-20', 'next_session_date' => '2026-10-27',
+                'level' => $this->parent->level?->value ?? 'first_instance',
+                'custom_fields' => ['Phase' => 'p', 'Stage' => 'b', 'المرحلة' => 'مرحلة ثالثة'],
+            ])
+            ->assertHasNoActionErrors();
+
+        $this->assertSame('مرحلة ثالثة', Matter::where('parent_id', $this->parent->id)->sole()->custom_fields['المرحلة']);
+    }
+
+    public function test_required_custom_fields_filled_in_the_open_form_pass(): void
+    {
+        foreach (['المرحلة', 'Case phase', 'مرحلة القضية'] as $label) {
+            $field = MatterFieldDefinition::create(['label' => $label, 'type' => 'text_input', 'required' => true, 'show_in_supplementary' => true]);
+            $this->type->fieldDefinitions()->attach($field->id);
+        }
+
+        Livewire::test(ViewMatter::class, ['record' => $this->parent->getRouteKey()])
+            ->mountAction('clone')
+            ->fillForm([
+                'number' => 1010, 'year' => 2026, 'received_at' => '2026-10-20', 'distributed_at' => '2026-10-20', 'next_session_date' => '2026-10-27',
+                'level' => $this->parent->level?->value ?? 'first_instance',
+                'custom_fields' => ['Stage' => 'b', 'المرحلة' => 'مرحلة ثالثة', 'Case phase' => 'third', 'مرحلة القضية' => 'ثالثة'],
+            ])
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        $this->assertEquals(['المرحلة' => 'مرحلة ثالثة', 'Case phase' => 'third', 'مرحلة القضية' => 'ثالثة'], collect(Matter::where('parent_id', $this->parent->id)->sole()->custom_fields)->only(['المرحلة', 'Case phase', 'مرحلة القضية'])->all());
+    }
+
+    public function test_typing_in_a_required_custom_field_one_field_at_a_time_passes(): void
+    {
+        $field = MatterFieldDefinition::create(['label' => 'المرحلة', 'type' => 'text_input', 'required' => true, 'show_in_supplementary' => true]);
+        $this->type->fieldDefinitions()->attach($field->id);
+
+        $page = Livewire::test(ViewMatter::class, ['record' => $this->parent->getRouteKey()])->mountAction('clone');
+
+        // As the browser sends it: each field's own path.
+        foreach ([
+            'number' => '1010', 'year' => '2026', 'received_at' => '2026-10-20', 'distributed_at' => '2026-10-20', 'next_session_date' => '2026-10-27',
+            'level' => $this->parent->level?->value ?? 'first_instance',
+            'custom_fields.Stage' => 'b', 'custom_fields.المرحلة' => 'مرحلة ثالثة',
+        ] as $path => $value) {
+            $page->set('mountedActions.0.data.'.$path, $value);
+        }
+
+        $page->callMountedAction()->assertHasNoActionErrors();
+        $this->assertSame('مرحلة ثالثة', Matter::where('parent_id', $this->parent->id)->sole()->custom_fields['المرحلة']);
+    }
+
+    public function test_the_real_phase_dropdown_passes_when_a_phase_is_chosen(): void
+    {
+        $phase = MatterFieldDefinition::create([
+            'label' => 'المرحلة', 'type' => 'select_input', 'required' => true, 'show_in_supplementary' => true,
+            'options' => ['First' => 'مرحلة أولي ', 'Third' => 'مرحلة ثالثة', 'Second' => 'مرحلة ثانية'],
+        ]);
+        $this->type->fieldDefinitions()->attach($phase->id);
+        $this->parent->update(['custom_fields' => [...$this->parent->custom_fields, 'المرحلة' => 'Second']]);
+
+        $page = Livewire::test(ViewMatter::class, ['record' => $this->parent->getRouteKey()])->mountAction('clone');
+
+        // Starts from the parent's phase.
+        $page->assertSchemaStateSet(['custom_fields' => fn ($state) => ($state['المرحلة'] ?? null) === 'Second'], 'mountedActionSchema0');
+
+        foreach ([
+            'number' => '1010', 'year' => '2026', 'received_at' => '2026-10-20', 'distributed_at' => '2026-10-20', 'next_session_date' => '2026-10-27',
+            'level' => $this->parent->level?->value ?? 'first_instance',
+            'custom_fields.Stage' => 'b', 'custom_fields.المرحلة' => 'Third',
+        ] as $path => $value) {
+            $page->set('mountedActions.0.data.'.$path, $value);
+        }
+
+        $page->callMountedAction()->assertHasNoActionErrors();
+        $this->assertSame('Third', Matter::where('parent_id', $this->parent->id)->sole()->custom_fields['المرحلة']);
+    }
+
+    public function test_a_phase_saved_as_the_old_label_is_read_as_its_option(): void
+    {
+        $phase = MatterFieldDefinition::create([
+            'label' => 'المرحلة', 'type' => 'select_input', 'required' => true, 'show_in_supplementary' => true,
+            'options' => ['First' => 'مرحلة أولي ', 'Third' => 'مرحلة ثالثة', 'Second' => 'مرحلة ثانية'],
+        ]);
+        $this->type->fieldDefinitions()->attach($phase->id);
+        // Saved before the options had keys of their own: the label itself.
+        $this->parent->update(['custom_fields' => [...$this->parent->custom_fields, 'المرحلة' => 'مرحلة ثانية']]);
+
+        $page = Livewire::test(ViewMatter::class, ['record' => $this->parent->getRouteKey()])->mountAction('clone');
+
+        foreach ([
+            'number' => '1010', 'year' => '2026', 'received_at' => '2026-10-20', 'distributed_at' => '2026-10-20', 'next_session_date' => '2026-10-27',
+            'level' => $this->parent->level?->value ?? 'first_instance',
+            'custom_fields.Stage' => 'b',
+        ] as $path => $value) {
+            $page->set('mountedActions.0.data.'.$path, $value);
+        }
+
+        // Left as it was: the option it means (Second), not an error.
+        $page->assertSchemaStateSet(['custom_fields' => fn ($state) => ($state['المرحلة'] ?? null) === 'Second'], 'mountedActionSchema0')
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+        $this->assertSame('Second', Matter::where('parent_id', $this->parent->id)->sole()->custom_fields['المرحلة']);
+    }
+
+    public function test_a_dropdown_prints_its_label_and_old_labels_can_be_put_right(): void
+    {
+        $phase = MatterFieldDefinition::create([
+            'label' => 'المرحلة', 'type' => 'select_input', 'required' => true,
+            'options' => ['First' => 'مرحلة أولي ', 'Third' => 'مرحلة ثالثة', 'Second' => 'مرحلة ثانية'],
+        ]);
+        $this->type->fieldDefinitions()->attach($phase->id);
+
+        $byKey = Matter::factory()->create(['type_id' => $this->type->id, 'custom_fields' => ['المرحلة' => 'Third']]);
+        $byLabel = Matter::factory()->create(['type_id' => $this->type->id, 'custom_fields' => ['المرحلة' => 'مرحلة ثانية']]);
+        $unknown = Matter::factory()->create(['type_id' => $this->type->id, 'custom_fields' => ['المرحلة' => 'Fourth']]);
+
+        // The label, whichever way it was saved — not the key.
+        $placeholder = fn (Matter $m): string => \App\Services\MMS\BulkMailPlaceholders::forMatter($m->fresh())['matter.custom.المرحلة'];
+        $this->assertSame('مرحلة ثالثة', $placeholder($byKey));
+        $this->assertSame('مرحلة ثانية', $placeholder($byLabel));
+        $this->assertSame('Fourth', $placeholder($unknown));
+        $this->assertSame('مرحلة أولي', $phase->displayValue('First'));
+
+        // The repair: only what is a label becomes its key.
+        $this->artisan('matters:normalize-custom-selects', ['--dry-run' => true])->assertSuccessful();
+        $this->assertSame('مرحلة ثانية', $byLabel->fresh()->custom_fields['المرحلة']);
+
+        $this->artisan('matters:normalize-custom-selects')->assertSuccessful();
+        $this->assertSame('Second', $byLabel->fresh()->custom_fields['المرحلة']);
+        $this->assertSame('Third', $byKey->fresh()->custom_fields['المرحلة']);
+        $this->assertSame('Fourth', $unknown->fresh()->custom_fields['المرحلة']);
+    }
+
     public function test_a_type_with_none_marked_asks_for_nothing(): void
     {
         MatterFieldDefinition::query()->update(['show_in_supplementary' => false]);
