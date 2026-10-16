@@ -127,7 +127,7 @@ class MatterForm
                                         ->required()
                                         ->live(),
                                     Group::make()
-                                        ->schema(function (Get $get) {
+                                        ->schema(function (Get $get, Set $set) {
                                             $typeId = $get('type_id');
                                             if (! $typeId) {
                                                 return [];
@@ -138,14 +138,11 @@ class MatterForm
                                                 return [];
                                             }
 
-                                            $fields = $type->fieldDefinitions;
-                                            $components = [];
-
-                                            foreach ($fields as $field) {
-                                                $components[] = CustomFieldInput::make($field);
-                                            }
-
-                                            return $components;
+                                            return CustomFieldInput::components(
+                                                $type->fieldDefinitions,
+                                                (array) ($get('custom_fields') ?? []),
+                                                fn (array $slots) => $set('custom_fields', $slots),
+                                            );
                                         })
                                         ->columns(2)
                                         ->columnSpanFull(),

@@ -220,6 +220,37 @@ class SupplementaryMatterFieldsTest extends TestCase
         $this->assertSame('Fourth', $unknown->fresh()->custom_fields['المرحلة']);
     }
 
+    public function test_every_custom_field_has_its_place_in_the_form_data_so_a_choice_can_be_sent(): void
+    {
+        // The fields are drawn after the form was filled: each is given its place, empty, once.
+        $fields = $this->type->fieldDefinitions()->get();
+        $set = null;
+        $components = \App\Filament\Support\CustomFieldInput::components($fields, ['Phase' => 'p1'], function (array $slots) use (&$set): void {
+            $set = $slots;
+        });
+
+        $this->assertCount(3, $components);
+        $this->assertSame(['Phase' => 'p1', 'Stage' => null, 'Notes' => null], collect($set)->only(['Phase', 'Stage', 'Notes'])->sortKeys()->sortBy(fn ($v, $k) => ['Phase' => 0, 'Stage' => 1, 'Notes' => 2][$k])->all());
+
+        // Nothing missing: nothing set.
+        $set = null;
+        \App\Filament\Support\CustomFieldInput::components($fields, ['Phase' => null, 'Stage' => 'a', 'Notes' => ''], function (array $slots) use (&$set): void {
+            $set = $slots;
+        });
+        $this->assertNull($set);
+    }
+
+    public function test_the_supplementary_form_has_a_place_for_a_field_the_parent_has_no_value_for(): void
+    {
+        $phase = MatterFieldDefinition::create(['label' => 'المرحلة', 'type' => 'select_input', 'required' => true, 'show_in_supplementary' => true, 'options' => ['First' => 'مرحلة أولي']]);
+        $this->type->fieldDefinitions()->attach($phase->id);
+
+        // The parent has none saved for it.
+        Livewire::test(ViewMatter::class, ['record' => $this->parent->getRouteKey()])
+            ->mountAction('clone')
+            ->assertSchemaStateSet(['custom_fields' => fn ($state) => array_key_exists('المرحلة', (array) $state)], 'mountedActionSchema0');
+    }
+
     public function test_a_type_with_none_marked_asks_for_nothing(): void
     {
         MatterFieldDefinition::query()->update(['show_in_supplementary' => false]);
