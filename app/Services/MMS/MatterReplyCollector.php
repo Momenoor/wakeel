@@ -13,6 +13,7 @@ use App\Models\MatterParty;
 use App\Models\Party;
 use App\Models\Setting;
 use App\Models\User;
+use BezhanSalleh\FilamentShield\Support\Utils;
 use Carbon\CarbonInterface;
 use Closure;
 use Filament\Actions\Action;
@@ -54,6 +55,9 @@ class MatterReplyCollector
 
     /** @var array<int, array{matter: int, label: string, url: string, downloads: list<array{name: string, url: string}>}> matters whose emails were kept in the system only (they have no OneDrive folder), with the files to download and put there by hand */
     private array $unlinked = [];
+
+    /** The original email (.eml) is kept when it is no bigger than this. */
+    private const MAX_ORIGINAL_BYTES = 25 * 1024 * 1024;
 
     public function __construct(
         private readonly SentFolder $mailboxes,
@@ -192,6 +196,7 @@ class MatterReplyCollector
                 if ($answers = self::answers($message, $sent)) {
                     if ($matterId === null || (int) $answers->matter_id === $matterId) {
                         $this->keep($answers, $message, $id);
+                        $this->markRead($message);
                         $kept['replies']++;
                     }
 
@@ -209,9 +214,11 @@ class MatterReplyCollector
 
                 if ($match['matter'] !== null && ($matterId === null || $match['matter'] === $matterId)) {
                     $this->keepIncoming(Matter::findOrFail($match['matter']), $message, $id, $senderKey, $match['by']);
+                    $this->markRead($message);
                     $kept['emails']++;
                 } elseif ($match['matter'] === null && $match['candidates'] !== [] && $matterId === null) {
                     $this->hold($message, $id, $senderKey, $match['candidates']);
+                    $this->markRead($message);
                     $kept['unfiled']++;
                 }
             } catch (Throwable $e) {
@@ -270,6 +277,27 @@ class MatterReplyCollector
     }
 
     /**
+     * A message that is kept in the system is read in the mailbox too, so the
+     * inbox shows what is still to be looked at. Never stops the collecting: a
+     * mailbox that does not allow it (Microsoft 365 needs Mail.ReadWrite) is
+     * only logged.
+     *
+     * @param  array<string, mixed>  $message
+     */
+    private function markRead(array $message): void
+    {
+        if (! ($message['mark_read'] ?? null) instanceof Closure) {
+            return;
+        }
+
+        try {
+            ($message['mark_read'])();
+        } catch (Throwable $e) {
+            Log::info('Email not marked as read in the mailbox: '.$e->getMessage(), ['message' => $message['message_id'] ?? null]);
+        }
+    }
+
+    /**
      * A reply, kept.
      *
      * @param  array<string, mixed>  $message
@@ -283,10 +311,11 @@ class MatterReplyCollector
             'matter_id' => $matter?->getKey(),
             'parent_id' => $answers->getKey(),
         ]);
-        [$pdf, $files, $name] = $this->rendered($message, (string) $answers->sender_key, true);
+        [$pdf, $files, $name, $source] = $this->rendered($message, (string) $answers->sender_key, true);
+        $sourceSaved = false;
 
         if ($matter) {
-            $kept = $this->keepOnMatter($matter, $pdf, $files, $name, $answers->user_id);
+            $kept = $this->keepOnMatter($matter, $pdf, $files, $name, $answers->user_id, $source, $sourceSaved);
             $this->noteUnlinked($matter, $kept);
             MatterProgressRecorder::replyReceived($reply->setRelation('parent', $answers));
             // Whoever they put in To or CC: theirs, on this matter.
@@ -297,7 +326,7 @@ class MatterReplyCollector
         }
 
         // Where each went — for the campaign's recipients list to open.
-        $reply->update(['files' => $kept]);
+        $reply->update(['files' => $kept, 'eml_saved' => $sourceSaved]);
         $this->tell($reply, $answers, count($files));
     }
 
@@ -310,10 +339,10 @@ class MatterReplyCollector
     private function keepIncoming(Matter $matter, array $message, string $id, string $senderKey, ?string $by): void
     {
         $email = $this->record($message, $id, $senderKey, ['matter_id' => $matter->getKey(), 'status' => MatterEmail::FILED, 'matched_by' => $by]);
-        [$pdf, $files, $name] = $this->rendered($message, $senderKey, false);
+        [$pdf, $files, $name, $source] = $this->rendered($message, $senderKey, false);
 
-        $kept = $this->keepOnMatter($matter, $pdf, $files, $name, null);
-        $email->update(['files' => $kept]);
+        $kept = $this->keepOnMatter($matter, $pdf, $files, $name, null, $source, $sourceSaved);
+        $email->update(['files' => $kept, 'eml_saved' => $sourceSaved]);
         MatterProgressRecorder::emailReceived($email);
         MatterContact::learn($email);
         $this->tellMatter($email, $matter, count($files), $this->noteUnlinked($matter, $kept));
@@ -329,9 +358,9 @@ class MatterReplyCollector
     private function hold(array $message, string $id, string $senderKey, array $candidates): void
     {
         $email = $this->record($message, $id, $senderKey, ['status' => MatterEmail::PENDING, 'candidates' => $candidates]);
-        [$pdf, $files, $name] = $this->rendered($message, $senderKey, false);
+        [$pdf, $files, $name, $source] = $this->rendered($message, $senderKey, false);
 
-        $email->update(['files' => $this->keepLoose('email-unfiled/'.$email->getKey(), $pdf, $files, $name)]);
+        $email->update(['files' => $this->keepLoose('email-unfiled/'.$email->getKey(), $pdf, $files, $name, $source)]);
         $this->tellUnfiled($email);
     }
 
@@ -345,6 +374,7 @@ class MatterReplyCollector
         $stored = (array) ($email->files ?? []);
         $pdf = $stored[0] ?? null;
         $kept = [];
+        $sourceSaved = false;
 
         foreach ($stored as $i => $file) {
             $path = (string) ($file['path'] ?? '');
@@ -355,6 +385,14 @@ class MatterReplyCollector
             // The PDF in the received-emails folder; the files it came with
             // in a folder of the PDF's name beside it.
             $folder = MatterOneDriveFolders::receivedEmailsFolder();
+            // The original email (.eml) goes to OneDrive only, beside the PDF; it is not kept in the system.
+            if (($file['kind'] ?? null) === MatterEmail::SOURCE) {
+                $sourceSaved = $this->archive->keepInOneDrive($matter, (string) $file['name'], (string) $disk->get($path), 'message/rfc822', $folder);
+                $disk->delete($path);
+
+                continue;
+            }
+
             $subfolder = $i === 0 || $folder === '' ? $folder : $folder.'/'.pathinfo((string) ($pdf['name'] ?? ''), PATHINFO_FILENAME);
             $kept[] = ['name' => (string) $file['name'], 'path' => $this->archive->keepFile($matter, (string) $file['name'], (string) $disk->get($path), (string) ($disk->mimeType($path) ?: 'application/octet-stream'), $subfolder, $userId)];
             $disk->delete($path);
@@ -364,11 +402,15 @@ class MatterReplyCollector
             'matter_id' => $matter->getKey(),
             'status' => MatterEmail::FILED,
             'matched_by' => MatterEmail::BY_HAND,
+            'eml_saved' => $sourceSaved,
             'files' => array_values(array_filter($kept, fn (array $file) => filled($file['path']))),
         ]);
 
         MatterProgressRecorder::emailReceived($email, $userId);
         MatterContact::learn($email);
+
+        // As for an email put on its matter by itself: its people hear of it — but not who chose it.
+        $this->tellMatter($email, $matter, max(count($kept) - 1, 0), $this->noteUnlinked($matter, $kept), $userId);
     }
 
     /** A held email that is no matter's: set aside, its files gone. */
@@ -407,7 +449,7 @@ class MatterReplyCollector
      * for the party who sent it.
      *
      * @param  array<string, mixed>  $message
-     * @return array{0: string, 1: list<array{name: string, contents: string, mime?: string}>, 2: string}
+     * @return array{0: string, 1: list<array{name: string, contents: string, mime?: string}>, 2: string, 3: ?string} the PDF, the files, the name, and the original email (.eml) when the mailbox gives it
      */
     private function rendered(array $message, string $senderKey, bool $reply): array
     {
@@ -431,7 +473,7 @@ class MatterReplyCollector
             (string) (SenderMailer::all()[$senderKey]['name'] ?? $senderKey),
         );
 
-        return [$pdf, $files, SentEmailArchive::emailName(false, self::partyName($from) ?? $fromName, (string) ($message['subject'] ?? ''), $at, $reply)];
+        return [$pdf, $files, SentEmailArchive::emailName(false, self::partyName($from) ?? $fromName, (string) ($message['subject'] ?? ''), $at, $reply), self::original($message)];
     }
 
     /**
@@ -439,15 +481,23 @@ class MatterReplyCollector
      * came with in a folder of the same name beside it. Where each went.
      *
      * @param  list<array{name: string, contents: string, mime?: string}>  $files
+     * @param  ?string  $source  the original email (.eml), kept beside the PDF
+     * @param  bool  $sourceSaved  set to whether the original reached the matter's OneDrive
      * @return list<array{name: string, path: string}>
      */
-    private function keepOnMatter(Matter $matter, string $pdf, array $files, string $name, ?int $userId): array
+    private function keepOnMatter(Matter $matter, string $pdf, array $files, string $name, ?int $userId, ?string $source = null, &$sourceSaved = null): array
     {
+        $sourceSaved = false;
         $folder = MatterOneDriveFolders::receivedEmailsFolder();
         $kept = [['name' => $name.'.pdf', 'path' => $this->archive->keepFile($matter, $name.'.pdf', $pdf, 'application/pdf', $folder, $userId)]];
 
         foreach ($files as $file) {
             $kept[] = ['name' => (string) $file['name'], 'path' => $this->archive->keepFile($matter, (string) $file['name'], (string) $file['contents'], (string) ($file['mime'] ?? 'application/octet-stream'), $folder !== '' ? $folder.'/'.$name : '', $userId)];
+        }
+
+        // The original email goes to OneDrive only, beside the PDF — nowhere in the system.
+        if ($source !== null) {
+            $sourceSaved = $this->archive->keepInOneDrive($matter, $name.'.eml', $source, 'message/rfc822', $folder);
         }
 
         return array_values(array_filter($kept, fn (array $file) => filled($file['path'])));
@@ -459,7 +509,7 @@ class MatterReplyCollector
      * @param  list<array{name: string, contents: string, mime?: string}>  $files
      * @return list<array{name: string, path: string}>
      */
-    private function keepLoose(string $folder, string $pdf, array $files, string $name): array
+    private function keepLoose(string $folder, string $pdf, array $files, string $name, ?string $source = null): array
     {
         $kept = [['name' => $name.'.pdf', 'path' => $this->archive->keepLoose($folder, $name.'.pdf', $pdf)]];
 
@@ -467,7 +517,34 @@ class MatterReplyCollector
             $kept[] = ['name' => (string) $file['name'], 'path' => $this->archive->keepLoose($folder.'/'.$name, (string) $file['name'], (string) $file['contents'])];
         }
 
+        if ($source !== null) {
+            $kept[] = ['kind' => MatterEmail::SOURCE, 'name' => $name.'.eml', 'path' => $this->archive->keepLoose($folder, $name.'.eml', $source)];
+        }
+
         return $kept;
+    }
+
+    /**
+     * The email exactly as it came (RFC 822, the .eml an email program opens) —
+     * null when the mailbox does not give it, or it is too big to keep twice.
+     *
+     * @param  array<string, mixed>  $message
+     */
+    private static function original(array $message): ?string
+    {
+        if (! ($message['raw'] ?? null) instanceof Closure) {
+            return null;
+        }
+
+        try {
+            $raw = (string) ($message['raw'])();
+        } catch (Throwable $e) {
+            Log::info('Original email not read: '.$e->getMessage(), ['message' => $message['message_id'] ?? null]);
+
+            return null;
+        }
+
+        return $raw !== '' && strlen($raw) <= self::MAX_ORIGINAL_BYTES ? $raw : null;
     }
 
     /** A message's body or files, read the first time asked for only. */
@@ -558,18 +635,35 @@ class MatterReplyCollector
     {
         $partyIds = MatterParty::query()->whereIn('matter_id', $matterIds)->where('role', 'expert')->pluck('party_id');
 
-        return User::query()->whereIn('id', Party::query()->whereIn('id', $partyIds)->whereNotNull('user_id')->select('user_id'))->get();
+        $people = User::query()->whereIn('id', Party::query()->whereIn('id', $partyIds)->whereNotNull('user_id')->select('user_id'))->get();
+
+        // The super admins hear of every email that arrives too.
+        return $people->merge(self::superAdmins())->unique('id')->values();
+    }
+
+    /**
+     * @return Collection<int, User>
+     */
+    private static function superAdmins(): Collection
+    {
+        try {
+            return User::role(Utils::getSuperAdminName())->get();
+        } catch (Throwable) {
+            // No such role set up (yet).
+            return new Collection;
+        }
     }
 
     /** The matter's people: told of a party's email kept on it. */
     /**
      * @param  list<array{name: string, url: string}>  $downloads  when the matter has no OneDrive folder: the email's files, to download and put there by hand
+     * @param  int|null  $exceptUserId  not told: whoever filed it by hand
      */
-    private function tellMatter(MatterEmail $email, Matter $matter, int $files, array $downloads = []): void
+    private function tellMatter(MatterEmail $email, Matter $matter, int $files, array $downloads = [], ?int $exceptUserId = null): void
     {
         $notInOneDrive = $downloads !== [];
         $downloads = array_values(array_filter($downloads, fn (array $file) => filled($file['url'])));
-        $users = self::matterUsers([(int) $matter->getKey()]);
+        $users = self::matterUsers([(int) $matter->getKey()])->reject(fn (User $user): bool => $exceptUserId !== null && $user->getKey() === $exceptUserId);
         if ($users->isEmpty()) {
             return;
         }
@@ -650,6 +744,7 @@ class MatterReplyCollector
         foreach ($headers as $header) {
             $from = collect($header->get('from')?->all() ?? [])->first(fn ($a) => $a instanceof Address);
             $uid = (int) $header->uid;
+            $whole = self::once(fn () => $inbox->query()->leaveUnread()->setFetchFlags(false)->getMessageByUid($uid));
 
             yield [
                 'message_id' => (string) $header->getMessageId(),
@@ -660,13 +755,14 @@ class MatterReplyCollector
                 'to' => self::imapAddresses($header, 'to'),
                 'cc' => self::imapAddresses($header, 'cc'),
                 'at' => $header->getDate()->toDate()->toDateTimeString(),
-                'body' => function () use ($inbox, $uid): string {
-                    $message = $inbox->query()->leaveUnread()->setFetchFlags(false)->getMessageByUid($uid);
+                // The whole message, fetched once however many of these are asked for.
+                'body' => function () use ($whole): string {
+                    $message = $whole();
 
                     return $message->hasHTMLBody() ? $message->getHTMLBody() : nl2br(e($message->getTextBody()));
                 },
-                'attachments' => function () use ($inbox, $uid): array {
-                    $message = $inbox->query()->leaveUnread()->setFetchFlags(false)->getMessageByUid($uid);
+                'attachments' => function () use ($whole): array {
+                    $message = $whole();
                     $files = [];
 
                     foreach ($message->getAttachments() as $attachment) {
@@ -683,6 +779,16 @@ class MatterReplyCollector
                     }
 
                     return $files;
+                },
+                // The email as it came: its header, a blank line, its body.
+                'raw' => function () use ($whole): string {
+                    $message = $whole();
+
+                    return rtrim((string) $message->getHeader()?->raw, "\r\n")."\r\n\r\n".$message->getRawBody();
+                },
+                // Seen in the mailbox, like one opened there.
+                'mark_read' => function () use ($inbox, $uid): void {
+                    $inbox->query()->leaveUnread()->setFetchBody(false)->setFetchFlags(false)->getMessageByUid($uid)->setFlag('Seen');
                 },
             ];
         }
@@ -738,6 +844,20 @@ class MatterReplyCollector
                     'cc' => array_values(array_filter(array_map(fn ($r) => $r['emailAddress']['address'] ?? null, $item['ccRecipients'] ?? []))),
                     'at' => (string) ($item['receivedDateTime'] ?? now()->toIso8601String()),
                     'body' => ($item['body']['contentType'] ?? 'html') === 'html' ? (string) ($item['body']['content'] ?? '') : nl2br(e((string) ($item['body']['content'] ?? ''))),
+                    // The email as it came (MIME).
+                    'raw' => function () use ($base, $graphId): string {
+                        $response = Http::withToken($this->graph->getAccessToken())->timeout(120)->get($base.'/messages/'.rawurlencode($graphId).'/$value');
+
+                        return $response->successful() ? $response->body() : '';
+                    },
+                    // Read in the mailbox too — needs the Mail.ReadWrite application permission.
+                    'mark_read' => function () use ($base, $graphId, $mailbox): void {
+                        $response = Http::withToken($this->graph->getAccessToken())->timeout(20)->patch($base.'/messages/'.rawurlencode($graphId), ['isRead' => true]);
+
+                        if ($response->status() === 403) {
+                            throw new RuntimeException(__('Microsoft 365 refused to mark emails as read in :mailbox: the app registration needs the Mail.ReadWrite application permission, with admin consent.', ['mailbox' => $mailbox]));
+                        }
+                    },
                     'attachments' => function () use ($base, $graphId, $item): array {
                         if (! ($item['hasAttachments'] ?? false)) {
                             return [];

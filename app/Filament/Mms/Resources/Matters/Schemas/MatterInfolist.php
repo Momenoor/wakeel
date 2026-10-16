@@ -12,6 +12,7 @@ use App\Filament\Mms\Resources\CalendarEvents\CalendarEventResource;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\BulkMailRelationManager;
+use App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager;
 use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
 use App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager;
 use App\Filament\Mms\Resources\Matters\RelationManagers\ProgressRelationManager;
@@ -213,6 +214,17 @@ class MatterInfolist
                                     'ownerRecord' => $record,
                                     'pageClass' => ViewMatter::class,
                                 ])->key('matter-bulk-mail'),
+                            ]),
+                        // Its email log: sent from it, and came in from its parties.
+                        Tab::make(__('Emails'))
+                            ->icon('heroicon-o-inbox')
+                            ->visible(fn ($record): bool => ScreenPermissions::can(ScreenPermissions::MATTER_EMAILS_TAB)
+                                && EmailsRelationManager::canViewForRecord($record, ViewMatter::class))
+                            ->schema([
+                                Livewire::make(EmailsRelationManager::class, fn ($record) => [
+                                    'ownerRecord' => $record,
+                                    'pageClass' => ViewMatter::class,
+                                ])->key('matter-emails'),
                             ]),
                         // Everyone it dealt with, and how to reach them.
                         Tab::make(__('Contacts'))

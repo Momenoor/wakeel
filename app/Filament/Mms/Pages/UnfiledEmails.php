@@ -114,7 +114,7 @@ class UnfiledEmails extends Page implements HasTable
                     ->label(__('Subject'))
                     ->searchable()
                     ->weight('bold')
-                    ->description(fn (MatterEmail $record): ?string => ($n = max(count((array) $record->files) - 1, 0))
+                    ->description(fn (MatterEmail $record): ?string => ($n = count($record->attachmentFiles()))
                         ? trans_choice(':count file|:count files', $n, ['count' => $n]) : null)
                     ->wrap(),
                 TextColumn::make('candidates')

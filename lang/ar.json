@@ -3987,5 +3987,20 @@
     "A template for all types except the ones it is left out for.": "قالب لكل الأنواع عدا الأنواع المستثناة منه.",
     "Folder for finished matters in their OneDrive": "مجلد القضايا المنتهية في OneDrive الخاص به",
     "When a matter is finished, its folder is moved here and the matter link follows it. Leave empty to keep the folders of finished matters where they are.": "عند انتهاء القضية (تقديم التقرير النهائي) يُنقل مجلدها إلى هذا المجلد ويتبعه رابط القضية. اتركه فارغاً لإبقاء مجلدات القضايا المنتهية في مكانها.",
-    "Left out for this type": "مستثناة من هذا النوع"
+    "Left out for this type": "مستثناة من هذا النوع",
+    "Direction": "الاتجاه",
+    "From / To": "من / إلى",
+    "Matter known by": "عُرفت القضية من",
+    "Open the email": "فتح البريد",
+    "No emails yet": "لا توجد رسائل بريد بعد",
+    "Emails sent from this matter, and those that come in from its parties, are listed here.": "تُعرض هنا رسائل البريد الصادرة من هذه القضية والواردة من أطرافها.",
+    "the email as PDF": "البريد بصيغة PDF",
+    "No file was kept for this email.": "لم يُحفظ أي ملف لهذا البريد.",
+    "Microsoft 365 refused to mark emails as read in :mailbox: the app registration needs the Mail.ReadWrite application permission, with admin consent.": "رفض Microsoft 365 وضع علامة «مقروء» على الرسائل في :mailbox: يحتاج تسجيل التطبيق إلى صلاحية التطبيق Mail.ReadWrite مع موافقة المسؤول.",
+    "PDF": "PDF",
+    "EML": "EML",
+    "Not saved": "غير محفوظ",
+    "Saved in OneDrive": "محفوظ في OneDrive",
+    "The original email, saved in the matter's OneDrive": "البريد الأصلي، محفوظ في OneDrive الخاص بالقضية",
+    ":count attachment|:count attachments": ":count مرفق|:count مرفقات"
 }

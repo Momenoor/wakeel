@@ -70,6 +70,8 @@ final class ScreenPermissions
 
     public const MATTER_BULK_MAIL_TAB = 'View:MatterBulkMailTab';
 
+    public const MATTER_EMAILS_TAB = 'View:MatterEmailsTab';
+
     public const MATTER_CONTACTS_TAB = 'View:MatterContactsTab';
 
     // ── Matters list tabs ────────────────────────────────────────────────
@@ -158,6 +160,7 @@ final class ScreenPermissions
             self::MATTER_MINUTES_TAB => $matterViewers,
             self::MATTER_PROGRESS_TAB => $matterViewers,
             self::MATTER_BULK_MAIL_TAB => $matterViewers,
+            self::MATTER_EMAILS_TAB => $matterViewers,
             self::MATTER_CONTACTS_TAB => $matterViewers,
 
             self::MATTERS_ALL_TAB => $matterListers,

@@ -216,6 +216,158 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertSame(MatterEmail::PENDING, MatterEmail::query()->latest('id')->first()->status);
     }
 
+    /** An assistant (a user with a profile) on the matter. */
+    private function assistantOn(Matter $matter): User
+    {
+        $user = User::factory()->create();
+        $party = Party::factory()->assistant()->create(['user_id' => $user->id]);
+        MatterParty::create(['matter_id' => $matter->id, 'party_id' => $party->id, 'role' => 'expert', 'type' => 'assistant']);
+
+        return $user;
+    }
+
+    public function test_an_email_that_arrives_is_told_to_the_assistant_and_the_super_admins_by_default(): void
+    {
+        $assistant = $this->assistantOn($this->second);
+        $otherAdmin = User::factory()->create()->assignRole('super-admin');
+        $stranger = User::factory()->create();
+
+        // Filed by itself: the number in the subject.
+        $this->collect($this->email(['subject' => 'مستندات القضية 987/2026']));
+
+        $this->assertSame(1, $assistant->notifications()->count());
+        $this->assertSame(1, $this->user->notifications()->count());
+        $this->assertSame(1, $otherAdmin->notifications()->count());
+        $this->assertSame(0, $stranger->notifications()->count());
+
+        // Waiting for a person to choose: the assistants of the matters it may be about, and the super admins, are asked.
+        $this->assistantOn($this->first);
+        $this->collect($this->email(['message_id' => '<pending-1@albanna.ae>']));
+        $this->assertSame(2, $otherAdmin->notifications()->count());
+        $this->assertTrue($otherAdmin->notifications()->get()->contains(fn ($note) => str_starts_with((string) ($note->data['title'] ?? ''), 'Which matter is this email from')));
+    }
+
+    public function test_filing_by_hand_tells_the_people_of_the_matter_but_not_who_filed_it(): void
+    {
+        $assistant = $this->assistantOn($this->first);
+        $this->collect($this->email());
+        $email = MatterEmail::sole();
+        $assistant->notifications()->delete();
+        $this->user->notifications()->delete();
+        $otherAdmin = User::factory()->create()->assignRole('super-admin');
+
+        Livewire::test(UnfiledEmails::class)->callTableAction('file', $email, ['matter_id' => $this->first->id]);
+
+        $this->assertSame(1, $assistant->notifications()->count());
+        $this->assertSame(1, $otherAdmin->notifications()->count());
+        // $this->user filed it.
+        $this->assertSame(0, $this->user->notifications()->count());
+    }
+
+    public function test_the_matter_lists_its_emails_sent_and_received_each_to_open(): void
+    {
+        $this->collect($this->email(['subject' => 'مستندات القضية 987/2026']));
+        MatterEmail::recordSent($this->second->id, null, 'iflas', 'sent-1', 'خطاب إلى المحكمة', ['court@dubai.ae'], $this->user->id);
+        // Waiting for a matter, and set aside: not on any.
+        $this->collect($this->email(['message_id' => '<pending-1@albanna.ae>']));
+        $received = MatterEmail::where('direction', MatterEmail::RECEIVED)->where('matter_id', $this->second->id)->sole();
+        $sent = MatterEmail::where('direction', MatterEmail::SENT)->sole();
+
+        $page = Livewire::test(\App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager::class, [
+            'ownerRecord' => $this->second,
+            'pageClass' => \App\Filament\Mms\Resources\Matters\Pages\ViewMatter::class,
+        ]);
+
+        $page->assertCanSeeTableRecords([$received, $sent])
+            ->assertCountTableRecords(2)
+            ->filterTable('direction', MatterEmail::RECEIVED)
+            ->assertCanSeeTableRecords([$received])
+            ->assertCanNotSeeTableRecords([$sent])
+            ->removeTableFilters();
+
+        // What was kept of each: the PDF, the original (.eml, in OneDrive), the files it came with.
+        $page->assertTableColumnStateSet('pdf_saved', 'Saved', $received)
+            ->assertTableColumnStateSet('eml_saved', 'Not saved', $received)
+            ->assertTableColumnStateSet('attachments', '1 attachment', $received)
+            ->assertTableColumnStateSet('pdf_saved', null, $sent)
+            ->assertTableColumnStateSet('eml_saved', null, $sent)
+            ->assertTableColumnStateSet('attachments', null, $sent);
+        $received->update(['eml_saved' => true]);
+        Livewire::test(\App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager::class, [
+            'ownerRecord' => $this->second,
+            'pageClass' => \App\Filament\Mms\Resources\Matters\Pages\ViewMatter::class,
+        ])->assertTableColumnStateSet('eml_saved', 'Saved', $received);
+
+        // The PDF of one that came in opens; its details list the files it came with.
+        $page->assertTableActionVisible('open', $received)
+            ->assertTableActionHidden('open', $sent)
+            ->assertTableActionExists('view', record: $received);
+
+        $details = view('filament.mms.matter-email', [
+            'email' => $received->load('user'),
+            'files' => [['name' => 'x.pdf', 'url' => 'https://x/x.pdf'], ['name' => 'عقد.pdf', 'url' => 'https://x/c.pdf']],
+        ])->render();
+        $this->assertStringContainsString('عقد.pdf', $details);
+        $this->assertMatchesRegularExpression('/PDF.*?Saved.*?EML.*?Saved in OneDrive.*?Attachments.*?>1</s', $details);
+        $this->assertStringContainsString(__('the email as PDF'), $details);
+        $this->assertStringContainsString(e($received->from), $details);
+        $this->assertStringContainsString('/storage/attachments/emails/'.$this->second->id, Storage::disk('public')->url($received->files[0]['path']));
+    }
+    public function test_a_collected_email_is_marked_read_in_the_mailbox_and_its_original_is_kept_as_eml(): void
+    {
+        $read = [];
+        $mark = function (string $which) use (&$read): \Closure {
+            return function () use (&$read, $which): void {
+                $read[] = $which;
+            };
+        };
+        $eml = "From: office@albanna.ae\r\nSubject: =?UTF-8?B?2YXYs9iq2YbYr9in2Ko=?=\r\n\r\nbody";
+
+        // Filed by itself, waiting for a person, and not about any matter: only the first two are collected.
+        $this->collect(
+            $this->email(['subject' => 'مستندات 987/2026', 'raw' => fn () => $eml, 'mark_read' => $mark('filed')]),
+            $this->email(['message_id' => '<held@albanna.ae>', 'raw' => fn () => $eml, 'mark_read' => $mark('held')]),
+            $this->email(['message_id' => '<stranger@x.com>', 'from' => 'nobody@x.com', 'raw' => fn () => $eml, 'mark_read' => $mark('stranger')]),
+        );
+
+        $this->assertEqualsCanonicalizing(['filed', 'held'], $read);
+
+        // The original email goes to OneDrive only, beside its PDF — not into the system.
+        $filed = MatterEmail::where('status', MatterEmail::FILED)->sole();
+        $this->assertNull(collect($filed->files)->firstWhere('kind', MatterEmail::SOURCE));
+        $this->assertSame([], $this->second->attachments()->where('name', 'like', '%.eml')->pluck('name')->all());
+        // (Only the held one, aside for now.)
+        $this->assertSame([], array_values(array_filter(Storage::disk('public')->allFiles(), fn (string $path) => str_ends_with($path, '.eml') && ! str_starts_with($path, 'email-unfiled'))));
+        $this->assertTrue(collect($this->uploads)->contains(fn (string $url) => str_contains($url, '.eml:/content')));
+        $this->assertCount(1, $filed->attachmentFiles());
+        $this->assertTrue($filed->eml_saved);
+
+        // Held: kept aside with it for the time being, and filed by hand, it goes to OneDrive and is gone from the system.
+        $held = MatterEmail::where('status', MatterEmail::PENDING)->sole();
+        $this->assertSame('source', collect($held->files)->last()['kind']);
+        $uploads = count($this->uploads);
+        Livewire::test(UnfiledEmails::class)->callTableAction('file', $held, ['matter_id' => $this->first->id]);
+
+        $held->refresh();
+        $this->assertTrue($held->eml_saved);
+        $this->assertNull(collect($held->files)->firstWhere('kind', 'source'));
+        $this->assertSame([], $this->first->attachments()->where('name', 'like', '%.eml')->pluck('name')->all());
+        $this->assertCount($uploads + 3, $this->uploads);
+        $this->assertTrue(collect(array_slice($this->uploads, $uploads))->contains(fn (string $url) => str_contains($url, '.eml:/content')));
+        $this->assertSame([], Storage::disk('public')->allFiles('email-unfiled'));
+        $this->assertCount(1, $held->attachmentFiles());
+    }
+
+    public function test_an_email_whose_mailbox_refuses_marking_read_is_still_kept(): void
+    {
+        $this->collect($this->email([
+            'subject' => 'مستندات 987/2026',
+            'mark_read' => fn () => throw new \RuntimeException('Microsoft 365 refused'),
+        ]));
+
+        $this->assertSame(MatterEmail::FILED, MatterEmail::sole()->status);
+    }
+
     public function test_a_matter_with_no_onedrive_folder_gets_the_email_to_download_by_hand(): void
     {
         \App\Models\Setting::set(\App\Services\MMS\MatterOneDriveFolders::ENABLED, true, 'onedrive');

@@ -30,6 +30,9 @@ class MatterEmail extends Model
     /** Not about any matter, a person said. */
     public const DISMISSED = 'dismissed';
 
+    /** A file entry that is the original email (.eml), not one it came with. */
+    public const SOURCE = 'source';
+
     /** How an incoming email's matter was known. */
     public const BY_SUBJECT = 'subject_reference';
 
@@ -41,7 +44,7 @@ class MatterEmail extends Model
 
     public const BY_HAND = 'hand';
 
-    protected $fillable = ['matter_id', 'direction', 'status', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'cc', 'files', 'candidates', 'matched_by', 'at', 'user_id'];
+    protected $fillable = ['matter_id', 'direction', 'status', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'cc', 'files', 'eml_saved', 'candidates', 'matched_by', 'at', 'user_id'];
 
     protected function casts(): array
     {
@@ -49,6 +52,7 @@ class MatterEmail extends Model
             'to' => 'array',
             'cc' => 'array',
             'files' => 'array',
+            'eml_saved' => 'boolean',
             'candidates' => 'array',
             'at' => 'datetime',
         ];
@@ -79,6 +83,20 @@ class MatterEmail extends Model
         } catch (Throwable $e) {
             Log::warning('Matter email not recorded: '.$e->getMessage());
         }
+    }
+
+    /**
+     * The files an email came with: not its PDF (the first kept) nor its original (.eml).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function attachmentFiles(): array
+    {
+        return collect((array) ($this->files ?? []))
+            ->skip(1)
+            ->filter(fn ($file): bool => ($file['kind'] ?? null) !== self::SOURCE)
+            ->values()
+            ->all();
     }
 
     public static function matchedByLabel(?string $how): string

@@ -115,21 +115,35 @@ class SentEmailArchive
             }
         }
 
+        $this->keepInOneDrive($matter, $name, $contents, $mime, $subfolder);
+
+        return $path;
+    }
+
+    /**
+     * A file into a subfolder of the matter's OneDrive folder, and nowhere
+     * else. Whether it was saved there: false when the matter has no folder,
+     * there is no subfolder to put it in, or OneDrive refused.
+     */
+    public function keepInOneDrive(Matter $matter, string $name, string $contents, string $mime, string $subfolder): bool
+    {
         $folder = trim($subfolder);
         if ($folder === '') {
-            return $path;
+            return false;
         }
 
         try {
             // As named — a "/" in it no folder.
+            $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
             $base = $extension !== '' ? Str::beforeLast($name, '.'.pathinfo($name, PATHINFO_EXTENSION)) : $name;
             $fileName = MatterOneDriveExplorer::cleanName($base).($extension !== '' ? '.'.$extension : '');
-            $this->folders->uploadToSubfolder($matter, $folder, $fileName, $contents, $mime);
+
+            return $this->folders->uploadToSubfolder($matter, $folder, $fileName, $contents, $mime) !== null;
         } catch (Throwable $e) {
             Log::warning('Email file not saved in OneDrive', ['matter' => $matter->getKey(), 'error' => $e->getMessage()]);
-        }
 
-        return $path;
+            return false;
+        }
     }
 
     /**

@@ -82,6 +82,7 @@ return [
         'view_matter_minutes_tab' => 'تبويب القضية: المحاضر',
         'view_matter_progress_tab' => 'تبويب القضية: سير العمل',
         'view_matter_bulk_mail_tab' => 'تبويب القضية: البريد الجماعي',
+        'view_matter_emails_tab' => 'تبويب القضية: البريد',
         'view_matter_contacts_tab' => 'تبويب القضية: جهات الاتصال',
         'view_matters_all_tab' => 'تبويب القضايا: الكل',
         'view_matters_in_progress_tab' => 'تبويب القضايا: قيد العمل',
