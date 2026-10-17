@@ -2,6 +2,8 @@
 
 namespace App\Filament\Shared\Pages\Schemas;
 
+use App\Services\MMS\CollectedEmailUndo;
+use App\Services\MMS\MatterReplyCollector;
 use App\Support\Integrations;
 use BezhanSalleh\FilamentShield\Support\Utils;
 use Closure;
@@ -9,7 +11,6 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
-use App\Services\MMS\MatterReplyCollector;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Section;
@@ -81,7 +82,16 @@ class IntegrationsSettingsTab
                         // Whether the scheduler really runs: the automatic email check is one of its tasks.
                         TextEntry::make('last_email_check')
                             ->label(__('Last automatic email check'))
-                            ->state(fn (): string => MatterReplyCollector::lastRunSummary()),
+                            ->state(fn (): string => MatterReplyCollector::lastRunSummary())
+                            ->hintAction(self::undoCollectedAction()),
+                        TextInput::make(MatterReplyCollector::LOOK_BACK)
+                            ->label(__('Read the inboxes back (days)'))
+                            ->numeric()
+                            ->integer()
+                            ->minValue(1)
+                            ->maxValue(MatterReplyCollector::MAX_LOOK_BACK)
+                            ->required()
+                            ->helperText(__('How far back a mailbox is read the first time, for one matter, or after the checks stopped for a while. Each check still reads a little at a time — a long period is caught up over several checks, never in one long one.')),
                         Toggle::make(MatterReplyCollector::KEEP_ALL)
                             ->label(__('Keep every email of the inbox'))
                             ->helperText(__("Off: only replies and emails from a matter's parties are kept. On: every other email too (except the office's own) goes to Unfiled emails, to file on a matter or set aside.")),
@@ -148,6 +158,48 @@ class IntegrationsSettingsTab
                 }
 
                 Notification::make()->success()->title(__('Turned off'))->send();
+            });
+    }
+
+    /**
+     * The emails collected in the last hours undone, as if never collected — then read again from
+     * the inboxes by the next check. Super admins only.
+     */
+    private static function undoCollectedAction(): Action
+    {
+        return Action::make('undoCollectedEmails')
+            ->label(__('Undo recent emails'))
+            ->icon(Heroicon::ArrowUturnLeft)
+            ->color('danger')
+            ->link()
+            ->visible(fn (): bool => auth()->user()?->hasRole(Utils::getSuperAdminName()) ?? false)
+            ->requiresConfirmation()
+            ->modalHeading(__('Undo the emails collected recently?'))
+            ->modalDescription(fn (): string => __('Emails collected in the last 2 hours: :count.', ['count' => CollectedEmailUndo::since(2)->count()]).' '
+                .__("Their PDFs and files are removed from the system and the matters' OneDrive (its recycle bin), with their steps in the progress. Those that were unread in the mailbox before are made unread again; the others stay as they are. The next check collects them again."))
+            ->schema([
+                TextInput::make('hours')
+                    ->label(__('Collected in the last (hours)'))
+                    ->numeric()
+                    ->integer()
+                    ->minValue(1)
+                    ->maxValue(72)
+                    ->default(2)
+                    ->required(),
+            ])
+            ->modalSubmitActionLabel(__('Undo them'))
+            ->action(function (array $data): void {
+                $result = app(CollectedEmailUndo::class)->undo((int) $data['hours']);
+
+                Notification::make()
+                    ->title(trans_choice('{0} No emails to undo.|{1} 1 email undone.|[2,*] :count emails undone.', $result['undone'], ['count' => $result['undone']]))
+                    ->body(collect([
+                        $result['unread'] ? __(':count made unread again in the mailbox.', ['count' => $result['unread']]) : null,
+                        $result['errors'] ? __('Not undone: :errors', ['errors' => implode(' | ', $result['errors'])]) : null,
+                    ])->filter()->implode(' '))
+                    ->{$result['errors'] ? 'warning' : 'success'}()
+                    ->persistent()
+                    ->send();
             });
     }
 

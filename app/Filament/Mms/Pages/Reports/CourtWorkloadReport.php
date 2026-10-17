@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Pages\Reports;
 
 use App\Enums\FeeType;
+use App\Filament\Concerns\PrintableReport;
 use App\Filament\Mms\Clusters\Reports;
 use App\Models\Court;
 use App\Support\ReportDateRangeFilter;
@@ -29,7 +30,7 @@ use Illuminate\Database\Eloquent\Builder;
  */
 class CourtWorkloadReport extends Page implements HasTable
 {
-    use HasPageShield;
+    use HasPageShield, PrintableReport;
     use InteractsWithTable;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-building-library';
@@ -37,8 +38,6 @@ class CourtWorkloadReport extends Page implements HasTable
     protected static ?string $cluster = Reports::class;
 
     protected static ?int $navigationSort = 4;
-
-    protected string $view = 'filament.pages.court-workload-report';
 
     public static function getNavigationLabel(): string
     {

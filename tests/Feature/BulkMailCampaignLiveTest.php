@@ -14,6 +14,7 @@ use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
+use Tests\Support\MailSenders;
 use Tests\TestCase;
 
 /**
@@ -32,7 +33,7 @@ class BulkMailCampaignLiveTest extends TestCase
     {
         parent::setUp();
 
-        \Tests\Support\MailSenders::add('test', [
+        MailSenders::add('test', [
             'username' => 'sender@example.com', 'address' => 'sender@example.com', 'name' => 'Test Sender',
             'password' => 'secret', 'host' => 'mail.example.com', 'port' => 587, 'encryption' => 'tls',
         ]);
@@ -64,6 +65,13 @@ class BulkMailCampaignLiveTest extends TestCase
 
         Livewire::test(ViewBulkMailCampaign::class, ['record' => $this->campaign->getRouteKey()])
             ->assertDontSeeHtml('refreshCampaign');
+
+        // Paused on the page itself: the poll goes at once (not left to pause, then double up).
+        $this->campaign->update(['status' => BulkMailCampaignStatus::Active]);
+        Livewire::test(ViewBulkMailCampaign::class, ['record' => $this->campaign->getRouteKey()])
+            ->assertSeeHtml('wire:poll.10s="refreshCampaign"')
+            ->callAction('pause_campaign')
+            ->assertDontSeeHtml('wire:poll.10s="refreshCampaign"');
     }
 
     public function test_with_pusher_the_poll_is_only_a_slow_safety_net(): void

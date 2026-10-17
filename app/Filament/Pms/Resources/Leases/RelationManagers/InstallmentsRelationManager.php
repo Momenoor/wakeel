@@ -5,6 +5,7 @@ namespace App\Filament\Pms\Resources\Leases\RelationManagers;
 use App\Enums\PMS\InstallmentPaymentMethod;
 use App\Enums\PMS\InstallmentPaymentStatus;
 use App\Filament\Concerns\HasRelationManagerPermission;
+use App\Filament\Support\EntryTable;
 use App\Models\Installment;
 use App\Models\Lease;
 use App\Services\MMS\PaymentService;
@@ -16,8 +17,10 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Support\Enums\FontWeight;
 use Filament\Tables\Columns\Summarizers\Sum;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -182,9 +185,17 @@ class InstallmentsRelationManager extends RelationManager
             ->icon('heroicon-o-list-bullet')
             ->color('gray')
             ->visible(fn (Installment $record): bool => $record->payments()->exists())
-            ->modalContent(fn (Installment $record) => view('filament.pms.leases.installment-payments-modal', [
-                'payments' => $record->payments()->orderByDesc('paid_date')->get(),
-            ]))
+            ->schema(fn (Installment $record): array => [
+                EntryTable::make('payments', [
+                    TextEntry::make('paid_date')->label(__('Paid Date'))->date('d/m/Y'),
+                    TextEntry::make('amount')->label(Currency::label(__('Amount (AED)')))->aed()->weight(FontWeight::SemiBold),
+                    TextEntry::make('payment_method')->label(__('Method'))->placeholder('—'),
+                    TextEntry::make('transaction_reference')->label(__('Cheque / Ref.'))->color('gray')->placeholder('—'),
+                    TextEntry::make('bank_name')->label(__('Bank'))->color('gray')->placeholder('—'),
+                ])
+                    ->state($record->payments()->orderByDesc('paid_date')->get())
+                    ->placeholder(__('No payments recorded yet.')),
+            ])
             ->modalSubmitAction(false)
             ->modalCancelActionLabel(__('Close'));
     }

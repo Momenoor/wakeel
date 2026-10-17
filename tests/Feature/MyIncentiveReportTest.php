@@ -196,6 +196,14 @@ class MyIncentiveReportTest extends TestCase
             ->filterTable('calculation', $january->id)
             ->assertCanSeeTableRecords([$januaryLine])
             ->assertCanNotSeeTableRecords([$februaryLine]);
+
+        // Picked and applied on the page: the summary above the table follows at once, not a step behind.
+        Livewire::test(MyIncentiveReport::class)
+            ->assertSee('700.00')
+            ->set('tableDeferredFilters.calculation.value', $january->id)
+            ->call('applyTableFilters')
+            ->assertCanSeeTableRecords([$januaryLine])
+            ->assertDontSee('700.00');
     }
 
     public function test_period_totals_come_from_this_assistants_own_extras(): void
@@ -236,6 +244,37 @@ class MyIncentiveReportTest extends TestCase
         $this->assertEquals(300.0, $page->shareTotal());
         // 300 earned less the 20 fixed deduction.
         $this->assertEquals(280.0, $page->netTotal());
+    }
+
+    public function test_the_period_summary_shows_above_the_table(): void
+    {
+        $this->allowEverything();
+
+        [$user, $mine] = $this->assistantUser();
+        $calculation = $this->calculation(name: 'March period');
+        $this->lineFor($calculation, $mine, 300);
+
+        IncentiveAssistantExtra::create([
+            'incentive_calculation_id' => $calculation->id,
+            'party_id' => $mine->id,
+            'completed_matter_count' => 1,
+            'meets_minimum' => false,
+            'extra_amount' => 50,
+            'extra_percentage' => 5,
+            'penalty_amount' => 0,
+            'fixed_deduction' => 20,
+            'fixed_deduction_reason' => 'Late reports',
+        ]);
+
+        $this->actingAs($user);
+
+        Livewire::test(MyIncentiveReport::class)
+            ->assertOk()
+            ->assertSee('March period')
+            ->assertSee(__('Net Total'))
+            ->assertSee('(+5.00%)')
+            ->assertSee('Late reports')
+            ->assertSee(__('This period did not reach the minimum number of completed matters, so a penalty was applied.'));
     }
 
     public function test_an_assistant_may_print_their_own_statement_but_not_another_persons(): void

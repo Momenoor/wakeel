@@ -92,6 +92,33 @@ class SystemUpdatesTest extends TestCase
             ->assertSee('New reports');
     }
 
+    public function test_a_running_update_shows_its_steps_and_a_failed_one_its_retry(): void
+    {
+        License::factory()->create(['latest_version' => '1.2.0']);
+        $updater = app(Updater::class);
+        $this->startAfter($updater, '1.2.0', ['preflight']);
+        $steps = array_values($updater->steps());
+
+        Livewire::test(SystemUpdates::class)
+            ->assertSee(__('Updating to :version', ['version' => '1.2.0']))
+            ->assertSee($steps[0])
+            ->assertSee($steps[1])
+            ->assertSee(__('Done'))
+            ->assertSee(__('Pending'))
+            // The step loop starts in the browser.
+            ->assertSee('x-init="handleErrorsHere(); start()"', false)
+            ->assertDontSee(__('Retry failed step'));
+
+        $state = $updater->state();
+        $state['failed'] = true;
+        Setting::set(Updater::STATE_KEY, $state, 'system', 'json');
+
+        Livewire::test(SystemUpdates::class)
+            ->assertSee(__('Failed'))
+            ->assertSee(__('Retry failed step'))
+            ->assertSeeHtml('x-on:click="$wire.retryStep().then(');
+    }
+
     public function test_only_super_admins_can_open_the_page(): void
     {
         $this->actingAs(User::factory()->create());
@@ -296,5 +323,23 @@ class SystemUpdatesTest extends TestCase
         $state = $updater->state();
         $state['completed'] = $completed;
         Setting::set(Updater::STATE_KEY, $state, 'system', 'json');
+    }
+
+    public function test_the_page_shows_the_update_running_right_after_update_now_and_not_after_cancel(): void
+    {
+        License::factory()->create(['latest_version' => '1.2.0']);
+
+        // Drawn after the action has run: the steps and their loop at once, not on the next reload.
+        $page = Livewire::test(SystemUpdates::class)
+            ->assertDontSeeHtml('handleErrorsHere(); start()')
+            ->callAction('update')
+            ->assertSeeHtml('handleErrorsHere(); start()');
+
+        // A step failed, then the update cancelled: the steps go at once.
+        $state = app(Updater::class)->state();
+        Setting::set(Updater::STATE_KEY, ['failed' => true] + $state, 'system', 'json');
+        $page->call('refreshState')
+            ->callAction('abandon')
+            ->assertDontSeeHtml('handleErrorsHere(); start()');
     }
 }

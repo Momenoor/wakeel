@@ -4,24 +4,36 @@ namespace Tests\Feature;
 
 use App\Enums\ProgressType;
 use App\Filament\Mms\Pages\UnfiledEmails;
+use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
+use App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager;
+use App\Models\MailSender;
 use App\Models\Matter;
 use App\Models\MatterEmail;
 use App\Models\MatterOneDriveFolder;
 use App\Models\MatterParty;
+use App\Models\MatterProgress;
 use App\Models\Party;
+use App\Models\Setting;
+use App\Models\Type;
 use App\Models\User;
+use App\Services\MMS\CollectedEmailUndo;
 use App\Services\MMS\IncomingEmailMatcher;
+use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterReplyCollector;
 use App\Services\MMS\SentFolder;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\HtmlString;
 use Livewire\Livewire;
 use Mockery;
 use Spatie\Permission\Models\Role;
+use Tests\Support\FakeOneDrive;
+use Tests\Support\MailSenders;
 use Tests\TestCase;
 
 /**
@@ -51,7 +63,7 @@ class IncomingMatterEmailsTest extends TestCase
 
         Storage::fake('public');
         $this->withoutDefer();
-        \Tests\Support\MailSenders::add('iflas', ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
+        MailSenders::add('iflas', ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
         config([
             'services.outlook' => ['tenant_id' => 'tenant', 'client_id' => 'client', 'client_secret' => 'secret'],
         ]);
@@ -162,7 +174,7 @@ class IncomingMatterEmailsTest extends TestCase
         // The matters it may be about, as a bullet list — in the table and in the note to the people who can choose.
         Livewire::test(UnfiledEmails::class)
             ->assertTableColumnExists('candidates', fn ($column) => $column->isBulleted() && $column->isListWithLineBreaks() && ! $column->isBadge(), $email);
-        $body = \App\Services\MMS\MatterReplyCollector::bullets(['Subject', new \Illuminate\Support\HtmlString('It may be about:'.\App\Services\MMS\MatterReplyCollector::bullets(['2026/1', '2026/2'])->toHtml())])->toHtml();
+        $body = MatterReplyCollector::bullets(['Subject', new HtmlString('It may be about:'.MatterReplyCollector::bullets(['2026/1', '2026/2'])->toHtml())])->toHtml();
         $this->assertStringContainsString('<li>It may be about:<ul', $body);
         $this->assertSame(2, substr_count($body, '<ul'));
 
@@ -278,9 +290,9 @@ class IncomingMatterEmailsTest extends TestCase
         $received = MatterEmail::where('direction', MatterEmail::RECEIVED)->where('matter_id', $this->second->id)->sole();
         $sent = MatterEmail::where('direction', MatterEmail::SENT)->sole();
 
-        $page = Livewire::test(\App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager::class, [
+        $page = Livewire::test(EmailsRelationManager::class, [
             'ownerRecord' => $this->second,
-            'pageClass' => \App\Filament\Mms\Resources\Matters\Pages\ViewMatter::class,
+            'pageClass' => ViewMatter::class,
         ]);
 
         $page->assertCanSeeTableRecords([$received, $sent])
@@ -313,16 +325,22 @@ class IncomingMatterEmailsTest extends TestCase
             ->assertTableActionHidden('open', $sent)
             ->assertTableActionExists('view', record: $received);
 
-        $details = view('filament.mms.matter-email', [
-            'email' => $received->load('user'),
-            'files' => [['name' => 'x.pdf', 'url' => 'https://x/x.pdf'], ['name' => 'عقد.pdf', 'url' => 'https://x/c.pdf']],
-        ])->render();
-        $this->assertStringContainsString('عقد.pdf', $details);
-        $this->assertMatchesRegularExpression('/PDF in OneDrive.*?Saved.*?EML in OneDrive.*?Not saved.*?Attachments in OneDrive.*?Saved/s', $details);
-        $this->assertStringContainsString(__('the email as PDF'), $details);
-        $this->assertStringContainsString(e($received->from), $details);
+        $page->mountTableAction('view', $received)
+            ->assertMountedActionModalSee([
+                $received->files[0]['name'].' ('.__('the email as PDF').')',
+                MatterEmail::fileUrl($received->files[0]['path']),
+                $received->from,
+                'PDF in OneDrive', 'EML in OneDrive', 'Not saved', 'Attachments in OneDrive',
+            ])
+            ->assertMountedActionModalDontSee(__('No file was kept for this email.'));
+        // Each OneDrive line with its own value, in order, inside the window.
+        $modal = $page->getMountedActionModalHtml();
+        $this->assertMatchesRegularExpression('/PDF in OneDrive.*?'.preg_quote((string) $received->oneDriveLabel('pdf'), '/')
+            .'.*?EML in OneDrive.*?'.preg_quote((string) $received->oneDriveLabel('eml'), '/')
+            .'.*?Attachments in OneDrive.*?'.preg_quote((string) $received->oneDriveLabel('attachments'), '/').'/s', $modal);
         $this->assertStringContainsString('/storage/attachments/emails/'.$this->second->id, Storage::disk('public')->url($received->files[0]['path']));
     }
+
     public function test_a_collected_email_is_marked_read_in_the_mailbox_and_its_original_is_kept_as_eml(): void
     {
         $read = [];
@@ -383,11 +401,11 @@ class IncomingMatterEmailsTest extends TestCase
         $this->collect($this->email(['subject' => 'مستندات القضية 987/2026']));
         $email = MatterEmail::where('status', MatterEmail::FILED)->sole();
         $stem = pathinfo($email->files[0]['name'], PATHINFO_FILENAME);
-        $received = \App\Services\MMS\MatterOneDriveFolders::receivedEmailsFolder();
+        $received = MatterOneDriveFolders::receivedEmailsFolder();
         $email->update(['onedrive' => null]);
 
         // OneDrive has the PDF and the file it came with — not the original.
-        Http::swap(new \Illuminate\Http\Client\Factory);
+        Http::swap(new Factory);
         Http::fake(function (Request $request) use ($stem, $received) {
             $url = rawurldecode($request->url());
 
@@ -403,7 +421,7 @@ class IncomingMatterEmailsTest extends TestCase
             };
         });
 
-        $this->assertTrue(app(\App\Services\MMS\MatterOneDriveFolders::class)->checkEmails($this->second, [$email]));
+        $this->assertTrue(app(MatterOneDriveFolders::class)->checkEmails($this->second, [$email]));
 
         $email->refresh();
         $this->assertSame([true, false, 1], [$email->onedrive['pdf'], $email->onedrive['eml'], $email->onedrive['attachments']]);
@@ -412,14 +430,14 @@ class IncomingMatterEmailsTest extends TestCase
 
         // No OneDrive folder on the matter: nothing to read, nothing changed.
         MatterOneDriveFolder::query()->where('matter_id', $this->second->id)->delete();
-        $this->assertFalse(app(\App\Services\MMS\MatterOneDriveFolders::class)->checkEmails($this->second, [$email]));
+        $this->assertFalse(app(MatterOneDriveFolders::class)->checkEmails($this->second, [$email]));
     }
 
     public function test_an_email_is_saved_in_the_folder_structure_set_for_the_matter(): void
     {
         $this->second->update(['custom_fields' => ['phase' => 'التنفيذ']]);
-        \App\Models\Setting::set(\App\Services\MMS\MatterOneDriveFolders::RECEIVED_EMAILS, '{{matter.custom.phase}}/01 system + 02/{{matter.plaintiff_capacity}}', 'onedrive');
-        \App\Models\Setting::clearCache();
+        Setting::set(MatterOneDriveFolders::RECEIVED_EMAILS, '{{matter.custom.phase}}/01 system + 02/{{matter.plaintiff_capacity}}', 'onedrive');
+        Setting::clearCache();
 
         $this->collect($this->email(['subject' => 'مستندات القضية 987/2026']));
 
@@ -429,7 +447,7 @@ class IncomingMatterEmailsTest extends TestCase
             ->map(fn ($pair) => $pair[0]->data()['name'] ?? null)
             ->values()
             ->all();
-        $capacity = \App\Models\Type::sideLabel($this->second->type, 'plaintiff');
+        $capacity = Type::sideLabel($this->second->type, 'plaintiff');
         $this->assertSame(['التنفيذ', '01 system + 02', $capacity], array_slice($made, 0, 3));
 
         // And what is saved there is found there.
@@ -439,8 +457,8 @@ class IncomingMatterEmailsTest extends TestCase
 
     public function test_emails_of_a_day_are_saved_in_that_days_folder(): void
     {
-        \App\Models\Setting::set(\App\Services\MMS\MatterOneDriveFolders::RECEIVED_EMAILS, 'واردة/{{day}}', 'onedrive');
-        \App\Models\Setting::clearCache();
+        Setting::set(MatterOneDriveFolders::RECEIVED_EMAILS, 'واردة/{{day}}', 'onedrive');
+        Setting::clearCache();
 
         $this->collect(
             $this->email(['subject' => 'القضية 987/2026 أولى', 'at' => '2026-10-16 09:00:00']),
@@ -461,18 +479,18 @@ class IncomingMatterEmailsTest extends TestCase
         $emails = MatterEmail::where('status', MatterEmail::FILED)->orderBy('at')->get();
         $this->assertSame(
             ['واردة/2026-10-16', 'واردة/2026-10-16', 'واردة/2026-10-17'],
-            $emails->map(fn (MatterEmail $e) => \App\Services\MMS\MatterOneDriveFolders::receivedEmailsFolderFor($this->second, $e->at))->all(),
+            $emails->map(fn (MatterEmail $e) => MatterOneDriveFolders::receivedEmailsFolderFor($this->second, $e->at))->all(),
         );
     }
 
     public function test_with_only_the_day_as_the_structure_the_email_goes_in_that_days_folder_not_the_main_folder(): void
     {
-        $od = (new \Tests\Support\FakeOneDrive)->install();
+        $od = (new FakeOneDrive)->install();
         // The matter's folder, really there.
         $main = $od->ensure('Work/Matters/2026-987');
-        \App\Models\MatterOneDriveFolder::where('matter_id', $this->second->id)->update(['drive_item_id' => $main]);
-        \App\Models\Setting::set(\App\Services\MMS\MatterOneDriveFolders::RECEIVED_EMAILS, '{{day}}', 'onedrive');
-        \App\Models\Setting::clearCache();
+        MatterOneDriveFolder::where('matter_id', $this->second->id)->update(['drive_item_id' => $main]);
+        Setting::set(MatterOneDriveFolders::RECEIVED_EMAILS, '{{day}}', 'onedrive');
+        Setting::clearCache();
 
         $this->collect($this->email(['subject' => 'مستندات القضية 987/2026', 'at' => '2026-10-16 09:00:00']));
 
@@ -486,7 +504,7 @@ class IncomingMatterEmailsTest extends TestCase
 
     public function test_with_no_onedrive_folder_the_file_it_came_with_is_kept_in_the_system_so_it_is_not_lost(): void
     {
-        \App\Models\MatterOneDriveFolder::query()->where('matter_id', $this->second->id)->delete();
+        MatterOneDriveFolder::query()->where('matter_id', $this->second->id)->delete();
 
         $this->collect($this->email(['subject' => 'مستندات القضية 987/2026']));
 
@@ -500,7 +518,7 @@ class IncomingMatterEmailsTest extends TestCase
 
     public function test_a_matter_with_no_onedrive_folder_gets_the_email_to_download_by_hand(): void
     {
-        \App\Models\Setting::set(\App\Services\MMS\MatterOneDriveFolders::ENABLED, true, 'onedrive');
+        Setting::set(MatterOneDriveFolders::ENABLED, true, 'onedrive');
         MatterOneDriveFolder::query()->where('matter_id', $this->second->id)->delete();
         // Someone to tell: a person of the matter.
         $user = User::factory()->create();
@@ -595,11 +613,11 @@ class IncomingMatterEmailsTest extends TestCase
 
     public function test_an_email_filed_on_the_wrong_matter_is_moved_with_its_files_and_progress(): void
     {
-        $od = (new \Tests\Support\FakeOneDrive)->install();
+        $od = (new FakeOneDrive)->install();
         MatterOneDriveFolder::where('matter_id', $this->first->id)->update(['drive_item_id' => $od->ensure('Work/2026-986')]);
         MatterOneDriveFolder::where('matter_id', $this->second->id)->update(['drive_item_id' => $od->ensure('Work/2026-987')]);
-        \App\Models\Setting::set(\App\Services\MMS\MatterOneDriveFolders::RECEIVED_EMAILS, 'واردة', 'onedrive');
-        \App\Models\Setting::clearCache();
+        Setting::set(MatterOneDriveFolders::RECEIVED_EMAILS, 'واردة', 'onedrive');
+        Setting::clearCache();
 
         $this->collect($this->email(['subject' => 'مستندات القضية 986/2026']));
         $email = MatterEmail::sole();
@@ -607,9 +625,9 @@ class IncomingMatterEmailsTest extends TestCase
         $inFirst = $od->names('Work/2026-986/واردة');
         $this->assertNotEmpty($inFirst);
 
-        Livewire::test(\App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager::class, [
+        Livewire::test(EmailsRelationManager::class, [
             'ownerRecord' => $this->first,
-            'pageClass' => \App\Filament\Mms\Resources\Matters\Pages\ViewMatter::class,
+            'pageClass' => ViewMatter::class,
         ])->callTableAction('move', $email, ['matter_id' => $this->second->id])->assertHasNoTableActionErrors();
 
         $email->refresh();
@@ -621,12 +639,54 @@ class IncomingMatterEmailsTest extends TestCase
         // Its PDF with the other matter's attachments; its step in the other's progress.
         $this->assertSame(0, $this->first->attachments()->where('path', $email->files[0]['path'])->count());
         $this->assertSame(1, $this->second->attachments()->where('path', $email->files[0]['path'])->count());
-        $this->assertSame([$this->second->id], \App\Models\MatterProgress::query()->where('source_id', $email->id)->where('source_type', $email->getMorphClass())->pluck('matter_id')->all());
+        $this->assertSame([$this->second->id], MatterProgress::query()->where('source_id', $email->id)->where('source_type', $email->getMorphClass())->pluck('matter_id')->all());
+    }
+
+    public function test_emails_collected_in_the_last_hours_are_undone_and_read_again_from_then(): void
+    {
+        $od = (new FakeOneDrive)->install();
+        MatterOneDriveFolder::where('matter_id', $this->first->id)->update(['drive_item_id' => $od->ensure('Work/2026-986')]);
+        Setting::set(MatterOneDriveFolders::RECEIVED_EMAILS, 'واردة', 'onedrive');
+        Setting::clearCache();
+
+        // One that was unread in the mailbox, one already read, one collected long ago.
+        $this->collect(
+            $this->email(['subject' => 'مستندات 986/2026', 'message_id' => '<unread@albanna.ae>', 'was_read' => false]),
+            $this->email(['subject' => 'ملاحظات 986/2026', 'message_id' => '<read@albanna.ae>', 'was_read' => true]),
+        );
+        $this->collect($this->email(['subject' => 'قديم 986/2026', 'message_id' => '<old@albanna.ae>']));
+        $old = MatterEmail::where('message_id', 'old@albanna.ae')->sole();
+        $old->forceFill(['created_at' => now()->subHours(5)])->saveQuietly();
+        $unread = MatterEmail::where('message_id', 'unread@albanna.ae')->sole();
+        $this->assertSame([true, false], [$unread->was_unread, MatterEmail::where('message_id', 'read@albanna.ae')->sole()->was_unread]);
+        $this->assertNotEmpty($od->names('Work/2026-986/واردة'));
+        Setting::set(MatterReplyCollector::checkedKey('iflas'), now()->toDateTimeString(), 'mail');
+
+        // Made unread again: only the one that was unread.
+        $collector = Mockery::mock(MatterReplyCollector::class);
+        $collector->shouldReceive('markUnread')->once()->withArgs(fn (MatterEmail $e) => $e->message_id === 'unread@albanna.ae')->andReturn(true);
+        $this->app->instance(MatterReplyCollector::class, $collector);
+
+        $result = app(CollectedEmailUndo::class)->undo(2);
+
+        $this->assertSame(['undone' => 2, 'unread' => 1, 'errors' => []], $result);
+        // The two gone, with their files, attachments and steps; the old one kept.
+        $this->assertSame([$old->id], MatterEmail::pluck('id')->all());
+        $this->assertSame(1, $this->first->attachments()->count());
+        $this->assertSame(1, MatterProgress::query()->where('source_type', $old->getMorphClass())->count());
+        // In OneDrive only the old one's PDF is left.
+        $pdfs = array_values(array_filter($od->names('Work/2026-986/واردة'), fn ($n) => str_ends_with($n, '.pdf')));
+        $this->assertCount(1, $pdfs);
+        $this->assertStringContainsString('قديم', $pdfs[0]);
+        // Read again from then, and at once.
+        $this->assertTrue(now()->subHours(2)->subMinute()->lt(Setting::get(MatterReplyCollector::checkedKey('iflas'))));
+        $this->assertTrue(now()->subHours(2)->addMinute()->gt(Setting::get(MatterReplyCollector::checkedKey('iflas'))));
+        $this->assertTrue(MatterReplyCollector::isDue());
     }
 
     public function test_set_to_keep_every_email_a_strangers_goes_to_unfiled_to_file_on_any_matter(): void
     {
-        \App\Models\Setting::set(MatterReplyCollector::KEEP_ALL, true, 'mail');
+        Setting::set(MatterReplyCollector::KEEP_ALL, true, 'mail');
 
         // A stranger's; still never the office's own mailbox's, nor one with no id.
         $this->collect(
@@ -646,16 +706,21 @@ class IncomingMatterEmailsTest extends TestCase
         $third = MatterEmail::query()->where('sender_key', 'noreply')->sole();
         Livewire::test(UnfiledEmails::class)
             ->assertSee('third@gmail.com')
-            // Each tab, clicked, opens its mailbox.
-            ->assertSeeHtml('wire:click="$set(\'mailbox\', \'noreply\')"')
-            ->assertSeeHtml('wire:click="$set(\'mailbox\', \'\')"')
-            ->set('mailbox', 'noreply')->assertCanSeeTableRecords([$third])->assertCanNotSeeTableRecords([$email])
-            ->set('mailbox', 'iflas')->assertCanSeeTableRecords([$email])->assertCanNotSeeTableRecords([$third])
-            ->set('mailbox', '')->assertCanSeeTableRecords([$email, $third]);
+            // Filament's tabs: each opens its mailbox.
+            ->assertSeeHtml('fi-tabs-item')->assertSee('noreply')
+            ->set('activeTab', 'noreply')->assertCanSeeTableRecords([$third])->assertCanNotSeeTableRecords([$email])
+            ->set('activeTab', 'iflas')->assertCanSeeTableRecords([$email])->assertCanNotSeeTableRecords([$third])
+            ->set('activeTab', UnfiledEmails::ALL)->assertCanSeeTableRecords([$email, $third]);
         $tabs = Livewire::test(UnfiledEmails::class)->instance()->mailboxTabs();
-        $this->assertSame([2, 1, 1], [$tabs['']['count'], $tabs['iflas']['count'], $tabs['noreply']['count']]);
+        $this->assertSame([2, 1, 1], [$tabs[UnfiledEmails::ALL]['count'], $tabs['iflas']['count'], $tabs['noreply']['count']]);
+        // Set aside on the page: the counts follow at once, not on the next visit.
+        $page = Livewire::test(UnfiledEmails::class);
+        $this->assertEquals(2, $page->instance()->getCachedTabs()[UnfiledEmails::ALL]->getBadge());
+        $page->callTableAction('dismiss', $third);
+        $this->assertEquals(1, $page->instance()->getCachedTabs()[UnfiledEmails::ALL]->getBadge());
+        $third->refresh();
         // Every mailbox of the list has its tab, with nothing waiting in it too.
-        \App\Models\MailSender::create(['driver' => \App\Models\MailSender::MICROSOFT, 'address' => 'empty@jpa.ae', 'name' => 'Empty box', 'key' => 'empty', 'is_active' => true]);
+        MailSender::create(['driver' => MailSender::MICROSOFT, 'address' => 'empty@jpa.ae', 'name' => 'Empty box', 'key' => 'empty', 'is_active' => true]);
         $this->assertSame(['label' => 'Empty box', 'count' => 0], Livewire::test(UnfiledEmails::class)->instance()->mailboxTabs()['empty']);
         $third->delete();
 
@@ -664,14 +729,14 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertSame([$this->second->id, MatterEmail::FILED], [$email->refresh()->matter_id, $email->status]);
 
         // Switched off: a stranger's is left in the mailbox again.
-        \App\Models\Setting::set(MatterReplyCollector::KEEP_ALL, false, 'mail');
+        Setting::set(MatterReplyCollector::KEEP_ALL, false, 'mail');
         $this->collect($this->email(['from' => 'someone@gmail.com', 'message_id' => '<later@gmail.com>']));
         $this->assertSame(1, MatterEmail::count());
     }
 
     public function test_a_sender_on_the_ignore_list_is_never_read_again(): void
     {
-        \App\Models\Setting::set(MatterReplyCollector::KEEP_ALL, true, 'mail');
+        Setting::set(MatterReplyCollector::KEEP_ALL, true, 'mail');
         $marked = 0;
         $read = function () use (&$marked): void {
             $marked++;
@@ -698,7 +763,7 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertSame([0, 3], [$marked, MatterEmail::count()]);
 
         // A whole domain.
-        \App\Models\Setting::set(MatterReplyCollector::IGNORED, ['@shop.com'], 'mail');
+        Setting::set(MatterReplyCollector::IGNORED, ['@shop.com'], 'mail');
         $this->assertTrue(MatterReplyCollector::isIgnored('anyone@shop.com'));
         $this->assertFalse(MatterReplyCollector::isIgnored('anyone@workshop.com'));
         $this->assertSame('a@b.com', MatterEmail::addressOf('Name <A@b.com>'));

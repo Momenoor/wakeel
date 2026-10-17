@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 /**
@@ -44,7 +45,7 @@ class MatterEmail extends Model
 
     public const BY_HAND = 'hand';
 
-    protected $fillable = ['matter_id', 'direction', 'status', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'cc', 'files', 'onedrive', 'candidates', 'matched_by', 'at', 'user_id'];
+    protected $fillable = ['matter_id', 'direction', 'status', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'cc', 'files', 'onedrive', 'candidates', 'matched_by', 'at', 'user_id', 'was_unread'];
 
     protected function casts(): array
     {
@@ -55,6 +56,7 @@ class MatterEmail extends Model
             'onedrive' => 'array',
             'candidates' => 'array',
             'at' => 'datetime',
+            'was_unread' => 'boolean',
         ];
     }
 
@@ -125,7 +127,7 @@ class MatterEmail extends Model
      */
     public static function fileUrl(string $path): string
     {
-        $disk = \Illuminate\Support\Facades\Storage::disk('public');
+        $disk = Storage::disk('public');
         $plain = $disk->url('x');
 
         return substr($plain, 0, -1).implode('/', array_map('rawurlencode', explode('/', $path)));

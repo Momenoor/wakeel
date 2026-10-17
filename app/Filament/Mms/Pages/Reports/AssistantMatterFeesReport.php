@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Pages\Reports;
 
 use App\Enums\FeeType;
+use App\Filament\Concerns\PrintableReport;
 use App\Filament\Mms\Clusters\Reports;
 use App\Filament\Mms\Exports\AssistantMatterFeesExporter;
 use App\Models\MatterParty;
@@ -23,7 +24,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class AssistantMatterFeesReport extends Page implements HasTable
 {
-    use HasPageShield;
+    use HasPageShield, PrintableReport;
     use InteractsWithTable;
 
     protected static string|null|\BackedEnum $navigationIcon = 'heroicon-o-document-chart-bar';
@@ -31,8 +32,6 @@ class AssistantMatterFeesReport extends Page implements HasTable
     protected static ?string $cluster = Reports::class;
 
     protected static ?int $navigationSort = 7;
-
-    protected string $view = 'filament.pages.assistant-matter-fees-report';
 
     protected static ?string $navigationLabel = 'Assistant Fees Report';
 

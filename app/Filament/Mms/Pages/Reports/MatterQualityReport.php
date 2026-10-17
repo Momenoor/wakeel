@@ -3,8 +3,8 @@
 namespace App\Filament\Mms\Pages\Reports;
 
 use App\Enums\MatterDifficulty;
+use App\Filament\Concerns\PrintableReport;
 use App\Filament\Mms\Clusters\Reports;
-use App\Models\Court;
 use App\Models\Matter;
 use App\Services\MMS\IncentiveCalculatorService;
 use App\Support\ReportDateRangeFilter;
@@ -41,7 +41,7 @@ use Illuminate\Database\Eloquent\Builder;
  */
 class MatterQualityReport extends Page implements HasTable
 {
-    use HasPageShield;
+    use HasPageShield, PrintableReport;
     use InteractsWithTable;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-shield-exclamation';
@@ -49,8 +49,6 @@ class MatterQualityReport extends Page implements HasTable
     protected static ?string $cluster = Reports::class;
 
     protected static ?int $navigationSort = 5;
-
-    protected string $view = 'filament.pages.matter-quality-report';
 
     public static function getNavigationLabel(): string
     {

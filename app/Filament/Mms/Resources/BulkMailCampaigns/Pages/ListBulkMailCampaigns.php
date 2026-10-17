@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Resources\BulkMailCampaigns\Pages;
 
 use App\Filament\Mms\Resources\BulkMailCampaigns\BulkMailCampaignResource;
 use App\Jobs\ImportSentEmails;
+use App\Livewire\SentMailImportProgressPanel;
 use App\Services\MMS\SenderMailer;
 use App\Services\MMS\SentMailImportProgress;
 use Filament\Actions;
@@ -11,7 +12,7 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Pages\ListRecords;
-use Illuminate\Contracts\View\View;
+use Filament\Schemas\Components\Livewire;
 
 class ListBulkMailCampaigns extends ListRecords
 {
@@ -77,7 +78,10 @@ class ListBulkMailCampaigns extends ListRecords
     {
         return Actions\Action::make('importProgress')
             ->modalHeading(__('Importing sent emails'))
-            ->modalContent(fn (array $arguments): View => view('filament.bulk-mail.import-progress', ['run' => $arguments['run'] ?? '']))
+            ->schema(fn (array $arguments): array => [
+                Livewire::make(SentMailImportProgressPanel::class, ['run' => $arguments['run'] ?? ''])
+                    ->key('sent-mail-import-'.($arguments['run'] ?? '')),
+            ])
             ->modalSubmitAction(false)
             ->modalCancelActionLabel(__('Close'))
             ->closeModalByClickingAway(false);

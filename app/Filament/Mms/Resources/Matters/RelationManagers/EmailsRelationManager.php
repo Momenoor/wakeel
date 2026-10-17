@@ -12,8 +12,11 @@ use App\Services\MMS\MatterReplyCollector;
 use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Schemas\Components\Component;
+use Filament\Schemas\Components\Text;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -176,10 +179,7 @@ class EmailsRelationManager extends RelationManager
                     ->label(__('Details'))
                     ->icon('heroicon-o-eye')
                     ->modalHeading(fn (MatterEmail $record): string => (string) ($record->subject ?: __('(no subject)')))
-                    ->modalContent(fn (MatterEmail $record) => view('filament.mms.matter-email', [
-                        'email' => $record,
-                        'files' => self::fileLinks($record),
-                    ]))
+                    ->schema(fn (MatterEmail $record): array => self::details($record))
                     ->modalSubmitAction(false)
                     ->modalCancelActionLabel(__('Close')),
             ])
@@ -225,12 +225,67 @@ class EmailsRelationManager extends RelationManager
             default => is_string($state) && preg_match('/\d/', $state) ? 'info' : 'gray',
         };
     }
+
     /** The URL of the email's PDF (the first file kept), when there is one. */
     private static function pdfUrl(MatterEmail $email): ?string
     {
         $path = $email->files[0]['path'] ?? null;
 
         return filled($path) && Storage::disk('public')->exists($path) ? MatterEmail::fileUrl($path) : null;
+    }
+
+    /**
+     * An email's details window: who, when, how its matter was known, what
+     * of it is in OneDrive — then the files kept of it, each to open.
+     *
+     * @return list<Component>
+     */
+    private static function details(MatterEmail $email): array
+    {
+        $sent = $email->direction === MatterEmail::SENT;
+        $folder = ((array) $email->onedrive)['folder'] ?? null;
+        $files = self::fileLinks($email);
+
+        $rows = array_filter([
+            'at' => [__('Date'), $email->at?->format('d/m/Y H:i')],
+            'from' => [__('From'), $sent ? $email->user?->name : $email->from],
+            'to' => [__('To'), implode('، ', (array) $email->to)],
+            'cc' => [__('Cc'), implode('، ', (array) $email->cc)],
+            'matched_by' => [__('Matter known by'), $sent ? null : MatterEmail::matchedByLabel($email->matched_by)],
+            // What was kept of an email that came in.
+            // Inside the matter's OneDrive folder — as it was when the email was saved.
+            'onedrive_folder' => [__('OneDrive folder'), filled($folder) ? $folder : null],
+            'onedrive_pdf' => [__('PDF in OneDrive'), $email->oneDriveLabel('pdf')],
+            'onedrive_eml' => [__('EML in OneDrive'), $email->oneDriveLabel('eml')],
+            'onedrive_attachments' => [__('Attachments in OneDrive'), $email->oneDriveLabel('attachments')],
+        ], fn (array $row): bool => filled($row[1]));
+
+        return [
+            ...array_map(
+                // Each value in its own direction: Arabic names beside Latin addresses read in order.
+                fn (string $name, array $row): TextEntry => TextEntry::make($name)->label($row[0])->state($row[1])->inlineLabel()->extraAttributes(['dir' => 'auto']),
+                array_keys($rows),
+                $rows,
+            ),
+            TextEntry::make('kept_files')
+                ->label(__('Files'))
+                ->visible($files !== [])
+                ->state(array_map(
+                    // The first is the email itself, as a PDF.
+                    fn (array $file, int $index): array => [...$file, 'name' => $index === 0 ? $file['name'].' ('.__('the email as PDF').')' : $file['name']],
+                    $files,
+                    array_keys($files),
+                ))
+                ->formatStateUsing(fn (array $state): string => $state['name'])
+                ->url(fn (array $state): string => $state['url'], shouldOpenInNewTab: true)
+                ->color('primary')
+                ->listWithLineBreaks()
+                ->bulleted()
+                ->extraAttributes(['dir' => 'auto']),
+            Text::make(__('No file was kept for this email.'))
+                ->color('gray')
+                ->visible($files === [] && ! $sent),
+        ];
     }
 
     /**

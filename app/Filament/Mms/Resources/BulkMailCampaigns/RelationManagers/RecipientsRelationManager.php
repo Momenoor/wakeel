@@ -21,9 +21,13 @@ use Filament\Actions\ImportAction;
 use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
+use Filament\Infolists\Components\RepeatableEntry;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\FontWeight;
+use Filament\Support\Enums\TextSize;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Auth\Access\Response;
@@ -225,7 +229,30 @@ class RecipientsRelationManager extends RelationManager
                     ->color('success')
                     ->visible(fn (BulkMailRecipient $record): bool => $this->replies()->has($record->getKey()))
                     ->modalHeading(fn (BulkMailRecipient $record): string => __('Replies from :name', ['name' => $record->name ?: $record->email]))
-                    ->modalContent(fn (BulkMailRecipient $record) => view('filament.mms.bulk-mail.replies', ['replies' => $this->replies()->get($record->getKey())]))
+                    // Each reply: who, when, and every file kept (its PDF first).
+                    ->schema(fn (BulkMailRecipient $record): array => [
+                        RepeatableEntry::make('replies')
+                            ->hiddenLabel()
+                            ->state($this->replies()->get($record->getKey()))
+                            ->schema([
+                                TextEntry::make('subject')
+                                    ->hiddenLabel()
+                                    ->state(fn (MatterEmail $record): string => $record->subject ?: __('(no subject)'))
+                                    ->weight(FontWeight::SemiBold),
+                                TextEntry::make('from')
+                                    ->hiddenLabel()
+                                    ->state(fn (MatterEmail $record): string => $record->from.' — '.$record->at?->format('d/m/Y H:i'))
+                                    ->size(TextSize::ExtraSmall)
+                                    ->color('gray'),
+                                TextEntry::make('files')
+                                    ->hiddenLabel()
+                                    ->formatStateUsing(fn (array $state): string => (string) $state['name'])
+                                    ->url(fn (array $state): ?string => filled($state['path'] ?? null) ? MatterEmail::fileUrl($state['path']) : null, shouldOpenInNewTab: true)
+                                    ->icon(fn (array $state): ?string => filled($state['path'] ?? null) ? 'heroicon-o-document-arrow-down' : null)
+                                    ->color(fn (array $state): ?string => filled($state['path'] ?? null) ? 'primary' : null)
+                                    ->listWithLineBreaks(),
+                            ]),
+                    ])
                     ->modalSubmitAction(false)
                     ->modalCancelActionLabel(__('Close')),
                 EditAction::make(),

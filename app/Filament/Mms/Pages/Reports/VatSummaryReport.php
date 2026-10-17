@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Pages\Reports;
 
 use App\Enums\FeeType;
+use App\Filament\Concerns\PrintableReport;
 use App\Filament\Mms\Clusters\Reports;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Models\Fee;
@@ -34,7 +35,7 @@ use Illuminate\Database\Eloquent\Builder;
  */
 class VatSummaryReport extends Page implements HasTable
 {
-    use HasPageShield;
+    use HasPageShield, PrintableReport;
     use InteractsWithTable;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-receipt-percent';
@@ -42,8 +43,6 @@ class VatSummaryReport extends Page implements HasTable
     protected static ?string $cluster = Reports::class;
 
     protected static ?int $navigationSort = 11;
-
-    protected string $view = 'filament.pages.vat-summary-report';
 
     public static function getNavigationLabel(): string
     {

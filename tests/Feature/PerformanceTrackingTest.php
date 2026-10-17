@@ -8,9 +8,11 @@ use App\Livewire\ChatWidget;
 use App\Models\PerformanceSample;
 use App\Models\Setting;
 use App\Models\User;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -110,6 +112,26 @@ class PerformanceTrackingTest extends TestCase
         $this->assertStringContainsString('browser: echo: connection unavailable', $page->report());
     }
 
+    public function test_the_screens_sort_and_the_slowest_show_their_most_run_query(): void
+    {
+        PerformanceSample::query()->delete();
+        $row = fn (array $with) => PerformanceSample::create($with + ['method' => 'GET', 'path' => '/', 'status' => 200, 'queries' => 4, 'repeated' => 0, 'memory_mb' => 1, 'response_kb' => 1]);
+        $row(['name' => 'mms: often.screen', 'duration_ms' => 100]);
+        $row(['name' => 'mms: often.screen', 'duration_ms' => 100]);
+        $row(['name' => 'mms: slow.screen', 'duration_ms' => 2500, 'top_query' => 'select * from `fees`']);
+
+        Livewire::test(Performance::class)
+            ->assertSee('select * from `fees`')
+            ->assertSee('wire:model.live="period"', false)
+            ->assertSee(__('Check every screen'))
+            // Slowest on average first; by requests when that is sorted.
+            ->tap(fn ($page) => $this->assertSame(['mms: slow.screen', 'mms: often.screen'], $page->instance()->screens()->pluck('name')->all()))
+            ->sortTable('requests', 'desc')
+            ->tap(fn ($page) => $this->assertSame(['mms: often.screen', 'mms: slow.screen'], $page->instance()->screens()->pluck('name')->all()))
+            ->set('period', '7d')
+            ->assertSee('mms: often.screen');
+    }
+
     public function test_measuring_can_be_stopped(): void
     {
         Setting::set(TrackPerformance::SETTING, false, 'system', 'boolean');
@@ -148,5 +170,23 @@ class PerformanceTrackingTest extends TestCase
 
         // Downloaded as a file.
         Livewire::test(Performance::class)->callAction('export')->assertFileDownloaded();
+    }
+
+    public function test_the_page_follows_its_own_buttons_at_once(): void
+    {
+        $check = (string) Str::uuid();
+        $row = fn (array $with) => PerformanceSample::create($with + ['method' => 'GET', 'path' => '/', 'status' => 200, 'queries' => 4, 'repeated' => 0, 'memory_mb' => 1, 'response_kb' => 1]);
+        $row(['name' => 'mms: a', 'duration_ms' => 100]);
+        $row(['name' => 'mms: slowest-screen', 'duration_ms' => 2500, 'check_id' => $check]);
+
+        $page = Livewire::test(Performance::class)->call('showCheck', $check)
+            ->assertSee(__('Results of the check of every screen'));
+
+        // Back to all requests: the check's results go with it.
+        $page->callAction(TestAction::make('backToPeriod')->schemaComponent(true, 'content'))
+            ->assertDontSee(__('Results of the check of every screen'));
+
+        // Cleared: nothing of the old requests left on the page.
+        $page->callAction('clear')->assertDontSee('slowest-screen');
     }
 }

@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Resources\PayrollRuns\Pages;
 use App\Enums\PayrollRunStatus;
 use App\Filament\Mms\Concerns\RefreshesPayrollData;
 use App\Filament\Mms\Resources\PayrollRuns\PayrollRunResource;
+use App\Filament\Support\JournalVoucherEntries;
 use App\Models\FlightTicket;
 use App\Models\PayrollRun;
 use App\Services\MMS\FlightTicketService;
@@ -16,7 +17,6 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
-use Illuminate\Contracts\View\View;
 use LogicException;
 use Throwable;
 
@@ -283,9 +283,7 @@ class ViewPayrollRun extends ViewRecord
             ->authorize('viewJournalVoucher')
             ->visible(fn (): bool => $this->hasPayslips())
             ->modalHeading(fn (): string => __('Journal Voucher — :period', ['period' => $this->run()->period]))
-            ->modalContent(fn (): View => view('filament.payroll.journal-voucher', [
-                'voucher' => app(PayrollJournalVoucherService::class)->forRun($this->run()),
-            ]))
+            ->schema(fn (): array => JournalVoucherEntries::voucher(app(PayrollJournalVoucherService::class)->forRun($this->run())))
             ->modalSubmitAction(false)
             ->modalCancelActionLabel(__('Close'))
             ->modalWidth('6xl');

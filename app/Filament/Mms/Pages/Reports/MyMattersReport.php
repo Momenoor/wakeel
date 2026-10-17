@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Pages\Reports;
 
+use App\Filament\Concerns\PrintableReport;
 use App\Filament\Mms\Clusters\Reports;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Models\Matter;
@@ -32,15 +33,13 @@ use Illuminate\Database\Eloquent\Builder;
  */
 class MyMattersReport extends Page implements HasTable
 {
-    use InteractsWithTable;
+    use InteractsWithTable, PrintableReport;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-briefcase';
 
     protected static ?string $cluster = Reports::class;
 
     protected static ?int $navigationSort = 0;
-
-    protected string $view = 'filament.pages.my-matters-report';
 
     public static function getNavigationLabel(): string
     {

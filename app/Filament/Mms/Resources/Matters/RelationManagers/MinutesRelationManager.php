@@ -7,6 +7,7 @@ use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Concerns\RefreshesMatterPage;
 use App\Filament\Mms\Resources\Matters\Pages\RecordMinutes;
 use App\Filament\Support\EmailSendFields;
+use App\Filament\Support\EntryTable;
 use App\Filament\Support\RichEditorDirection;
 use App\Models\Attachment;
 use App\Models\CalendarEvent;
@@ -24,6 +25,7 @@ use App\Support\EmailGrouping;
 use App\Support\Honorific;
 use App\Support\ScreenPermissions;
 use Carbon\Carbon;
+use Closure;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\DateTimePicker;
@@ -36,14 +38,21 @@ use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Infolists\Components\RepeatableEntry;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
+use Filament\Support\Enums\TextSize;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
 
 /**
@@ -488,12 +497,89 @@ class MinutesRelationManager extends RelationManager
             ->visible(fn (MatterMinutes $record): bool => $record->deliveries->isNotEmpty())
             ->modalHeading(fn (MatterMinutes $record) => __('Minutes (:number)', ['number' => $record->number]).' — '.__('Signatures'))
             ->modalWidth('6xl')
-            ->modalContent(fn (MatterMinutes $record) => view('filament.mms.minutes.signatures', [
-                'deliveries' => $record->deliveries()->latest('id')->get(),
-                'attachments' => Attachment::query()->whereIn('id', $record->deliveries->flatMap(fn ($d) => $d->signed_attachments ?? []))->get()->keyBy('id'),
-            ]))
+            ->schema(fn (MatterMinutes $record): array => [
+                self::signaturesTable(
+                    $record->deliveries()->latest('id')->get(),
+                    Attachment::query()->whereIn('id', $record->deliveries->flatMap(fn ($d) => $d->signed_attachments ?? []))->get()->keyBy('id'),
+                ),
+            ])
             ->modalSubmitAction(false)
             ->modalCancelActionLabel(__('Close'));
+    }
+
+    /**
+     * Minutes sent for signature: to whom, how, and what came back signed.
+     *
+     * @param  Collection<int, MinutesDelivery>  $deliveries
+     * @param  Collection<int, Attachment>  $attachments  the signed copies, by id
+     */
+    private static function signaturesTable(Collection $deliveries, Collection $attachments): RepeatableEntry
+    {
+        $note = fn (string|Closure $text): Text => Text::make($text)->color('gray')->size(TextSize::ExtraSmall);
+
+        return EntryTable::make('deliveries', [
+            TextEntry::make('name')->label(__('Name')),
+            TextEntry::make('channel')
+                ->label(__('Sent by'))
+                ->formatStateUsing(fn (string $state): string => $state === MinutesDelivery::WHATSAPP ? 'WhatsApp' : __('Email'))
+                ->belowContent(fn (MinutesDelivery $record): Text => $note($record->address)->extraAttributes(['dir' => 'ltr'])),
+            TextEntry::make('sent_at')
+                ->label(__('Sent'))
+                ->dateTime('d/m/Y H:i')
+                ->placeholder('—'),
+            TextEntry::make('status')
+                ->label(__('Status'))
+                ->badge()
+                ->formatStateUsing(fn (string $state, MinutesDelivery $record): string => match ($state) {
+                    MinutesDelivery::SIGNED => trim(__('Signed').' '.$record->signed_at?->format('d/m/Y H:i')),
+                    MinutesDelivery::FAILED => __('Failed'),
+                    default => __('Awaiting signature'),
+                })
+                ->color(fn (string $state): string => match ($state) {
+                    MinutesDelivery::SIGNED => 'success',
+                    MinutesDelivery::FAILED => 'danger',
+                    default => 'warning',
+                })
+                ->belowContent(fn (MinutesDelivery $record): ?Text => $record->status === MinutesDelivery::FAILED ? $note((string) $record->error) : null),
+            // The signed copies kept, then where else it stands.
+            __('Signed copy') => Group::make([
+                TextEntry::make('signed_copies')
+                    ->hiddenLabel()
+                    ->state(fn (MinutesDelivery $record): array => collect($record->signed_attachments ?? [])
+                        ->map(fn ($id) => $attachments->get($id))
+                        ->filter()
+                        ->map(fn (Attachment $attachment): array => ['name' => $attachment->name, 'url' => Storage::disk('public')->url($attachment->path)])
+                        ->values()
+                        ->all())
+                    ->formatStateUsing(fn (array $state): string => (string) $state['name'])
+                    ->url(fn (array $state): string => $state['url'], shouldOpenInNewTab: true)
+                    ->color('primary')
+                    ->listWithLineBreaks()
+                    ->visible(fn ($state): bool => filled($state)),
+                TextEntry::make('onedrive_url')
+                    ->hiddenLabel()
+                    ->formatStateUsing(fn (): string => __('In OneDrive'))
+                    ->url(fn (string $state): string => $state, shouldOpenInNewTab: true)
+                    ->color('primary')
+                    ->visible(fn ($state): bool => filled($state)),
+                $note(fn (MinutesDelivery $record): string => __('Not in OneDrive:').' '.$record->onedrive_error)
+                    ->visible(fn (MinutesDelivery $record): bool => blank($record->onedrive_url) && filled($record->onedrive_error)),
+                // What they wrote back instead of (or with) the file.
+                RepeatableEntry::make('replies')
+                    ->hiddenLabel()
+                    ->schema([
+                        TextEntry::make('text')
+                            ->hiddenLabel()
+                            ->aboveContent(fn (TextEntry $component): Text => $note(__('Their reply').' · '.Carbon::parse(EntryTable::row($component)['at'] ?? null)->timezone(config('app.timezone'))->format('d/m/Y H:i')))
+                            ->extraAttributes(['dir' => 'auto', 'class' => 'whitespace-pre-line']),
+                    ])
+                    ->visible(fn ($state): bool => filled($state)),
+                $note(fn (MinutesDelivery $record): string => __('Answered with how to send the signed copy').' · '.$record->text_reply_sent_at?->format('d/m/Y H:i'))
+                    ->visible(fn (MinutesDelivery $record): bool => filled($record->text_reply_sent_at)),
+                $note(__('A copy signed by email is added by hand, under the matter\'s attachments.'))
+                    ->visible(fn (MinutesDelivery $record): bool => $record->channel === MinutesDelivery::EMAIL && $record->status !== MinutesDelivery::SIGNED),
+            ])->dense(),
+        ])->state($deliveries);
     }
 
     private function reopenAction(): Action

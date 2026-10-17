@@ -11,16 +11,13 @@ use App\Models\BulkMailRecipient;
 use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Filament\Schemas\Components\Group;
+use Filament\Schemas\Schema;
 use Illuminate\Support\Facades\Mail;
 
 class ViewBulkMailCampaign extends ViewRecord
 {
     protected static string $resource = BulkMailCampaignResource::class;
-
-    /**
-     * The page's own view adds the refresh poll (see pollInterval()).
-     */
-    protected string $view = 'filament.mms.bulk-mail.view-campaign';
 
     /**
      * Live progress over Pusher: every recipient sent or failed, and the
@@ -62,6 +59,24 @@ class ViewBulkMailCampaign extends ViewRecord
         }
 
         return filled(config('filament.broadcasting.echo')) ? '60s' : '10s';
+    }
+
+    /**
+     * Filament's own page, and — only while the campaign sends — a hidden poll that refreshes it
+     * (pollInterval()). Gone when it stops, so its poller goes with it rather than pausing and
+     * doubling up when the campaign is started again.
+     */
+    public function content(Schema $schema): Schema
+    {
+        $schema = parent::content($schema);
+
+        return $schema->components([
+            ...$schema->getComponents(withHidden: true),
+            Group::make([])
+                ->key('campaign-poll')
+                ->visible(fn (): bool => $this->pollInterval() !== null)
+                ->extraAttributes(fn (): array => ['wire:poll.'.$this->pollInterval() => 'refreshCampaign', 'style' => 'display: none;']),
+        ]);
     }
 
     protected function getHeaderActions(): array

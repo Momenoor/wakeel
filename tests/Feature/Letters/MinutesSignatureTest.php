@@ -35,6 +35,7 @@ use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
 use Symfony\Component\Mime\Email;
+use Tests\Support\MailSenders;
 use Tests\TestCase;
 
 /**
@@ -60,10 +61,10 @@ class MinutesSignatureTest extends TestCase
         Storage::fake('public');
         $this->withoutDefer();
 
-        \Tests\Support\MailSenders::add('iflas', [
-                'username' => 'iflas@jpaemirates.com', 'address' => 'iflas@jpaemirates.com', 'name' => 'JPA Iflas',
-                'password' => 'secret', 'host' => 'mail.example.com', 'port' => 587, 'encryption' => 'tls',
-            ]);
+        MailSenders::add('iflas', [
+            'username' => 'iflas@jpaemirates.com', 'address' => 'iflas@jpaemirates.com', 'name' => 'JPA Iflas',
+            'password' => 'secret', 'host' => 'mail.example.com', 'port' => 587, 'encryption' => 'tls',
+        ]);
         config([
             'services.whatsapp.token' => 'wa-token',
             'services.whatsapp.phone_id' => '1234',
@@ -357,7 +358,7 @@ class MinutesSignatureTest extends TestCase
         Livewire::test(MinutesRelationManager::class, ['ownerRecord' => $this->minutes->matter, 'pageClass' => ViewMatter::class])
             ->assertTableColumnStateSet('signed', '1 / 1', $this->minutes)
             ->mountTableAction('signatures', $this->minutes)
-            ->assertMountedActionModalSee('https://od/signed/file.pdf');
+            ->assertMountedActionModalSee(['https://od/signed/file.pdf', __('In OneDrive'), __('Signed').' '.$delivery->fresh()->signed_at->format('d/m/Y H:i')]);
     }
 
     public function test_a_text_sent_back_instead_is_kept_told_and_answered_once(): void
@@ -411,7 +412,13 @@ class MinutesSignatureTest extends TestCase
 
         Livewire::test(MinutesRelationManager::class, ['ownerRecord' => $this->minutes->matter, 'pageClass' => ViewMatter::class])
             ->mountTableAction('signatures', $this->minutes)
-            ->assertMountedActionModalSee('وعندي ملاحظة على البند 3');
+            ->assertMountedActionModalSee([
+                'وعندي ملاحظة على البند 3',
+                __('Their reply'),
+                __('Awaiting signature'),
+                __('Answered with how to send the signed copy'),
+                '971501132801',
+            ]);
     }
 
     public function test_whatsapp_templates_and_the_webhook_settings_screen(): void

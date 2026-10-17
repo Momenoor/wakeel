@@ -9,6 +9,7 @@ use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
 use App\Models\EmailTemplate;
 use App\Models\Letterhead;
 use App\Models\LetterTemplate;
+use App\Models\MailSender;
 use App\Models\Matter;
 use App\Models\MatterLetter;
 use App\Models\MatterParty;
@@ -24,11 +25,16 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Mockery;
 use Spatie\Permission\Models\Role;
+use Symfony\Component\Mailer\Exception\TransportException;
+use Symfony\Component\Mailer\SentMessage;
+use Symfony\Component\Mailer\Transport\AbstractTransport;
 use Symfony\Component\Mime\Email;
+use Tests\Support\MailSenders;
 use Tests\TestCase;
 
 /**
@@ -52,14 +58,14 @@ class LetterEmailTest extends TestCase
         // The sent email's PDF is kept after the response: at once here.
         $this->withoutDefer();
 
-        \Tests\Support\MailSenders::add('iflas', [
-                'username' => 'iflas@jpaemirates.com', 'address' => 'iflas@jpaemirates.com', 'name' => 'JPA Iflas',
-                'password' => 'secret', 'host' => 'mail.example.com', 'port' => 587, 'encryption' => 'tls',
-            ]);
+        MailSenders::add('iflas', [
+            'username' => 'iflas@jpaemirates.com', 'address' => 'iflas@jpaemirates.com', 'name' => 'JPA Iflas',
+            'password' => 'secret', 'host' => 'mail.example.com', 'port' => 587, 'encryption' => 'tls',
+        ]);
         config([
             // The mailbox's smtp mailer delivers into memory here.
             'mail.mailers.smtp.transport' => 'array',
-            ]);
+        ]);
 
         Event::listen(MessageSent::class, fn (MessageSent $event) => $this->sent[] = $event->message);
         $this->app->instance(SentFolder::class, Mockery::spy(SentFolder::class));
@@ -116,7 +122,7 @@ class LetterEmailTest extends TestCase
 
     public function test_the_letter_itself_as_the_email_has_no_signature_of_its_own_but_the_mailboxs(): void
     {
-        \App\Models\MailSender::where('key', 'iflas')->update(['signature' => '<div dir="ltr" id="Signature"><p>Best Regards <b>JPA Iflas</b></p></div>']);
+        MailSender::where('key', 'iflas')->update(['signature' => '<div dir="ltr" id="Signature"><p>Best Regards <b>JPA Iflas</b></p></div>']);
 
         app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::BODY);
 
@@ -134,7 +140,7 @@ class LetterEmailTest extends TestCase
 
     public function test_the_mailboxs_signature_ends_the_covering_email_too_and_is_in_its_pdf(): void
     {
-        \App\Models\MailSender::where('key', 'iflas')->update(['signature' => '<div dir="ltr" id="Signature"><p>Best Regards <b>JPA Iflas</b></p></div>']);
+        MailSender::where('key', 'iflas')->update(['signature' => '<div dir="ltr" id="Signature"><p>Best Regards <b>JPA Iflas</b></p></div>']);
 
         app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::ATTACHMENT, null, ['pdf']);
 
@@ -214,7 +220,7 @@ class LetterEmailTest extends TestCase
 
     public function test_a_failed_send_is_recorded_per_recipient(): void
     {
-        \App\Models\MailSender::where('key', 'iflas')->update(['host' => '127.0.0.1', 'port' => 9]);
+        MailSender::where('key', 'iflas')->update(['host' => '127.0.0.1', 'port' => 9]);
         config(['mail.mailers.smtp.transport' => 'smtp', 'mail.mailers.smtp.timeout' => 2]);
 
         $result = app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::ATTACHMENT, null, ['pdf']);
@@ -374,7 +380,7 @@ class LetterEmailTest extends TestCase
 
     public function test_the_letter_as_the_email_is_previewed_with_the_mailboxs_signature_not_its_own(): void
     {
-        \App\Models\MailSender::where('key', 'iflas')->update(['signature' => '<div id="Signature"><p>Best Regards <b>JPA Iflas</b></p></div>']);
+        MailSender::where('key', 'iflas')->update(['signature' => '<div id="Signature"><p>Best Regards <b>JPA Iflas</b></p></div>']);
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->letter->matter, 'pageClass' => ViewMatter::class])
             ->mountTableAction('email', $this->letter)
@@ -387,7 +393,7 @@ class LetterEmailTest extends TestCase
             ->assertMountedActionModalSeeHtml('<div dir="ltr" style="text-align: left;"><div id="Signature">')
             ->assertMountedActionModalDontSeeHtml('data:image/png;base64,')
             // Its logos side by side stay so in the preview (the page's own styles would stack every image).
-            ->assertMountedActionModalSeeHtml('class="wk-mail"')
+            ->assertMountedActionModalSeeHtml(' wk-mail ')
             ->assertMountedActionModalSeeHtml('.wk-mail img');
     }
 
@@ -467,13 +473,13 @@ class LetterEmailTest extends TestCase
     public function test_an_address_the_server_refuses_does_not_stop_the_others_and_is_named(): void
     {
         // A mail server that turns an email away for one address that does not exist ("550 No Such User Here").
-        \Illuminate\Support\Facades\Mail::extend('refusing', fn () => new class extends \Symfony\Component\Mailer\Transport\AbstractTransport
+        Mail::extend('refusing', fn () => new class extends AbstractTransport
         {
-            protected function doSend(\Symfony\Component\Mailer\SentMessage $message): void
+            protected function doSend(SentMessage $message): void
             {
                 foreach ($message->getEnvelope()->getRecipients() as $recipient) {
                     if ($recipient->getAddress() === 'gone@jpaemirates.com') {
-                        throw new \Symfony\Component\Mailer\Exception\TransportException('Expected response code "250/251/252" but got code "550", with message "550 No Such User Here".');
+                        throw new TransportException('Expected response code "250/251/252" but got code "550", with message "550 No Such User Here".');
                     }
                 }
             }

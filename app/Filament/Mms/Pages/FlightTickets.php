@@ -9,6 +9,8 @@ use App\Models\FlightTicket;
 use App\Support\FlightTicketTable;
 use BackedEnum;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\EmbeddedTable;
+use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
@@ -25,11 +27,14 @@ class FlightTickets extends Page implements HasTable
     use HasModuleGate;
     use InteractsWithTable;
 
-    protected string $view = 'filament.pages.flight-tickets';
-
     protected static string|null|BackedEnum $navigationIcon = 'heroicon-o-paper-airplane';
 
     protected static ?int $navigationSort = 4;
+
+    public function content(Schema $schema): Schema
+    {
+        return $schema->components([EmbeddedTable::make()]);
+    }
 
     public static function moduleGateKey(): string
     {

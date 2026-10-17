@@ -2,12 +2,17 @@
 
 namespace Tests\Feature\PMS;
 
+use App\Filament\Pms\Resources\LeasePrintTemplates\Pages\EditLeasePrintTemplate;
+use App\Filament\Pms\Resources\LeasePrintTemplates\RelationManagers\PagesRelationManager;
 use App\Livewire\Pms\PrintTemplatePageBuilder;
 use App\Models\LeasePrintTemplate;
 use App\Models\LeasePrintTemplateField;
 use App\Models\LeasePrintTemplatePage;
+use App\Models\User;
+use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class PrintTemplatePageBuilderTest extends TestCase
@@ -23,6 +28,21 @@ class PrintTemplatePageBuilderTest extends TestCase
             'page_number' => 1,
             'background_image_path' => 'lease-print-templates/fake.png',
         ]);
+    }
+
+    public function test_the_builder_opens_from_the_templates_pages(): void
+    {
+        $page = $this->page();
+        Role::firstOrCreate(['name' => 'super-admin', 'guard_name' => 'web']);
+        $this->actingAs(User::factory()->create()->assignRole('super-admin'));
+        Filament::setCurrentPanel(Filament::getPanel('pms'));
+
+        Livewire::test(PagesRelationManager::class, [
+            'ownerRecord' => $page->template,
+            'pageClass' => EditLeasePrintTemplate::class,
+        ])
+            ->mountTableAction('edit_field_positions', $page)
+            ->assertMountedActionModalSee(__('Field to place'));
     }
 
     public function test_placing_a_field_adds_it_at_the_clicked_position(): void

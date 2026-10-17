@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Resources\PayrollRuns\RelationManagers;
 
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Mms\Concerns\RefreshesPayrollData;
+use App\Filament\Support\EntryTable;
 use App\Models\LoanInstallment;
 use App\Models\PayrollRun;
 use App\Models\Payslip;
@@ -12,13 +13,17 @@ use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Schemas\Components\Component;
+use Filament\Schemas\Components\Text;
+use Filament\Support\Enums\TextSize;
 use Filament\Tables\Columns\Summarizers\Sum;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Table;
-use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
 use LogicException;
 
 /**
@@ -191,15 +196,58 @@ class PayslipsRelationManager extends RelationManager
             ->modalWidth('5xl')
             // Nothing was deducted, so there is nothing to open.
             ->visible(fn (Payslip $record): bool => (float) $record->loan_deduction > 0)
-            ->modalContent(fn (Payslip $record): View => view('filament.payroll.loan-breakdown', [
-                'installments' => $record->installments()->with('loan')->orderBy('due_period')->get(),
-                'period' => $this->payrollRun()->period,
+            ->schema(fn (Payslip $record): array => self::loanBreakdown(
+                $record->installments()->with('loan')->orderBy('due_period')->get(),
+                $this->payrollRun()->period,
                 // What these same advances still owe once this run is paid.
-                'outstanding' => (float) LoanInstallment::query()
+                (float) LoanInstallment::query()
                     ->whereNull('payslip_id')
                     ->whereIn('employee_loan_id', $record->installments()->select('employee_loan_id'))
                     ->sum('amount'),
-            ]));
+            ));
+    }
+
+    /**
+     * Why this employee's loan deduction is the number it is.
+     *
+     * A payslip shows one figure for "Loan", but an employee can be repaying a
+     * staff loan and a petty cash advance at the same time, and an instalment
+     * missed in an earlier month is swept into the current run. One total
+     * cannot explain any of that, and the question it provokes — "why was
+     * 1,750 taken?" — is the one HR gets asked.
+     *
+     * @param  Collection<int, LoanInstallment>  $installments
+     * @return list<Component>
+     */
+    private static function loanBreakdown(Collection $installments, string $period, float $outstanding): array
+    {
+        $rows = $installments->map(fn (LoanInstallment $installment): array => [
+            'kind' => $installment->loan->kind->getLabel(),
+            'advance' => Currency::format($installment->loan->principal),
+            'seq' => __(':seq of :total', ['seq' => $installment->seq, 'total' => $installment->loan->months]),
+            'due_period' => $installment->due_period,
+            // An instalment carried over from a month this employee was not
+            // paid in.
+            'carried_over' => $installment->due_period !== $period,
+            'amount' => (float) $installment->amount,
+        ])->all();
+
+        return [
+            EntryTable::make('installments', [
+                TextEntry::make('kind')->label(__('Type'))->weight(EntryTable::totalWeight(...)),
+                TextEntry::make('advance')->label(__('Advance'))->extraAttributes(['class' => 'tabular-nums']),
+                TextEntry::make('seq')->label(__('Instalment')),
+                TextEntry::make('due_period')
+                    ->label(__('Due Period'))
+                    ->belowContent(fn (TextEntry $component): ?Text => (EntryTable::row($component)['carried_over'] ?? false)
+                        ? Text::make('('.__('carried over').')')->color('warning')
+                        : null),
+                EntryTable::amount('amount', Currency::label(__('Amount (AED)'))),
+            ])->state([...$rows, ['total' => true, 'kind' => __('Total'), 'amount' => $installments->sum(fn (LoanInstallment $installment): float => (float) $installment->amount)]]),
+            $outstanding > 0
+                ? Text::make(Currency::label(__('Still outstanding after this run: :amount AED', ['amount' => number_format($outstanding, 2)])))->color('gray')->size(TextSize::ExtraSmall)
+                : Text::make(__('These advances are fully recovered.'))->color('success')->size(TextSize::ExtraSmall),
+        ];
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\PayrollRuns\Tables;
 
 use App\Enums\PayrollRunStatus;
+use App\Filament\Support\JournalVoucherEntries;
 use App\Models\PayrollRun;
 use App\Services\MMS\PayrollJournalVoucherService;
 use App\Support\Currency;
@@ -13,7 +14,6 @@ use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
-use Illuminate\Contracts\View\View;
 
 class PayrollRunsTable
 {
@@ -73,9 +73,7 @@ class PayrollRunsTable
                     ->authorize('viewJournalVoucher')
                     ->visible(fn (PayrollRun $record): bool => $record->payslips()->exists())
                     ->modalHeading(fn (PayrollRun $record): string => __('Journal Voucher — :period', ['period' => $record->period]))
-                    ->modalContent(fn (PayrollRun $record): View => view('filament.payroll.journal-voucher', [
-                        'voucher' => app(PayrollJournalVoucherService::class)->forRun($record),
-                    ]))
+                    ->schema(fn (PayrollRun $record): array => JournalVoucherEntries::voucher(app(PayrollJournalVoucherService::class)->forRun($record)))
                     ->modalSubmitAction(false)
                     ->modalCancelActionLabel(__('Close'))
                     ->modalWidth('6xl'),

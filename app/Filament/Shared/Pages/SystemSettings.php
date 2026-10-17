@@ -87,6 +87,7 @@ class SystemSettings extends Page
 
             'mail_sender_key' => Setting::get('mail_sender_key'),
             MatterReplyCollector::KEEP_ALL => MatterReplyCollector::keepsAll(),
+            MatterReplyCollector::LOOK_BACK => MatterReplyCollector::lookBackDays(),
             MatterReplyCollector::IGNORED => MatterReplyCollector::ignoredSenders(),
             EmailSendFields::DEFAULT_SENDER => Setting::get(EmailSendFields::DEFAULT_SENDER),
             'mail_mailer' => Setting::get('mail_mailer', config('mail.default', 'smtp')),
@@ -175,6 +176,7 @@ class SystemSettings extends Page
 
             'mail_sender_key' => 'mail',
             MatterReplyCollector::KEEP_ALL => 'mail',
+            MatterReplyCollector::LOOK_BACK => 'mail',
             MatterReplyCollector::IGNORED => 'mail',
             EmailSendFields::DEFAULT_SENDER => 'mail',
             'mail_mailer' => 'mail',

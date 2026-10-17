@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\MMS\Calendar\EventMatterLinker;
 use App\Services\MMS\Calendar\MatterReferenceMatcher;
 use App\Services\MMS\Calendar\OutlookCalendarSync;
+use App\Services\MMS\IncomingEmailMatcher;
 use App\Support\MatterSearch;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
@@ -70,7 +71,7 @@ class CalendarMatterLinkingTest extends TestCase
         $zeros = Matter::factory()->create(['number' => '0986', 'year' => 2026]);
         $other = Matter::factory()->create(['number' => '986', 'year' => 2025]);
 
-        $this->assertSame([$zeros->id], \App\Services\MMS\IncomingEmailMatcher::numbered('رد: الدعوى رقم 986 لسنة 2026'));
+        $this->assertSame([$zeros->id], IncomingEmailMatcher::numbered('رد: الدعوى رقم 986 لسنة 2026'));
         $this->assertSame([$zeros->id], MatterReferenceMatcher::idsOf('986', 2026));
         $this->assertSame([$other->id], MatterReferenceMatcher::idsOf('٩٨٦', 2025));
         $this->assertSame([], MatterReferenceMatcher::idsOf('98', 2026));
@@ -458,6 +459,7 @@ class CalendarMatterLinkingTest extends TestCase
             ->assertSee('Next session 639/2025')
             ->assertSee('Earlier session 639/2025')
             ->assertSee('1/2020, 639/2025 (Dubai Courts)')
+            ->assertSee('with 1 other matter')
             ->assertSee('https://teams.test/join')
             ->assertDontSee('Session 1/2020');
     }

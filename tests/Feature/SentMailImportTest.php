@@ -144,7 +144,8 @@ class SentMailImportTest extends TestCase
 
         Livewire::test(ListBulkMailCampaigns::class)
             ->callAction('importSentEmails', ['name' => 'X', 'sender' => 'cpanel', 'subject' => 'invoice', 'from' => '2026-09-01', 'to' => '2026-09-30'])
-            ->assertActionMounted('importProgress');
+            ->assertActionMounted('importProgress')
+            ->assertMountedActionModalSee(__('Importing…'));
 
         Bus::assertDispatchedAfterResponse(ImportSentEmails::class, fn (ImportSentEmails $job) => $job->senderKey === 'cpanel' && $job->subject === 'invoice');
     }

@@ -3,13 +3,15 @@
 namespace App\Filament\Pms\Resources\Quotations\Schemas;
 
 use App\Filament\Pms\Resources\Leases\LeaseResource;
+use App\Filament\Support\EntryTable;
 use App\Models\Quotation;
 use App\Services\PMS\QuotationService;
+use App\Support\Currency;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
-use Illuminate\Support\HtmlString;
+use Illuminate\Support\Carbon;
 
 class QuotationInfolist
 {
@@ -96,14 +98,28 @@ class QuotationInfolist
 
                 Section::make(__('Expected Instalments'))
                     ->description(__('What the lease would be paid in — the instalments are only created once it becomes a lease.'))
-                    ->schema([
-                        TextEntry::make('expected_installments')
-                            ->hiddenLabel()
-                            ->state(fn (Quotation $record): HtmlString => new HtmlString(view('filament.pms.quotations.expected-installments', [
-                                'rows' => app(QuotationService::class)->expectedInstallments($record),
-                            ])->render()))
-                            ->html(),
+                    // Rent rows, then the VAT and the security deposit each
+                    // on its own.
+                    ->schema(fn (Quotation $record): array => [
+                        static::expectedInstallments(app(QuotationService::class)->expectedInstallments($record)),
                     ]),
             ]);
+    }
+
+    /**
+     * The instalments a quotation's lease would get, totalled.
+     *
+     * @param  list<array{number: int, kind: string, label: string, due_date: Carbon, amount: float}>  $rows
+     */
+    private static function expectedInstallments(array $rows): RepeatableEntry
+    {
+        return EntryTable::make('expected_installments', [
+            TextEntry::make('number')->label('#'),
+            TextEntry::make('label')->label(__('Instalment'))->weight(EntryTable::totalWeight(...)),
+            TextEntry::make('due_date')->label(__('Due Date'))->formatStateUsing(fn ($state): string => $state->format('d/m/Y')),
+            EntryTable::amount('amount', Currency::label(__('Amount (AED)'))),
+        ])
+            ->state($rows === [] ? [] : [...$rows, ['total' => true, 'label' => __('Total'), 'amount' => array_sum(array_column($rows, 'amount'))]])
+            ->placeholder(__('Add a unit with its rent to see the instalments.'));
     }
 }

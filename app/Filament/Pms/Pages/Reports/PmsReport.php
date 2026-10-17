@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pms\Pages\Reports;
 
+use App\Filament\Concerns\PrintableReport;
 use App\Filament\Pms\Clusters\Reports;
 use App\Filament\Pms\Support\PortfolioScope;
 use App\Models\Lease;
@@ -24,12 +25,10 @@ use Illuminate\Database\Eloquent\Builder;
  */
 abstract class PmsReport extends Page implements HasTable
 {
-    use HasPageShield;
+    use HasPageShield, PrintableReport;
     use InteractsWithTable;
 
     protected static ?string $cluster = Reports::class;
-
-    protected string $view = 'filament.pms.reports.report';
 
     abstract public static function reportTitle(): string;
 

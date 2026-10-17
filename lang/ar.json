@@ -4072,5 +4072,16 @@
     "The email could not be moved": "تعذر نقل الرسالة",
     "Moved to matter :matter.": "نُقلت إلى القضية :matter.",
     "Nothing of it was found in this matter's OneDrive to move.": "لم يُعثر على شيء منها في OneDrive هذه القضية لنقله.",
-    "Emails from these addresses (or a whole domain written as @domain) are not read: not kept, not notified, and left unread in the mailbox. Add several at once by separating them with a comma, space or semicolon, or by pasting a list.": "الرسائل الواردة من هذه العناوين (أو من نطاق كامل يُكتب ‎@domain) لا تُقرأ: لا تُحفظ، ولا يُرسل عنها إشعار، وتبقى غير مقروءة في صندوق البريد. أضف عدة عناوين دفعة واحدة بفصلها بفاصلة أو مسافة أو فاصلة منقوطة، أو بلصق قائمة."
+    "Emails from these addresses (or a whole domain written as @domain) are not read: not kept, not notified, and left unread in the mailbox. Add several at once by separating them with a comma, space or semicolon, or by pasting a list.": "الرسائل الواردة من هذه العناوين (أو من نطاق كامل يُكتب ‎@domain) لا تُقرأ: لا تُحفظ، ولا يُرسل عنها إشعار، وتبقى غير مقروءة في صندوق البريد. أضف عدة عناوين دفعة واحدة بفصلها بفاصلة أو مسافة أو فاصلة منقوطة، أو بلصق قائمة.",
+    "Undo recent emails": "التراجع عن الرسائل الأخيرة",
+    "Undo the emails collected recently?": "التراجع عن الرسائل التي جُمعت مؤخرًا؟",
+    "Emails collected in the last 2 hours: :count.": "الرسائل التي جُمعت في آخر ساعتين: :count.",
+    "Their PDFs and files are removed from the system and the matters' OneDrive (its recycle bin), with their steps in the progress. Those that were unread in the mailbox before are made unread again; the others stay as they are. The next check collects them again.": "تُحذف ملفات PDF والمرفقات من النظام ومن OneDrive القضايا (إلى سلة المحذوفات)، مع خطواتها في سير القضية. ما كان منها غير مقروء في صندوق البريد يعود غير مقروء، ويبقى الباقي كما هو. وتجمعها عملية الفحص التالية من جديد.",
+    "Collected in the last (hours)": "جُمعت خلال آخر (ساعات)",
+    "Undo them": "تراجع عنها",
+    "{0} No emails to undo.|{1} 1 email undone.|[2,*] :count emails undone.": "{0} لا رسائل للتراجع عنها.|{1} تم التراجع عن رسالة واحدة.|[2,*] تم التراجع عن :count رسائل.",
+    ":count made unread again in the mailbox.": "أُعيدت :count منها غير مقروءة في صندوق البريد.",
+    "Not undone: :errors": "لم يُتراجع عن: :errors",
+    "Read the inboxes back (days)": "قراءة صناديق الوارد للخلف (أيام)",
+    "How far back a mailbox is read the first time, for one matter, or after the checks stopped for a while. Each check still reads a little at a time — a long period is caught up over several checks, never in one long one.": "إلى أي مدى يُقرأ صندوق البريد للخلف: في المرة الأولى، أو لقضية واحدة، أو بعد توقف الفحص فترة. يقرأ كل فحص جزءًا صغيرًا في كل مرة — وتُستكمل المدة الطويلة على عدة فحوصات، لا في فحص واحد طويل."
 }

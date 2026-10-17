@@ -191,8 +191,8 @@ class MatterIncentiveDisplayTest extends TestCase
         $html = Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])->html();
 
         $this->assertStringContainsString('1,000.00', $html);
-        $this->assertStringContainsString('+30.00', $html);
-        $this->assertStringContainsString('−200.00', $html);
+        $this->assertStringContainsString('+30.00 (3%)', $html);
+        $this->assertStringContainsString('−200.00 (2%)', $html);
         // The whole period deduction sits on this, the assistant's only matter.
         $this->assertStringContainsString('−100.00', $html);
         $this->assertMatchesRegularExpression('~<span class="wakeel-aed"[^>]*>D</span> 730.00~', $html);

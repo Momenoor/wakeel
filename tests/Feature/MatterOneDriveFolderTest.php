@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Filament\Mms\Pages\OneDriveSettings;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
+use App\Filament\Mms\Resources\Types\Pages\EditType;
+use App\Filament\Mms\Resources\Types\Pages\ViewType;
 use App\Jobs\CreateMatterOneDriveFolder;
 use App\Livewire\MatterOneDriveFiles;
 use App\Models\Court;
@@ -16,14 +18,19 @@ use App\Models\Setting;
 use App\Models\Type;
 use App\Models\User;
 use App\Services\MMS\MatterOneDriveFolders;
+use App\Services\MMS\SentEmailArchive;
+use App\Services\MMS\SentMailImporter;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
+use Tests\Support\FakeOneDrive;
 use Tests\TestCase;
 
 /**
@@ -202,7 +209,7 @@ class MatterOneDriveFolderTest extends TestCase
         $template = '{{matter.custom.phase}}/01 system + 02/{{matter.plaintiff_capacity}}';
 
         $path = MatterOneDriveFolders::resolvePath($template, $matter->fresh());
-        $this->assertSame(['التنفيذ', '01 system + 02', \App\Models\Type::sideLabel($matter->type, 'plaintiff')], explode('/', $path));
+        $this->assertSame(['التنفيذ', '01 system + 02', Type::sideLabel($matter->type, 'plaintiff')], explode('/', $path));
 
         // A part with no value is left out; a placeholder that is not known too.
         $matter->update(['custom_fields' => []]);
@@ -239,7 +246,7 @@ class MatterOneDriveFolderTest extends TestCase
     public function test_received_emails_can_go_in_a_folder_of_the_day_they_reached_us(): void
     {
         $matter = $this->matter();
-        $at = \Illuminate\Support\Carbon::parse('2026-10-16 22:30:00', 'UTC');
+        $at = Carbon::parse('2026-10-16 22:30:00', 'UTC');
         // 22:30 UTC is already the 17th in the app's zone (UTC+4).
         config(['app.timezone' => 'Asia/Dubai']);
 
@@ -264,15 +271,15 @@ class MatterOneDriveFolderTest extends TestCase
         // The type's own wins; empty: back to the default.
         $matter->type->update(['onedrive_received_emails' => '{{matter.year}}/{{day}}']);
         $this->assertSame('{{matter.year}}/{{day}}', MatterOneDriveFolders::receivedEmailsTemplate($matter->fresh()));
-        $this->assertSame('2026/2026-10-16', MatterOneDriveFolders::receivedEmailsFolderFor($matter->fresh(), \Illuminate\Support\Carbon::parse('2026-10-16 10:00')));
+        $this->assertSame('2026/2026-10-16', MatterOneDriveFolders::receivedEmailsFolderFor($matter->fresh(), Carbon::parse('2026-10-16 10:00')));
         $matter->type->update(['onedrive_received_emails' => '']);
         $this->assertSame('الافتراضي', MatterOneDriveFolders::receivedEmailsFolderFor($matter->fresh()));
 
         // Set on the type's form, shown on its page.
-        \Illuminate\Support\Facades\Gate::before(fn () => true);
+        Gate::before(fn () => true);
         Filament::setCurrentPanel('mms');
         $this->actingAs(User::factory()->create());
-        Livewire::test(\App\Filament\Mms\Resources\Types\Pages\EditType::class, ['record' => $matter->type->getRouteKey()])
+        Livewire::test(EditType::class, ['record' => $matter->type->getRouteKey()])
             ->fillForm(['onedrive_received_emails' => '{{day}}'])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -295,7 +302,7 @@ class MatterOneDriveFolderTest extends TestCase
     public function test_another_phase_of_a_case_goes_in_the_same_main_folder_and_moves_alone_when_finished(): void
     {
         $this->switchOn("{{matter.custom.Phase}}/01 system\n{{matter.custom.Phase}}/02 documents");
-        $od = (new \Tests\Support\FakeOneDrive)->install();
+        $od = (new FakeOneDrive)->install();
         $assistant = $this->assistant(['onedrive_finished_path' => 'Work/Finished']);
         $main = '2026-1010 - خبرة - محاكم دبي';
 
@@ -340,9 +347,9 @@ class MatterOneDriveFolderTest extends TestCase
 
     public function test_sent_emails_and_signed_minutes_folders_take_the_placeholders_and_the_day(): void
     {
-        \Illuminate\Support\Carbon::setTestNow('2026-10-17 09:30:00');
+        Carbon::setTestNow('2026-10-17 09:30:00');
         $this->switchOn('{{matter.custom.Phase}}/01 system');
-        $od = (new \Tests\Support\FakeOneDrive)->install();
+        $od = (new FakeOneDrive)->install();
         $matter = $this->phaseOf('phase1');
         $this->assign($matter, $this->assistant());
         $main = '2026-1010 - خبرة - محاكم دبي';
@@ -355,7 +362,7 @@ class MatterOneDriveFolderTest extends TestCase
         $this->assertSame('phase1/06 محاضر موقعة', MatterOneDriveFolders::signedMinutesFolderFor($matter->fresh()));
 
         // A sent email's PDF goes in that day's folder — no folder is named after a placeholder.
-        app(\App\Services\MMS\SentEmailArchive::class)->keep($matter->fresh(), '%PDF', 'مكتب البنا', 'مستندات', null, asAttachment: false);
+        app(SentEmailArchive::class)->keep($matter->fresh(), '%PDF', 'مكتب البنا', 'مستندات', null, asAttachment: false);
 
         $this->assertContains("Work/Matters/{$main}/phase1/04 المراسلات/المراسلات الصادرة/2026-10-17", $od->tree());
         $this->assertSame([], array_values(array_filter($od->tree(), fn (string $path) => str_contains($path, '{{'))));
@@ -366,12 +373,12 @@ class MatterOneDriveFolderTest extends TestCase
         Setting::clearCache();
         $this->assertSame('', MatterOneDriveFolders::sentEmailsFolderFor($matter->fresh()));
         $this->assertSame(MatterOneDriveFolders::DEFAULT_SIGNED_MINUTES, MatterOneDriveFolders::signedMinutesFolderFor($matter->fresh()));
-        \Illuminate\Support\Carbon::setTestNow();
+        Carbon::setTestNow();
     }
 
     public function test_sent_signed_and_received_folders_can_be_set_per_matter_type(): void
     {
-        \Illuminate\Support\Carbon::setTestNow('2026-10-17 09:30:00');
+        Carbon::setTestNow('2026-10-17 09:30:00');
         $matter = $this->phaseOf('phase1');
         $other = Matter::factory()->create(['type_id' => Type::factory()->create()->id, 'year' => 2026, 'number' => 55, 'custom_fields' => ['Phase' => 'p']]);
 
@@ -408,17 +415,17 @@ class MatterOneDriveFolderTest extends TestCase
         $matter->type->update(['onedrive_sent_emails' => 'صادرة النوع']);
         $this->assertSame('صادرة النوع', MatterOneDriveFolders::sentEmailsFolderFor($matter->fresh()));
         $this->assertSame('', MatterOneDriveFolders::sentEmailsFolderFor($other->fresh()));
-        \Illuminate\Support\Carbon::setTestNow();
+        Carbon::setTestNow();
     }
 
     public function test_the_matter_type_form_sets_its_three_folders(): void
     {
-        \Illuminate\Support\Facades\Gate::before(fn () => true);
+        Gate::before(fn () => true);
         Filament::setCurrentPanel('mms');
         $this->actingAs(User::factory()->create());
         $type = Type::factory()->create();
 
-        Livewire::test(\App\Filament\Mms\Resources\Types\Pages\EditType::class, ['record' => $type->getRouteKey()])
+        Livewire::test(EditType::class, ['record' => $type->getRouteKey()])
             ->fillForm([
                 'onedrive_received_emails' => '{{day}}',
                 'onedrive_sent_emails' => '{{matter.custom.Phase}}/Sent',
@@ -431,7 +438,7 @@ class MatterOneDriveFolderTest extends TestCase
         $this->assertSame(['{{day}}', '{{matter.custom.Phase}}/Sent', 'Signed'], [$type->onedrive_received_emails, $type->onedrive_sent_emails, $type->onedrive_signed_minutes]);
 
         // Shown on its page.
-        Livewire::test(\App\Filament\Mms\Resources\Types\Pages\ViewType::class, ['record' => $type->getRouteKey()])
+        Livewire::test(ViewType::class, ['record' => $type->getRouteKey()])
             ->assertSee('{{matter.custom.Phase}}/Sent')
             ->assertSee('Signed');
     }
@@ -439,7 +446,7 @@ class MatterOneDriveFolderTest extends TestCase
     public function test_a_sent_email_says_what_was_kept_and_what_it_went_with(): void
     {
         $this->switchOn('{{matter.custom.Phase}}/01 system');
-        $od = (new \Tests\Support\FakeOneDrive)->install();
+        $od = (new FakeOneDrive)->install();
         $matter = $this->phaseOf('phase1');
         $this->assign($matter, $this->assistant());
 
@@ -448,8 +455,8 @@ class MatterOneDriveFolderTest extends TestCase
         $this->assertInstanceOf(MatterEmail::class, $record);
         $this->assertSame('Not checked', $record->oneDriveLabel('pdf'));
 
-        \Illuminate\Support\Facades\Storage::fake('public');
-        $kept = app(\App\Services\MMS\SentEmailArchive::class)->keep($matter->fresh(), '%PDF', 'مكتب البنا', 'مستندات', User::factory()->create()->id);
+        Storage::fake('public');
+        $kept = app(SentEmailArchive::class)->keep($matter->fresh(), '%PDF', 'مكتب البنا', 'مستندات', User::factory()->create()->id);
         $this->assertTrue($kept['inOneDrive']);
         $this->assertNotNull($kept['path']);
         $record->noteKept($kept, 2);
@@ -488,7 +495,7 @@ class MatterOneDriveFolderTest extends TestCase
     {
         $matter = $this->phaseOf('phase1');
         $matter->update(['custom_fields' => []]);
-        $at = \Illuminate\Support\Carbon::parse('2026-10-17 09:00:00');
+        $at = Carbon::parse('2026-10-17 09:00:00');
 
         // The phase it has none of; the day it has.
         $template = '{{matter.custom.Phase}}/04 واردة/{{day}}/{{matter.no_such_thing}}';
@@ -512,26 +519,26 @@ class MatterOneDriveFolderTest extends TestCase
         $this->assertSame(1, $cut % 2);
         $words = $head.'=?UTF-8?B?'.base64_encode(substr($arabic, 0, $cut)).'?= =?UTF-8?B?'.base64_encode(substr($arabic, $cut)).'?=';
 
-        $this->assertSame($real, \App\Services\MMS\SentMailImporter::decodeHeader($words));
+        $this->assertSame($real, SentMailImporter::decodeHeader($words));
         // Quoted-printable too, and a name that is only plain text is left alone.
-        $this->assertSame('تقرير.pdf', \App\Services\MMS\SentMailImporter::decodeHeader('=?UTF-8?Q?=D8=AA=D9=82=D8=B1=D9=8A=D8=B1.pdf?='));
-        $this->assertSame('a b.pdf', \App\Services\MMS\SentMailImporter::decodeHeader('a b.pdf'));
+        $this->assertSame('تقرير.pdf', SentMailImporter::decodeHeader('=?UTF-8?Q?=D8=AA=D9=82=D8=B1=D9=8A=D8=B1.pdf?='));
+        $this->assertSame('a b.pdf', SentMailImporter::decodeHeader('a b.pdf'));
 
         // The extension only when it is one.
-        $this->assertSame(['JPA-2026-1010-1 إشعار بأمورية الخبرة وطلب مستندات', 'docx'], \App\Services\MMS\SentEmailArchive::splitName($words));
-        $this->assertSame(['Report', 'pdf'], \App\Services\MMS\SentEmailArchive::splitName('Report.PDF'));
-        [$base, $extension] = \App\Services\MMS\SentEmailArchive::splitName('broken name =?UTF-8?B?2YUg2KYqC5kb2N4?=');
+        $this->assertSame(['JPA-2026-1010-1 إشعار بأمورية الخبرة وطلب مستندات', 'docx'], SentEmailArchive::splitName($words));
+        $this->assertSame(['Report', 'pdf'], SentEmailArchive::splitName('Report.PDF'));
+        [$base, $extension] = SentEmailArchive::splitName('broken name =?UTF-8?B?2YUg2KYqC5kb2N4?=');
         $this->assertSame('', $extension);
-        $this->assertSame('', \App\Services\MMS\SentEmailArchive::splitName('x.4?=')[1]);
+        $this->assertSame('', SentEmailArchive::splitName('x.4?=')[1]);
 
         // Saved: in the system under a path with no stray characters, and in OneDrive under a name OneDrive accepts.
         $this->switchOn();
-        $od = (new \Tests\Support\FakeOneDrive)->install();
-        \Illuminate\Support\Facades\Storage::fake('public');
+        $od = (new FakeOneDrive)->install();
+        Storage::fake('public');
         $matter = $this->phaseOf('phase1');
         $this->assign($matter, $this->assistant());
 
-        $path = app(\App\Services\MMS\SentEmailArchive::class)->keepFile($matter->fresh(), $words, '%PDF', 'application/pdf', 'واردة', User::factory()->create()->id, true, $inOneDrive);
+        $path = app(SentEmailArchive::class)->keepFile($matter->fresh(), $words, '%PDF', 'application/pdf', 'واردة', User::factory()->create()->id, true, $inOneDrive);
         $this->assertTrue($inOneDrive);
         $this->assertMatchesRegularExpression('~^attachments/emails/\d+/[0-9-]+-\w{6}\.docx$~', $path);
         $this->assertSame($real, $matter->attachments()->latest('id')->first()->name);
@@ -539,18 +546,18 @@ class MatterOneDriveFolderTest extends TestCase
 
         // A name that stays unreadable: still saved, under a name OneDrive accepts, and its link opens.
         $odd = 'تقرير =?UTF-8?B?2YUg2KYqC5kb2N4?= x.4?=';
-        $oddPath = app(\App\Services\MMS\SentEmailArchive::class)->keepFile($matter->fresh(), $odd, '%PDF', 'application/pdf', 'واردة', User::factory()->create()->id, true, $oddInOneDrive);
+        $oddPath = app(SentEmailArchive::class)->keepFile($matter->fresh(), $odd, '%PDF', 'application/pdf', 'واردة', User::factory()->create()->id, true, $oddInOneDrive);
         $this->assertTrue($oddInOneDrive);
         $this->assertStringNotContainsString('?', (string) $oddPath);
         $this->assertSame([], array_values(array_filter($od->names('Work/Matters/2026-1010 - خبرة - محاكم دبي/واردة'), fn (string $n) => preg_match('~[?*:<>|"]~', $n) === 1)));
 
         // Arabic Outlook's windows-1256, and an unknown charset: read, never an error.
-        $this->assertSame('تقرير.pdf', \App\Services\MMS\SentMailImporter::decodeHeader('=?windows-1256?B?'.base64_encode(iconv('UTF-8', 'WINDOWS-1256', 'تقرير')).'?=.pdf'));
-        $this->assertIsString(\App\Services\MMS\SentMailImporter::decodeHeader('=?x-no-such-charset?B?'.base64_encode('abc').'?='));
+        $this->assertSame('تقرير.pdf', SentMailImporter::decodeHeader('=?windows-1256?B?'.base64_encode(iconv('UTF-8', 'WINDOWS-1256', 'تقرير')).'?=.pdf'));
+        $this->assertIsString(SentMailImporter::decodeHeader('=?x-no-such-charset?B?'.base64_encode('abc').'?='));
         // Raw 8-bit bytes beside an encoded word: not emptied.
-        $this->assertNotSame('', \App\Services\MMS\SentMailImporter::decodeHeader("caf\xE9 =?UTF-8?B?".base64_encode('x').'?='));
+        $this->assertNotSame('', SentMailImporter::decodeHeader("caf\xE9 =?UTF-8?B?".base64_encode('x').'?='));
         // A name of only characters OneDrive refuses: "attachment".
-        $this->assertSame('attachment', \App\Services\MMS\SentEmailArchive::cleanBase('????'));
+        $this->assertSame('attachment', SentEmailArchive::cleanBase('????'));
 
         // A link to a file with a "?" or "#" in its path keeps its whole path.
         $url = MatterEmail::fileUrl('attachments/emails/1/a b#c?.pdf');
@@ -560,7 +567,7 @@ class MatterOneDriveFolderTest extends TestCase
     public function test_a_child_matter_shares_its_parents_main_folder_whatever_its_number(): void
     {
         $this->switchOn('{{matter.custom.Phase}}/01 system');
-        $od = (new \Tests\Support\FakeOneDrive)->install();
+        $od = (new FakeOneDrive)->install();
         $assistant = $this->assistant();
 
         $parent = $this->phaseOf('phase1');
@@ -586,7 +593,7 @@ class MatterOneDriveFolderTest extends TestCase
     {
         // A structure with no placeholder: nothing to tell one phase's folders from the other's.
         $this->switchOn("01 system\n02 documents");
-        $od = (new \Tests\Support\FakeOneDrive)->install();
+        $od = (new FakeOneDrive)->install();
         $assistant = $this->assistant(['onedrive_finished_path' => 'Work/Finished']);
         $main = '2026-1010 - خبرة - محاكم دبي';
 
@@ -810,6 +817,9 @@ class MatterOneDriveFolderTest extends TestCase
             ->assertSet('testResults', fn (array $rows) => count($rows) === 2
                 && collect($rows)->every(fn ($row) => $row['ok'] && $row['url'] === 'https://onedrive.test/'.rawurlencode(MatterOneDriveFolders::TEST_FOLDER)))
             ->assertSee('amr@firm.ae')
+            // Each row's result, and its folder to open.
+            ->assertSee('Created')
+            ->assertSee('https://onedrive.test/'.rawurlencode(MatterOneDriveFolders::TEST_FOLDER))
             ->assertNotified();
 
         // Amr's under his path, Nahla's at the top of her OneDrive; each

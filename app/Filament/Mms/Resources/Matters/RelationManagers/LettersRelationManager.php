@@ -7,16 +7,18 @@ use App\Filament\Concerns\GuardsSentDeletion;
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Concerns\RefreshesMatterPage;
 use App\Filament\Support\EmailSendFields;
-use App\Filament\Support\RichEditorDirection;
 use App\Filament\Support\OverlapConfirmation;
+use App\Filament\Support\RichEditorDirection;
 use App\Filament\Support\SameDayMeetings;
 use App\Models\CalendarEvent;
 use App\Models\EmailTemplate;
 use App\Models\Letterhead;
 use App\Models\LetterItem;
 use App\Models\LetterTemplate;
+use App\Models\MailSender;
 use App\Models\Matter;
 use App\Models\MatterLetter;
+use App\Models\MatterMinutes;
 use App\Models\Party;
 use App\Services\MMS\Letters\Blocks\SavedSignatureBlock;
 use App\Services\MMS\Letters\Blocks\SignatureBlock;
@@ -25,6 +27,7 @@ use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterMailer;
 use App\Services\MMS\Letters\LetterMeeting;
 use App\Support\Addresses;
+use App\Support\Branding;
 use App\Support\EmailGrouping;
 use App\Support\ScreenPermissions;
 use Carbon\Carbon;
@@ -44,8 +47,10 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Components\Toggle;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
@@ -243,11 +248,7 @@ class LettersRelationManager extends RelationManager
                     ]),
                 Section::make(__('Preview'))
                     ->collapsible()
-                    ->schema([
-                        Placeholder::make('email_preview')
-                            ->hiddenLabel()
-                            ->content(fn (Get $get) => self::emailPreview($record, $get)),
-                    ]),
+                    ->schema(fn (Get $get): array => self::emailPreview($record, $get)),
             ])
             ->action(function (MatterLetter $record, array $data) {
                 $result = app(LetterMailer::class)->send(
@@ -311,9 +312,35 @@ class LettersRelationManager extends RelationManager
 
     /**
      * The email as it will go out — to the first ticked recipient when each
-     * gets their own.
+     * gets their own: to whom, its subject and files, then the email itself.
+     *
+     * @return list<Component>
      */
-    private static function emailPreview(MatterLetter $record, Get $get): HtmlString
+    private static function emailPreview(MatterLetter $record, Get $get): array
+    {
+        // Filament asks for the section's entries several times a request: the email worked out once
+        // for the same choices.
+        $worked = (array) request()->attributes->get('letter-email-preview', []);
+        $attachments = array_map(fn ($file) => $file instanceof TemporaryUploadedFile ? $file->getClientOriginalName() : $file, array_values((array) ($get('attachments') ?? [])));
+        $key = $record->getKey().'|'.md5(serialize([
+            $get('mode'), $get('recipients'), $get('grouping'), $get('email_template_id'), $get('body'), $get('subject'),
+            $get('sender'), $get('formats'), $get('cc'), $attachments, $get('onedrive_files'),
+        ]));
+        if (! isset($worked[$key])) {
+            $worked[$key] = self::workEmailPreview($record, $get);
+            request()->attributes->set('letter-email-preview', $worked);
+        }
+        [$to, $cc, $preview, $attachments, $mode] = $worked[$key];
+
+        return self::emailPreviewEntries($to, $cc, $preview, $attachments, $mode, $record);
+    }
+
+    /**
+     * To whom, CC, the email (subject, body), the files and how it goes.
+     *
+     * @return array{0: string, 1: string, 2: array<string, mixed>, 3: list<string>, 4: string}
+     */
+    private static function workEmailPreview(MatterLetter $record, Get $get): array
     {
         $mode = (string) ($get('mode') ?: LetterMailer::ATTACHMENT);
         $ticked = $record->recipients->whereIn('id', array_map('intval', $get('recipients') ?? []))->values();
@@ -354,12 +381,35 @@ class LettersRelationManager extends RelationManager
             ...EmailSendFields::oneDriveNames($record->matter, (array) ($get('onedrive_files') ?? [])),
         ];
 
-        return new HtmlString(view('filament.mms.letters.email-preview', [
-            ...$preview,
-            'to' => $to,
-            'cc' => implode(', ', $get('cc') ?? []),
-            'attachments' => $attachments,
-        ])->render());
+        return [$to, implode(', ', $get('cc') ?? []), $preview, $attachments, $mode];
+    }
+
+    /**
+     * The preview's entries: to whom, its subject and files, then the email itself.
+     *
+     * @param  array<string, mixed>  $preview
+     * @param  list<string>  $attachments
+     * @return list<Component>
+     */
+    private static function emailPreviewEntries(string $to, string $cc, array $preview, array $attachments, string $mode, MatterLetter $record): array
+    {
+        return [
+            TextEntry::make('preview_to')->label(__('To'))->inlineLabel()->state($to ?: '—')->extraAttributes(['dir' => 'auto']),
+            TextEntry::make('preview_cc')->label(__('CC'))->inlineLabel()->state($cc)->extraAttributes(['dir' => 'ltr'])->visible(filled($cc)),
+            TextEntry::make('preview_subject')->label(__('Subject'))->inlineLabel()->state($preview['subject'])->extraAttributes(['dir' => 'auto']),
+            TextEntry::make('preview_attachments')->label(__('Attachments'))->inlineLabel()->state(implode(' · ', $attachments))->extraAttributes(['dir' => 'auto'])->visible($attachments !== []),
+            // The email itself, as the mail program shows it.
+            TextEntry::make('preview_body')
+                ->hiddenLabel()
+                ->state(new HtmlString(MailSender::previewCss().$preview['html']))
+                ->extraAttributes([
+                    'class' => 'wk-mail',
+                    'dir' => $preview['rtl'] ? 'rtl' : 'ltr',
+                    'style' => 'padding: 1rem; background: #ffffff; color: #111827; border: 1px solid rgb(229 231 235); border-radius: 0.5rem;'
+                        .' font-family: '.Branding::emailFontFamily().'; font-size: 15px; line-height: 1.7;'
+                        .' text-align: '.($preview['rtl'] ? 'right' : 'left').'; max-height: 28rem; overflow: auto;',
+                ]),
+        ];
     }
 
     /**
@@ -1067,7 +1117,7 @@ class LettersRelationManager extends RelationManager
         $meetings = CalendarEvent::query()
             ->where(fn ($query) => $query->where('matter_id', $matter->getKey())
                 ->orWhereHas('matters', fn ($q) => $q->whereKey($matter->getKey())))
-            ->whereNotIn('id', \App\Models\MatterMinutes::query()->whereNotNull('calendar_event_id')->select('calendar_event_id'))
+            ->whereNotIn('id', MatterMinutes::query()->whereNotNull('calendar_event_id')->select('calendar_event_id'))
             // Current or upcoming: not over yet (its end, else its start).
             ->whereRaw('COALESCE(end_datetime, start_datetime) >= ?', [now()])
             ->orderBy('start_datetime')

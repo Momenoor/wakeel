@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Pages\Reports;
 
 use App\Enums\MatterCollectionStatus;
+use App\Filament\Concerns\PrintableReport;
 use App\Filament\Mms\Clusters\Reports;
 use App\Filament\Mms\Exports\MatterExporter;
 use App\Models\Matter;
@@ -28,7 +29,7 @@ use Illuminate\Support\Facades\DB;
 
 class MattersMonthlyReport extends Page implements HasTable
 {
-    use HasPageShield;
+    use HasPageShield, PrintableReport;
     use InteractsWithTable;
 
     protected static string|null|BackedEnum $navigationIcon = 'heroicon-o-chart-bar';
@@ -36,8 +37,6 @@ class MattersMonthlyReport extends Page implements HasTable
     protected static ?string $cluster = Reports::class;
 
     protected static ?int $navigationSort = 2;
-
-    protected string $view = 'filament.pages.matters-monthly-report';
 
     public static function getNavigationLabel(): string
     {

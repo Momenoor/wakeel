@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Pages\Reports;
 
 use App\Enums\FeeType;
+use App\Filament\Concerns\PrintableReport;
 use App\Filament\Mms\Clusters\Reports;
 use App\Filament\Mms\Exports\AssistantMattersExporter;
 use App\Filament\Mms\Resources\Matters\MatterResource;
@@ -27,10 +28,8 @@ use Illuminate\Support\HtmlString;
 
 class AssistantMattersReport extends Page implements HasTable
 {
-    use HasPageShield;
+    use HasPageShield, PrintableReport;
     use InteractsWithTable;
-
-    protected string $view = 'filament.pages.assistant-matters-report';
 
     protected static string|null|BackedEnum $navigationIcon = 'heroicon-o-clipboard-document-list';
 

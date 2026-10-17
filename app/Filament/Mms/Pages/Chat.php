@@ -2,8 +2,11 @@
 
 namespace App\Filament\Mms\Pages;
 
+use App\Livewire\ChatWidget;
 use BackedEnum;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Livewire;
+use Filament\Schemas\Schema;
 use UnitEnum;
 
 /**
@@ -14,13 +17,23 @@ use UnitEnum;
  */
 class Chat extends Page
 {
-    protected string $view = 'filament.pages.chat';
-
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-chat-bubble-left-right';
 
     protected static string|UnitEnum|null $navigationGroup = 'Communication';
 
     protected static ?int $navigationSort = 1;
+
+    /** From a notification: ?conversation=…&message=… opens it at that message. */
+    public function content(Schema $schema): Schema
+    {
+        return $schema->components([
+            Livewire::make(ChatWidget::class, fn (): array => [
+                'mode' => 'page',
+                'conversation' => filter_var(request()->query('conversation'), FILTER_VALIDATE_INT, FILTER_NULL_ON_FAILURE),
+                'message' => filter_var(request()->query('message'), FILTER_VALIDATE_INT, FILTER_NULL_ON_FAILURE),
+            ]),
+        ]);
+    }
 
     public function getTitle(): string
     {

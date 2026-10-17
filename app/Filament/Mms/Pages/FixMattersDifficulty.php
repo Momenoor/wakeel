@@ -16,8 +16,6 @@ class FixMattersDifficulty extends Page
 {
     use HasPageShield;
 
-    protected string $view = 'filament.pages.fix-matters-difficulty';
-
     protected static string|null|\BackedEnum $navigationIcon = 'heroicon-o-wrench-screwdriver';
 
     protected static ?string $navigationLabel = 'Fix Matters Difficulty';

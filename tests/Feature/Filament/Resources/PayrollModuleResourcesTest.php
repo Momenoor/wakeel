@@ -17,6 +17,7 @@ use App\Filament\Mms\Resources\LeaveRequests\Pages\ListLeaveRequests;
 use App\Filament\Mms\Resources\PayrollRuns\Pages\ListPayrollRuns;
 use App\Filament\Mms\Resources\PayrollRuns\Pages\ViewPayrollRun;
 use App\Filament\Mms\Resources\PayrollRuns\PayrollRunResource;
+use App\Filament\Mms\Resources\PayrollRuns\RelationManagers\PayslipsRelationManager;
 use App\Models\EmployeeLoan;
 use App\Models\EmployeeProfile;
 use App\Models\EmployeeSalaryComponent;
@@ -448,19 +449,42 @@ class PayrollModuleResourcesTest extends TestCase
         $run = PayrollRun::create(['period' => '2026-06', 'status' => PayrollRunStatus::DRAFT]);
         app(PayrollService::class)->generate($run);
 
+        $this->assertTrue(app(PayrollJournalVoucherService::class)->forRun($run)['balanced']);
+
         Livewire::test(ViewPayrollRun::class, ['record' => $run->getKey()])
             ->mountAction('journal_voucher')
-            ->assertOk();
+            ->assertOk()
+            ->assertMountedActionModalSee([
+                '2026-06',
+                __('Salaries Expense'),
+                __('Net Salary Payable'),
+                __('Total'),
+                __('Debits and credits agree.'),
+            ]);
+    }
 
-        // Filament renders modal bodies lazily, so the view is exercised
-        // directly rather than fished out of the component's initial HTML.
-        $voucher = app(PayrollJournalVoucherService::class)->forRun($run);
-        $html = view('filament.payroll.journal-voucher', ['voucher' => $voucher])->render();
+    public function test_a_payslips_loan_deduction_is_broken_down_by_instalment(): void
+    {
+        $loan = $this->loan();
 
-        $this->assertTrue($voucher['balanced']);
-        $this->assertStringContainsString(__('Salaries Expense'), $html);
-        $this->assertStringContainsString(__('Net Salary Payable'), $html);
-        $this->assertStringContainsString(__('Debits and credits agree.'), $html);
+        $run = PayrollRun::create(['period' => '2026-06', 'status' => PayrollRunStatus::DRAFT]);
+        app(PayrollService::class)->generate($run);
+        $payslip = $run->payslips()->where('party_id', $loan->party_id)->sole();
+
+        // 1,200 over 6 months: 200 taken now, 1,000 still to come.
+        Livewire::test(PayslipsRelationManager::class, [
+            'ownerRecord' => $run,
+            'pageClass' => ViewPayrollRun::class,
+        ])
+            ->mountTableAction('loan_breakdown', $payslip)
+            ->assertMountedActionModalSee([
+                LoanKind::LOAN->getLabel(),
+                __(':seq of :total', ['seq' => 1, 'total' => 6]),
+                '2026-06',
+                '200.00',
+                __('Total'),
+                '1,000.00',
+            ]);
     }
 
     /**
@@ -530,7 +554,9 @@ class PayrollModuleResourcesTest extends TestCase
 
         $this->get(EndOfServiceGratuityClosingVoucher::getUrl())
             ->assertSuccessful()
-            ->assertSee($party->name);
+            ->assertSee($party->name)
+            ->assertSee(__('Opening Balance'))
+            ->assertSee(__('Debits and credits agree.'));
 
         $this->get(route('payroll.eosg-closing-voucher.print', ['year' => 2026]))
             ->assertSuccessful()

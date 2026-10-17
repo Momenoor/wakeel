@@ -132,6 +132,26 @@ class QuotationResourceTest extends TestCase
         $this->assertSame('2026-06-01', $data['deposit_payment']['payment_date']);
     }
 
+    public function test_the_quotation_page_lists_its_expected_instalments_with_their_total(): void
+    {
+        $quotation = app(QuotationService::class)->generate([
+            'party_id' => Party::factory()->tenant()->create()->id,
+            'units' => [['unit_id' => Unit::factory()->residential()->create()->id, 'offered_rent' => 60000]],
+            'start_date' => '2026-06-21',
+            'validity_date' => now()->addDays(10)->toDateString(),
+            'number_of_installments' => 2,
+        ]);
+        $rows = app(QuotationService::class)->expectedInstallments($quotation);
+
+        Livewire::test(ViewQuotation::class, ['record' => $quotation->getKey()])
+            ->assertSee(__('Expected Instalments'))
+            ->assertSee($rows[0]['label'])
+            ->assertSee('21/06/2026')
+            ->assertSee(number_format($rows[0]['amount'], 2))
+            ->assertSee(number_format(array_sum(array_column($rows, 'amount')), 2))
+            ->assertDontSee(__('Add a unit with its rent to see the instalments.'));
+    }
+
     public function test_the_printout_shows_the_building_and_its_lessor(): void
     {
         $unit = Unit::factory()->residential()->create();

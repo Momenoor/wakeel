@@ -16,6 +16,7 @@ use App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager;
 use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
 use App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager;
 use App\Filament\Mms\Resources\Matters\RelationManagers\ProgressRelationManager;
+use App\Filament\Support\EntryTable;
 use App\Helpers\FileUploadHelper;
 use App\Livewire\MatterContacts;
 use App\Livewire\MatterOneDriveFiles;
@@ -49,6 +50,7 @@ use Filament\Schemas\Components\Livewire;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\FontWeight;
@@ -58,7 +60,6 @@ use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\HtmlString;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class MatterInfolist
@@ -309,35 +310,85 @@ class MatterInfolist
             ->icon('heroicon-o-calendar-days')
             ->description(__('Court sessions and meetings from the calendar. Events whose title names this matter (e.g. 639/2025) are linked automatically.'))
             ->headerActions([static::linkEventAction()])
-            ->schema([
-                TextEntry::make('events_list')
-                    ->hiddenLabel()
-                    ->state(function ($record) {
-                        if (! $record) {
-                            return null;
-                        }
+            ->schema(function ($record): array {
+                if (! $record) {
+                    return [];
+                }
 
-                        $today = now()->startOfDay();
-                        $events = fn () => $record->linkedCalendarEvents()->with('matters:id');
+                $today = now()->startOfDay();
+                $events = fn () => $record->linkedCalendarEvents()->with('matters:id');
+                $past = $events()->where('start_datetime', '<', $today)->orderByDesc('start_datetime')->limit(30)->get();
+                $pastTotal = $events()->where('start_datetime', '<', $today)->count();
 
-                        return new HtmlString(view('filament.mms.matters.events', [
-                            'upcoming' => $events()->where('start_datetime', '>=', $today)->orderBy('start_datetime')->get(),
-                            'past' => $events()->where('start_datetime', '<', $today)->orderByDesc('start_datetime')->limit(30)->get(),
-                            'pastTotal' => $events()->where('start_datetime', '<', $today)->count(),
-                            // Each event opens on the Calendar, in its own
-                            // details window — for those who may see it.
-                            'eventUrl' => CalendarEventResource::canViewAny()
-                                ? fn (CalendarEvent $event): string => CalendarEventResource::getUrl('index', [
-                                    'tableAction' => 'view',
-                                    'tableActionRecord' => $event->getKey(),
-                                    // The calendar lists upcoming events by default.
-                                    ...($event->start_datetime?->isPast() ? ['filters' => ['upcoming' => ['isActive' => false]]] : []),
-                                ])
-                                : fn (): ?string => null,
-                        ])->render());
-                    })
-                    ->html(),
-            ]);
+                return [
+                    // Upcoming first (soonest at the top), then past (latest
+                    // at the top) — when there are any.
+                    static::eventsTable('upcoming_events', __('Upcoming'), $events()->where('start_datetime', '>=', $today)->orderBy('start_datetime')->get(), upcoming: true),
+                    static::eventsTable('past_events', __('Past'), $past, upcoming: false)
+                        ->visible($past->isNotEmpty())
+                        ->extraAttributes(['class' => 'opacity-80']),
+                    Text::make(__('Showing the latest :shown of :total past events.', ['shown' => $past->count(), 'total' => $pastTotal]))
+                        ->color('gray')
+                        ->size(TextSize::ExtraSmall)
+                        ->visible($pastTotal > $past->count()),
+                ];
+            });
+    }
+
+    /**
+     * One group of a matter's events: when, what (opening on the Calendar,
+     * for those who may see it) and where from — and, while it is still to
+     * come, a link to join it online.
+     *
+     * @param  Collection<int, CalendarEvent>  $events
+     */
+    private static function eventsTable(string $name, string $heading, Collection $events, bool $upcoming): RepeatableEntry
+    {
+        // Each event opens on the Calendar, in its own details window (for whoever may see it — asked once).
+        $canView = CalendarEventResource::canViewAny();
+        $url = fn (CalendarEvent $event): ?string => $canView
+            ? CalendarEventResource::getUrl('index', [
+                'tableAction' => 'view',
+                'tableActionRecord' => $event->getKey(),
+                // The calendar lists upcoming events by default.
+                ...($event->start_datetime?->isPast() ? ['filters' => ['upcoming' => ['isActive' => false]]] : []),
+            ])
+            : null;
+
+        return EntryTable::make($name, [
+            TextEntry::make('start_datetime')
+                ->label(__('Date'))
+                ->hiddenLabel()
+                ->formatStateUsing(fn (CalendarEvent $record): ?string => $record->start_datetime?->translatedFormat('D d/m/Y'))
+                ->weight(FontWeight::SemiBold)
+                ->helperText(fn (CalendarEvent $record): ?string => $record->is_all_day ? __('All day') : $record->start_datetime?->translatedFormat('g:i A')),
+            TextEntry::make('title')
+                ->label(__('Title'))
+                ->hiddenLabel()
+                ->url($url)
+                ->color(fn (CalendarEvent $record): ?string => $url($record) ? 'primary' : null)
+                ->tooltip(fn (CalendarEvent $record): ?string => $url($record) ? __('Open in the calendar') : null)
+                ->helperText(fn (CalendarEvent $record): string => collect([
+                    filled($record->location) ? $record->location : null,
+                    $record->imported_from_outlook ? __('From Outlook') : __('Created in Wakeel'),
+                    ($others = $record->matters->count() - 1) > 0
+                        ? trans_choice('{1} with 1 other matter|[2,*] with :count other matters', $others, ['count' => $others])
+                        : null,
+                ])->filter()->implode(' · ')),
+            TextEntry::make('online_meeting_url')
+                ->label(__('Join'))
+                ->hiddenLabel()
+                ->visible($upcoming)
+                ->alignEnd()
+                ->formatStateUsing(fn (): string => __('Join'))
+                ->url(fn (string $state): string => $state, shouldOpenInNewTab: true)
+                ->badge()
+                ->color('primary'),
+        ])
+            ->hiddenLabel(false)
+            ->label($heading.' ('.$events->count().')')
+            ->state($events)
+            ->placeholder(__('No upcoming sessions or events.'));
     }
 
     /**
@@ -850,15 +901,59 @@ class MatterInfolist
                                     ->label(__('Incentive Base'))
                                     ->helperText(__('The fee at this rate, before the assistant rate is applied — not the amount paid out.'))
                                     ->state(Currency::label(number_format((float) $feeLines->sum('net_amount'), 2).' AED')),
-                                TextEntry::make("incentive_{$calculationId}_assistants")
+                                static::incentiveBreakdown("incentive_{$calculationId}_assistants", $rows)
                                     ->label(__('Paid to Assistants'))
                                     ->columnSpanFull()
-                                    ->helperText(__('Each assistant\'s rate on the incentive base above, plus any monthly bonus, less any shortfall penalty and their fixed deduction (spread over their matters) — so it will not equal the base.'))
-                                    ->state(new HtmlString(view('filament.mms.matters.incentive-breakdown', ['rows' => $rows])->render()))
-                                    ->html(),
+                                    ->helperText(__('Each assistant\'s rate on the incentive base above, plus any monthly bonus, less any shortfall penalty and their fixed deduction (spread over their matters) — so it will not equal the base.')),
                             ]);
                     })->values()->all();
             });
+    }
+
+    /**
+     * Each assistant's incentive on one matter: share, then what was added
+     * and taken off, then what is paid — totalled when there are several.
+     *
+     * @param  list<array{name: string, override: bool, share: float, extra: float, extra_pct: float, penalty: float, penalty_pct: float, fixed: float, net: float}>  $rows
+     */
+    private static function incentiveBreakdown(string $name, array $rows): RepeatableEntry
+    {
+        $money = fn (float $v): string => number_format($v, 2);
+        // An amount added or taken off, with its percentage: "+50.00 (10%)";
+        // in the totals row the plain sum.
+        $change = fn (string $sign, string $pct) => fn (float $state, TextEntry $component): string => match (true) {
+            EntryTable::isTotal($component) => $money($state),
+            $state <= 0 => '—',
+            default => $sign.$money($state).(($p = (float) (EntryTable::row($component)[$pct] ?? 0)) > 0 ? ' ('.($p + 0).'%)' : ''),
+        };
+        $color = fn (string $color) => fn (TextEntry $component): ?string => EntryTable::isTotal($component) ? null : $color;
+
+        if (count($rows) > 1) {
+            $rows[] = [
+                'total' => true,
+                'name' => __('Total'),
+                ...collect(['share', 'extra', 'penalty', 'fixed', 'net'])->mapWithKeys(fn (string $key) => [$key => array_sum(array_column($rows, $key))])->all(),
+            ];
+        }
+
+        return EntryTable::make($name, [
+            TextEntry::make('name')
+                ->label(__('Assistant'))
+                ->formatStateUsing(fn (string $state, TextEntry $component): string => $state.(EntryTable::row($component)['override'] ?? false ? ' ('.__('override').')' : ''))
+                ->weight(EntryTable::totalWeight(...)),
+            EntryTable::amount('share', __('Share')),
+            TextEntry::make('extra')->label(__('Extra'))->alignEnd()->formatStateUsing($change('+', 'extra_pct'))->color($color('success'))->weight(EntryTable::totalWeight(...)),
+            TextEntry::make('penalty')->label(__('Penalty'))->alignEnd()->formatStateUsing($change('−', 'penalty_pct'))->color($color('danger'))->weight(EntryTable::totalWeight(...)),
+            TextEntry::make('fixed')
+                ->label(__('Fixed Deduction'))
+                ->alignEnd()
+                ->formatStateUsing(fn (float $state, TextEntry $component): string => EntryTable::isTotal($component) ? $money($state) : ($state > 0 ? '−'.$money($state) : '—'))
+                ->color($color('danger'))
+                ->weight(EntryTable::totalWeight(...)),
+            TextEntry::make('net')->label(__('Net'))->alignEnd()->aed()->weight(FontWeight::Bold),
+        ])
+            ->hiddenLabel(false)
+            ->state($rows);
     }
 
     /**

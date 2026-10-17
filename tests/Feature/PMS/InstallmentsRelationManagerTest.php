@@ -74,4 +74,22 @@ class InstallmentsRelationManagerTest extends TestCase
 
         $this->assertSame('0.00', $installment->fresh()->balance_due);
     }
+
+    public function test_the_payments_behind_an_instalment_are_listed(): void
+    {
+        $lease = $this->lease();
+        $installment = app(InstallmentGenerator::class)->generateSchedule($lease, 2)->first();
+
+        $page = Livewire::test(InstallmentsRelationManager::class, [
+            'ownerRecord' => $lease,
+            'pageClass' => ViewLease::class,
+        ]);
+
+        $page->assertTableActionHidden('view_payments', $installment)
+            ->callAction(TestAction::make('record_payment')->table($installment), ['amount' => 1000, 'transaction_reference' => 'TRX-77', 'paid_date' => '2026-05-04']);
+
+        $page->mountTableAction('view_payments', $installment->fresh())
+            ->assertMountedActionModalSee(['04/05/2026', '1,000.00', 'TRX-77'])
+            ->assertMountedActionModalDontSee(__('No payments recorded yet.'));
+    }
 }

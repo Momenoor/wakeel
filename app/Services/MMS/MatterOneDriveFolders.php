@@ -13,15 +13,14 @@ use App\Models\OneDriveFolderReview;
 use App\Models\Party;
 use App\Models\Setting;
 use App\Models\Type;
-use App\Services\MMS\Calendar\MatterReferenceMatcher;
 use App\Models\User;
+use App\Services\MMS\Calendar\MatterReferenceMatcher;
+use Carbon\CarbonInterface;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Collection;
-use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 
 /**
  * A folder for each matter in its assistant's OneDrive:
@@ -433,15 +432,7 @@ class MatterOneDriveFolders
 
         $sourceUser = (string) $source->party->onedrive_email;
         $targetUser = (string) $target->party->onedrive_email;
-        $sourcePath = (string) (($email->onedrive['folder'] ?? null) ?: self::receivedEmailsFolderFor($from, $email->at));
-        $folderId = $this->walk($sourceUser, (string) $source->drive_item_id, $sourcePath);
-
-        if ($folderId === null) {
-            return $result;
-        }
-
-        $stem = mb_strtolower(self::clean($base));
-        $items = collect($this->client->children($sourceUser, $folderId))->filter(fn (array $item): bool => in_array(mb_strtolower($item['name']), $item['folder'] ? [$stem] : [$stem.'.pdf', $stem.'.eml'], true));
+        $items = $this->emailItems($email, $from);
 
         if ($items->isEmpty()) {
             return $result;
@@ -479,6 +470,50 @@ class MatterOneDriveFolders
         $result['moved'] = true;
 
         return $result;
+    }
+
+    /**
+     * A received email's files removed from the matter's OneDrive (to its owner's recycle bin): its
+     * PDF, its original and the folder of the files it came with. How many items were removed.
+     */
+    public function removeEmailFiles(MatterEmail $email, Matter $matter): int
+    {
+        $folder = self::folderFor($matter);
+        $items = $this->emailItems($email, $matter);
+
+        $items->each(fn (array $item) => $this->client->delete((string) $folder->party->onedrive_email, $item['id']));
+
+        return $items->count();
+    }
+
+    /**
+     * A received email's items in the matter's received-emails folder: its PDF, its original (.eml)
+     * and the folder of the files it came with — by the PDF's name. None when not found.
+     *
+     * @return \Illuminate\Support\Collection<int, array{id: string, name: string, folder: bool}>
+     */
+    private function emailItems(MatterEmail $email, Matter $matter): \Illuminate\Support\Collection
+    {
+        $folder = self::folderFor($matter);
+        $base = pathinfo((string) ($email->files[0]['name'] ?? ''), PATHINFO_FILENAME);
+
+        if (! $folder || $base === '') {
+            return collect();
+        }
+
+        $user = (string) $folder->party->onedrive_email;
+        $path = (string) (($email->onedrive['folder'] ?? null) ?: self::receivedEmailsFolderFor($matter, $email->at));
+        $folderId = $this->walk($user, (string) $folder->drive_item_id, $path);
+
+        if ($folderId === null) {
+            return collect();
+        }
+
+        $stem = mb_strtolower(self::clean($base));
+
+        return collect($this->client->children($user, $folderId))
+            ->filter(fn (array $item): bool => in_array(mb_strtolower($item['name']), $item['folder'] ? [$stem] : [$stem.'.pdf', $stem.'.eml'], true))
+            ->values();
     }
 
     /** A folder's id, down a path from a folder — null when a folder on the way is not there. */
@@ -667,6 +702,7 @@ class MatterOneDriveFolders
 
         return array_values(array_unique(array_filter($firsts)));
     }
+
     public static function signedMinutesFolder(): string
     {
         return trim((string) Setting::get(self::SIGNED_MINUTES, '')) ?: 'محاضر موقعة';

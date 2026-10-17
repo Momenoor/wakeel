@@ -2,6 +2,7 @@
 
 namespace App\Filament\Shared\Pages;
 
+use App\Filament\Concerns\RendersFreshContent;
 use App\Filament\Shared\Clusters\Settings;
 use App\Http\Middleware\TrackPerformance;
 use App\Models\PerformanceSample;
@@ -10,14 +11,34 @@ use App\Support\AppUpdate;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\Select;
+use Filament\Infolists\Components\RepeatableEntry;
+use Filament\Infolists\Components\RepeatableEntry\TableColumn;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Actions;
+use Filament\Schemas\Components\EmbeddedTable;
+use Filament\Schemas\Components\Flex;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Text;
+use Filament\Schemas\Schema;
+use Filament\Support\Enums\FontFamily;
+use Filament\Support\Enums\FontWeight;
+use Filament\Support\Enums\TextSize;
 use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Concerns\InteractsWithTable;
+use Filament\Tables\Contracts\HasTable;
+use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Routing\Route;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\HtmlString;
+use Illuminate\Support\Js;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Renderless;
 
@@ -28,15 +49,16 @@ use Livewire\Attributes\Renderless;
  * the slowest requests in full. "Check every screen" opens each screen in
  * turn, from this browser, as the signed-in user.
  */
-class Performance extends Page
+class Performance extends Page implements HasTable
 {
+    use InteractsWithTable;
+    use RendersFreshContent;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Bolt;
 
     protected static ?int $navigationSort = 33;
 
     protected static ?string $cluster = Settings::class;
-
-    protected string $view = 'filament.shared.performance';
 
     /** The period shown: 24h, 7d or 14d. */
     public string $period = '24h';
@@ -44,8 +66,8 @@ class Performance extends Page
     /** A "Check every screen" run whose results are shown, instead of the period. */
     public ?string $check = null;
 
-    /** The screens' order: avg, max, queries, repeated, count. */
-    public string $sort = 'avg';
+    /** The columns the screens can be ordered by (the table's sortable ones). */
+    private const SCREEN_SORTS = ['requests', 'avg_ms', 'max_ms', 'avg_queries', 'avg_repeated'];
 
     public static function getNavigationLabel(): string
     {
@@ -132,19 +154,15 @@ class Performance extends Page
      */
     public function screens(int $limit = 60): Collection
     {
-        $order = match ($this->sort) {
-            'max' => 'max_ms',
-            'queries' => 'avg_queries',
-            'repeated' => 'avg_repeated',
-            'count' => 'requests',
-            default => 'avg_ms',
-        };
+        // In the order the table is sorted by — slowest on average first.
+        $order = in_array($this->getTableSortColumn(), self::SCREEN_SORTS, true) ? $this->getTableSortColumn() : 'avg_ms';
+        $direction = $this->getTableSortColumn() !== null && $this->getTableSortDirection() === 'asc' ? 'asc' : 'desc';
 
         return $this->samples()
             ->toBase()
             ->selectRaw('name, count(*) as requests, avg(duration_ms) as avg_ms, max(duration_ms) as max_ms, avg(queries) as avg_queries, max(queries) as max_queries, avg(repeated) as avg_repeated, avg(memory_mb) as avg_mb, avg(response_kb) as avg_kb')
             ->groupBy('name')
-            ->orderByDesc($order)
+            ->orderBy($order, $direction)
             ->limit($limit)
             ->get();
     }
@@ -161,11 +179,6 @@ class Performance extends Page
             ->orderByDesc('duration_ms')
             ->limit($limit)
             ->get();
-    }
-
-    public function sortBy(string $sort): void
-    {
-        $this->sort = $sort;
     }
 
     public function updatedPeriod(): void
@@ -330,6 +343,252 @@ class Performance extends Page
         }
 
         return implode("\n", $lines)."\n";
+    }
+
+    public function content(Schema $schema): Schema
+    {
+        $stats = $this->stats();
+
+        return $schema->components([
+            Flex::make([
+                // The period, or a check's results.
+                Flex::make([
+                    Text::make(__('Results of the check of every screen'))
+                        ->badge()
+                        ->color('info')
+                        ->visible(filled($this->check))
+                        ->grow(false),
+                    Actions::make([
+                        Action::make('backToPeriod')
+                            ->label(__('Back to all requests'))
+                            ->link()
+                            ->action(fn () => $this->showPeriod()),
+                    ])
+                        ->visible(filled($this->check))
+                        ->grow(false),
+                    Select::make('period')
+                        ->hiddenLabel()
+                        ->options([
+                            '24h' => __('Last 24 hours'),
+                            '7d' => __('Last 7 days'),
+                            '14d' => __('Last 14 days'),
+                        ])
+                        ->native()
+                        ->selectablePlaceholder(false)
+                        ->live()
+                        ->hidden(filled($this->check))
+                        ->extraFieldWrapperAttributes(['style' => 'width: 12rem'])
+                        ->grow(false),
+                    Text::make(__('Measuring is stopped'))
+                        ->badge()
+                        ->color('warning')
+                        ->hidden($this->tracking())
+                        ->grow(false),
+                ])->verticallyAlignCenter(),
+
+                // Each screen opened in turn, from here, as you: on this
+                // server, with its data. The requests go from the browser,
+                // so Alpine drives the run; the page only hands out the
+                // addresses and shows the results.
+                Flex::make([
+                    Text::make(new HtmlString(e(__('Opening screen')).' <span x-text="done"></span> / <span x-text="total"></span>'))
+                        ->extraAttributes(['x-show' => 'running', 'x-cloak' => true])
+                        ->grow(false),
+                    Actions::make([
+                        Action::make('checkEveryScreen')
+                            ->label(__('Check every screen'))
+                            ->icon(Heroicon::OutlinedPlayCircle)
+                            ->alpineClickHandler('run()')
+                            ->extraAttributes(['x-bind:disabled' => 'running']),
+                    ])->grow(false),
+                ])
+                    ->verticallyAlignCenter()
+                    ->extraAttributes(['x-data' => $this->checkRunAlpine()])
+                    ->grow(false),
+            ])->verticallyAlignCenter()->alignBetween(),
+
+            Grid::make(['default' => 2, 'md' => 3, 'xl' => 5])->schema([
+                $this->statCard('requests', __('Requests'), number_format($stats['requests'])),
+                $this->statCard('avg', __('Average time'), number_format($stats['avg']).' ms', $this->tone($stats['avg'])),
+                $this->statCard('p95', __('95% of requests within'), number_format($stats['p95']).' ms', $this->tone($stats['p95'])),
+                $this->statCard('slow', __('Slow requests (1 s or more)'), number_format($stats['slow']), $stats['slow'] ? 'danger' : null),
+                $this->statCard('queries', __('Database queries per request'), (string) $stats['queries']),
+            ]),
+
+            Section::make(__('By screen'))
+                ->description(__('Repeated: the same query run again in one request — usually once per row of a list, the first thing to fix.'))
+                ->schema([EmbeddedTable::make()]),
+
+            Section::make(__('Slowest requests'))
+                ->collapsible()
+                ->schema([
+                    RepeatableEntry::make('slowest')
+                        ->hiddenLabel()
+                        ->state($this->slowest()->map(fn (PerformanceSample $sample): array => [
+                            'when' => $sample->created_at->diffForHumans(),
+                            'user' => $sample->user?->display_name ?: $sample->user?->name ?: '—',
+                            'name' => $sample->name,
+                            'top_query' => $sample->top_query,
+                            'duration_ms' => $sample->duration_ms,
+                            'queries' => $sample->queries,
+                            'repeated' => $sample->repeated,
+                            'status' => $sample->status,
+                        ])->all())
+                        ->placeholder(__('Nothing measured yet.'))
+                        ->table([
+                            TableColumn::make(__('When')),
+                            TableColumn::make(__('User')),
+                            TableColumn::make(__('Screen or action')),
+                            TableColumn::make('ms')->alignEnd(),
+                            TableColumn::make(__('Queries'))->alignEnd(),
+                            TableColumn::make(__('Repeated'))->alignEnd(),
+                            TableColumn::make(__('Status'))->alignEnd(),
+                        ])
+                        ->schema([
+                            TextEntry::make('when'),
+                            TextEntry::make('user'),
+                            TextEntry::make('name')
+                                ->extraAttributes(['dir' => 'ltr'])
+                                // The query run most often, under the screen.
+                                ->belowContent(fn (?string $state, TextEntry $component): ?Text => filled($query = data_get($component->getContainer()->getConstantState(), 'top_query'))
+                                    ? Text::make($query)->fontFamily(FontFamily::Mono)->size(TextSize::ExtraSmall)->color('gray')->extraAttributes(['dir' => 'ltr', 'style' => 'word-break: break-all'])
+                                    : null),
+                            TextEntry::make('duration_ms')
+                                ->numeric()
+                                ->color(fn ($state): ?string => $this->tone((float) $state))
+                                ->weight(fn ($state): ?FontWeight => $this->toneWeight((float) $state))
+                                ->alignEnd(),
+                            TextEntry::make('queries')->alignEnd(),
+                            TextEntry::make('repeated')->alignEnd(),
+                            TextEntry::make('status')->alignEnd(),
+                        ]),
+                ]),
+        ]);
+    }
+
+    /**
+     * Every screen, from the check run's addresses: each one fetched with the
+     * run's id in a header, so the server files those requests under it.
+     */
+    private function checkRunAlpine(): string
+    {
+        // Single quotes only: this sits in an HTML attribute as it is.
+        return '{
+            total: 0,
+            done: 0,
+            running: false,
+            async run() {
+                this.running = true;
+                const id = await $wire.startCheck();
+                const urls = await $wire.checkUrls();
+                this.total = urls.length;
+                this.done = 0;
+                for (const url of urls) {
+                    try { await fetch(url, { headers: { '.Js::from(TrackPerformance::CHECK_HEADER).': id }, credentials: \'same-origin\' }); } catch (e) {}
+                    this.done++;
+                }
+                this.running = false;
+                await $wire.showCheck(id);
+            },
+        }';
+    }
+
+    private function statCard(string $name, string $label, string $value, ?string $color = null): Section
+    {
+        return Section::make()
+            ->compact()
+            ->schema([
+                TextEntry::make($name)
+                    ->label($label)
+                    ->state($value)
+                    ->size(TextSize::Large)
+                    ->weight(FontWeight::Bold)
+                    ->color($color),
+            ]);
+    }
+
+    /**
+     * A time's colour: red from a slow request, amber from half of one.
+     */
+    private function tone(float $ms): ?string
+    {
+        return match (true) {
+            $ms >= TrackPerformance::SLOW_MS => 'danger',
+            $ms >= TrackPerformance::SLOW_MS / 2 => 'warning',
+            default => null,
+        };
+    }
+
+    private function toneWeight(float $ms): ?FontWeight
+    {
+        return match ($this->tone($ms)) {
+            'danger' => FontWeight::Bold,
+            'warning' => FontWeight::SemiBold,
+            default => null,
+        };
+    }
+
+    /**
+     * Each screen (or Livewire action) — see screens(); sorting it orders
+     * the rows the server returns.
+     */
+    public function table(Table $table): Table
+    {
+        return $table
+            ->records(fn (): array => $this->screens()
+                ->mapWithKeys(fn (object $row): array => [$row->name => (array) $row])
+                ->all())
+            ->defaultSort('avg_ms', 'desc')
+            ->paginated(false)
+            ->emptyStateHeading(__('Nothing measured yet.'))
+            ->columns([
+                TextColumn::make('name')
+                    ->label(__('Screen or action'))
+                    ->extraAttributes(['dir' => 'ltr'])
+                    ->wrap(),
+                TextColumn::make('requests')
+                    ->label(__('Requests'))
+                    ->numeric()
+                    ->sortable()
+                    ->alignEnd(),
+                TextColumn::make('avg_ms')
+                    ->label(__('Average ms'))
+                    ->numeric()
+                    ->color(fn ($state): ?string => $this->tone((float) $state))
+                    ->weight(fn ($state): ?FontWeight => $this->toneWeight((float) $state))
+                    ->sortable()
+                    ->alignEnd(),
+                TextColumn::make('max_ms')
+                    ->label(__('Slowest ms'))
+                    ->numeric()
+                    ->color(fn ($state): ?string => $this->tone((float) $state))
+                    ->weight(fn ($state): ?FontWeight => $this->toneWeight((float) $state))
+                    ->sortable()
+                    ->alignEnd(),
+                TextColumn::make('avg_queries')
+                    ->label(__('Queries'))
+                    // The average, and the most one request ran.
+                    ->formatStateUsing(fn ($state, array $record): HtmlString => new HtmlString(
+                        e((string) round((float) $state)).' <small style="color: rgb(156 163 175);">/ '.e((string) $record['max_queries']).'</small>'
+                    ))
+                    ->sortable()
+                    ->alignEnd(),
+                TextColumn::make('avg_repeated')
+                    ->label(__('Repeated'))
+                    ->formatStateUsing(fn ($state): string => (string) round((float) $state))
+                    ->color(fn ($state): ?string => $state >= 10 ? 'danger' : null)
+                    ->weight(fn ($state): ?FontWeight => $state >= 10 ? FontWeight::Bold : null)
+                    ->sortable()
+                    ->alignEnd(),
+                TextColumn::make('avg_mb')
+                    ->label(__('Memory MB'))
+                    ->formatStateUsing(fn ($state): string => (string) round((float) $state, 1))
+                    ->alignEnd(),
+                TextColumn::make('avg_kb')
+                    ->label(__('Size KB'))
+                    ->numeric()
+                    ->alignEnd(),
+            ]);
     }
 
     protected function getHeaderActions(): array

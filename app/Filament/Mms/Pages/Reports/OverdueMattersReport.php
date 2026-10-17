@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Pages\Reports;
 
+use App\Filament\Concerns\PrintableReport;
 use App\Filament\Mms\Clusters\Reports;
 use App\Models\Matter;
 use App\Models\MatterParty;
@@ -40,7 +41,7 @@ use Illuminate\Support\Collection;
  */
 class OverdueMattersReport extends Page implements HasTable
 {
-    use HasPageShield;
+    use HasPageShield, PrintableReport;
     use InteractsWithTable;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-clock';
@@ -48,8 +49,6 @@ class OverdueMattersReport extends Page implements HasTable
     protected static ?string $cluster = Reports::class;
 
     protected static ?int $navigationSort = 3;
-
-    protected string $view = 'filament.pages.overdue-matters-report';
 
     /** @var Collection<int, Collection<int, PartyLeave>>|null */
     private ?Collection $leaveByParty = null;

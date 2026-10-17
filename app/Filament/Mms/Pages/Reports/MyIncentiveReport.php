@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Pages\Reports;
 
+use App\Filament\Concerns\PrintableReport;
 use App\Filament\Mms\Clusters\Reports;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Models\IncentiveAssistantExtra;
@@ -12,8 +13,16 @@ use App\Models\Matter;
 use App\Services\MMS\IncentiveCalculatorService;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Callout;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Text;
+use Filament\Support\Enums\FontWeight;
+use Filament\Support\Enums\TextSize;
 use Filament\Support\Enums\Width;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\Summarizers\Sum;
 use Filament\Tables\Columns\Summarizers\Summarizer;
 use Filament\Tables\Columns\TextColumn;
@@ -44,14 +53,13 @@ use Illuminate\Support\Collection;
 class MyIncentiveReport extends Page implements HasTable
 {
     use InteractsWithTable;
+    use PrintableReport;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-banknotes';
 
     protected static ?string $cluster = Reports::class;
 
     protected static ?int $navigationSort = 1;
-
-    protected string $view = 'filament.pages.reports.my-incentive-report';
 
     /**
      * Per-matter fee and base totals for the calculation on screen.
@@ -272,6 +280,62 @@ class MyIncentiveReport extends Page implements HasTable
         }
 
         return $parts ? implode(' · ', $parts) : null;
+    }
+
+    /** The calculation's period totals, between the print header and the table — printed with them. */
+    protected function reportHeaderComponents(): array
+    {
+        return [$this->periodSummary()];
+    }
+
+    /**
+     * The calculation on screen: share, the period's extra, penalty and fixed
+     * deduction, and what is left.
+     */
+    private function periodSummary(): Section
+    {
+        $calculation = $this->selectedCalculation();
+        $extra = $this->periodTotals();
+
+        return Section::make($calculation?->name)
+            ->description(__('Finalized :date', ['date' => $calculation?->finalized_at?->translatedFormat('d M Y') ?? '—']))
+            ->icon(Heroicon::OutlinedBanknotes)
+            ->visible($calculation !== null)
+            ->schema([
+                Grid::make(['default' => 2, 'sm' => 3, 'lg' => 5])->schema([
+                    $this->amountEntry('share', __('Share'), $this->shareTotal()),
+
+                    $this->amountEntry('extra', __('Extra'), (float) ($extra?->extra_amount ?? 0), 'success')
+                        ->afterContent(($extra?->extra_percentage ?? 0) > 0
+                            ? Text::make('(+'.$extra->extra_percentage.'%)')->color('success')
+                            : null),
+
+                    $this->amountEntry('penalty', __('Penalty'), (float) ($extra?->penalty_amount ?? 0), 'danger'),
+
+                    $this->amountEntry('fixed_deduction', __('Fixed Deduction'), (float) ($extra?->fixed_deduction ?? 0), 'danger')
+                        ->helperText($extra?->fixed_deduction_reason),
+
+                    $this->amountEntry('net', __('Net Total'), $this->netTotal(), 'primary')
+                        ->weight(FontWeight::Bold),
+                ]),
+
+                Callout::make()
+                    ->description(__('This period did not reach the minimum number of completed matters, so a penalty was applied.'))
+                    ->icon(Heroicon::OutlinedExclamationTriangle)
+                    ->color('warning')
+                    ->visible(! ($extra?->meets_minimum ?? true)),
+            ]);
+    }
+
+    private function amountEntry(string $name, string $label, float $amount, ?string $color = null): TextEntry
+    {
+        return TextEntry::make($name)
+            ->label($label)
+            ->state($amount)
+            ->aed()
+            ->size(TextSize::Large)
+            ->weight(FontWeight::SemiBold)
+            ->color($color);
     }
 
     protected function getTableQuery(): Builder

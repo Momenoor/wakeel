@@ -10,6 +10,7 @@ use App\Models\Matter;
 use App\Models\MatterContact;
 use App\Models\MatterEmail;
 use App\Models\MatterParty;
+use App\Models\MatterProgress;
 use App\Models\Party;
 use App\Models\Setting;
 use App\Models\User;
@@ -22,12 +23,13 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\HtmlString;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\HtmlString;
 use RuntimeException;
 use Throwable;
 use Webklex\PHPIMAP\Address;
+use Webklex\PHPIMAP\Folder;
 use Webklex\PHPIMAP\Message;
 
 /**
@@ -51,8 +53,17 @@ class MatterReplyCollector
     /** How far back sent emails are watched for replies. */
     private const WATCH_DAYS = 90;
 
-    /** How far back a mailbox is first read for the parties' other emails. */
-    private const FIRST_DAYS = 30;
+    /** Setting: how many days back a mailbox is ever read — the first time, for one matter, or after a long gap. */
+    public const LOOK_BACK = 'mail_look_back_days';
+
+    /** The most it may be: each run still reads only a short slice, but further back than this is a backlog no run should take on. */
+    public const MAX_LOOK_BACK = 30;
+
+    /** Days back a mailbox is read (1 unless set). */
+    public static function lookBackDays(): int
+    {
+        return max(1, min(self::MAX_LOOK_BACK, (int) Setting::get(self::LOOK_BACK, 1)));
+    }
 
     /** What the last automatic run did: when it started and finished, what it kept, whether it stopped for time, its errors. */
     public const LAST_RUN = 'mail_collect_last_run';
@@ -76,8 +87,8 @@ class MatterReplyCollector
     /**
      * Every mailbox a letter or email has gone from, read for what came in
      * since it was last read: replies to the emails sent, and any other
-     * email from a matter's party. Or — for one matter — read back from its
-     * first email (FIRST_DAYS at least), for its emails only.
+     * email from a matter's party — never further back than lookBackDays().
+     * Or — for one matter — those days, for its emails only.
      *
      * With $maxSeconds it stops starting new messages once that time is up, and saves how far each
      * mailbox got, so the next run goes on from there (an automatic run must fit in the web cron's
@@ -133,8 +144,9 @@ class MatterReplyCollector
             try {
                 $sender = SenderMailer::sender($senderKey);
                 $checked = $matterId ? null : Setting::get(self::checkedKey($senderKey));
-                $first = now()->subDays(self::FIRST_DAYS);
-                $since = $checked ? Carbon::parse($checked)->subHour() : ($emails->isNotEmpty() ? $emails->min('at')->copy()->subHour()->min($first) : $first);
+                // From where the mailbox was last read — never further back than the days set.
+                $first = now()->subDays(self::lookBackDays());
+                $since = $checked ? Carbon::parse($checked)->subHour()->max($first) : $first;
                 $startedAt = now();
 
                 $messages = SenderMailer::isMicrosoft($sender)
@@ -431,11 +443,15 @@ class MatterReplyCollector
 
         Setting::set(self::IGNORED, array_values(array_unique([...self::ignoredSenders(), $address])), 'mail');
 
-        $waiting = MatterEmail::pending()->get()->filter(fn (MatterEmail $email): bool => self::isIgnored(MatterEmail::addressOf((string) $email->from), [$address]));
+        // Narrowed by the database first (the address, or "@domain", is in "from"), then matched exactly.
+        $waiting = MatterEmail::pending()->where('from', 'like', '%'.addcslashes($address, '%_\\').'%')->get()->filter(fn (MatterEmail $email): bool => self::isIgnored(MatterEmail::addressOf((string) $email->from), [$address]));
         $waiting->each(fn (MatterEmail $email) => $this->dismiss($email));
 
         return $waiting->count();
     }
+
+    /** Headers read at a time from a cPanel inbox. */
+    private const IMAP_PAGE = 50;
 
     /** Minutes after which a half-kept email counts as abandoned — longer than any run lasts. */
     private const ABANDONED_MINUTES = 20;
@@ -540,6 +556,35 @@ class MatterReplyCollector
         } catch (Throwable $e) {
             Log::info('Email not marked as read in the mailbox: '.$e->getMessage(), ['message' => $message['message_id'] ?? null]);
         }
+    }
+
+    /**
+     * A collected email made unread again in the mailbox it came to — found there by its Message-ID.
+     * Whether it was found and changed.
+     */
+    public function markUnread(MatterEmail $email): bool
+    {
+        $id = (string) $email->message_id;
+        $sender = SenderMailer::all()[(string) $email->sender_key] ?? null;
+
+        if ($id === '' || ! is_array($sender)) {
+            return false;
+        }
+
+        if (SenderMailer::isMicrosoft($sender)) {
+            $base = 'https://graph.microsoft.com/v1.0/users/'.rawurlencode((string) $sender['address']);
+            $found = Http::withToken($this->graph->getAccessToken())->timeout(30)
+                ->get($base.'/messages', ['$filter' => "internetMessageId eq '".str_replace("'", "''", '<'.$id.'>')."'", '$select' => 'id'])
+                ->json('value.0.id');
+
+            return is_string($found)
+                && Http::withToken($this->graph->getAccessToken())->timeout(20)->patch($base.'/messages/'.rawurlencode($found), ['isRead' => false])->successful();
+        }
+
+        $message = $this->mailboxes->inbox((string) $email->sender_key, $sender)->query()
+            ->whereMessageId('<'.$id.'>')->leaveUnread()->setFetchBody(false)->get()->first();
+
+        return $message !== null && $message->unsetFlag('Seen');
     }
 
     /**
@@ -720,7 +765,7 @@ class MatterReplyCollector
         ]);
 
         // Its step in the progress, on the other matter.
-        \App\Models\MatterProgress::query()->where('source_type', $email->getMorphClass())->where('source_id', $email->getKey())->update(['matter_id' => $to->getKey()]);
+        MatterProgress::query()->where('source_type', $email->getMorphClass())->where('source_id', $email->getKey())->update(['matter_id' => $to->getKey()]);
         if ($email->parent_id === null) {
             MatterProgressRecorder::emailReceived($email, $userId);
         }
@@ -750,6 +795,8 @@ class MatterReplyCollector
             'to' => array_values(array_filter((array) ($message['to'] ?? []))),
             'cc' => array_values(array_filter((array) ($message['cc'] ?? []))),
             'at' => self::arrivedAt($message),
+            // Unread in the mailbox before it was collected (null: not known).
+            'was_unread' => isset($message['was_read']) ? ! $message['was_read'] : null,
             ...$attributes,
         ]);
     }
@@ -1095,15 +1142,42 @@ class MatterReplyCollector
         // message's date in the mail server's own time zone (US time on cPanel hosts) — from the
         // app's day, the mail delivered in the hours between the two would never be read. Messages
         // read already are skipped by their Message-ID.
-        $query = $inbox->query()->whereSince($since->copy()->subDay()->startOfDay())->leaveUnread()->setFetchBody(false)->setFetchFlags(false);
-        $headers = $query->get();
+        // A page of headers at a time, oldest first: a long period is never loaded whole, and a run out of
+        // time stops on the page it is on (the next goes on from the last message handled).
+        for ($page = 1; ; $page++) {
+            // Flags too: whether each was read before it was collected (kept, so an undo puts it back).
+            $query = $inbox->query()->whereSince($since->copy()->subDay()->startOfDay())->leaveUnread()->setFetchBody(false)->setFetchFlags(true)
+                ->setFetchOrderAsc()->limit(self::IMAP_PAGE, $page);
+            $headers = $query->get();
 
-        // Messages the library could not read (it skips them rather than failing the mailbox): said in the log.
-        foreach ($query->errors() as $uid => $error) {
-            Log::warning('Email could not be read from '.$senderKey, ['uid' => $uid, 'error' => $error instanceof Throwable ? $error->getMessage() : (string) $error]);
+            // Messages the library could not read (it skips them rather than failing the mailbox): said in the log.
+            foreach ($query->errors() as $uid => $error) {
+                Log::warning('Email could not be read from '.$senderKey, ['uid' => $uid, 'error' => $error instanceof Throwable ? $error->getMessage() : (string) $error]);
+            }
+
+            yield from $this->imapPage($inbox, $headers, $since);
+
+            if ($headers->count() < self::IMAP_PAGE) {
+                return;
+            }
         }
+    }
 
+    /**
+     * One page of a cPanel inbox's headers as messages: a message's body and files read only once it's
+     * kept.
+     *
+     * @return iterable<array<string, mixed>>
+     */
+    private function imapPage(Folder $inbox, iterable $headers, CarbonInterface $since): iterable
+    {
         foreach ($headers as $header) {
+            // The whole day before was asked for (SINCE is a date): none from before the time asked.
+            $date = $header->getDate()->toDate();
+            if ($date->year >= 1971 && $date->lt($since)) {
+                continue;
+            }
+
             $from = collect($header->get('from')?->all() ?? [])->first(fn ($a) => $a instanceof Address);
             $uid = (int) $header->uid;
             $whole = self::once(fn () => $inbox->query()->leaveUnread()->setFetchFlags(false)->getMessageByUid($uid));
@@ -1118,7 +1192,8 @@ class MatterReplyCollector
                 'cc' => self::imapAddresses($header, 'cc'),
                 // The moment with its offset — "+0000" from Outlook is not the app's local time.
                 // (An unreadable Date header comes back as 1970: read as now instead.)
-                'at' => ($date = $header->getDate()->toDate())->year < 1971 ? now()->toIso8601String() : $date->toIso8601String(),
+                'at' => $date->year < 1971 ? now()->toIso8601String() : $date->toIso8601String(),
+                'was_read' => $header->hasFlag('seen'),
                 // The whole message, fetched once however many of these are asked for.
                 'body' => function () use ($whole): string {
                     $message = $whole();
@@ -1180,7 +1255,7 @@ class MatterReplyCollector
         $url = $base.'/mailFolders/Inbox/messages';
         $query = [
             '$filter' => 'receivedDateTime ge '.$since->copy()->utc()->format('Y-m-d\TH:i:s\Z'),
-            '$select' => 'id,subject,from,toRecipients,ccRecipients,receivedDateTime,internetMessageId,internetMessageHeaders,body,hasAttachments',
+            '$select' => 'id,subject,from,toRecipients,ccRecipients,receivedDateTime,internetMessageId,internetMessageHeaders,body,hasAttachments,isRead',
             '$top' => 50,
             // Oldest first: a run that stops for time goes on from the last one handled.
             '$orderby' => 'receivedDateTime asc',
@@ -1212,6 +1287,7 @@ class MatterReplyCollector
                     'to' => array_values(array_filter(array_map(fn ($r) => $r['emailAddress']['address'] ?? null, $item['toRecipients'] ?? []))),
                     'cc' => array_values(array_filter(array_map(fn ($r) => $r['emailAddress']['address'] ?? null, $item['ccRecipients'] ?? []))),
                     'at' => (string) ($item['receivedDateTime'] ?? now()->toIso8601String()),
+                    'was_read' => isset($item['isRead']) ? (bool) $item['isRead'] : null,
                     'body' => ($item['body']['contentType'] ?? 'html') === 'html' ? (string) ($item['body']['content'] ?? '') : nl2br(e((string) ($item['body']['content'] ?? ''))),
                     // The email as it came (MIME).
                     'raw' => function () use ($base, $graphId): string {
@@ -1250,9 +1326,8 @@ class MatterReplyCollector
         }
     }
 
-    private static function checkedKey(string $senderKey): string
+    public static function checkedKey(string $senderKey): string
     {
-        // Read for every email, not replies only: read afresh from FIRST_DAYS back.
         return 'mail_inbox_checked_at.'.$senderKey;
     }
 }

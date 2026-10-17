@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Pages;
 use App\Filament\Mms\Pages\Concerns\ReviewsOneDriveFolders;
 use App\Filament\Mms\Resources\Types\Schemas\TypeForm;
 use App\Filament\Shared\Clusters\Settings;
+use App\Filament\Support\EntryTable;
 use App\Filament\Support\SettingsForm;
 use App\Models\Matter;
 use App\Models\MatterFieldDefinition;
@@ -20,6 +21,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions;
@@ -230,10 +232,23 @@ class OneDriveSettings extends Page implements HasTable
                                 ->modalDescription(__('Removes the test folder from every assistant\'s OneDrive. It goes to their OneDrive recycle bin. Nothing else is touched.'))
                                 ->action(fn () => $this->runTest('remove')),
                         ]),
-                        Placeholder::make('test_results')
-                            ->hiddenLabel()
+                        // The last run: one row per assistant.
+                        EntryTable::make('test_results', [
+                            TextEntry::make('name')->label(__('Assistant')),
+                            TextEntry::make('email')->label(__('OneDrive account'))->extraAttributes(['dir' => 'ltr']),
+                            TextEntry::make('message')
+                                ->label(__('Result'))
+                                ->icon(fn (TextEntry $component): Heroicon => EntryTable::row($component)['ok'] ? Heroicon::OutlinedCheckCircle : Heroicon::OutlinedXCircle)
+                                ->color(fn (TextEntry $component): string => EntryTable::row($component)['ok'] ? 'success' : 'danger'),
+                            TextEntry::make('url')
+                                ->label(__('Open'))
+                                ->hiddenLabel()
+                                ->formatStateUsing(fn (): string => __('Open'))
+                                ->url(fn (string $state): string => $state, shouldOpenInNewTab: true)
+                                ->color('primary'),
+                        ])
                             ->visible(fn (): bool => $this->testResults !== [])
-                            ->content(fn (): HtmlString => new HtmlString(view('filament.mms.onedrive-test-results', ['rows' => $this->testResults])->render())),
+                            ->state(fn (): array => $this->testResults),
                     ]),
 
                 Section::make(__('Connection'))
@@ -336,7 +351,7 @@ class OneDriveSettings extends Page implements HasTable
                 }
             } catch (Throwable $exception) {
                 $row['ok'] = false;
-                $row['message'] = $exception->getMessage();
+                $row['message'] = $exception->getMessage() ?: __('Failed');
             }
 
             $rows[] = $row;

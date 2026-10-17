@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Pages;
 
+use App\Filament\Concerns\RendersFreshContent;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Models\Matter;
 use App\Models\MatterEmail;
@@ -13,12 +14,15 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Resources\Concerns\HasTabs;
+use Filament\Schemas\Components\EmbeddedTable;
+use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Url;
 
 /**
@@ -30,13 +34,9 @@ use Livewire\Attributes\Url;
  */
 class UnfiledEmails extends Page implements HasTable
 {
+    use HasTabs;
     use InteractsWithTable;
-
-    protected string $view = 'filament.mms.pages.unfiled-emails';
-
-    /** The mailbox tab open: a sender key, or '' for all. */
-    #[Url]
-    public string $mailbox = '';
+    use RendersFreshContent;
 
     protected static string|null|BackedEnum $navigationIcon = 'heroicon-o-inbox-stack';
 
@@ -102,16 +102,62 @@ class UnfiledEmails extends Page implements HasTable
         return MatterEmail::pending($mine);
     }
 
+    /** The "All" tab's key — not a mailbox's (theirs are slugs: no underscores at the start). */
+    public const ALL = '__all';
+
+    /** The mailbox tab open — kept in the address, so a reload or a link keeps it. */
+    #[Url(as: 'tab')]
+    public ?string $activeTab = null;
+
+    public function mount(): void
+    {
+        $this->loadDefaultActiveTab();
+    }
+
+    /** Each tab's count as it is after an action (filed, set aside), not before. */
+    public function rendering(): void
+    {
+        unset($this->cachedTabs);
+    }
+
+    public function content(Schema $schema): Schema
+    {
+        return $schema->components([
+            $this->getTabsContentComponent(),
+            EmbeddedTable::make(),
+        ]);
+    }
+
     /**
-     * "All", then every mailbox of the senders list — the one that received the email — with how
-     * many wait in it (a mailbox since removed from the list, while its emails still wait, too).
+     * A tab for each mailbox — the one that received the email — with how many wait in it; none
+     * when there is no mailbox at all.
+     *
+     * @return array<string, Tab>
+     */
+    public function getTabs(): array
+    {
+        $tabs = $this->mailboxTabs();
+
+        if (count($tabs) <= 1) {
+            return [];
+        }
+
+        return collect($tabs)->map(fn (array $tab, string $key): Tab => Tab::make($tab['label'])
+            ->badge($tab['count'] ?: null)
+            ->modifyQueryUsing(fn (Builder $query): Builder => $key === self::ALL ? $query : $query->where('sender_key', $key)))
+            ->all();
+    }
+
+    /**
+     * "All", then every mailbox of the senders list, with how many wait in it (a mailbox since
+     * removed from the list, while its emails still wait, too).
      *
      * @return array<string, array{label: string, count: int}>
      */
     public function mailboxTabs(): array
     {
         $counts = self::waiting()->reorder()->selectRaw('sender_key, count(*) as total')->groupBy('sender_key')->pluck('total', 'sender_key');
-        $tabs = ['' => ['label' => __('All'), 'count' => (int) $counts->sum()]];
+        $tabs = [self::ALL => ['label' => __('All'), 'count' => (int) $counts->sum()]];
 
         foreach (SenderMailer::all() as $key => $sender) {
             $tabs[(string) $key] = ['label' => (string) ($sender['name'] ?? '' ?: ($sender['address'] ?? $key)), 'count' => (int) ($counts[$key] ?? 0)];
@@ -126,15 +172,11 @@ class UnfiledEmails extends Page implements HasTable
         return $tabs;
     }
 
-    public function updatedMailbox(): void
-    {
-        $this->resetPage();
-    }
-
     public function table(Table $table): Table
     {
         return $table
-            ->query(fn (): Builder => self::waiting()->when($this->mailbox !== '', fn (Builder $q) => $q->where('sender_key', $this->mailbox)))
+            ->query(self::waiting())
+            ->modifyQueryUsing($this->modifyQueryWithActiveTab(...))
             ->modelLabel(__('Unfiled email'))
             ->pluralModelLabel(__('Unfiled emails'))
             ->defaultSort('at', 'desc')

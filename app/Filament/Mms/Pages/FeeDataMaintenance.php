@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Pages;
 
 use App\Enums\FeeType;
+use App\Filament\Schemas\MaintenanceNoticeSection;
 use App\Filament\Shared\Clusters\Settings;
 use App\Models\Allocation;
 use App\Models\Fee;
@@ -39,8 +40,6 @@ class FeeDataMaintenance extends Page
     protected static ?int $navigationSort = 30;
 
     protected static ?string $cluster = Settings::class;
-
-    protected string $view = 'filament.pages.fee-data-maintenance';
 
     public static function getNavigationLabel(): string
     {
@@ -123,6 +122,11 @@ class FeeDataMaintenance extends Page
         $owner = $ownerId ? Party::find($ownerId) : null;
 
         return $schema->components([
+            MaintenanceNoticeSection::make([
+                __('These actions write to live financial records. Each one shows exactly what it will change before you confirm it, runs inside a transaction, and is safe to run twice — the second run finds nothing left to do.'),
+                __('Neither action affects incentive calculations. The incentive engine reads registered fee amounts only and never reads allocations, and finalized calculations keep their own stored snapshot.'),
+            ]),
+
             Section::make(__('Office Owner'))
                 ->description(__('Matters whose certified expert is anyone else are treated as commission matters. Confirm this is correct before running the settlement repair.'))
                 ->icon(Heroicon::OutlinedUserCircle)

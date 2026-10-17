@@ -1,10 +1,11 @@
 @props([
     'title' => null,
+    'indicators' => null,
 ])
 
 @php
     $reportTitle = $title ?? (method_exists($this, 'getTitle') ? $this->getTitle() : (method_exists($this, 'getHeading') ? $this->getHeading() : __('Report')));
-    $indicators = method_exists($this, 'getTable') ? $this->getTable()->getFilterIndicators() : [];
+    $indicators ??= method_exists($this, 'getTable') ? $this->getTable()->getFilterIndicators() : [];
 @endphp
 
 <div class="report-print-header hidden print:block mb-6 border-b-2 border-gray-800 pb-3">

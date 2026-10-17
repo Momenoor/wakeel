@@ -6,6 +6,7 @@ use App\Enums\ProgressType;
 use App\Filament\Mms\Resources\BulkMailCampaigns\Pages\ViewBulkMailCampaign;
 use App\Filament\Mms\Resources\BulkMailCampaigns\RelationManagers\RecipientsRelationManager;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
+use App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager;
 use App\Filament\Mms\Resources\Matters\RelationManagers\ProgressRelationManager;
 use App\Filament\Support\EmailSendFields;
 use App\Models\BulkMailCampaign;
@@ -21,6 +22,7 @@ use App\Models\User;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterMailer;
 use App\Services\MMS\MatterOneDriveExplorer;
+use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterReplyCollector;
 use App\Services\MMS\SenderMailer;
 use App\Services\MMS\SentEmailArchive;
@@ -29,13 +31,20 @@ use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\HtmlString;
 use Livewire\Livewire;
 use Mockery;
 use Spatie\Permission\Models\Role;
+use Tests\Support\MailSenders;
 use Tests\TestCase;
+use Webklex\PHPIMAP\Folder;
+use Webklex\PHPIMAP\Message;
+use Webklex\PHPIMAP\Query\WhereQuery;
+use Webklex\PHPIMAP\Support\MessageCollection;
 
 /**
  * Replies to a matter's emails, collected from the sending mailbox and kept
@@ -64,7 +73,7 @@ class MatterRepliesTest extends TestCase
 
         Storage::fake('public');
         $this->withoutDefer();
-        \Tests\Support\MailSenders::add('iflas', ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
+        MailSenders::add('iflas', ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
         config([
             'mail.mailers.smtp.transport' => 'array',
             'mail.mailers.microsoft-graph' => ['transport' => 'microsoft-graph', 'tenant_id' => 'tenant', 'client_id' => 'client', 'client_secret' => 'secret'],
@@ -176,9 +185,9 @@ class MatterRepliesTest extends TestCase
         $this->assertSame(['pdf' => true, 'eml' => false, 'attachments' => 1], collect($reply->onedrive)->except('folder')->all());
         // Where it was saved, on its record.
         $this->assertSame('المراسلات الواردة', $reply->onedrive['folder']);
-        \Livewire\Livewire::test(\App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager::class, [
+        Livewire::test(EmailsRelationManager::class, [
             'ownerRecord' => $this->matter,
-            'pageClass' => \App\Filament\Mms\Resources\Matters\Pages\ViewMatter::class,
+            'pageClass' => ViewMatter::class,
         ])
             ->assertCanSeeTableRecords([$reply, $sent])
             ->assertTableColumnStateSet('pdf_saved', 'Saved', $reply)
@@ -211,7 +220,7 @@ class MatterRepliesTest extends TestCase
         $mime = fn (string $parts) => "From: a@x.ae\r\nTo: b@y.ae\r\nSubject: s\r\nMessage-ID: <1@x>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"B\"\r\n\r\n--B\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>hi</p><img src=\"cid:logo@x\">\r\n{$parts}--B--\r\n";
 
         $kept = function (string $parts) use ($mime): array {
-            $message = \Webklex\PHPIMAP\Message::fromString($mime($parts));
+            $message = Message::fromString($mime($parts));
             $html = (string) $message->getHTMLBody();
             $names = [];
 
@@ -293,7 +302,7 @@ class MatterRepliesTest extends TestCase
         // One that never gets kept (it kills PHP every time) is tried a few times, then left — not for ever.
         $stuck = fn () => MatterEmail::create(['matter_id' => $this->matter->id, 'direction' => MatterEmail::RECEIVED, 'sender_key' => 'iflas', 'message_id' => 'stuck@x', 'subject' => 'RE', 'at' => now(), 'status' => MatterEmail::FILED])
             ->forceFill(['created_at' => now()->subHour()])->saveQuietly();
-        \Illuminate\Support\Facades\Cache::put('mail-keep-retries:stuck@x', 3, now()->addDay());
+        Cache::put('mail-keep-retries:stuck@x', 3, now()->addDay());
         $stuck();
         $this->assertSame(0, app(MatterReplyCollector::class)->handle([$this->reply(['message_id' => '<stuck@x>'])], collect([$sent]), 'iflas'));
         $this->assertSame([], MatterEmail::where('message_id', 'stuck@x')->sole()->files);
@@ -310,10 +319,10 @@ class MatterRepliesTest extends TestCase
 
     public function test_the_automatic_run_is_due_ten_minutes_after_the_last_or_at_once_with_a_backlog(): void
     {
-        \App\Models\Setting::forget(MatterReplyCollector::LAST_RUN);
+        Setting::forget(MatterReplyCollector::LAST_RUN);
         $this->assertTrue(MatterReplyCollector::isDue());
 
-        $last = fn (array $run) => \App\Models\Setting::set(MatterReplyCollector::LAST_RUN, $run, 'mail', 'json');
+        $last = fn (array $run) => Setting::set(MatterReplyCollector::LAST_RUN, $run, 'mail', 'json');
 
         $last(['started_at' => now()->subMinutes(3)->toDateTimeString(), 'finished_at' => now()->subMinutes(3)->toDateTimeString(), 'stopped' => false]);
         $this->assertFalse(MatterReplyCollector::isDue());
@@ -333,14 +342,71 @@ class MatterRepliesTest extends TestCase
         $this->assertStringContainsString('has not finished', MatterReplyCollector::lastRunSummary());
     }
 
+    public function test_a_cpanel_inbox_is_read_a_page_at_a_time_and_only_as_far_back_as_set(): void
+    {
+        Setting::set(MatterReplyCollector::KEEP_ALL, true, 'mail');
+        // From a sender on the ignore list: read, then passed over — only the reading is looked at here.
+        Setting::set(MatterReplyCollector::IGNORED, ['news@shop.com'], 'mail');
+        $raw = fn (int $n, string $date) => "Message-ID: <m{$n}@shop.com>\r\nDate: {$date}\r\nFrom: news@shop.com\r\nTo: iflas@jpa.ae\r\nSubject: offer {$n}\r\nContent-Type: text/plain\r\n\r\nx";
+        $message = function (int $n, string $date) use ($raw): Message {
+            $message = Message::fromString($raw($n, $date));
+            $message->uid = $n;
+
+            return $message;
+        };
+        $recent = now()->subHour()->toRfc2822String();
+        $pages = [
+            1 => [$message(1, now()->subDays(3)->toRfc2822String()), ...array_map(fn ($n) => $message($n, $recent), range(2, 50))],
+            2 => [$message(51, $recent), $message(52, $recent)],
+        ];
+
+        $asked = [];
+        $run = function (?int $seconds) use ($pages, &$asked) {
+            $asked = [];
+            $query = Mockery::mock(WhereQuery::class);
+            $query->shouldReceive('whereSince', 'leaveUnread', 'setFetchBody', 'setFetchFlags', 'setFetchOrderAsc')->andReturnSelf();
+            $query->shouldReceive('errors')->andReturn([]);
+            $query->shouldReceive('limit')->andReturnUsing(function (int $limit, int $page) use ($query, &$asked) {
+                $asked[] = [$limit, $page];
+
+                return $query;
+            });
+            $query->shouldReceive('get')->andReturnUsing(function () use ($pages, &$asked) {
+                return new MessageCollection($pages[end($asked)[1]] ?? []);
+            });
+            $folder = Mockery::mock(Folder::class);
+            $folder->shouldReceive('query')->andReturn($query);
+            $mailboxes = Mockery::mock(SentFolder::class);
+            $mailboxes->shouldReceive('inbox')->andReturn($folder);
+            $this->app->instance(SentFolder::class, $mailboxes);
+            Setting::forget(MatterReplyCollector::checkedKey('iflas'));
+
+            return app(MatterReplyCollector::class)->collect(null, $seconds);
+        };
+
+        // With time: page after page of 50, until a short one.
+        $this->assertSame([], $run(60)['errors']);
+        $this->assertSame([[50, 1], [50, 2]], $asked);
+
+        // Out of time: the page it is on, not the next one.
+        $run(0);
+        $this->assertSame([[50, 1]], $asked);
+
+        // The days set, within the most allowed.
+        Setting::set(MatterReplyCollector::LOOK_BACK, 7, 'mail');
+        $this->assertSame(7, MatterReplyCollector::lookBackDays());
+        Setting::set(MatterReplyCollector::LOOK_BACK, 99, 'mail');
+        $this->assertSame(MatterReplyCollector::MAX_LOOK_BACK, MatterReplyCollector::lookBackDays());
+    }
+
     public function test_set_to_keep_every_email_a_mailbox_never_sent_from_is_read_too(): void
     {
-        \App\Models\MailSender::create(['driver' => \App\Models\MailSender::MICROSOFT, 'address' => 'info@jpa.ae', 'name' => 'Info', 'key' => 'info', 'is_active' => true]);
+        MailSender::create(['driver' => MailSender::MICROSOFT, 'address' => 'info@jpa.ae', 'name' => 'Info', 'key' => 'info', 'is_active' => true]);
         $this->inbox = [[
             'id' => 'AAMk9', 'subject' => 'استفسار', 'internetMessageId' => '<q@gmail.com>', 'hasAttachments' => false,
             'from' => ['emailAddress' => ['address' => 'someone@gmail.com', 'name' => 'Someone']],
             'toRecipients' => [['emailAddress' => ['address' => 'info@jpa.ae']]], 'receivedDateTime' => now()->subMinute()->toIso8601String(),
-            'body' => ['contentType' => 'html', 'content' => '<p>؟</p>'], 'internetMessageHeaders' => [],
+            'body' => ['contentType' => 'html', 'content' => '<p>؟</p>'], 'internetMessageHeaders' => [], 'isRead' => false,
         ]];
 
         // Only replies and parties': a mailbox nothing was sent from is not read.
@@ -348,14 +414,20 @@ class MatterRepliesTest extends TestCase
         Http::assertNotSent(fn (Request $request) => str_contains(rawurldecode($request->url()), 'users/info@jpa.ae/mailFolders'));
 
         // Every email: it is.
-        \App\Models\Setting::set(MatterReplyCollector::KEEP_ALL, true, 'mail');
+        Setting::set(MatterReplyCollector::KEEP_ALL, true, 'mail');
         app(MatterReplyCollector::class)->collect(null, 60);
         $this->assertSame('info', MatterEmail::pending()->sole()->sender_key);
+        // Unread in the mailbox before: kept, so an undo can put it back.
+        $this->assertTrue(MatterEmail::pending()->sole()->was_unread);
+        // Read for the last day only, never further back.
+        $since = now()->subDay()->utc()->format('Y-m-d\TH');
+        Http::assertSent(fn (Request $request) => str_contains(rawurldecode($request->url()), 'users/info@jpa.ae/mailFolders')
+            && str_contains(rawurldecode($request->url()), 'receivedDateTime ge '.$since));
     }
 
     public function test_an_automatic_run_records_itself_and_goes_on_where_a_short_one_stopped(): void
     {
-        \App\Models\MailSender::create(['driver' => \App\Models\MailSender::MICROSOFT, 'address' => 'no_reply@jpa.ae', 'name' => 'JPA', 'key' => 'noreply', 'is_active' => true]);
+        MailSender::create(['driver' => MailSender::MICROSOFT, 'address' => 'no_reply@jpa.ae', 'name' => 'JPA', 'key' => 'noreply', 'is_active' => true]);
         $this->sentEmail(['sender_key' => 'noreply']);
         $message = fn (string $id, string $at) => [
             'id' => $id, 'subject' => 'RE: طلب بيانات — JPA/2026/986/1', 'internetMessageId' => '<'.$id.'@police>', 'hasAttachments' => false,
@@ -372,7 +444,7 @@ class MatterRepliesTest extends TestCase
         $this->assertTrue($result['stopped']);
         $this->assertSame(1, $result['replies']);
         $this->assertTrue(MatterReplyCollector::isDue());
-        $this->assertSame($older->copy()->setTimezone(config('app.timezone'))->toDateTimeString(), \App\Models\Setting::get('mail_inbox_checked_at.noreply'));
+        $this->assertSame($older->copy()->setTimezone(config('app.timezone'))->toDateTimeString(), Setting::get('mail_inbox_checked_at.noreply'));
         $this->assertStringContainsString('more to read', MatterReplyCollector::lastRunSummary());
 
         // With time: it goes on from there — the other reply — and is not due again yet.
@@ -387,7 +459,7 @@ class MatterRepliesTest extends TestCase
 
         // An error is shown, and the command says it failed.
         $this->mailReadAllowed = false;
-        \App\Models\Setting::forget(MatterReplyCollector::LAST_RUN);
+        Setting::forget(MatterReplyCollector::LAST_RUN);
         $this->artisan('mail:collect-replies', ['--max-seconds' => 30])->assertFailed();
         $this->assertStringContainsString('Mail.Read', MatterReplyCollector::lastRunSummary());
     }
@@ -441,7 +513,7 @@ class MatterRepliesTest extends TestCase
 
     public function test_letters_minutes_and_bulk_mail_start_from_the_default_mailbox(): void
     {
-        \Tests\Support\MailSenders::add('legal', ['username' => 'legal@jpa.ae', 'address' => 'legal@jpa.ae', 'name' => 'Legal', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
+        MailSenders::add('legal', ['username' => 'legal@jpa.ae', 'address' => 'legal@jpa.ae', 'name' => 'Legal', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
         Setting::set(EmailSendFields::DEFAULT_SENDER, 'legal', 'mail');
 
         $this->assertSame('legal', EmailSendFields::defaultSender());
@@ -483,7 +555,7 @@ class MatterRepliesTest extends TestCase
 
     public function test_a_matter_with_no_onedrive_folder_is_named_in_the_action_as_a_bullet_list(): void
     {
-        \App\Models\Setting::set(\App\Services\MMS\MatterOneDriveFolders::ENABLED, true, 'onedrive');
+        Setting::set(MatterOneDriveFolders::ENABLED, true, 'onedrive');
         MailSender::create(['driver' => MailSender::MICROSOFT, 'address' => 'no_reply@jpa.ae', 'name' => 'JPA', 'key' => 'noreply', 'is_active' => true]);
         $this->sentEmail(['sender_key' => 'noreply', 'message_id' => 'graph-made-its-own@jpa.ae']);
         $this->inbox = [[
@@ -494,12 +566,12 @@ class MatterRepliesTest extends TestCase
         ]];
 
         // Linked to its folder: nothing to say.
-        $this->assertTrue(\App\Services\MMS\MatterOneDriveFolders::folderFor($this->matter) !== null);
-        $this->assertFalse(\App\Services\MMS\MatterOneDriveFolders::receivedEmailsNotInOneDrive($this->matter));
+        $this->assertTrue(MatterOneDriveFolders::folderFor($this->matter) !== null);
+        $this->assertFalse(MatterOneDriveFolders::receivedEmailsNotInOneDrive($this->matter));
 
         // Not linked: kept in the system, and said — the matter named, with the way to it.
         MatterOneDriveFolder::query()->delete();
-        $this->assertTrue(\App\Services\MMS\MatterOneDriveFolders::receivedEmailsNotInOneDrive($this->matter->fresh()));
+        $this->assertTrue(MatterOneDriveFolders::receivedEmailsNotInOneDrive($this->matter->fresh()));
 
         $result = app(MatterReplyCollector::class)->collect($this->matter->id);
         $this->assertSame(1, $result['replies']);
@@ -514,7 +586,7 @@ class MatterRepliesTest extends TestCase
 
         // In the action, as a bullet list.
         MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->delete();
-        $html = MatterReplyCollector::bullets(['One', new \Illuminate\Support\HtmlString('<b>Two</b>'), null, ''])->toHtml();
+        $html = MatterReplyCollector::bullets(['One', new HtmlString('<b>Two</b>'), null, ''])->toHtml();
         $this->assertSame('<ul style="list-style: disc; padding-inline-start: 1.1rem; margin: 0;"><li>One</li><li><b>Two</b></li></ul>', $html);
 
         Livewire::test(ProgressRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])

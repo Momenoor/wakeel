@@ -3,6 +3,7 @@
 namespace App\Filament\Pms\Resources\LeasePrintTemplates\RelationManagers;
 
 use App\Filament\Concerns\HasRelationManagerPermission;
+use App\Livewire\Pms\PrintTemplatePageBuilder;
 use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
@@ -11,6 +12,7 @@ use Filament\Actions\EditAction;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Schemas\Components\Livewire;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -99,7 +101,10 @@ class PagesRelationManager extends RelationManager
                     ->modalWidth('7xl')
                     ->modalSubmitAction(false)
                     ->modalCancelActionLabel(__('Close'))
-                    ->modalContent(fn ($record) => view('filament.pms.print-template-page-builder-modal', ['pageId' => $record->id])),
+                    ->schema(fn ($record): array => [
+                        Livewire::make(PrintTemplatePageBuilder::class, ['pageId' => $record->id])
+                            ->key('print-template-page-builder-'.$record->id),
+                    ]),
                 EditAction::make()
                     ->mutateDataUsing(fn (array $data): array => $this->withImageDimensions($data)),
                 DeleteAction::make(),

@@ -2,6 +2,8 @@
 
 namespace App\Filament\Mms\Pages\Payroll;
 
+use App\Filament\Concerns\RendersFreshContent;
+use App\Filament\Support\JournalVoucherEntries;
 use App\Models\EosgClosingVoucher;
 use App\Services\MMS\EndOfServiceGratuityClosingVoucherService;
 use App\Support\Currency;
@@ -15,7 +17,6 @@ use Filament\Schemas\Components\EmbeddedSchema;
 use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Text;
-use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Livewire\Attributes\Computed;
 
@@ -47,6 +48,7 @@ use Livewire\Attributes\Computed;
 class EndOfServiceGratuityClosingVoucher extends Page
 {
     use HasPageShield;
+    use RendersFreshContent;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-document-text';
 
@@ -162,18 +164,12 @@ class EndOfServiceGratuityClosingVoucher extends Page
 
             Section::make(__('Journal Voucher'))
                 ->visible(fn (): bool => $this->voucher !== null)
-                ->schema([
-                    View::make('filament.payroll.journal-voucher')
-                        ->viewData(fn (): array => ['voucher' => $this->voucher]),
-                ]),
+                ->schema(fn (): array => $this->voucher !== null ? JournalVoucherEntries::voucher($this->voucher) : []),
 
             Section::make(__('Opening / Closing Balances Per Employee'))
                 ->description(__('Informational only — the journal entry above posts only this year\'s movement.'))
                 ->visible(fn (): bool => $this->voucher !== null)
-                ->schema([
-                    View::make('filament.payroll.eosg-rollforward')
-                        ->viewData(fn (): array => ['rollforward' => $this->voucher['rollforward']]),
-                ]),
+                ->schema(fn (): array => $this->voucher !== null ? [JournalVoucherEntries::rollforward($this->voucher['rollforward'])] : []),
 
             Section::make(__('Journal Voucher'))
                 ->visible(fn (): bool => $this->voucher === null)

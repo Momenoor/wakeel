@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Pages;
 
+use App\Filament\Schemas\MaintenanceNoticeSection;
 use App\Filament\Shared\Clusters\Settings;
 use App\Services\AccessControlRepairService;
 use BackedEnum;
@@ -30,8 +31,6 @@ class AccessControlMaintenance extends Page
     protected static ?int $navigationSort = 31;
 
     protected static ?string $cluster = Settings::class;
-
-    protected string $view = 'filament.pages.access-control-maintenance';
 
     public static function getNavigationLabel(): string
     {
@@ -72,6 +71,11 @@ class AccessControlMaintenance extends Page
         $orphans = $repairs->orphanedPagePermissions();
 
         return $schema->components([
+            MaintenanceNoticeSection::make([
+                __('These actions change who can do what. Each one shows exactly what it will grant before you confirm it, runs inside a transaction, and is safe to run twice — the second run finds nothing left to do.'),
+                __('Both only ever grant. No permission is revoked and no role is deleted, so a mistaken run cannot lock anybody out.'),
+            ]),
+
             Section::make(__('Super Administrator Roles'))
                 ->description(__('Shield now grants "super-admin" every ability unconditionally via Gate::before. The "super_admin" role below is what an earlier configuration pointed at before that was corrected — it has no users, and its permission count is shown only so it can be recognised as the historical duplicate rather than a second live administrator role.'))
                 ->icon(Heroicon::OutlinedShieldExclamation)
