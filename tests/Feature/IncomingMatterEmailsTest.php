@@ -543,12 +543,162 @@ class IncomingMatterEmailsTest extends TestCase
         MatterParty::create(['matter_id' => $this->first->id, 'party_id' => $expert->id, 'role' => 'expert', 'type' => 'certified']);
 
         $this->assertSame(0, $this->collect(
-            $this->email(['from' => 'someone@gmail.com', 'subject' => '986/2026']),
+            $this->email(['from' => 'someone@gmail.com', 'subject' => 'مرحبا']),
             $this->email(['from' => 'expert@jpa.ae', 'subject' => '986/2026']),
             $this->email(['from' => 'iflas@jpa.ae', 'subject' => '986/2026']),
             $this->email(['message_id' => '', 'subject' => '986/2026']),
         ));
         $this->assertSame(0, MatterEmail::count());
+    }
+
+    public function test_someone_on_no_matter_naming_a_matter_is_filed_on_it(): void
+    {
+        $number = fn (Matter $m): string => $m->number.'/'.$m->year;
+
+        // In the subject; else in the text.
+        $this->collect(
+            $this->email(['from' => 'clerk@court.ae', 'subject' => 'بخصوص الدعوى '.$number($this->first)]),
+            $this->email(['from' => 'newlawyer@x.ae', 'subject' => 'مستندات', 'body' => '<p>الدعوى رقم '.$number($this->second).'</p>']),
+        );
+        $byFrom = fn (string $address) => MatterEmail::query()->where('from', 'like', '%'.$address.'%')->sole();
+        $this->assertSame([$this->first->id, MatterEmail::FILED, MatterEmail::BY_SUBJECT], [$byFrom('clerk@court.ae')->matter_id, $byFrom('clerk@court.ae')->status, $byFrom('clerk@court.ae')->matched_by]);
+        $this->assertSame([$this->second->id, MatterEmail::BY_BODY], [$byFrom('newlawyer@x.ae')->matter_id, $byFrom('newlawyer@x.ae')->matched_by]);
+
+        // A number two matters share: a person picks among those two.
+        $twin = Matter::factory()->create(['number' => $this->first->number, 'year' => $this->first->year]);
+        $this->collect($this->email(['from' => 'other@court.ae', 'subject' => 'بخصوص '.$number($this->first)]));
+        $held = $byFrom('other@court.ae');
+        $this->assertSame(MatterEmail::PENDING, $held->status);
+        $this->assertEqualsCanonicalizing([$this->first->id, $twin->id], array_map('intval', (array) $held->candidates));
+    }
+
+    public function test_someone_on_no_matter_naming_a_matters_party_by_name_or_email_is_filed_on_it(): void
+    {
+        // The defendant's name in the text.
+        $this->collect($this->email(['from' => 'clerk@court.ae', 'subject' => 'إخطار', 'body' => '<p>بشأن شركة المهاد للتجارة</p>']));
+        $byName = MatterEmail::query()->latest('id')->first();
+        $this->assertSame([$this->first->id, MatterEmail::FILED, MatterEmail::BY_PARTY_NAME], [$byName->matter_id, $byName->status, $byName->matched_by]);
+
+        // The defendant's email address in the text.
+        $defendant = $this->second->parties()->wherePivot('role', 'party')->firstOrFail();
+        $defendant->update(['email' => ['legal@nakheel.ae']]);
+        $this->collect($this->email(['from' => 'bank@x.ae', 'subject' => 'كشف حساب', 'body' => '<p>المرسل إلى legal@nakheel.ae</p>', 'message_id' => '<bank@x.ae>']));
+        $this->assertSame($this->second->id, MatterEmail::query()->latest('id')->first()->matter_id);
+
+        // A name on both: a person picks among the two.
+        MatterParty::create(['matter_id' => $this->second->id, 'party_id' => $this->first->parties()->wherePivot('role', 'party')->firstOrFail()->id, 'role' => 'party', 'type' => 'defendant']);
+        $this->collect($this->email(['from' => 'other@court.ae', 'subject' => 'إخطار', 'body' => '<p>شركة المهاد للتجارة</p>', 'message_id' => '<two@court.ae>']));
+        $held = MatterEmail::query()->latest('id')->first();
+        $this->assertSame(MatterEmail::PENDING, $held->status);
+        $this->assertEqualsCanonicalizing([$this->first->id, $this->second->id], array_map('intval', (array) $held->candidates));
+    }
+
+    public function test_an_email_filed_on_the_wrong_matter_is_moved_with_its_files_and_progress(): void
+    {
+        $od = (new \Tests\Support\FakeOneDrive)->install();
+        MatterOneDriveFolder::where('matter_id', $this->first->id)->update(['drive_item_id' => $od->ensure('Work/2026-986')]);
+        MatterOneDriveFolder::where('matter_id', $this->second->id)->update(['drive_item_id' => $od->ensure('Work/2026-987')]);
+        \App\Models\Setting::set(\App\Services\MMS\MatterOneDriveFolders::RECEIVED_EMAILS, 'واردة', 'onedrive');
+        \App\Models\Setting::clearCache();
+
+        $this->collect($this->email(['subject' => 'مستندات القضية 986/2026']));
+        $email = MatterEmail::sole();
+        $this->assertSame($this->first->id, $email->matter_id);
+        $inFirst = $od->names('Work/2026-986/واردة');
+        $this->assertNotEmpty($inFirst);
+
+        Livewire::test(\App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager::class, [
+            'ownerRecord' => $this->first,
+            'pageClass' => \App\Filament\Mms\Resources\Matters\Pages\ViewMatter::class,
+        ])->callTableAction('move', $email, ['matter_id' => $this->second->id])->assertHasNoTableActionErrors();
+
+        $email->refresh();
+        $this->assertSame([$this->second->id, MatterEmail::BY_HAND], [$email->matter_id, $email->matched_by]);
+        // Its OneDrive files: out of the first matter's folder, into the other's.
+        $this->assertSame([], $od->names('Work/2026-986/واردة'));
+        $this->assertSame($inFirst, $od->names('Work/2026-987/واردة'));
+        $this->assertTrue($email->onedrive['pdf']);
+        // Its PDF with the other matter's attachments; its step in the other's progress.
+        $this->assertSame(0, $this->first->attachments()->where('path', $email->files[0]['path'])->count());
+        $this->assertSame(1, $this->second->attachments()->where('path', $email->files[0]['path'])->count());
+        $this->assertSame([$this->second->id], \App\Models\MatterProgress::query()->where('source_id', $email->id)->where('source_type', $email->getMorphClass())->pluck('matter_id')->all());
+    }
+
+    public function test_set_to_keep_every_email_a_strangers_goes_to_unfiled_to_file_on_any_matter(): void
+    {
+        \App\Models\Setting::set(MatterReplyCollector::KEEP_ALL, true, 'mail');
+
+        // A stranger's; still never the office's own mailbox's, nor one with no id.
+        $this->collect(
+            $this->email(['from' => 'someone@gmail.com', 'subject' => 'استفسار']),
+            $this->email(['from' => 'iflas@jpa.ae', 'subject' => 'استفسار', 'message_id' => '<own@jpa.ae>']),
+            $this->email(['from' => 'other@gmail.com', 'message_id' => '']),
+        );
+
+        $email = MatterEmail::sole();
+        $this->assertSame([MatterEmail::PENDING, []], [$email->status, (array) $email->candidates]);
+        $this->assertStringContainsString('someone@gmail.com', $email->from);
+        Livewire::test(UnfiledEmails::class)->assertCanSeeTableRecords([$email]);
+
+        // A tab for each mailbox of the senders list — the one that received the email.
+        $other = app(MatterReplyCollector::class);
+        $other->handle([$this->email(['from' => 'third@gmail.com', 'message_id' => '<third@gmail.com>'])], collect(), 'noreply');
+        $third = MatterEmail::query()->where('sender_key', 'noreply')->sole();
+        Livewire::test(UnfiledEmails::class)
+            ->assertSee('third@gmail.com')
+            ->set('mailbox', 'noreply')->assertCanSeeTableRecords([$third])->assertCanNotSeeTableRecords([$email])
+            ->set('mailbox', 'iflas')->assertCanSeeTableRecords([$email])->assertCanNotSeeTableRecords([$third])
+            ->set('mailbox', '')->assertCanSeeTableRecords([$email, $third]);
+        $tabs = Livewire::test(UnfiledEmails::class)->instance()->mailboxTabs();
+        $this->assertSame([2, 1, 1], [$tabs['']['count'], $tabs['iflas']['count'], $tabs['noreply']['count']]);
+        // Every mailbox of the list has its tab, with nothing waiting in it too.
+        \App\Models\MailSender::create(['driver' => \App\Models\MailSender::MICROSOFT, 'address' => 'empty@jpa.ae', 'name' => 'Empty box', 'key' => 'empty', 'is_active' => true]);
+        $this->assertSame(['label' => 'Empty box', 'count' => 0], Livewire::test(UnfiledEmails::class)->instance()->mailboxTabs()['empty']);
+        $third->delete();
+
+        // Filed by hand on any matter.
+        Livewire::test(UnfiledEmails::class)->callTableAction('file', $email, ['matter_id' => $this->second->id]);
+        $this->assertSame([$this->second->id, MatterEmail::FILED], [$email->refresh()->matter_id, $email->status]);
+
+        // Switched off: a stranger's is left in the mailbox again.
+        \App\Models\Setting::set(MatterReplyCollector::KEEP_ALL, false, 'mail');
+        $this->collect($this->email(['from' => 'someone@gmail.com', 'message_id' => '<later@gmail.com>']));
+        $this->assertSame(1, MatterEmail::count());
+    }
+
+    public function test_a_sender_on_the_ignore_list_is_never_read_again(): void
+    {
+        \App\Models\Setting::set(MatterReplyCollector::KEEP_ALL, true, 'mail');
+        $marked = 0;
+        $read = function () use (&$marked): void {
+            $marked++;
+        };
+
+        // Two from a stranger wait on the Unfiled page; one from their colleague too.
+        $this->collect(
+            $this->email(['from' => 'News@Shop.com', 'from_name' => 'Shop']),
+            $this->email(['from' => 'news@shop.com']),
+            $this->email(['from' => 'sales@shop.com']),
+        );
+        $this->assertSame(3, MatterEmail::pending()->count());
+
+        // "Ignore sender": theirs set aside, the colleague's left.
+        $first = MatterEmail::query()->where('from', 'like', '%News@Shop.com%')->firstOrFail();
+        Livewire::test(UnfiledEmails::class)->callTableAction('ignore', $first);
+        $this->assertSame(['news@shop.com'], MatterReplyCollector::ignoredSenders());
+        $this->assertSame(['sales@shop.com'], MatterEmail::pending()->pluck('from')->map(fn ($from) => MatterEmail::addressOf($from))->all());
+
+        // New ones from them are not read at all — not kept, not marked read — even a reply or a party's.
+        $this->assertSame(0, $this->collect($this->email(['from' => 'NEWS@shop.com', 'mark_read' => $read])));
+        $this->lawyer->update(['email' => ['news@shop.com']]);
+        $this->assertSame(0, $this->collect($this->email(['from' => 'news@shop.com', 'subject' => '986/2026', 'mark_read' => $read])));
+        $this->assertSame([0, 3], [$marked, MatterEmail::count()]);
+
+        // A whole domain.
+        \App\Models\Setting::set(MatterReplyCollector::IGNORED, ['@shop.com'], 'mail');
+        $this->assertTrue(MatterReplyCollector::isIgnored('anyone@shop.com'));
+        $this->assertFalse(MatterReplyCollector::isIgnored('anyone@workshop.com'));
+        $this->assertSame('a@b.com', MatterEmail::addressOf('Name <A@b.com>'));
     }
 
     public function test_names_are_compared_however_the_arabic_is_written(): void

@@ -241,6 +241,12 @@ class MatterEmail extends Model
             }));
     }
 
+    /** The address in a "from" as kept: "Name <a@b>" or "a@b". */
+    public static function addressOf(string $from): string
+    {
+        return mb_strtolower(trim(preg_match('/<([^<>]+)>\s*$/', $from, $m) ? $m[1] : $from));
+    }
+
     /** "<abc@host>" and "abc@host" alike. */
     public static function messageId(?string $id): ?string
     {

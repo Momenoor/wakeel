@@ -3,10 +3,15 @@
 namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 
 use App\Filament\Concerns\HasRelationManagerPermission;
+use App\Filament\Mms\Pages\UnfiledEmails;
+use App\Filament\Mms\Resources\Matters\MatterResource;
+use App\Models\Matter;
 use App\Models\MatterEmail;
 use App\Services\MMS\MatterOneDriveFolders;
+use App\Services\MMS\MatterReplyCollector;
 use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Columns\TextColumn;
@@ -131,6 +136,42 @@ class EmailsRelationManager extends RelationManager
                     ->color('gray')
                     ->visible(fn (MatterEmail $record): bool => $record->direction === MatterEmail::RECEIVED)
                     ->action(fn (MatterEmail $record) => $this->checkOneDrive([$record])),
+                // Filed on the wrong matter: to another, with its files and its step in the progress.
+                Action::make('move')
+                    ->label(__('Move to another matter'))
+                    ->icon('heroicon-o-arrows-right-left')
+                    ->color('warning')
+                    ->visible(fn (MatterEmail $record): bool => $record->direction === MatterEmail::RECEIVED && (auth()->user()?->can('update', $this->getOwnerRecord()) ?? false))
+                    ->modalWidth('lg')
+                    ->modalDescription(__('Its PDF, original and attachments go to the other matter (in the system and its OneDrive), and its step in the progress with them.'))
+                    ->schema([
+                        Select::make('matter_id')
+                            ->label(__('Matter'))
+                            ->searchable()
+                            ->getSearchResultsUsing(fn (string $search): array => array_diff_key(UnfiledEmails::searchMatters($search), [$this->getOwnerRecord()->getKey() => true]))
+                            ->getOptionLabelUsing(fn ($value): ?string => UnfiledEmails::matterLabels([(int) $value])[(int) $value] ?? null)
+                            ->helperText(__('Search by its number: 986, 986/2026 or 2026/986.'))
+                            ->required(),
+                    ])
+                    ->action(function (MatterEmail $record, array $data): void {
+                        $matter = Matter::findOrFail($data['matter_id']);
+                        abort_unless(auth()->user()?->can('update', $matter), 403);
+
+                        try {
+                            $oneDrive = app(MatterReplyCollector::class)->move($record, $matter, auth()->id());
+                        } catch (\Throwable $e) {
+                            Notification::make()->danger()->title(__('The email could not be moved'))->body($e->getMessage())->send();
+
+                            return;
+                        }
+
+                        Notification::make()
+                            ->success()
+                            ->title(__('Moved to matter :matter.', ['matter' => $matter->year.'/'.$matter->number]))
+                            ->body($oneDrive['moved'] ? null : __('Nothing of it was found in this matter\'s OneDrive to move.'))
+                            ->actions([Action::make('open')->label(__('View'))->url(MatterResource::getUrl('view', ['record' => $matter]))])
+                            ->send();
+                    }),
                 Action::make('view')
                     ->label(__('Details'))
                     ->icon('heroicon-o-eye')

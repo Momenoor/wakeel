@@ -6,7 +6,9 @@ use App\Support\Integrations;
 use BezhanSalleh\FilamentShield\Support\Utils;
 use Closure;
 use Filament\Actions\Action;
+use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use App\Services\MMS\MatterReplyCollector;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
@@ -80,6 +82,14 @@ class IntegrationsSettingsTab
                         TextEntry::make('last_email_check')
                             ->label(__('Last automatic email check'))
                             ->state(fn (): string => MatterReplyCollector::lastRunSummary()),
+                        Toggle::make(MatterReplyCollector::KEEP_ALL)
+                            ->label(__('Keep every email of the inbox'))
+                            ->helperText(__("Off: only replies and emails from a matter's parties are kept. On: every other email too (except the office's own) goes to Unfiled emails, to file on a matter or set aside.")),
+                        TagsInput::make(MatterReplyCollector::IGNORED)
+                            ->label(__('Never check emails from'))
+                            ->placeholder(__('Add an email address, or @domain'))
+                            ->nestedRecursiveRules(['regex:/^([^@\s]+)?@[^@\s]+\.[^@\s]+$/'])
+                            ->helperText(__('Emails from these addresses (or a whole domain written as @domain) are not read: not kept, not notified, and left unread in the mailbox.')),
                         TextEntry::make('cron_url')
                             ->label(__('Link for cron-job.org'))
                             ->state(function (Get $get): string {

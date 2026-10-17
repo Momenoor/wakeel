@@ -23,6 +23,10 @@ use Closure;
  *   3. the name of a candidate's party (not the sender's own) in either,
  *   4. the sender has but the one matter — and the email names no other.
  *
+ * From anyone else (on no matter at all): a matter number written in the
+ * subject or text, else a matter's party named in it (by name or email
+ * address).
+ *
  * When a step points at more than one candidate, or none settles it, a
  * person chooses (the Unfiled emails page): an address on several matters
  * is never enough on its own.
@@ -31,6 +35,9 @@ class IncomingEmailMatcher
 {
     /** A party's name shorter than this is not looked for in an email. */
     private const NAME_MIN = 5;
+
+    /** More matters than this named by an unknown sender's email say nothing (a name on many). */
+    private const MAX_CANDIDATES = 10;
 
     /** @var array<string, list<int>>|null address => the parties that have it */
     private ?array $byAddress = null;
@@ -46,7 +53,29 @@ class IncomingEmailMatcher
         $none = ['matter' => null, 'candidates' => [], 'by' => null];
         $parties = $this->partiesWith($from);
 
+        // Someone on no matter: the matter they name — its number in the subject, else in the text,
+        // else one of its parties by name or email address. One: its; several: a person picks among
+        // those (not when so many share it that it says nothing).
         if ($parties === []) {
+            $plain = self::plain($body instanceof Closure ? (string) $body() : $body);
+            $steps = [
+                MatterEmail::BY_SUBJECT => fn (): array => self::numbered($subject),
+                MatterEmail::BY_BODY => fn (): array => self::numbered($plain),
+                MatterEmail::BY_PARTY_NAME => fn (): array => self::mentioned($subject.' '.$plain),
+            ];
+
+            foreach ($steps as $by => $find) {
+                $found = $find();
+
+                if (count($found) === 1) {
+                    return ['matter' => $found[0], 'candidates' => $found, 'by' => $by];
+                }
+
+                if ($found !== [] && count($found) <= self::MAX_CANDIDATES) {
+                    return ['matter' => null, 'candidates' => $found, 'by' => null];
+                }
+            }
+
             return $none;
         }
 
@@ -164,28 +193,60 @@ class IncomingEmailMatcher
      */
     public static function named(array $candidates, array $senders, string $text): array
     {
-        $text = self::normal($text);
+        return self::mentioned($text, $candidates, $senders);
+    }
+
+    /**
+     * The matters one of whose parties (plaintiff, defendant … — not $except) is written in the
+     * text: by name, or by email address. Among $matterIds, or every matter.
+     *
+     * @param  list<int>|null  $matterIds
+     * @param  list<int>  $except
+     * @return list<int>
+     */
+    public static function mentioned(string $text, ?array $matterIds = null, array $except = []): array
+    {
+        $normal = self::normal($text);
+        $lower = mb_strtolower($text);
         $found = [];
 
         MatterParty::query()
-            ->whereIn('matter_id', $candidates)
+            ->when($matterIds !== null, fn ($q) => $q->whereIn('matter_id', $matterIds))
             ->where('role', 'party')
-            ->whereNotIn('party_id', $senders)
-            ->with('party:id,name,legal_name')
-            ->get(['id', 'matter_id', 'party_id'])
-            ->each(function (MatterParty $row) use ($text, &$found) {
-                foreach ([$row->party?->name, $row->party?->legal_name] as $name) {
+            ->when($except !== [], fn ($q) => $q->whereNotIn('party_id', $except))
+            ->whereHas('matter')
+            ->with('party:id,name,legal_name,email')
+            ->select(['id', 'matter_id', 'party_id'])
+            ->lazyById(1000)
+            ->each(function (MatterParty $row) use ($normal, $lower, &$found) {
+                $matter = (int) $row->matter_id;
+
+                if (isset($found[$matter]) || ! $row->party) {
+                    return;
+                }
+
+                foreach ([$row->party->name, $row->party->legal_name] as $name) {
                     $name = self::normal((string) $name);
 
-                    if (mb_strlen($name) >= self::NAME_MIN && str_contains($text, $name)) {
-                        $found[] = (int) $row->matter_id;
+                    if (mb_strlen($name) >= self::NAME_MIN && str_contains($normal, $name)) {
+                        $found[$matter] = true;
+
+                        return;
+                    }
+                }
+
+                foreach (Party::values($row->party->email) as $email) {
+                    $email = mb_strtolower(trim((string) $email));
+
+                    if (str_contains($email, '@') && str_contains($lower, $email)) {
+                        $found[$matter] = true;
 
                         return;
                     }
                 }
             });
 
-        return array_values(array_unique($found));
+        return array_keys($found);
     }
 
     /** An email's HTML as its words. */

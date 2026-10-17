@@ -103,11 +103,15 @@ class MatterReplyCollector
             ->get()
             ->groupBy('sender_key');
 
-        // Every mailbox anything has been sent from — still set up.
-        $mailboxes = array_values(array_intersect(
-            MatterEmail::query()->where('direction', MatterEmail::SENT)->distinct()->pluck('sender_key')->map(fn ($key) => (string) $key)->all(),
-            array_map('strval', array_keys(SenderMailer::all())),
-        ));
+        // Every mailbox anything has been sent from — still set up; set to keep every email, every
+        // mailbox of the senders list (one never sent from still receives).
+        $mailboxes = array_map('strval', array_keys(SenderMailer::all()));
+        if (! self::keepsAll()) {
+            $mailboxes = array_values(array_intersect(
+                MatterEmail::query()->where('direction', MatterEmail::SENT)->distinct()->pluck('sender_key')->map(fn ($key) => (string) $key)->all(),
+                $mailboxes,
+            ));
+        }
 
         // The mailbox read longest ago first: one a short run did not reach goes first next time, so a
         // slow mailbox never keeps the others waiting.
@@ -282,6 +286,8 @@ class MatterReplyCollector
         $kept = ['replies' => 0, 'emails' => 0, 'unfiled' => 0];
         $own = array_map(fn (array $s): string => mb_strtolower((string) ($s['address'] ?? '')), SenderMailer::all());
         $progress = ['reached' => null, 'stopped' => false];
+        $keepAll = self::keepsAll();
+        $ignored = self::ignoredSenders();
 
         foreach ($messages as $message) {
             // Out of time: what is left is read next time, from the last message handled — but only once
@@ -301,6 +307,11 @@ class MatterReplyCollector
             // A Date header in the future (a wrong clock) or an unreadable one must not move it past the rest.
             if ($at !== null && $at->lte($startedAt) && $at->year > 1971 && ($progress['reached'] === null || $at->gt($progress['reached']))) {
                 $progress['reached'] = $at;
+            }
+
+            // From an address on the ignore list: not read at all — not kept, not told, left unread.
+            if (self::isIgnored((string) ($message['from'] ?? ''), $ignored)) {
+                continue;
             }
 
             // Kept already — but one that was cut off half way (its row made, its files never kept) is
@@ -332,8 +343,8 @@ class MatterReplyCollector
                     continue;
                 }
 
-                // Any other: from a party, about a matter of theirs. Never
-                // our own mailboxes', and only one that can be told apart.
+                // Any other: from a party, about a matter of theirs — or, when set to keep every email,
+                // from anyone. Never our own mailboxes', and only one that can be told apart.
                 $from = mb_strtolower(trim((string) ($message['from'] ?? '')));
                 if ($senderKey === null || $id === null || $from === '' || in_array($from, $own, true)) {
                     continue;
@@ -345,7 +356,9 @@ class MatterReplyCollector
                     $this->keepIncoming(Matter::findOrFail($match['matter']), $message, $id, $senderKey, $match['by']);
                     $this->markRead($message);
                     $kept['emails']++;
-                } elseif ($match['matter'] === null && $match['candidates'] !== [] && $matterId === null) {
+                } elseif ($match['matter'] === null && $matterId === null && ($match['candidates'] !== [] || $keepAll)) {
+                    // Its matter not certain — or none at all (a stranger's email, kept when set to keep
+                    // every one): a person files it, or sets it aside, on the Unfiled emails page.
                     $this->hold($message, $id, $senderKey, $match['candidates']);
                     $this->markRead($message);
                     $kept['unfiled']++;
@@ -358,6 +371,70 @@ class MatterReplyCollector
         }
 
         return $kept;
+    }
+
+    /** Setting: keep every email of the inbox, not only those from a matter's party (others go to Unfiled emails). */
+    public const KEEP_ALL = 'mail_keep_all_inbox';
+
+    public static function keepsAll(): bool
+    {
+        return (bool) Setting::get(self::KEEP_ALL, false);
+    }
+
+    /** Setting: addresses (or "@domain" for a whole domain) whose emails are never read. */
+    public const IGNORED = 'mail_ignored_senders';
+
+    /**
+     * @return list<string> lower case
+     */
+    public static function ignoredSenders(): array
+    {
+        return array_values(array_unique(array_filter(array_map(
+            fn ($entry): string => mb_strtolower(trim((string) $entry)),
+            (array) Setting::get(self::IGNORED, []),
+        ))));
+    }
+
+    /**
+     * Whether an address is on the ignore list: itself, or its domain written as "@domain".
+     *
+     * @param  list<string>|null  $list
+     */
+    public static function isIgnored(string $from, ?array $list = null): bool
+    {
+        $from = mb_strtolower(trim($from));
+
+        if ($from === '') {
+            return false;
+        }
+
+        foreach ($list ?? self::ignoredSenders() as $entry) {
+            if ($entry === $from || (str_starts_with($entry, '@') && str_ends_with($from, $entry))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * An address put on the ignore list, and its emails waiting on the Unfiled emails page set aside.
+     * Returns how many were set aside.
+     */
+    public function ignore(string $address): int
+    {
+        $address = mb_strtolower(trim($address));
+
+        if ($address === '') {
+            return 0;
+        }
+
+        Setting::set(self::IGNORED, array_values(array_unique([...self::ignoredSenders(), $address])), 'mail');
+
+        $waiting = MatterEmail::pending()->get()->filter(fn (MatterEmail $email): bool => self::isIgnored(MatterEmail::addressOf((string) $email->from), [$address]));
+        $waiting->each(fn (MatterEmail $email) => $this->dismiss($email));
+
+        return $waiting->count();
     }
 
     /** Minutes after which a half-kept email counts as abandoned — longer than any run lasts. */
@@ -607,6 +684,50 @@ class MatterReplyCollector
     {
         Storage::disk('public')->delete(array_filter(array_map(fn ($file) => $file['path'] ?? null, (array) ($email->files ?? []))));
         $email->update(['status' => MatterEmail::DISMISSED, 'files' => []]);
+    }
+
+    /**
+     * A received email filed on the wrong matter, moved to another: its files kept in the system go
+     * with the matter's attachments, those in OneDrive to the other matter's received-emails folder
+     * (the PDF saved there when it was not in OneDrive), and its step in the progress follows.
+     *
+     * @return array{pdf: bool, eml: bool, attachments: int, folder: string, moved: bool}
+     */
+    public function move(MatterEmail $email, Matter $to, ?int $userId = null): array
+    {
+        $from = $email->matter;
+        abort_if($email->direction !== MatterEmail::RECEIVED || ! $from || $from->is($to), 422);
+
+        $folders = app(MatterOneDriveFolders::class);
+        $oneDrive = $folders->moveEmailFiles($email, $from, $to);
+
+        // The files kept in the system: with the other matter's attachments.
+        $paths = array_values(array_filter(array_map(fn ($file) => $file['path'] ?? null, (array) ($email->files ?? []))));
+        if ($paths !== []) {
+            $from->attachments()->whereIn('path', $paths)->update(['matter_id' => $to->getKey()]);
+        }
+
+        // Its PDF not in OneDrive (or not found there): saved in the other matter's folder from the system.
+        $pdf = (string) ($email->files[0]['path'] ?? '');
+        if (! $oneDrive['pdf'] && $pdf !== '' && Storage::disk('public')->exists($pdf)) {
+            $oneDrive['pdf'] = $this->archive->keepInOneDrive($to, (string) $email->files[0]['name'], (string) Storage::disk('public')->get($pdf), 'application/pdf', $oneDrive['folder']);
+        }
+
+        $email->update([
+            'matter_id' => $to->getKey(),
+            'matched_by' => MatterEmail::BY_HAND,
+            'onedrive' => ['pdf' => $oneDrive['pdf'], 'eml' => $oneDrive['eml'], 'attachments' => $oneDrive['attachments'], 'folder' => $oneDrive['folder']],
+        ]);
+
+        // Its step in the progress, on the other matter.
+        \App\Models\MatterProgress::query()->where('source_type', $email->getMorphClass())->where('source_id', $email->getKey())->update(['matter_id' => $to->getKey()]);
+        if ($email->parent_id === null) {
+            MatterProgressRecorder::emailReceived($email, $userId);
+        }
+
+        MatterContact::learn($email);
+
+        return $oneDrive;
     }
 
     /**
@@ -949,8 +1070,8 @@ class MatterReplyCollector
                 ->warning()
                 ->icon('heroicon-o-inbox-stack')
                 ->title(__('Which matter is this email from :name about?', ['name' => $email->from]))
-                // The subject, then the matters it may be about, one point each.
-                ->body(self::bullets([trim($email->subject), new HtmlString(e(__('It may be about:')).self::bullets($matters)->toHtml())]))
+                // The subject, then the matters it may be about, one point each (none: a sender on no matter).
+                ->body(self::bullets($matters === [] ? [trim($email->subject)] : [trim($email->subject), new HtmlString(e(__('It may be about:')).self::bullets($matters)->toHtml())]))
                 ->actions([
                     Action::make('choose')->label(__('Choose its matter'))->url(UnfiledEmails::getUrl(panel: 'mms'))->markAsRead(),
                 ])

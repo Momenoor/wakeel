@@ -410,6 +410,99 @@ class MatterOneDriveFolders
 
         return true;
     }
+
+    /**
+     * A received email's files in OneDrive — its PDF, its original (.eml) and the folder of the files
+     * it came with — moved from one matter's received-emails folder to the other's. Moved as they are
+     * when both folders are in the same person's OneDrive; else downloaded, saved there, and removed.
+     * What is in the new folder after.
+     *
+     * @return array{pdf: bool, eml: bool, attachments: int, folder: string, moved: bool}
+     */
+    public function moveEmailFiles(MatterEmail $email, Matter $from, Matter $to): array
+    {
+        $targetPath = self::receivedEmailsFolderFor($to, $email->at);
+        $result = ['pdf' => false, 'eml' => false, 'attachments' => 0, 'folder' => $targetPath, 'moved' => false];
+        $source = self::folderFor($from);
+        $target = self::folderFor($to);
+        $base = pathinfo((string) ($email->files[0]['name'] ?? ''), PATHINFO_FILENAME);
+
+        if (! $source || ! $target || $base === '') {
+            return $result;
+        }
+
+        $sourceUser = (string) $source->party->onedrive_email;
+        $targetUser = (string) $target->party->onedrive_email;
+        $sourcePath = (string) (($email->onedrive['folder'] ?? null) ?: self::receivedEmailsFolderFor($from, $email->at));
+        $folderId = $this->walk($sourceUser, (string) $source->drive_item_id, $sourcePath);
+
+        if ($folderId === null) {
+            return $result;
+        }
+
+        $stem = mb_strtolower(self::clean($base));
+        $items = collect($this->client->children($sourceUser, $folderId))->filter(fn (array $item): bool => in_array(mb_strtolower($item['name']), $item['folder'] ? [$stem] : [$stem.'.pdf', $stem.'.eml'], true));
+
+        if ($items->isEmpty()) {
+            return $result;
+        }
+
+        $path = implode('/', array_map([self::class, 'clean'], OneDriveClient::segments($targetPath)));
+        $targetId = $path !== '' ? $this->client->ensureFolder($targetUser, $path, $target->drive_item_id)['id'] : (string) $target->drive_item_id;
+
+        foreach ($items as $item) {
+            if ($item['folder']) {
+                $files = collect($this->client->children($sourceUser, $item['id']))->where('folder', false);
+                $result['attachments'] = $files->count();
+
+                if ($sourceUser === $targetUser) {
+                    $this->client->move($sourceUser, $item['id'], $targetId);
+                } else {
+                    $newId = $this->client->ensureFolder($targetUser, self::clean($base), $targetId)['id'];
+                    $files->each(fn (array $file) => $this->copyFile($sourceUser, $file, $targetUser, $newId));
+                    $this->client->delete($sourceUser, $item['id']);
+                }
+
+                continue;
+            }
+
+            if ($sourceUser === $targetUser) {
+                $this->client->move($sourceUser, $item['id'], $targetId);
+            } else {
+                $this->copyFile($sourceUser, $item, $targetUser, $targetId);
+                $this->client->delete($sourceUser, $item['id']);
+            }
+
+            $result[str_ends_with(mb_strtolower($item['name']), '.eml') ? 'eml' : 'pdf'] = true;
+        }
+
+        $result['moved'] = true;
+
+        return $result;
+    }
+
+    /** A folder's id, down a path from a folder — null when a folder on the way is not there. */
+    private function walk(string $user, string $id, string $path): ?string
+    {
+        foreach (OneDriveClient::segments($path) as $segment) {
+            $next = collect($this->client->childFolders($user, $id))->first(fn (array $f): bool => mb_strtolower($f['name']) === mb_strtolower(self::clean($segment)));
+            $id = (string) ($next['id'] ?? '');
+
+            if ($id === '') {
+                return null;
+            }
+        }
+
+        return $id;
+    }
+
+    /** A file saved again in another person's OneDrive. */
+    private function copyFile(string $fromUser, array $file, string $toUser, string $folderId): void
+    {
+        $info = $this->client->itemInfo($fromUser, $file['id']);
+        $this->client->upload($toUser, $folderId, $file['name'], $this->client->download((string) $info['downloadUrl']), (string) ($file['mime'] ?? 'application/octet-stream'));
+    }
+
     /** A file's name as it is put in OneDrive (no "/" or other characters it refuses). */
     private static function oneDriveName(string $name): string
     {

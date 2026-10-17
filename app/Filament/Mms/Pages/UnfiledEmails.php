@@ -7,6 +7,7 @@ use App\Models\Matter;
 use App\Models\MatterEmail;
 use App\Services\MMS\Calendar\MatterReferenceMatcher;
 use App\Services\MMS\MatterReplyCollector;
+use App\Services\MMS\SenderMailer;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -18,6 +19,7 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Attributes\Url;
 
 /**
  * Emails from a matter's party whose matter Wakeel could not be sure of —
@@ -30,7 +32,11 @@ class UnfiledEmails extends Page implements HasTable
 {
     use InteractsWithTable;
 
-    protected string $view = 'filament.pages.flight-tickets';
+    protected string $view = 'filament.mms.pages.unfiled-emails';
+
+    /** The mailbox tab open: a sender key, or '' for all. */
+    #[Url]
+    public string $mailbox = '';
 
     protected static string|null|BackedEnum $navigationIcon = 'heroicon-o-inbox-stack';
 
@@ -53,7 +59,9 @@ class UnfiledEmails extends Page implements HasTable
 
     public function getSubheading(): ?string
     {
-        return __('Emails from parties on more than one matter, with nothing in them to say which. Choose the matter, or set aside one that is about none.');
+        return MatterReplyCollector::keepsAll()
+            ? __('Emails whose matter is not certain, and every other email of the inbox. Choose the matter, or set aside one that is about none.')
+            : __('Emails from parties on more than one matter, with nothing in them to say which. Choose the matter, or set aside one that is about none.');
     }
 
     public static function canAccess(): bool
@@ -94,10 +102,39 @@ class UnfiledEmails extends Page implements HasTable
         return MatterEmail::pending($mine);
     }
 
+    /**
+     * "All", then every mailbox of the senders list — the one that received the email — with how
+     * many wait in it (a mailbox since removed from the list, while its emails still wait, too).
+     *
+     * @return array<string, array{label: string, count: int}>
+     */
+    public function mailboxTabs(): array
+    {
+        $counts = self::waiting()->reorder()->selectRaw('sender_key, count(*) as total')->groupBy('sender_key')->pluck('total', 'sender_key');
+        $tabs = ['' => ['label' => __('All'), 'count' => (int) $counts->sum()]];
+
+        foreach (SenderMailer::all() as $key => $sender) {
+            $tabs[(string) $key] = ['label' => (string) ($sender['name'] ?? '' ?: ($sender['address'] ?? $key)), 'count' => (int) ($counts[$key] ?? 0)];
+        }
+
+        foreach ($counts as $key => $total) {
+            if (filled($key) && ! isset($tabs[(string) $key])) {
+                $tabs[(string) $key] = ['label' => (string) $key, 'count' => (int) $total];
+            }
+        }
+
+        return $tabs;
+    }
+
+    public function updatedMailbox(): void
+    {
+        $this->resetPage();
+    }
+
     public function table(Table $table): Table
     {
         return $table
-            ->query(self::waiting())
+            ->query(fn (): Builder => self::waiting()->when($this->mailbox !== '', fn (Builder $q) => $q->where('sender_key', $this->mailbox)))
             ->modelLabel(__('Unfiled email'))
             ->pluralModelLabel(__('Unfiled emails'))
             ->defaultSort('at', 'desc')
@@ -122,8 +159,11 @@ class UnfiledEmails extends Page implements HasTable
                     // The matters it may be about, one point each.
                     ->state(fn (MatterEmail $record): array => array_values(self::matterLabels((array) $record->candidates)))
                     ->listWithLineBreaks()
-                    ->bulleted(),
+                    ->bulleted()
+                    // A sender on no matter: any matter can be chosen by its number.
+                    ->placeholder(__('No matter found')),
             ])
+
             ->recordActions([
                 Action::make('open')
                     ->label(__('Open'))
@@ -160,6 +200,25 @@ class UnfiledEmails extends Page implements HasTable
                             ->send();
                     }),
 
+                Action::make('ignore')
+                    ->label(__('Ignore sender'))
+                    ->icon('heroicon-o-no-symbol')
+                    ->color('gray')
+                    ->requiresConfirmation()
+                    ->modalHeading(fn (MatterEmail $record): string => __('Never check emails from :address?', ['address' => MatterEmail::addressOf((string) $record->from)]))
+                    ->modalDescription(__('Their emails waiting here are set aside, and new ones are not read (they stay unread in the mailbox). The address can be taken off the list in Settings → Integrations.'))
+                    ->visible(fn (): bool => auth()->user()?->can('View:SystemSettings') ?? false)
+                    ->action(function (MatterEmail $record): void {
+                        $address = MatterEmail::addressOf((string) $record->from);
+                        $count = app(MatterReplyCollector::class)->ignore($address);
+
+                        Notification::make()
+                            ->success()
+                            ->title(__(':address will not be checked again.', ['address' => $address]))
+                            ->body(trans_choice('{0} |{1} 1 waiting email set aside.|[2,*] :count waiting emails set aside.', $count, ['count' => $count]))
+                            ->send();
+                    }),
+
                 Action::make('dismiss')
                     ->label(__('About no matter'))
                     ->icon('heroicon-o-archive-box-x-mark')
@@ -179,7 +238,7 @@ class UnfiledEmails extends Page implements HasTable
      * @param  list<int>  $ids
      * @return array<int, string>
      */
-    private static function matterLabels(array $ids): array
+    public static function matterLabels(array $ids): array
     {
         if ($ids === []) {
             return [];
@@ -195,7 +254,7 @@ class UnfiledEmails extends Page implements HasTable
      *
      * @return array<int, string>
      */
-    private static function searchMatters(string $search): array
+    public static function searchMatters(string $search): array
     {
         $digits = array_values(array_filter(preg_split('/\D+/', $search) ?: [], fn ($d) => $d !== ''));
         if ($digits === []) {

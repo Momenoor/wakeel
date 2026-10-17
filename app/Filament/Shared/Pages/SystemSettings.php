@@ -9,6 +9,7 @@ use App\Filament\Support\SettingsForm;
 use App\Models\MatterLetter;
 use App\Models\Setting;
 use App\Services\Installer\EnvironmentFileWriter;
+use App\Services\MMS\MatterReplyCollector;
 use App\Services\MMS\SenderMailer;
 use App\Support\Branding;
 use App\Support\CompanyContact;
@@ -85,6 +86,8 @@ class SystemSettings extends Page
             Branding::EMAIL_PDF_FONT => Setting::get(Branding::EMAIL_PDF_FONT),
 
             'mail_sender_key' => Setting::get('mail_sender_key'),
+            MatterReplyCollector::KEEP_ALL => MatterReplyCollector::keepsAll(),
+            MatterReplyCollector::IGNORED => MatterReplyCollector::ignoredSenders(),
             EmailSendFields::DEFAULT_SENDER => Setting::get(EmailSendFields::DEFAULT_SENDER),
             'mail_mailer' => Setting::get('mail_mailer', config('mail.default', 'smtp')),
             'mail_host' => Setting::get('mail_host', config('mail.mailers.smtp.host', '')),
@@ -171,6 +174,8 @@ class SystemSettings extends Page
             'letter_cc_expert_types' => 'general',
 
             'mail_sender_key' => 'mail',
+            MatterReplyCollector::KEEP_ALL => 'mail',
+            MatterReplyCollector::IGNORED => 'mail',
             EmailSendFields::DEFAULT_SENDER => 'mail',
             'mail_mailer' => 'mail',
             'mail_host' => 'mail',

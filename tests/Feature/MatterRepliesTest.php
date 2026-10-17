@@ -333,6 +333,26 @@ class MatterRepliesTest extends TestCase
         $this->assertStringContainsString('has not finished', MatterReplyCollector::lastRunSummary());
     }
 
+    public function test_set_to_keep_every_email_a_mailbox_never_sent_from_is_read_too(): void
+    {
+        \App\Models\MailSender::create(['driver' => \App\Models\MailSender::MICROSOFT, 'address' => 'info@jpa.ae', 'name' => 'Info', 'key' => 'info', 'is_active' => true]);
+        $this->inbox = [[
+            'id' => 'AAMk9', 'subject' => 'استفسار', 'internetMessageId' => '<q@gmail.com>', 'hasAttachments' => false,
+            'from' => ['emailAddress' => ['address' => 'someone@gmail.com', 'name' => 'Someone']],
+            'toRecipients' => [['emailAddress' => ['address' => 'info@jpa.ae']]], 'receivedDateTime' => now()->subMinute()->toIso8601String(),
+            'body' => ['contentType' => 'html', 'content' => '<p>؟</p>'], 'internetMessageHeaders' => [],
+        ]];
+
+        // Only replies and parties': a mailbox nothing was sent from is not read.
+        app(MatterReplyCollector::class)->collect(null, 60);
+        Http::assertNotSent(fn (Request $request) => str_contains(rawurldecode($request->url()), 'users/info@jpa.ae/mailFolders'));
+
+        // Every email: it is.
+        \App\Models\Setting::set(MatterReplyCollector::KEEP_ALL, true, 'mail');
+        app(MatterReplyCollector::class)->collect(null, 60);
+        $this->assertSame('info', MatterEmail::pending()->sole()->sender_key);
+    }
+
     public function test_an_automatic_run_records_itself_and_goes_on_where_a_short_one_stopped(): void
     {
         \App\Models\MailSender::create(['driver' => \App\Models\MailSender::MICROSOFT, 'address' => 'no_reply@jpa.ae', 'name' => 'JPA', 'key' => 'noreply', 'is_active' => true]);
