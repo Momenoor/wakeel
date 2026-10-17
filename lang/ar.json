@@ -4046,5 +4046,13 @@
     "Where the signed minutes are saved, for this type's matters. Folders are separated by \"/\", and each may use the matter's placeholders, like the letters do, e.g. {{matter.custom.Phase}}/06 signed minutes. Leave empty for the default one (Settings → OneDrive Folders).": "مكان حفظ المحاضر الموقعة، لقضايا هذا النوع. تُفصل المجلدات بـ «/» ويجوز أن يستخدم كل منها متغيرات القضية كما في الخطابات، مثل {{matter.custom.Phase}}/06 signed minutes. اتركه فارغاً للافتراضي (الإعدادات ← مجلدات OneDrive).",
     ":count attachment|:count attachments": ":count مرفق|:count مرفقات",
     "OneDrive folder": "مجلد OneDrive",
-    "This matter has no value for :placeholders — its folder is left out.": "ليست لهذه القضية قيمة للمتغير :placeholders — فيُحذف مجلده."
+    "This matter has no value for :placeholders — its folder is left out.": "ليست لهذه القضية قيمة للمتغير :placeholders — فيُحذف مجلده.",
+    "Stopped for time; the rest is read on the next run.": "توقف لانتهاء الوقت؛ يُقرأ الباقي في المرة التالية.",
+    "Last automatic check: :when": "آخر فحص تلقائي: :when",
+    "Last automatic email check": "آخر فحص تلقائي للبريد",
+    "Never — the scheduled tasks are not running (check the cron link).": "لم يُجرَ بعد — المهام المجدولة لا تعمل (تحقق من رابط cron).",
+    "Started :when and has not finished (still running, or it was cut off).": "بدأ :when ولم ينتهِ (لا يزال يعمل، أو قُطع).",
+    "{0} nothing new|{1} 1 email kept|[2,*] :count emails kept": "{0} لا جديد|{1} حُفظت رسالة واحدة|[2,*] حُفظت :count رسائل",
+    "more to read on the next run": "وبقي ما يُقرأ في المرة التالية",
+    "Error: :error": "خطأ: :error"
 }

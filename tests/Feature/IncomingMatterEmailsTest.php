@@ -119,11 +119,13 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertSame([MatterEmail::FILED, MatterEmail::BY_SUBJECT], [$second->status, $second->matched_by]);
         $this->assertSame(MatterEmail::BY_BODY, MatterEmail::query()->where('matter_id', $this->first->id)->sole()->matched_by);
 
-        // Its PDF and its file on the matter, in OneDrive, a step in its progress.
-        $this->assertSame(2, $this->second->attachments()->count());
+        // Its PDF on the matter and in OneDrive; the file it came with in OneDrive only — listed, not kept here.
+        $this->assertSame([$second->files[0]['name']], $this->second->attachments()->pluck('name')->all());
         $this->assertStringContainsString(__('Incoming email'), $second->files[0]['name']);
         $this->assertContains('عقد.pdf', array_column($second->files, 'name'));
-        $this->assertNotEmpty($this->uploads);
+        $this->assertNull(collect($second->files)->firstWhere('name', 'عقد.pdf')['path']);
+        $this->assertTrue(collect($this->uploads)->contains(fn (string $url) => str_contains($url, 'عقد.pdf')));
+        $this->assertSame([], array_values(array_filter(Storage::disk('public')->allFiles(), fn (string $p) => str_ends_with($p, '.pdf') && ! str_contains($p, 'attachments/emails'))));
         $step = $this->second->progress()->sole();
         $this->assertSame(ProgressType::EMAIL_RECEIVED, $step->type);
         $this->assertSame('مستندات القضية 987/2026', $step->title);
@@ -172,10 +174,13 @@ class IncomingMatterEmailsTest extends TestCase
 
         $email->refresh();
         $this->assertSame([$this->first->id, MatterEmail::FILED, MatterEmail::BY_HAND], [$email->matter_id, $email->status, $email->matched_by]);
-        $this->assertContains('عقد.pdf', $this->first->attachments()->pluck('name')->all());
-        $this->assertSame(2, $this->first->attachments()->count());
+        // The PDF with the matter's attachments; the file it came with in OneDrive only.
+        $this->assertNotContains('عقد.pdf', $this->first->attachments()->pluck('name')->all());
+        $this->assertSame(1, $this->first->attachments()->count());
+        $this->assertContains('عقد.pdf', array_column($email->files, 'name'));
         $this->assertSame(ProgressType::EMAIL_RECEIVED, $this->first->progress()->sole()->type);
         $this->assertCount(2, $this->uploads);
+        $this->assertTrue(collect($this->uploads)->contains(fn (string $url) => str_contains($url, 'عقد.pdf')));
         // Moved, not copied.
         $this->assertSame([], Storage::disk('public')->allFiles('email-unfiled'));
     }
@@ -477,6 +482,20 @@ class IncomingMatterEmailsTest extends TestCase
         foreach ($files as $path) {
             $this->assertStringStartsWith('Work/Matters/2026-987/2026-10-16/', $path);
         }
+    }
+
+    public function test_with_no_onedrive_folder_the_file_it_came_with_is_kept_in_the_system_so_it_is_not_lost(): void
+    {
+        \App\Models\MatterOneDriveFolder::query()->where('matter_id', $this->second->id)->delete();
+
+        $this->collect($this->email(['subject' => 'مستندات القضية 987/2026']));
+
+        $email = MatterEmail::where('matter_id', $this->second->id)->sole();
+        $contract = collect($email->files)->firstWhere('name', 'عقد.pdf');
+        $this->assertNotNull($contract['path']);
+        $this->assertTrue(Storage::disk('public')->exists($contract['path']));
+        $this->assertContains('عقد.pdf', $this->second->attachments()->pluck('name')->all());
+        $this->assertSame('Not saved', $email->oneDriveLabel('attachments'));
     }
 
     public function test_a_matter_with_no_onedrive_folder_gets_the_email_to_download_by_hand(): void

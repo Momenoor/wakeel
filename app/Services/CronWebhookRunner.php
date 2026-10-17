@@ -32,7 +32,15 @@ class CronWebhookRunner
     /** Seconds the queue worker may take within one call. */
     private const WORKER_SECONDS = 40;
 
+    /** Seconds one call should take in all: inside the minute, so the next call is not turned away "busy" (and the tasks due only in that minute missed). */
+    private const RUN_SECONDS = 55;
+
     private ?Lock $lock = null;
+
+    /** The task running now — its overlap lock is freed if PHP dies while it runs. */
+    private ?Event $running = null;
+
+    private float $startedAt = 0.0;
 
     public function __construct(private readonly Application $app) {}
 
@@ -61,18 +69,44 @@ class CronWebhookRunner
 
     public function run(): void
     {
-        ignore_user_abort(true);
-        @set_time_limit(110);
+        $this->startedAt = microtime(true);
+
+        // If PHP dies in a task (its time or memory limit — a fatal error runs no "finally"), the task's
+        // overlap lock and the run lock are freed here, so the next call is not blocked. A process the
+        // server kills outright runs nothing: the locks then expire by themselves (the run lock after
+        // two minutes, a task's after its withoutOverlapping() minutes).
+        register_shutdown_function(function (): void {
+            if ($this->running !== null && $this->running->withoutOverlapping) {
+                $this->running->mutex->forget($this->running);
+            }
+
+            $this->lock?->release();
+        });
 
         try {
+            // Guarded: a host that disables them would otherwise stop the run before it starts.
+            if (function_exists('ignore_user_abort')) {
+                ignore_user_abort(true);
+            }
+            if (function_exists('set_time_limit')) {
+                @set_time_limit(110);
+            }
+
             foreach ($this->schedule()->dueEvents($this->app) as $event) {
                 if (! $event->filtersPass($this->app)) {
+                    // Said in the log when it is the overlap lock — a task still running, or one a
+                    // killed run left behind — so a task that never runs can be told from one not due.
+                    if ($event->withoutOverlapping && $event->mutex->exists($event)) {
+                        Log::info('Web cron skipped a task still locked by an earlier run: '.($event->description ?: $event->command));
+                    }
+
                     continue;
                 }
 
                 $this->runEvent($event);
             }
         } finally {
+            $this->running = null;
             $this->lock?->release();
         }
     }
@@ -106,11 +140,15 @@ class CronWebhookRunner
             return;
         }
 
+        $this->running = $event;
+
         try {
             $callback();
         } catch (Throwable $exception) {
             Log::error('Web cron task failed: '.($event->description ?: $event->command), ['exception' => $exception]);
         } finally {
+            $this->running = null;
+
             if ($event->withoutOverlapping) {
                 $event->mutex->forget($event);
             }
@@ -119,12 +157,19 @@ class CronWebhookRunner
 
     private function work(Event $event): void
     {
+        // Only the time this call has left: the tasks before it may have used some.
+        $seconds = min(self::WORKER_SECONDS, self::RUN_SECONDS - (int) ceil(microtime(true) - $this->startedAt));
+
+        if ($seconds < 10) {
+            return;
+        }
+
         $output = new BufferedOutput;
 
         Artisan::call('queue:work', [
             '--queue' => 'default,mail',
             '--stop-when-empty' => true,
-            '--max-time' => self::WORKER_SECONDS,
+            '--max-time' => $seconds,
             '--tries' => 3,
             '--timeout' => 35,
         ], $output);

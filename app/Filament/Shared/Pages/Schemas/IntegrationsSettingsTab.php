@@ -7,6 +7,7 @@ use BezhanSalleh\FilamentShield\Support\Utils;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
+use App\Services\MMS\MatterReplyCollector;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Section;
@@ -75,6 +76,10 @@ class IntegrationsSettingsTab
                                     ->icon(Heroicon::ArrowPath)
                                     ->action(fn (Set $set) => $set(Integrations::CRON_TOKEN, Str::random(48))),
                             ),
+                        // Whether the scheduler really runs: the automatic email check is one of its tasks.
+                        TextEntry::make('last_email_check')
+                            ->label(__('Last automatic email check'))
+                            ->state(fn (): string => MatterReplyCollector::lastRunSummary()),
                         TextEntry::make('cron_url')
                             ->label(__('Link for cron-job.org'))
                             ->state(function (Get $get): string {

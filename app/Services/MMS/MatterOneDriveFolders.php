@@ -413,10 +413,9 @@ class MatterOneDriveFolders
     /** A file's name as it is put in OneDrive (no "/" or other characters it refuses). */
     private static function oneDriveName(string $name): string
     {
-        $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-        $base = $extension !== '' ? Str::beforeLast($name, '.'.pathinfo($name, PATHINFO_EXTENSION)) : $name;
+        [$base, $extension] = SentEmailArchive::splitName($name);
 
-        return MatterOneDriveExplorer::cleanName($base).($extension !== '' ? '.'.$extension : '');
+        return SentEmailArchive::cleanBase($base).($extension !== '' ? '.'.$extension : '');
     }
 
     /**

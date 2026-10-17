@@ -160,6 +160,12 @@ class SentFolder
     private function config(string $senderKey, array $sender): array
     {
         return [
+            // A message whose Date header cannot be read (spam often has one) gets a date of its own
+            // instead of failing the whole fetch — and so the whole mailbox.
+            'options' => [
+                'soft_fail' => true,
+                'fallback_date' => '1970-01-01 00:00:00',
+            ],
             'accounts' => [
                 $senderKey => [
                     'host' => $sender['host'],

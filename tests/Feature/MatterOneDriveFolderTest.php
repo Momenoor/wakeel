@@ -501,6 +501,62 @@ class MatterOneDriveFolderTest extends TestCase
         $this->assertSame([], MatterOneDriveFolders::emptyPlaceholders('{{matter.custom.Phase}}/{{day}}', $matter->fresh(), $at));
     }
 
+    public function test_an_attachment_named_in_encoded_words_is_read_saved_and_linked_whole(): void
+    {
+        $real = 'JPA-2026-1010-1 إشعار بأمورية الخبرة وطلب مستندات.docx';
+
+        // As a mail program sends it: plain text first, then words that cut an Arabic letter in two.
+        $head = 'JPA-2026-1010-1 ';
+        $arabic = substr($real, strlen($head));
+        $cut = 17; // inside a two-byte letter
+        $this->assertSame(1, $cut % 2);
+        $words = $head.'=?UTF-8?B?'.base64_encode(substr($arabic, 0, $cut)).'?= =?UTF-8?B?'.base64_encode(substr($arabic, $cut)).'?=';
+
+        $this->assertSame($real, \App\Services\MMS\SentMailImporter::decodeHeader($words));
+        // Quoted-printable too, and a name that is only plain text is left alone.
+        $this->assertSame('تقرير.pdf', \App\Services\MMS\SentMailImporter::decodeHeader('=?UTF-8?Q?=D8=AA=D9=82=D8=B1=D9=8A=D8=B1.pdf?='));
+        $this->assertSame('a b.pdf', \App\Services\MMS\SentMailImporter::decodeHeader('a b.pdf'));
+
+        // The extension only when it is one.
+        $this->assertSame(['JPA-2026-1010-1 إشعار بأمورية الخبرة وطلب مستندات', 'docx'], \App\Services\MMS\SentEmailArchive::splitName($words));
+        $this->assertSame(['Report', 'pdf'], \App\Services\MMS\SentEmailArchive::splitName('Report.PDF'));
+        [$base, $extension] = \App\Services\MMS\SentEmailArchive::splitName('broken name =?UTF-8?B?2YUg2KYqC5kb2N4?=');
+        $this->assertSame('', $extension);
+        $this->assertSame('', \App\Services\MMS\SentEmailArchive::splitName('x.4?=')[1]);
+
+        // Saved: in the system under a path with no stray characters, and in OneDrive under a name OneDrive accepts.
+        $this->switchOn();
+        $od = (new \Tests\Support\FakeOneDrive)->install();
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $matter = $this->phaseOf('phase1');
+        $this->assign($matter, $this->assistant());
+
+        $path = app(\App\Services\MMS\SentEmailArchive::class)->keepFile($matter->fresh(), $words, '%PDF', 'application/pdf', 'واردة', User::factory()->create()->id, true, $inOneDrive);
+        $this->assertTrue($inOneDrive);
+        $this->assertMatchesRegularExpression('~^attachments/emails/\d+/[0-9-]+-\w{6}\.docx$~', $path);
+        $this->assertSame($real, $matter->attachments()->latest('id')->first()->name);
+        $this->assertContains($real, $od->names('Work/Matters/2026-1010 - خبرة - محاكم دبي/واردة'));
+
+        // A name that stays unreadable: still saved, under a name OneDrive accepts, and its link opens.
+        $odd = 'تقرير =?UTF-8?B?2YUg2KYqC5kb2N4?= x.4?=';
+        $oddPath = app(\App\Services\MMS\SentEmailArchive::class)->keepFile($matter->fresh(), $odd, '%PDF', 'application/pdf', 'واردة', User::factory()->create()->id, true, $oddInOneDrive);
+        $this->assertTrue($oddInOneDrive);
+        $this->assertStringNotContainsString('?', (string) $oddPath);
+        $this->assertSame([], array_values(array_filter($od->names('Work/Matters/2026-1010 - خبرة - محاكم دبي/واردة'), fn (string $n) => preg_match('~[?*:<>|"]~', $n) === 1)));
+
+        // Arabic Outlook's windows-1256, and an unknown charset: read, never an error.
+        $this->assertSame('تقرير.pdf', \App\Services\MMS\SentMailImporter::decodeHeader('=?windows-1256?B?'.base64_encode(iconv('UTF-8', 'WINDOWS-1256', 'تقرير')).'?=.pdf'));
+        $this->assertIsString(\App\Services\MMS\SentMailImporter::decodeHeader('=?x-no-such-charset?B?'.base64_encode('abc').'?='));
+        // Raw 8-bit bytes beside an encoded word: not emptied.
+        $this->assertNotSame('', \App\Services\MMS\SentMailImporter::decodeHeader("caf\xE9 =?UTF-8?B?".base64_encode('x').'?='));
+        // A name of only characters OneDrive refuses: "attachment".
+        $this->assertSame('attachment', \App\Services\MMS\SentEmailArchive::cleanBase('????'));
+
+        // A link to a file with a "?" or "#" in its path keeps its whole path.
+        $url = MatterEmail::fileUrl('attachments/emails/1/a b#c?.pdf');
+        $this->assertStringEndsWith('/attachments/emails/1/a%20b%23c%3F.pdf', $url);
+    }
+
     public function test_a_child_matter_shares_its_parents_main_folder_whatever_its_number(): void
     {
         $this->switchOn('{{matter.custom.Phase}}/01 system');

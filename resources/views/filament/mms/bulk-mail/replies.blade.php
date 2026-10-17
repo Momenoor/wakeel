@@ -11,9 +11,13 @@
                 <ul class="mt-2 flex flex-col gap-1 text-sm">
                     @foreach ($reply->files as $file)
                         <li>
-                            <x-filament::link :href="\Illuminate\Support\Facades\Storage::disk('public')->url($file['path'])" target="_blank" icon="heroicon-o-document-arrow-down">
-                                {{ $file['name'] }}
-                            </x-filament::link>
+                            @if (filled($file['path'] ?? null))
+                                <x-filament::link :href="\App\Models\MatterEmail::fileUrl($file['path'])" target="_blank" icon="heroicon-o-document-arrow-down">
+                                    {{ $file['name'] }}
+                                </x-filament::link>
+                            @else
+                                <span dir="auto">{{ $file['name'] }}</span>
+                            @endif
                         </li>
                     @endforeach
                 </ul>

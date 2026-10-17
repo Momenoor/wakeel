@@ -21,6 +21,10 @@
     RewriteCond %{HTTP:x-xsrf-token} .
     RewriteRule .* - [E=HTTP_X_XSRF_TOKEN:%{HTTP:X-XSRF-Token}]
 
+    # The web cron (cron-job.org) is answered at once and the work goes on after that. LiteSpeed
+    # stops PHP when the caller goes away, unless told not to (ignore_user_abort() is not enough).
+    RewriteRule ^cron/run - [E=noabort:1,E=noconntimeout:1]
+
     # Old /public/... URLs keep working — public/.htaccess takes over.
     RewriteRule ^public/ - [L]
 

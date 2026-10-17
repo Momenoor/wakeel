@@ -234,13 +234,83 @@ class SentMailImporter
             return $value;
         }
 
-        $decoded = @iconv_mime_decode($value, ICONV_MIME_DECODE_CONTINUE_ON_ERROR, 'UTF-8');
+        // Joined first by hand: a mail program may cut a multi-byte (Arabic) character between two
+        // encoded words, which the library cannot read, and may leave some words undecoded.
+        $decoded = self::joinEncodedWords($value);
 
-        if (! is_string($decoded) || $decoded === '') {
-            $decoded = mb_decode_mimeheader($value);
+        if (str_contains($decoded, '=?')) {
+            $again = @iconv_mime_decode($decoded, ICONV_MIME_DECODE_CONTINUE_ON_ERROR, 'UTF-8');
+            $decoded = is_string($again) && $again !== '' ? $again : $decoded;
         }
 
         return $decoded;
+    }
+
+    /**
+     * The encoded words ("=?UTF-8?B?…?=") of a header read: consecutive words of the same
+     * character set and encoding are joined before they are decoded, as the text between
+     * two of them is not part of it (RFC 2047) and a word may end inside a character.
+     */
+    private static function joinEncodedWords(string $value): string
+    {
+        $word = '=\?([^?\s]+)\?([BbQq])\?([^?\s]*)\?=';
+
+        // No /u: encoded words are plain ASCII, and a header with raw 8-bit bytes beside them must not
+        // make the pattern fail (and the name come back empty).
+        $joined = preg_replace_callback('/'.$word.'(?:\s+'.$word.')*/', function (array $run) use ($word): string {
+            preg_match_all('/'.$word.'/', $run[0], $words, PREG_SET_ORDER);
+
+            $out = '';
+            $bytes = '';
+            $current = null;
+
+            $flush = function () use (&$out, &$bytes, &$current): void {
+                if ($current !== null) {
+                    $out .= self::toUtf8($bytes, $current);
+                }
+                $bytes = '';
+            };
+
+            foreach ($words as [, $charset, $encoding, $text]) {
+                $key = strtolower($charset).'|'.strtoupper($encoding);
+
+                if ($current !== $key) {
+                    $flush();
+                    $current = $key;
+                }
+
+                $bytes .= strtoupper($encoding) === 'B'
+                    ? (string) base64_decode($text)
+                    : quoted_printable_decode(str_replace('_', ' ', $text));
+            }
+            $flush();
+
+            return $out;
+        }, $value);
+
+        return is_string($joined) ? $joined : $value;
+    }
+
+    private static function toUtf8(string $bytes, string $charsetAndEncoding): string
+    {
+        $charset = strstr($charsetAndEncoding, '|', true) ?: 'utf-8';
+
+        // "utf-8*ar" — a language after a star.
+        $charset = explode('*', $charset)[0];
+
+        // iconv knows the Windows code pages Arabic mail uses (windows-1256 …); mbstring throws on a
+        // name it does not know — neither may stop the mailbox.
+        $text = @iconv($charset, 'UTF-8//IGNORE', $bytes);
+
+        if (! is_string($text) || $text === '') {
+            try {
+                $text = mb_convert_encoding($bytes, 'UTF-8', $charset);
+            } catch (\ValueError) {
+                $text = '';
+            }
+        }
+
+        return is_string($text) && $text !== '' ? $text : mb_scrub($bytes, 'UTF-8');
     }
 
     private static function normalize(string $text): string

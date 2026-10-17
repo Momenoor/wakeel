@@ -189,7 +189,7 @@ class EmailsRelationManager extends RelationManager
     {
         $path = $email->files[0]['path'] ?? null;
 
-        return filled($path) && Storage::disk('public')->exists($path) ? Storage::disk('public')->url($path) : null;
+        return filled($path) && Storage::disk('public')->exists($path) ? MatterEmail::fileUrl($path) : null;
     }
 
     /**
@@ -202,7 +202,7 @@ class EmailsRelationManager extends RelationManager
     {
         return collect((array) $email->files)
             ->filter(fn ($file): bool => filled($file['path'] ?? null) && Storage::disk('public')->exists($file['path']))
-            ->map(fn (array $file): array => ['name' => (string) $file['name'], 'url' => Storage::disk('public')->url($file['path']), 'kind' => $file['kind'] ?? null])
+            ->map(fn (array $file): array => ['name' => (string) $file['name'], 'url' => MatterEmail::fileUrl($file['path']), 'kind' => $file['kind'] ?? null])
             ->values()
             ->all();
     }

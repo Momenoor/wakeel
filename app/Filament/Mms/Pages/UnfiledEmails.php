@@ -129,7 +129,7 @@ class UnfiledEmails extends Page implements HasTable
                     ->label(__('Open'))
                     ->icon('heroicon-o-document-text')
                     ->color('gray')
-                    ->url(fn (MatterEmail $record): ?string => filled($path = $record->files[0]['path'] ?? null) ? Storage::disk('public')->url($path) : null, shouldOpenInNewTab: true),
+                    ->url(fn (MatterEmail $record): ?string => filled($path = $record->files[0]['path'] ?? null) ? MatterEmail::fileUrl($path) : null, shouldOpenInNewTab: true),
 
                 Action::make('file')
                     ->label(__('File to matter'))

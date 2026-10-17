@@ -96,4 +96,42 @@ class CronWebhookTest extends TestCase
         $this->assertTrue($commands->contains('pms:flag-overdue-installments'));
         $this->assertTrue($commands->contains(fn ($c) => str_starts_with($c, 'queue:work')));
     }
+    public function test_reply_collection_is_asked_every_minute_runs_when_due_and_its_lock_is_short(): void
+    {
+        $event = collect(app(CronWebhookRunner::class)->schedule()->events())
+            ->first(fn ($e) => str_starts_with((string) CronWebhookRunner::artisanCommand($e), 'mail:collect-replies'));
+
+        $this->assertNotNull($event);
+        $this->assertSame('* * * * *', $event->expression);
+        $this->assertSame('mail:collect-replies --max-seconds=30', CronWebhookRunner::artisanCommand($event));
+        $this->assertTrue($event->withoutOverlapping);
+        // A run the server cut off blocks it for 15 minutes, not 24 hours.
+        $this->assertSame(15, $event->expiresAt);
+
+        // Not due right after a run.
+        \App\Models\Setting::set(\App\Services\MMS\MatterReplyCollector::LAST_RUN, ['started_at' => now()->toDateTimeString(), 'finished_at' => now()->toDateTimeString(), 'stopped' => false], 'mail', 'json');
+        $this->assertFalse($event->filtersPass(app()));
+        \App\Models\Setting::set(\App\Services\MMS\MatterReplyCollector::LAST_RUN, ['started_at' => now()->subMinutes(12)->toDateTimeString(), 'finished_at' => now()->subMinutes(12)->toDateTimeString(), 'stopped' => false], 'mail', 'json');
+        $this->assertTrue($event->filtersPass(app()));
+    }
+
+    public function test_a_task_left_locked_is_said_in_the_log(): void
+    {
+        $event = app(Schedule::class)->call(fn () => null)->name('stuck-task')->everyMinute()->withoutOverlapping();
+        app(CacheEventMutex::class)->create($event);
+        \Illuminate\Support\Facades\Log::spy();
+
+        $runner = app(CronWebhookRunner::class);
+        $this->assertTrue($runner->claim());
+        $runner->run();
+
+        \Illuminate\Support\Facades\Log::shouldHaveReceived('info')->withArgs(fn (string $message) => str_contains($message, 'stuck-task'));
+    }
+
+    public function test_litespeed_is_told_to_let_the_web_cron_finish(): void
+    {
+        foreach ([base_path('public/.htaccess'), base_path('.htaccess')] as $file) {
+            $this->assertStringContainsString('RewriteRule ^cron/run - [E=noabort:1,E=noconntimeout:1]', file_get_contents($file), $file);
+        }
+    }
 }

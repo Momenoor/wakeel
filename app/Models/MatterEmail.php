@@ -120,6 +120,18 @@ class MatterEmail extends Model
     }
 
     /**
+     * The link to a file kept in the system (the public disk): each part of its path encoded, so
+     * a file named with a "?", "#" or "%" in it opens instead of being cut at that character.
+     */
+    public static function fileUrl(string $path): string
+    {
+        $disk = \Illuminate\Support\Facades\Storage::disk('public');
+        $plain = $disk->url('x');
+
+        return substr($plain, 0, -1).implode('/', array_map('rawurlencode', explode('/', $path)));
+    }
+
+    /**
      * Whether the email's PDF (`pdf`) or its original (`eml`) is in the matter's
      * OneDrive — null when that was never checked.
      */

@@ -138,7 +138,7 @@ class ProgressRelationManager extends RelationManager
                 // Now, not waiting for the next round (every ten minutes).
                 Action::make('collectReplies')
                     ->label(__('Check for emails'))
-                    ->tooltip(__("Replies, and any other email from the matter's parties"))
+                    ->tooltip(fn (): string => __("Replies, and any other email from the matter's parties").' — '.__('Last automatic check: :when', ['when' => MatterReplyCollector::lastRunSummary()]))
                     ->icon('heroicon-o-envelope-open')
                     ->color('gray')
                     ->visible(fn (): bool => MatterEmail::query()->where('direction', MatterEmail::SENT)->exists())

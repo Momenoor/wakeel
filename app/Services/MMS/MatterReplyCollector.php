@@ -20,6 +20,7 @@ use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Facades\Log;
@@ -53,6 +54,12 @@ class MatterReplyCollector
     /** How far back a mailbox is first read for the parties' other emails. */
     private const FIRST_DAYS = 30;
 
+    /** What the last automatic run did: when it started and finished, what it kept, whether it stopped for time, its errors. */
+    public const LAST_RUN = 'mail_collect_last_run';
+
+    /** Minutes between automatic runs (sooner while a backlog is left). */
+    private const EVERY_MINUTES = 10;
+
     /** @var array<int, array{matter: int, label: string, url: string, downloads: list<array{name: string, url: string}>}> matters whose emails were kept in the system only (they have no OneDrive folder), with the files to download and put there by hand */
     private array $unlinked = [];
 
@@ -72,12 +79,22 @@ class MatterReplyCollector
      * email from a matter's party. Or — for one matter — read back from its
      * first email (FIRST_DAYS at least), for its emails only.
      *
-     * @return array{replies: int, emails: int, unfiled: int, errors: list<string>, unlinked: list<array{matter: int, label: string, url: string, downloads: list<array{name: string, url: string}>}>}
+     * With $maxSeconds it stops starting new messages once that time is up, and saves how far each
+     * mailbox got, so the next run goes on from there (an automatic run must fit in the web cron's
+     * time — a run the server cuts off would otherwise start over every time).
+     *
+     * @return array{replies: int, emails: int, unfiled: int, errors: list<string>, stopped: bool, unlinked: list<array{matter: int, label: string, url: string, downloads: list<array{name: string, url: string}>}>}
      */
-    public function collect(?int $matterId = null): array
+    public function collect(?int $matterId = null, ?int $maxSeconds = null): array
     {
         $this->unlinked = [];
-        $result = ['replies' => 0, 'emails' => 0, 'unfiled' => 0, 'errors' => [], 'unlinked' => []];
+        $result = ['replies' => 0, 'emails' => 0, 'unfiled' => 0, 'errors' => [], 'stopped' => false, 'unlinked' => []];
+        $deadline = $maxSeconds !== null ? microtime(true) + $maxSeconds : null;
+        $automatic = $matterId === null;
+
+        if ($automatic) {
+            Setting::set(self::LAST_RUN, ['started_at' => now()->toDateTimeString(), 'finished_at' => null, 'stopped' => false] + ((array) Setting::get(self::LAST_RUN, [])), 'mail', 'json');
+        }
 
         $sent = MatterEmail::query()
             ->where('direction', MatterEmail::SENT)
@@ -92,8 +109,22 @@ class MatterReplyCollector
             array_map('strval', array_keys(SenderMailer::all())),
         ));
 
+        // The mailbox read longest ago first: one a short run did not reach goes first next time, so a
+        // slow mailbox never keeps the others waiting.
+        usort($mailboxes, fn (string $a, string $b): int => strcmp((string) Setting::get(self::checkedKey($a), ''), (string) Setting::get(self::checkedKey($b), '')));
+        $read = 0;
+
         foreach ($mailboxes as $senderKey) {
             $emails = $sent->get($senderKey, collect());
+
+            // Out of time: the mailboxes not reached are read next time (at least one is read each run).
+            if ($deadline !== null && $read > 0 && microtime(true) >= $deadline) {
+                $result['stopped'] = true;
+
+                break;
+            }
+
+            $read++;
 
             try {
                 $sender = SenderMailer::sender($senderKey);
@@ -106,12 +137,22 @@ class MatterReplyCollector
                     ? $this->fromGraph((string) $sender['address'], $since)
                     : $this->fromImap($senderKey, $sender, $since);
 
-                foreach ($this->handleAll($messages, $emails, $senderKey, $matterId) as $kind => $count) {
+                $progress = ['reached' => null, 'stopped' => false];
+
+                foreach ($this->handleAll($messages, $emails, $senderKey, $matterId, $deadline, $progress, $checked ? Carbon::parse($checked) : null) as $kind => $count) {
                     $result[$kind] += $count;
                 }
 
-                if (! $matterId) {
-                    Setting::set(self::checkedKey($senderKey), $startedAt->toDateTimeString(), 'mail');
+                if ($automatic) {
+                    if ($progress['stopped']) {
+                        // Stopped for time: from the last message handled, not from the start again.
+                        $result['stopped'] = true;
+                        if ($progress['reached'] !== null && (! $checked || $progress['reached']->gt(Carbon::parse($checked)))) {
+                            Setting::set(self::checkedKey($senderKey), $progress['reached']->toDateTimeString(), 'mail');
+                        }
+                    } else {
+                        Setting::set(self::checkedKey($senderKey), $startedAt->toDateTimeString(), 'mail');
+                    }
                 }
             } catch (Throwable $e) {
                 Log::warning('Emails not collected from '.$senderKey.': '.$e->getMessage());
@@ -121,7 +162,66 @@ class MatterReplyCollector
 
         $result['unlinked'] = array_values($this->unlinked);
 
+        if ($automatic) {
+            Setting::set(self::LAST_RUN, [
+                'started_at' => (string) (((array) Setting::get(self::LAST_RUN, []))['started_at'] ?? now()->toDateTimeString()),
+                'finished_at' => now()->toDateTimeString(),
+                'kept' => ['replies' => $result['replies'], 'emails' => $result['emails'], 'unfiled' => $result['unfiled']],
+                'stopped' => $result['stopped'],
+                'errors' => $result['errors'],
+            ], 'mail', 'json');
+        }
+
         return $result;
+    }
+
+    /**
+     * What the last automatic run did, in a line: "17/10/2026 10:40 — 2 kept", its errors, or that it
+     * has never run (the scheduler is not called) or is running (or was cut off).
+     */
+    public static function lastRunSummary(): string
+    {
+        $last = (array) Setting::get(self::LAST_RUN, []);
+
+        if (blank($last['started_at'] ?? null)) {
+            return __('Never — the scheduled tasks are not running (check the cron link).');
+        }
+
+        $started = Carbon::parse($last['started_at']);
+
+        if (blank($last['finished_at'] ?? null)) {
+            return __('Started :when and has not finished (still running, or it was cut off).', ['when' => $started->format('d/m/Y H:i')]);
+        }
+
+        $kept = array_sum((array) ($last['kept'] ?? []));
+        $line = Carbon::parse($last['finished_at'])->format('d/m/Y H:i').' — '.trans_choice('{0} nothing new|{1} 1 email kept|[2,*] :count emails kept', $kept, ['count' => $kept]);
+
+        if ($last['stopped'] ?? false) {
+            $line .= ' — '.__('more to read on the next run');
+        }
+
+        if (($errors = (array) ($last['errors'] ?? [])) !== []) {
+            $line .= ' — '.__('Error: :error', ['error' => implode(' | ', $errors)]);
+        }
+
+        return $line;
+    }
+
+    /**
+     * Whether the automatic run is due: never run yet, the last one stopped for time (a backlog is
+     * left), or it started ten minutes ago or more (a run that was cut off counts as started).
+     */
+    public static function isDue(): bool
+    {
+        $last = (array) Setting::get(self::LAST_RUN, []);
+
+        // A backlog is gone on at once — but only after a run that finished: one that was cut off
+        // (PHP died in it) waits its ten minutes, not retried every minute.
+        if (blank($last['started_at'] ?? null) || (filled($last['finished_at'] ?? null) && ($last['stopped'] ?? false))) {
+            return true;
+        }
+
+        return Carbon::parse($last['started_at'])->lte(now()->subMinutes(self::EVERY_MINUTES)->addSeconds(5));
     }
 
     /**
@@ -138,7 +238,7 @@ class MatterReplyCollector
         }
 
         $downloads = array_values(array_map(
-            fn (array $file): array => ['name' => (string) $file['name'], 'url' => Storage::disk('public')->url((string) $file['path'])],
+            fn (array $file): array => ['name' => (string) $file['name'], 'url' => MatterEmail::fileUrl((string) $file['path'])],
             array_filter($kept, fn (array $file) => filled($file['path'] ?? null)),
         ));
 
@@ -162,9 +262,9 @@ class MatterReplyCollector
      * @param  iterable<array<string, mixed>>  $messages
      * @param  Collection<int, MatterEmail>  $sent
      */
-    public function handle(iterable $messages, Collection $sent, ?string $senderKey = null, ?int $matterId = null): int
+    public function handle(iterable $messages, Collection $sent, ?string $senderKey = null, ?int $matterId = null, ?float $deadline = null, ?array &$progress = null, ?CarbonInterface $checkpoint = null): int
     {
-        return array_sum($this->handleAll($messages, $sent, $senderKey, $matterId));
+        return array_sum($this->handleAll($messages, $sent, $senderKey, $matterId, $deadline, $progress, $checkpoint));
     }
 
     /**
@@ -176,16 +276,45 @@ class MatterReplyCollector
      * @param  Collection<int, MatterEmail>  $sent
      * @return array{replies: int, emails: int, unfiled: int}
      */
-    private function handleAll(iterable $messages, Collection $sent, ?string $senderKey, ?int $matterId): array
+    private function handleAll(iterable $messages, Collection $sent, ?string $senderKey, ?int $matterId, ?float $deadline = null, ?array &$progress = null, ?CarbonInterface $checkpoint = null): array
     {
+        $startedAt = now();
         $kept = ['replies' => 0, 'emails' => 0, 'unfiled' => 0];
         $own = array_map(fn (array $s): string => mb_strtolower((string) ($s['address'] ?? '')), SenderMailer::all());
+        $progress = ['reached' => null, 'stopped' => false];
 
         foreach ($messages as $message) {
-            $id = MatterEmail::messageId($message['message_id'] ?? null);
+            // Out of time: what is left is read next time, from the last message handled — but only once
+            // this run has got past where the last one stopped, so every run moves forward (reading the
+            // mailbox's list, or the overlap read again, may take the time on its own).
+            if ($deadline !== null && microtime(true) >= $deadline
+                && $progress['reached'] !== null && ($checkpoint === null || $progress['reached']->gt($checkpoint))) {
+                $progress['stopped'] = true;
 
-            if ($id !== null && MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->where('message_id', $id)->exists()) {
-                continue;
+                break;
+            }
+
+            $id = MatterEmail::messageId($message['message_id'] ?? null);
+            // How far the mailbox has been read — messages come oldest first, and a stop for time
+            // only ever happens before the next one is begun.
+            $at = isset($message['at']) ? self::arrivedAt($message) : null;
+            // A Date header in the future (a wrong clock) or an unreadable one must not move it past the rest.
+            if ($at !== null && $at->lte($startedAt) && $at->year > 1971 && ($progress['reached'] === null || $at->gt($progress['reached']))) {
+                $progress['reached'] = $at;
+            }
+
+            // Kept already — but one that was cut off half way (its row made, its files never kept) is
+            // kept again by the automatic run: only once it is clearly abandoned (older than any run
+            // lasts, so not another run still keeping it) and only a few times (one that kills PHP
+            // every time must not stop the mailbox for ever).
+            if ($id !== null) {
+                if ($matterId === null) {
+                    $this->retryAbandoned($id);
+                }
+
+                if (MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->where('message_id', $id)->exists()) {
+                    continue;
+                }
             }
 
             // Bodies read once, however often asked for.
@@ -222,11 +351,50 @@ class MatterReplyCollector
                     $kept['unfiled']++;
                 }
             } catch (Throwable $e) {
+                // Its row, if it was made, stays without files: once abandoned long enough, the
+                // automatic run tries it again (retryAbandoned()).
                 Log::warning('Email not kept: '.$e->getMessage(), ['message' => $id]);
             }
         }
 
         return $kept;
+    }
+
+    /** Minutes after which a half-kept email counts as abandoned — longer than any run lasts. */
+    private const ABANDONED_MINUTES = 20;
+
+    /** How many times a half-kept email is kept again before it is left as it is. */
+    private const RETRIES = 3;
+
+    /**
+     * An email whose row was made but whose files were never kept (the run was cut off, or keeping
+     * it failed): its row goes so it is kept again — when abandoned, and up to RETRIES times. After
+     * that it is left with no files (and logged), so it no longer holds the mailbox up.
+     */
+    private function retryAbandoned(string $id): void
+    {
+        $half = MatterEmail::query()
+            ->where('direction', MatterEmail::RECEIVED)
+            ->where('message_id', $id)
+            ->whereNull('files')
+            ->where('created_at', '<=', now()->subMinutes(self::ABANDONED_MINUTES))
+            ->get();
+
+        if ($half->isEmpty()) {
+            return;
+        }
+
+        $tries = (int) Cache::get('mail-keep-retries:'.$id, 0);
+
+        if ($tries >= self::RETRIES) {
+            Log::warning('Email left half kept after '.self::RETRIES.' tries', ['message' => $id]);
+            $half->each(fn (MatterEmail $email) => $email->update(['files' => []]));
+
+            return;
+        }
+
+        Cache::put('mail-keep-retries:'.$id, $tries + 1, now()->addDays(7));
+        $half->each->delete();
     }
 
     /**
@@ -318,17 +486,22 @@ class MatterReplyCollector
 
         if ($matter) {
             $kept = $this->keepOnMatter($matter, $pdf, $files, $name, $answers->user_id, $source, $oneDrive, self::arrivedAt($message));
-            $this->noteUnlinked($matter, $kept);
-            MatterProgressRecorder::replyReceived($reply->setRelation('parent', $answers));
-            // Whoever they put in To or CC: theirs, on this matter.
-            MatterContact::learn($reply);
         } else {
             // No matter: its PDF and the files it came with, in a folder of its own.
             $kept = $this->keepLoose('email-replies/'.$reply->getKey(), $pdf, $files, $name);
         }
 
-        // Where each went — for the campaign's recipients list to open.
+        // Where each went — for the campaign's recipients list to open. Written first, so the steps
+        // after it are never repeated by a run that keeps the email again.
         $reply->update(['files' => $kept, 'onedrive' => $oneDrive]);
+
+        if ($matter) {
+            $this->noteUnlinked($matter, $kept);
+            MatterProgressRecorder::replyReceived($reply->setRelation('parent', $answers));
+            // Whoever they put in To or CC: theirs, on this matter.
+            MatterContact::learn($reply);
+        }
+
         $this->tell($reply, $answers, count($files));
     }
 
@@ -396,15 +569,21 @@ class MatterReplyCollector
                 continue;
             }
 
-            $subfolder = $i === 0 || $folder === '' ? $folder : $folder.'/'.pathinfo((string) ($pdf['name'] ?? ''), PATHINFO_FILENAME);
-            $kept[] = ['name' => (string) $file['name'], 'path' => $this->archive->keepFile($matter, (string) $file['name'], (string) $disk->get($path), (string) ($disk->mimeType($path) ?: 'application/octet-stream'), $subfolder, $userId, inOneDrive: $saved)];
-            $disk->delete($path);
+            $contents = (string) $disk->get($path);
+            $mime = (string) ($disk->mimeType($path) ?: 'application/octet-stream');
 
             if ($i === 0) {
+                // The PDF: with the matter's attachments, and in OneDrive.
+                $kept[] = ['name' => (string) $file['name'], 'path' => $this->archive->keepFile($matter, (string) $file['name'], $contents, $mime, $folder, $userId, inOneDrive: $saved)];
                 $oneDrive['pdf'] = (bool) $saved;
             } else {
-                $oneDrive['attachments'] += $saved ? 1 : 0;
+                // A file it came with: in OneDrive only, in a folder of the PDF's name.
+                $attachment = $this->keepAttachment($matter, (string) $file['name'], $contents, $mime, $folder !== '' ? $folder.'/'.pathinfo((string) ($pdf['name'] ?? ''), PATHINFO_FILENAME) : '', $userId);
+                $kept[] = ['name' => $attachment['name'], 'path' => $attachment['path']];
+                $oneDrive['attachments'] += $attachment['saved'] ? 1 : 0;
             }
+
+            $disk->delete($path);
         }
 
         $email->update([
@@ -412,7 +591,8 @@ class MatterReplyCollector
             'status' => MatterEmail::FILED,
             'matched_by' => MatterEmail::BY_HAND,
             'onedrive' => $oneDrive,
-            'files' => array_values(array_filter($kept, fn (array $file) => filled($file['path']))),
+            // Every file listed, the PDF first — those in OneDrive only have no path here.
+            'files' => $kept,
         ]);
 
         MatterProgressRecorder::emailReceived($email, $userId);
@@ -464,7 +644,7 @@ class MatterReplyCollector
     {
         $body = $message['body'] instanceof Closure ? ($message['body'])() : (string) ($message['body'] ?? '');
         $files = $message['attachments'] instanceof Closure ? ($message['attachments'])() : (array) ($message['attachments'] ?? []);
-        $at = isset($message['at']) ? Carbon::parse($message['at']) : now();
+        $at = self::arrivedAt($message);
         $from = trim((string) ($message['from'] ?? ''));
         $fromName = trim((string) ($message['from_name'] ?? '')) ?: $from;
 
@@ -502,8 +682,9 @@ class MatterReplyCollector
         $kept = [['name' => $name.'.pdf', 'path' => $this->archive->keepFile($matter, $name.'.pdf', $pdf, 'application/pdf', $folder, $userId, inOneDrive: $oneDrive['pdf'])]];
 
         foreach ($files as $file) {
-            $kept[] = ['name' => (string) $file['name'], 'path' => $this->archive->keepFile($matter, (string) $file['name'], (string) $file['contents'], (string) ($file['mime'] ?? 'application/octet-stream'), $folder !== '' ? $folder.'/'.$name : '', $userId, inOneDrive: $saved)];
-            $oneDrive['attachments'] += $saved ? 1 : 0;
+            $attachment = $this->keepAttachment($matter, (string) $file['name'], (string) $file['contents'], (string) ($file['mime'] ?? 'application/octet-stream'), $folder !== '' ? $folder.'/'.$name : '', $userId);
+            $kept[] = ['name' => $attachment['name'], 'path' => $attachment['path']];
+            $oneDrive['attachments'] += $attachment['saved'] ? 1 : 0;
         }
 
         // The original email goes to OneDrive only, beside the PDF — nowhere in the system.
@@ -511,7 +692,26 @@ class MatterReplyCollector
             $oneDrive['eml'] = $this->archive->keepInOneDrive($matter, $name.'.eml', $source, 'message/rfc822', $folder);
         }
 
-        return array_values(array_filter($kept, fn (array $file) => filled($file['path'])));
+        // Every file is listed — the PDF first — even one kept in OneDrive only (no path here).
+        return $kept;
+    }
+
+    /**
+     * A file an email came with: in the matter's OneDrive only — not with the matter's attachments,
+     * not in the system. Only when OneDrive cannot take it (the matter has no folder there, no folder
+     * is set for received emails, OneDrive refused) is it kept in the system, so it is never lost.
+     *
+     * @return array{name: string, path: ?string, saved: bool} saved: in OneDrive; path: where it is kept in the system, if it is
+     */
+    private function keepAttachment(Matter $matter, string $name, string $contents, string $mime, string $subfolder, ?int $userId): array
+    {
+        $saved = trim($subfolder) !== '' && $this->archive->keepInOneDrive($matter, $name, $contents, $mime, $subfolder);
+
+        return [
+            'name' => $name,
+            'path' => $saved ? null : $this->archive->keepFile($matter, $name, $contents, $mime, '', $userId),
+            'saved' => $saved,
+        ];
     }
 
     /**
@@ -770,7 +970,17 @@ class MatterReplyCollector
     private function fromImap(string $senderKey, array $sender, CarbonInterface $since): iterable
     {
         $inbox = $this->mailboxes->inbox($senderKey, $sender);
-        $headers = $inbox->query()->whereSince($since->copy()->startOfDay())->leaveUnread()->setFetchBody(false)->setFetchFlags(false)->get();
+        // A day earlier than the time asked for: IMAP's SINCE is a calendar date, compared with each
+        // message's date in the mail server's own time zone (US time on cPanel hosts) — from the
+        // app's day, the mail delivered in the hours between the two would never be read. Messages
+        // read already are skipped by their Message-ID.
+        $query = $inbox->query()->whereSince($since->copy()->subDay()->startOfDay())->leaveUnread()->setFetchBody(false)->setFetchFlags(false);
+        $headers = $query->get();
+
+        // Messages the library could not read (it skips them rather than failing the mailbox): said in the log.
+        foreach ($query->errors() as $uid => $error) {
+            Log::warning('Email could not be read from '.$senderKey, ['uid' => $uid, 'error' => $error instanceof Throwable ? $error->getMessage() : (string) $error]);
+        }
 
         foreach ($headers as $header) {
             $from = collect($header->get('from')?->all() ?? [])->first(fn ($a) => $a instanceof Address);
@@ -785,7 +995,9 @@ class MatterReplyCollector
                 'from_name' => SentMailImporter::decodeHeader((string) ($from?->personal ?? '')),
                 'to' => self::imapAddresses($header, 'to'),
                 'cc' => self::imapAddresses($header, 'cc'),
-                'at' => $header->getDate()->toDate()->toDateTimeString(),
+                // The moment with its offset — "+0000" from Outlook is not the app's local time.
+                // (An unreadable Date header comes back as 1970: read as now instead.)
+                'at' => ($date = $header->getDate()->toDate())->year < 1971 ? now()->toIso8601String() : $date->toIso8601String(),
                 // The whole message, fetched once however many of these are asked for.
                 'body' => function () use ($whole): string {
                     $message = $whole();
@@ -849,6 +1061,8 @@ class MatterReplyCollector
             '$filter' => 'receivedDateTime ge '.$since->copy()->utc()->format('Y-m-d\TH:i:s\Z'),
             '$select' => 'id,subject,from,toRecipients,ccRecipients,receivedDateTime,internetMessageId,internetMessageHeaders,body,hasAttachments',
             '$top' => 50,
+            // Oldest first: a run that stops for time goes on from the last one handled.
+            '$orderby' => 'receivedDateTime asc',
         ];
 
         while ($url !== null) {

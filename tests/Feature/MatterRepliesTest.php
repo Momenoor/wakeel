@@ -184,12 +184,11 @@ class MatterRepliesTest extends TestCase
             ->assertTableColumnStateSet('pdf_saved', 'Saved', $reply)
             ->assertTableColumnStateSet('attachments_saved', 'Saved', $reply);
 
-        // Its PDF and its file, with the matter and in the OneDrive replies folder.
+        // Its PDF with the matter and in the OneDrive replies folder; its file in OneDrive only.
         $files = $this->matter->attachments()->where('type', 'correspondence')->pluck('name')->all();
-        $this->assertCount(2, $files);
         $name = SentEmailArchive::emailName(false, 'القيادة العامة لشرطة دبي', 'A different subject', Carbon::parse($reply->at));
-        $this->assertSame($name.'.pdf', $files[0]);
-        $this->assertSame('كشف.xlsx', $files[1]);
+        $this->assertSame([$name.'.pdf'], $files);
+        $this->assertSame([$name.'.pdf', 'كشف.xlsx'], array_column($reply->files, 'name'));
         // The reply in the replies folder; its file in a folder of its name.
         $this->assertCount(2, $this->uploads);
         $this->assertStringEndsWith(':/'.$name.'.pdf:/content?@microsoft.graph.conflictBehavior=rename', $this->uploads[0]);
@@ -241,6 +240,136 @@ class MatterRepliesTest extends TestCase
         $this->assertFalse(MatterReplyCollector::isShownInText('application/pdf', 'abc@mac', 'cid:abc@mac'));
         $this->assertTrue(MatterReplyCollector::isShownInText('image/png', '', '<p>no pictures</p>'));
         $this->assertFalse(MatterReplyCollector::isShownInText('image/png', '<other@x>', '<img src="cid:logo@x">'));
+    }
+
+    public function test_a_run_out_of_time_stops_before_the_next_message_and_says_how_far_it_got(): void
+    {
+        $sent = $this->sentEmail();
+        $first = $this->reply(['at' => now()->subMinutes(30)->toDateTimeString()]);
+        $second = $this->reply(['message_id' => '<reply-2@dubaipolice.gov.ae>', 'at' => now()->subMinutes(5)->toDateTimeString()]);
+        $collector = app(MatterReplyCollector::class);
+
+        // No time left: still one message — every run moves forward — then it stops, saying how far.
+        $this->assertSame(1, $collector->handle([$first, $second], collect([$sent]), 'iflas', null, microtime(true) - 1, $progress));
+        $this->assertTrue($progress['stopped']);
+        $this->assertSame(Carbon::parse($first['at'])->toDateTimeString(), $progress['reached']->toDateTimeString());
+
+        // Time enough: the rest, and how far — the newer one.
+        $this->assertSame(1, $collector->handle([$first, $second], collect([$sent]), 'iflas', null, microtime(true) + 60, $progress));
+        $this->assertFalse($progress['stopped']);
+        $this->assertSame(Carbon::parse($second['at'])->toDateTimeString(), $progress['reached']->toDateTimeString());
+
+        // Out of time while only reading again what the last run had read: it goes on until past it.
+        $third = $this->reply(['message_id' => '<reply-3@dubaipolice.gov.ae>', 'at' => now()->subMinute()->toDateTimeString()]);
+        $this->assertSame(1, $collector->handle([$first, $second, $third], collect([$sent]), 'iflas', null, microtime(true) - 1, $progress, Carbon::parse($second['at'])));
+        $this->assertFalse($progress['stopped']);
+
+        // A Date header in the future does not move how far it got.
+        $future = $this->reply(['message_id' => '<reply-4@dubaipolice.gov.ae>', 'at' => now()->addDays(3)->toDateTimeString()]);
+        $collector->handle([$future], collect([$sent]), 'iflas', null, null, $progress);
+        $this->assertNull($progress['reached']);
+    }
+
+    public function test_an_email_cut_off_half_way_is_kept_again_not_skipped_for_ever(): void
+    {
+        $sent = $this->sentEmail();
+        // Its row made, its files never kept — a moment ago: another run may still be keeping it, so it is left.
+        $half = MatterEmail::create(['matter_id' => $this->matter->id, 'direction' => MatterEmail::RECEIVED, 'sender_key' => 'iflas', 'message_id' => 'reply-1@dubaipolice.gov.ae', 'subject' => 'RE', 'at' => now(), 'status' => MatterEmail::FILED]);
+        $this->assertSame(0, app(MatterReplyCollector::class)->handle([$this->reply()], collect([$sent]), 'iflas'));
+        $this->assertNull($half->fresh()->files);
+
+        // Abandoned (older than any run lasts): kept again. A run for one matter never does this.
+        $half->forceFill(['created_at' => now()->subMinutes(30)])->saveQuietly();
+        $this->assertSame(0, app(MatterReplyCollector::class)->handle([$this->reply()], collect([$sent]), 'iflas', $this->matter->id));
+        $this->assertSame(1, app(MatterReplyCollector::class)->handle([$this->reply()], collect([$sent]), 'iflas'));
+
+        $reply = MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->sole();
+        $this->assertNotNull($reply->files);
+        $this->assertSame(ProgressType::REPLY_RECEIVED, $this->matter->progress()->sole()->type);
+
+        // Kept in full: read again, not kept twice.
+        $this->assertSame(0, app(MatterReplyCollector::class)->handle([$this->reply()], collect([$sent]), 'iflas'));
+
+        // One that never gets kept (it kills PHP every time) is tried a few times, then left — not for ever.
+        $stuck = fn () => MatterEmail::create(['matter_id' => $this->matter->id, 'direction' => MatterEmail::RECEIVED, 'sender_key' => 'iflas', 'message_id' => 'stuck@x', 'subject' => 'RE', 'at' => now(), 'status' => MatterEmail::FILED])
+            ->forceFill(['created_at' => now()->subHour()])->saveQuietly();
+        \Illuminate\Support\Facades\Cache::put('mail-keep-retries:stuck@x', 3, now()->addDay());
+        $stuck();
+        $this->assertSame(0, app(MatterReplyCollector::class)->handle([$this->reply(['message_id' => '<stuck@x>'])], collect([$sent]), 'iflas'));
+        $this->assertSame([], MatterEmail::where('message_id', 'stuck@x')->sole()->files);
+    }
+
+    public function test_a_reply_dated_in_another_time_zone_is_still_after_the_email_it_answers(): void
+    {
+        // Sent ten minutes ago (the app's time, +04); the reply stamped in UTC a minute ago.
+        $sent = $this->sentEmail(['at' => now()->subMinutes(10)]);
+        $reply = $this->reply(['references' => [], 'at' => now()->subMinute()->utc()->format('Y-m-d\TH:i:sP')]);
+
+        $this->assertSame($sent->id, MatterReplyCollector::answers($reply, collect([$sent]))?->id);
+    }
+
+    public function test_the_automatic_run_is_due_ten_minutes_after_the_last_or_at_once_with_a_backlog(): void
+    {
+        \App\Models\Setting::forget(MatterReplyCollector::LAST_RUN);
+        $this->assertTrue(MatterReplyCollector::isDue());
+
+        $last = fn (array $run) => \App\Models\Setting::set(MatterReplyCollector::LAST_RUN, $run, 'mail', 'json');
+
+        $last(['started_at' => now()->subMinutes(3)->toDateTimeString(), 'finished_at' => now()->subMinutes(3)->toDateTimeString(), 'stopped' => false]);
+        $this->assertFalse(MatterReplyCollector::isDue());
+
+        $last(['started_at' => now()->subMinutes(11)->toDateTimeString(), 'finished_at' => now()->subMinutes(11)->toDateTimeString(), 'stopped' => false]);
+        $this->assertTrue(MatterReplyCollector::isDue());
+
+        // Stopped for time: again at once.
+        $last(['started_at' => now()->subMinute()->toDateTimeString(), 'finished_at' => now()->toDateTimeString(), 'stopped' => true]);
+        $this->assertTrue(MatterReplyCollector::isDue());
+
+        // Cut off (never finished) a minute ago: not yet — even after a run that had stopped for time.
+        $last(['started_at' => now()->subMinute()->toDateTimeString(), 'finished_at' => null]);
+        $this->assertFalse(MatterReplyCollector::isDue());
+        $last(['started_at' => now()->subMinute()->toDateTimeString(), 'finished_at' => null, 'stopped' => true]);
+        $this->assertFalse(MatterReplyCollector::isDue());
+        $this->assertStringContainsString('has not finished', MatterReplyCollector::lastRunSummary());
+    }
+
+    public function test_an_automatic_run_records_itself_and_goes_on_where_a_short_one_stopped(): void
+    {
+        \App\Models\MailSender::create(['driver' => \App\Models\MailSender::MICROSOFT, 'address' => 'no_reply@jpa.ae', 'name' => 'JPA', 'key' => 'noreply', 'is_active' => true]);
+        $this->sentEmail(['sender_key' => 'noreply']);
+        $message = fn (string $id, string $at) => [
+            'id' => $id, 'subject' => 'RE: طلب بيانات — JPA/2026/986/1', 'internetMessageId' => '<'.$id.'@police>', 'hasAttachments' => false,
+            'from' => ['emailAddress' => ['address' => 'info@dubaipolice.gov.ae', 'name' => 'شرطة دبي']],
+            'toRecipients' => [['emailAddress' => ['address' => 'no_reply@jpa.ae']]], 'receivedDateTime' => $at,
+            'body' => ['contentType' => 'html', 'content' => '<p>تم.</p>'], 'internetMessageHeaders' => [],
+        ];
+        $older = now()->subMinutes(20);
+        $this->inbox = [$message('r1', $older->toIso8601String()), $message('r2', now()->subMinute()->toIso8601String())];
+        $collector = app(MatterReplyCollector::class);
+
+        // No time at all: one reply still kept, then it stops — the mailbox read up to that one, due again at once.
+        $result = $collector->collect(null, 0);
+        $this->assertTrue($result['stopped']);
+        $this->assertSame(1, $result['replies']);
+        $this->assertTrue(MatterReplyCollector::isDue());
+        $this->assertSame($older->copy()->setTimezone(config('app.timezone'))->toDateTimeString(), \App\Models\Setting::get('mail_inbox_checked_at.noreply'));
+        $this->assertStringContainsString('more to read', MatterReplyCollector::lastRunSummary());
+
+        // With time: it goes on from there — the other reply — and is not due again yet.
+        $result = $collector->collect(null, 60);
+        $this->assertFalse($result['stopped']);
+        $this->assertSame(1, $result['replies']);
+        $this->assertFalse(MatterReplyCollector::isDue());
+        $this->assertStringContainsString('1 email kept', MatterReplyCollector::lastRunSummary());
+
+        // The inbox is read oldest first, so a run that stops can go on from there.
+        Http::assertSent(fn (Request $request) => str_contains(rawurldecode($request->url()), '$orderby=receivedDateTime asc'));
+
+        // An error is shown, and the command says it failed.
+        $this->mailReadAllowed = false;
+        \App\Models\Setting::forget(MatterReplyCollector::LAST_RUN);
+        $this->artisan('mail:collect-replies', ['--max-seconds' => 30])->assertFailed();
+        $this->assertStringContainsString('Mail.Read', MatterReplyCollector::lastRunSummary());
     }
 
     public function test_without_its_headers_a_reply_is_known_by_its_subject_from_someone_it_went_to(): void
@@ -318,9 +447,12 @@ class MatterRepliesTest extends TestCase
             ->callTableAction('collectReplies')
             ->assertNotified(trans_choice('No new replies.|:count new reply kept.|:count new replies kept.', 1, ['count' => 1]));
 
-        // The file it came with — not a signature's inline picture.
-        $this->assertSame(1, $this->matter->attachments()->where('name', 'شهادة.pdf')->count());
-        $this->assertSame(0, $this->matter->attachments()->where('name', 'logo.png')->count());
+        // The file it came with — in OneDrive only, not a signature's inline picture.
+        $reply = MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->sole();
+        $this->assertSame(['شهادة.pdf'], array_column($reply->attachmentFiles(), 'name'));
+        $this->assertTrue(collect($this->uploads)->contains(fn (string $url) => str_contains($url, 'شهادة.pdf')));
+        $this->assertFalse(collect($this->uploads)->contains(fn (string $url) => str_contains($url, 'logo.png')));
+        $this->assertSame(0, $this->matter->attachments()->whereIn('name', ['شهادة.pdf', 'logo.png'])->count());
 
         $this->mailReadAllowed = false;
         MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->delete();

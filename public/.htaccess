@@ -18,6 +18,10 @@
     RewriteCond %{REQUEST_URI} (.+)/$
     RewriteRule ^ %1 [L,R=301]
 
+    # The web cron (cron-job.org) is answered at once and the work goes on after that. LiteSpeed
+    # stops PHP when the caller goes away, unless told not to (ignore_user_abort() is not enough).
+    RewriteRule ^cron/run - [E=noabort:1,E=noconntimeout:1]
+
     # Send Requests To Front Controller...
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_FILENAME} !-f

@@ -94,13 +94,46 @@ class SentEmailArchive
     }
 
     /**
+     * A file name split into what it is called and its extension — the extension only when it is
+     * one (letters and digits): a name that could not be read in full ("…?=") must not make a
+     * path or a OneDrive name out of its pieces.
+     *
+     * @return array{0: string, 1: string} the name without the extension, the extension in lower case
+     */
+    public static function splitName(string $name): array
+    {
+        $name = trim((string) preg_replace('/[\x00-\x1F\x7F]+/u', '', mb_scrub(SentMailImporter::decodeHeader($name), 'UTF-8')));
+        $extension = pathinfo($name, PATHINFO_EXTENSION);
+
+        if (! preg_match('/^[A-Za-z0-9]{1,10}$/', $extension)) {
+            return [$name, ''];
+        }
+
+        return [Str::beforeLast($name, '.'.$extension), strtolower($extension)];
+    }
+
+    /**
+     * A file name OneDrive takes: cleaned of what it refuses — "attachment" when nothing is left
+     * (a name of only "????").
+     */
+    public static function cleanBase(string $base): string
+    {
+        try {
+            return MatterOneDriveExplorer::cleanName($base);
+        } catch (\RuntimeException) {
+            return 'attachment';
+        }
+    }
+
+    /**
      * A file of an email — its PDF, or one it came with: with the matter's
      * attachments (unless kept elsewhere), and in this subfolder of its
      * OneDrive folder (none: not there).
      */
     public function keepFile(Matter $matter, string $name, string $contents, string $mime, string $subfolder, ?int $userId, bool $asAttachment = true, ?bool &$inOneDrive = null): ?string
     {
-        $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+        [$base, $extension] = self::splitName($name);
+        $name = $base !== '' ? $base.($extension !== '' ? '.'.$extension : '') : $name;
         $path = null;
 
         if ($asAttachment) {
@@ -141,9 +174,8 @@ class SentEmailArchive
 
         try {
             // As named — a "/" in it no folder.
-            $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-            $base = $extension !== '' ? Str::beforeLast($name, '.'.pathinfo($name, PATHINFO_EXTENSION)) : $name;
-            $fileName = MatterOneDriveExplorer::cleanName($base).($extension !== '' ? '.'.$extension : '');
+            [$base, $extension] = self::splitName($name);
+            $fileName = self::cleanBase($base).($extension !== '' ? '.'.$extension : '');
 
             return $this->folders->uploadToSubfolder($matter, $folder, $fileName, $contents, $mime) !== null;
         } catch (Throwable $e) {
@@ -159,9 +191,8 @@ class SentEmailArchive
      */
     public function keepLoose(string $folder, string $name, string $contents): string
     {
-        $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-        $base = $extension !== '' ? Str::beforeLast($name, '.'.pathinfo($name, PATHINFO_EXTENSION)) : $name;
-        $path = trim($folder, '/').'/'.MatterOneDriveExplorer::cleanName($base).($extension !== '' ? '.'.$extension : '');
+        [$base, $extension] = self::splitName($name);
+        $path = trim($folder, '/').'/'.self::cleanBase($base).($extension !== '' ? '.'.$extension : '');
         Storage::disk('public')->put($path, $contents);
 
         return $path;
