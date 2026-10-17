@@ -660,6 +660,29 @@ class MatterOneDriveFolders
     }
 
     /**
+     * The placeholders of a path that the matter has no value for — a custom field it has none
+     * of, one that does not exist: the folder each makes is left out of the path.
+     *
+     * @return list<string> as written, e.g. "{{matter.custom.Phase}}"
+     */
+    public static function emptyPlaceholders(string $template, Matter $matter, ?CarbonInterface $at = null): array
+    {
+        if (! preg_match_all('/\{\{\s*[^{}]+?\s*\}\}/u', $template, $found)) {
+            return [];
+        }
+
+        $values = BulkMailPlaceholders::forMatter($matter);
+        if ($at !== null) {
+            $at = Carbon::instance($at)->setTimezone(config('app.timezone'));
+            $values = [...$values, 'day' => $at->format('Y-m-d'), 'month' => $at->format('Y-m'), 'year' => $at->format('Y')];
+        }
+
+        return collect($found[0])->unique()->filter(
+            fn (string $tag): bool => trim((string) preg_replace('/\{\{[^{}]*\}\}/u', '', BulkMailPlaceholders::apply($tag, $values))) === '',
+        )->values()->all();
+    }
+
+    /**
      * The folders of a path, one by one, with the matter's placeholders filled in (see
      * resolvePath()) — those that come out empty left out.
      *

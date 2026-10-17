@@ -484,6 +484,23 @@ class MatterOneDriveFolderTest extends TestCase
         $this->assertNull($sent->fresh()->status);
     }
 
+    public function test_a_placeholder_the_matter_has_no_value_for_is_named_and_the_folder_it_saved_in_is_kept(): void
+    {
+        $matter = $this->phaseOf('phase1');
+        $matter->update(['custom_fields' => []]);
+        $at = \Illuminate\Support\Carbon::parse('2026-10-17 09:00:00');
+
+        // The phase it has none of; the day it has.
+        $template = '{{matter.custom.Phase}}/04 واردة/{{day}}/{{matter.no_such_thing}}';
+        $this->assertSame(['{{matter.custom.Phase}}', '{{matter.no_such_thing}}'], MatterOneDriveFolders::emptyPlaceholders($template, $matter->fresh(), $at));
+        $this->assertSame('04 واردة/2026-10-17', MatterOneDriveFolders::resolvePath($template, $matter->fresh(), $at));
+        $this->assertSame([], MatterOneDriveFolders::emptyPlaceholders('04 واردة', $matter->fresh()));
+
+        // Given its phase: nothing is missing.
+        $matter->update(['custom_fields' => ['Phase' => 'phase1']]);
+        $this->assertSame([], MatterOneDriveFolders::emptyPlaceholders('{{matter.custom.Phase}}/{{day}}', $matter->fresh(), $at));
+    }
+
     public function test_a_child_matter_shares_its_parents_main_folder_whatever_its_number(): void
     {
         $this->switchOn('{{matter.custom.Phase}}/01 system');

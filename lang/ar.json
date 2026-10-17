@@ -4044,5 +4044,7 @@
     "Signed minutes folder": "مجلد المحاضر الموقعة",
     "Where the emails sent from the matter are saved, for this type's matters. Folders are separated by \"/\", and each may use the matter's placeholders, like the letters do, e.g. {{matter.custom.Phase}}/Sent/{{day}}. {{day}} is the day it is sent. Leave empty for the default one (Settings → OneDrive Folders).": "مكان حفظ الرسائل الصادرة من القضية، لقضايا هذا النوع. تُفصل المجلدات بـ «/» ويجوز أن يستخدم كل منها متغيرات القضية كما في الخطابات، مثل {{matter.custom.Phase}}/Sent/{{day}}. المتغير {{day}} هو يوم الإرسال. اتركه فارغاً للافتراضي (الإعدادات ← مجلدات OneDrive).",
     "Where the signed minutes are saved, for this type's matters. Folders are separated by \"/\", and each may use the matter's placeholders, like the letters do, e.g. {{matter.custom.Phase}}/06 signed minutes. Leave empty for the default one (Settings → OneDrive Folders).": "مكان حفظ المحاضر الموقعة، لقضايا هذا النوع. تُفصل المجلدات بـ «/» ويجوز أن يستخدم كل منها متغيرات القضية كما في الخطابات، مثل {{matter.custom.Phase}}/06 signed minutes. اتركه فارغاً للافتراضي (الإعدادات ← مجلدات OneDrive).",
-    ":count attachment|:count attachments": ":count مرفق|:count مرفقات"
+    ":count attachment|:count attachments": ":count مرفق|:count مرفقات",
+    "OneDrive folder": "مجلد OneDrive",
+    "This matter has no value for :placeholders — its folder is left out.": "ليست لهذه القضية قيمة للمتغير :placeholders — فيُحذف مجلده."
 }

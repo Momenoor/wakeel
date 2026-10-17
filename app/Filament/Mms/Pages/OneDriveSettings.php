@@ -199,7 +199,14 @@ class OneDriveSettings extends Page implements HasTable
                                     return new HtmlString('—');
                                 }
 
-                                return new HtmlString('<code dir="auto">'.e(MatterOneDriveFolders::folderName($matter).'/'.MatterOneDriveFolders::resolvePath($template, $matter, now())).'</code>');
+                                $path = '<code dir="auto">'.e(MatterOneDriveFolders::folderName($matter).'/'.MatterOneDriveFolders::resolvePath($template, $matter, now())).'</code>';
+
+                                // A folder the matter has no value for is left out of the path: said, so it is not a surprise.
+                                $empty = MatterOneDriveFolders::emptyPlaceholders($template, $matter, now());
+
+                                return new HtmlString($path.($empty === []
+                                    ? ''
+                                    : '<div style="color: #b45309; margin-top: .35rem;">'.e(__('This matter has no value for :placeholders — its folder is left out.', ['placeholders' => implode('، ', $empty)])).'</div>'));
                             }),
                     ]),
 

@@ -87,9 +87,10 @@ class SentEmailArchive
     public function keep(Matter $matter, string $pdf, string $party, string $about, ?int $userId, bool $asAttachment = true): array
     {
         $name = self::emailName(true, $party, $about).'.pdf';
-        $path = $this->keepFile($matter, $name, $pdf, 'application/pdf', MatterOneDriveFolders::sentEmailsFolderFor($matter), $userId, $asAttachment, $inOneDrive);
+        $folder = MatterOneDriveFolders::sentEmailsFolderFor($matter);
+        $path = $this->keepFile($matter, $name, $pdf, 'application/pdf', $folder, $userId, $asAttachment, $inOneDrive);
 
-        return ['name' => $name, 'path' => $path, 'inOneDrive' => (bool) $inOneDrive];
+        return ['name' => $name, 'path' => $path, 'inOneDrive' => (bool) $inOneDrive, 'folder' => $folder];
     }
 
     /**

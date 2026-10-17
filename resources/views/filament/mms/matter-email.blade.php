@@ -9,6 +9,8 @@
         __('Cc') => implode('، ', (array) $email->cc),
         __('Matter known by') => $sent ? null : MatterEmail::matchedByLabel($email->matched_by),
         // What was kept of an email that came in.
+        // Inside the matter's OneDrive folder — as it was when the email was saved.
+        __('OneDrive folder') => filled(((array) $email->onedrive)['folder'] ?? null) ? ((array) $email->onedrive)['folder'] : null,
         __('PDF in OneDrive') => $email->oneDriveLabel('pdf'),
         __('EML in OneDrive') => $email->oneDriveLabel('eml'),
         __('Attachments in OneDrive') => $email->oneDriveLabel('attachments'),

@@ -387,6 +387,7 @@ class MatterReplyCollector
             // The PDF in the received-emails folder; the files it came with
             // in a folder of the PDF's name beside it.
             $folder = MatterOneDriveFolders::receivedEmailsFolderFor($matter, $email->at);
+            $oneDrive['folder'] = $folder;
             // The original email (.eml) goes to OneDrive only, beside the PDF; it is not kept in the system.
             if (($file['kind'] ?? null) === MatterEmail::SOURCE) {
                 $oneDrive['eml'] = $this->archive->keepInOneDrive($matter, (string) $file['name'], (string) $disk->get($path), 'message/rfc822', $folder);
@@ -495,8 +496,9 @@ class MatterReplyCollector
      */
     private function keepOnMatter(Matter $matter, string $pdf, array $files, string $name, ?int $userId, ?string $source = null, &$oneDrive = null, ?CarbonInterface $at = null): array
     {
-        $oneDrive = ['pdf' => false, 'eml' => false, 'attachments' => 0];
         $folder = MatterOneDriveFolders::receivedEmailsFolderFor($matter, $at);
+        // The folder it goes in is kept with it, to say where it is.
+        $oneDrive = ['pdf' => false, 'eml' => false, 'attachments' => 0, 'folder' => $folder];
         $kept = [['name' => $name.'.pdf', 'path' => $this->archive->keepFile($matter, $name.'.pdf', $pdf, 'application/pdf', $folder, $userId, inOneDrive: $oneDrive['pdf'])]];
 
         foreach ($files as $file) {
@@ -560,6 +562,20 @@ class MatterReplyCollector
         }
 
         return $raw !== '' && strlen($raw) <= self::MAX_ORIGINAL_BYTES ? $raw : null;
+    }
+
+    /**
+     * Whether an inline part is only a picture the email's own text shows ("cid:…") — a
+     * signature's logo — and not a file that came with it. Anything else the mail program
+     * marked "inline" (a PDF from Apple Mail, Outlook for Mac or an iPhone) is a file.
+     */
+    public static function isShownInText(string $mime, string $contentId, string $html): bool
+    {
+        $contentId = trim($contentId, " <>\t\r\n");
+
+        // A picture the text shows by its Content-ID, or one with no Content-ID at all (it can only be decoration).
+        return str_starts_with(strtolower($mime), 'image/')
+            && ($contentId === '' || stripos($html, 'cid:'.$contentId) !== false);
     }
 
     /** A message's body or files, read the first time asked for only. */
@@ -780,9 +796,12 @@ class MatterReplyCollector
                     $message = $whole();
                     $files = [];
 
+                    $html = $message->hasHTMLBody() ? (string) $message->getHTMLBody() : '';
+
                     foreach ($message->getAttachments() as $attachment) {
-                        // Not a signature's inline picture.
-                        if ($attachment->disposition === 'inline' && filled($attachment->id)) {
+                        // Not a picture the email's own text shows (a signature's logo) — but a PDF
+                        // that Apple Mail or Outlook sent "inline" is a file it came with.
+                        if ($attachment->disposition === 'inline' && self::isShownInText((string) $attachment->content_type, (string) $attachment->id, $html)) {
                             continue;
                         }
 
@@ -881,7 +900,8 @@ class MatterReplyCollector
                         $response = Http::withToken($this->graph->getAccessToken())->timeout(120)->get($base.'/messages/'.rawurlencode($graphId).'/attachments');
 
                         return collect($response->successful() ? ($response->json()['value'] ?? []) : [])
-                            ->filter(fn ($a) => ! ($a['isInline'] ?? false) && isset($a['contentBytes']))
+                            ->filter(fn ($a) => isset($a['contentBytes'])
+                                && ! (($a['isInline'] ?? false) && self::isShownInText((string) ($a['contentType'] ?? ''), (string) ($a['contentId'] ?? ''), (string) ($item['body']['content'] ?? ''))))
                             ->map(fn ($a): array => ['name' => (string) ($a['name'] ?? 'attachment'), 'contents' => (string) base64_decode($a['contentBytes']), 'mime' => (string) ($a['contentType'] ?? 'application/octet-stream')])
                             ->values()
                             ->all();

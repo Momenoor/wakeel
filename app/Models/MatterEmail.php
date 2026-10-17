@@ -91,14 +91,14 @@ class MatterEmail extends Model
      * What was kept of an email that was sent: its PDF (where, and whether it is in the matter's
      * OneDrive) and how many files it went with.
      *
-     * @param  array{name: string, path: ?string, inOneDrive: bool}  $pdf
+     * @param  array{name: string, path: ?string, inOneDrive: bool, folder?: ?string}  $pdf
      */
     public function noteKept(array $pdf, int $attachmentsSent): void
     {
         try {
             $this->update([
                 'files' => filled($pdf['path'] ?? null) ? [['name' => $pdf['name'], 'path' => $pdf['path']]] : [],
-                'onedrive' => ['pdf' => (bool) ($pdf['inOneDrive'] ?? false), 'sent_attachments' => $attachmentsSent, 'checked_at' => now()->toDateTimeString()],
+                'onedrive' => ['pdf' => (bool) ($pdf['inOneDrive'] ?? false), 'sent_attachments' => $attachmentsSent, 'folder' => $pdf['folder'] ?? null, 'checked_at' => now()->toDateTimeString()],
             ]);
         } catch (Throwable $e) {
             Log::warning('What was kept of a sent email was not noted: '.$e->getMessage());

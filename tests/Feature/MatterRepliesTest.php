@@ -173,7 +173,9 @@ class MatterRepliesTest extends TestCase
 
         // On the matter: filed, listed in its Emails tab with what of it is in OneDrive.
         $this->assertSame(MatterEmail::FILED, $reply->status);
-        $this->assertSame(['pdf' => true, 'eml' => false, 'attachments' => 1], $reply->onedrive);
+        $this->assertSame(['pdf' => true, 'eml' => false, 'attachments' => 1], collect($reply->onedrive)->except('folder')->all());
+        // Where it was saved, on its record.
+        $this->assertSame('المراسلات الواردة', $reply->onedrive['folder']);
         \Livewire\Livewire::test(\App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager::class, [
             'ownerRecord' => $this->matter,
             'pageClass' => \App\Filament\Mms\Resources\Matters\Pages\ViewMatter::class,
@@ -201,6 +203,44 @@ class MatterRepliesTest extends TestCase
 
         // Read again: kept once.
         $this->assertSame(0, app(MatterReplyCollector::class)->handle([$this->reply()], collect([$sent])));
+    }
+
+    public function test_a_file_a_mail_program_marked_inline_is_kept_and_only_a_picture_in_the_text_is_not(): void
+    {
+        $pdf = chunk_split(base64_encode('%PDF-1.4 test'));
+        $png = chunk_split(base64_encode("\x89PNG fake"));
+        $mime = fn (string $parts) => "From: a@x.ae\r\nTo: b@y.ae\r\nSubject: s\r\nMessage-ID: <1@x>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"B\"\r\n\r\n--B\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>hi</p><img src=\"cid:logo@x\">\r\n{$parts}--B--\r\n";
+
+        $kept = function (string $parts) use ($mime): array {
+            $message = \Webklex\PHPIMAP\Message::fromString($mime($parts));
+            $html = (string) $message->getHTMLBody();
+            $names = [];
+
+            foreach ($message->getAttachments() as $a) {
+                if ($a->disposition === 'inline' && MatterReplyCollector::isShownInText((string) $a->content_type, (string) $a->id, $html)) {
+                    continue;
+                }
+                $names[] = $a->name ?: $a->filename;
+            }
+
+            return $names;
+        };
+
+        // A PDF as Apple Mail / Outlook for Mac sends it: inline, with a Content-ID — a file.
+        $this->assertSame(['b.pdf'], $kept("--B\r\nContent-Type: application/pdf; name=\"b.pdf\"\r\nContent-Disposition: inline; filename=\"b.pdf\"\r\nContent-ID: <abc@mac>\r\nContent-Transfer-Encoding: base64\r\n\r\n{$pdf}\r\n"));
+        // A normal attachment, one with no disposition, and a forwarded email: files.
+        $this->assertSame(['a.pdf'], $kept("--B\r\nContent-Type: application/pdf; name=\"a.pdf\"\r\nContent-Disposition: attachment; filename=\"a.pdf\"\r\nContent-Transfer-Encoding: base64\r\n\r\n{$pdf}\r\n"));
+        $this->assertSame(['c.pdf'], $kept("--B\r\nContent-Type: application/pdf; name=\"c.pdf\"\r\nContent-Transfer-Encoding: base64\r\n\r\n{$pdf}\r\n"));
+        // The logo the text shows: not a file; a picture the text does not show: one.
+        $logo = "--B\r\nContent-Type: image/png; name=\"logo.png\"\r\nContent-Disposition: inline; filename=\"logo.png\"\r\nContent-ID: <logo@x>\r\nContent-Transfer-Encoding: base64\r\n\r\n{$png}\r\n";
+        $this->assertSame([], $kept($logo));
+        $this->assertSame(['photo.png'], $kept(str_replace(['logo.png', '<logo@x>'], ['photo.png', '<other@x>'], $logo)));
+
+        // The rule itself.
+        $this->assertTrue(MatterReplyCollector::isShownInText('image/png', '<logo@x>', '<img src="cid:logo@x">'));
+        $this->assertFalse(MatterReplyCollector::isShownInText('application/pdf', 'abc@mac', 'cid:abc@mac'));
+        $this->assertTrue(MatterReplyCollector::isShownInText('image/png', '', '<p>no pictures</p>'));
+        $this->assertFalse(MatterReplyCollector::isShownInText('image/png', '<other@x>', '<img src="cid:logo@x">'));
     }
 
     public function test_without_its_headers_a_reply_is_known_by_its_subject_from_someone_it_went_to(): void

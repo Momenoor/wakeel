@@ -345,7 +345,7 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertSame([], array_values(array_filter(Storage::disk('public')->allFiles(), fn (string $path) => str_ends_with($path, '.eml') && ! str_starts_with($path, 'email-unfiled'))));
         $this->assertTrue(collect($this->uploads)->contains(fn (string $url) => str_contains($url, '.eml:/content')));
         $this->assertCount(1, $filed->attachmentFiles());
-        $this->assertSame(['pdf' => true, 'eml' => true, 'attachments' => 1], $filed->onedrive);
+        $this->assertSame(['pdf' => true, 'eml' => true, 'attachments' => 1], collect($filed->onedrive)->except('folder')->all());
 
         // Held: kept aside with it for the time being, and filed by hand, it goes to OneDrive and is gone from the system.
         $held = MatterEmail::where('status', MatterEmail::PENDING)->sole();
@@ -354,7 +354,7 @@ class IncomingMatterEmailsTest extends TestCase
         Livewire::test(UnfiledEmails::class)->callTableAction('file', $held, ['matter_id' => $this->first->id]);
 
         $held->refresh();
-        $this->assertSame(['pdf' => true, 'eml' => true, 'attachments' => 1], $held->onedrive);
+        $this->assertSame(['pdf' => true, 'eml' => true, 'attachments' => 1], collect($held->onedrive)->except('folder')->all());
         $this->assertNull(collect($held->files)->firstWhere('kind', 'source'));
         $this->assertSame([], $this->first->attachments()->where('name', 'like', '%.eml')->pluck('name')->all());
         $this->assertCount($uploads + 3, $this->uploads);
@@ -429,7 +429,7 @@ class IncomingMatterEmailsTest extends TestCase
 
         // And what is saved there is found there.
         $email = MatterEmail::where('status', MatterEmail::FILED)->sole();
-        $this->assertSame(['pdf' => true, 'eml' => false, 'attachments' => 1], $email->onedrive);
+        $this->assertSame(['pdf' => true, 'eml' => false, 'attachments' => 1], collect($email->onedrive)->except('folder')->all());
     }
 
     public function test_emails_of_a_day_are_saved_in_that_days_folder(): void
@@ -458,6 +458,25 @@ class IncomingMatterEmailsTest extends TestCase
             ['واردة/2026-10-16', 'واردة/2026-10-16', 'واردة/2026-10-17'],
             $emails->map(fn (MatterEmail $e) => \App\Services\MMS\MatterOneDriveFolders::receivedEmailsFolderFor($this->second, $e->at))->all(),
         );
+    }
+
+    public function test_with_only_the_day_as_the_structure_the_email_goes_in_that_days_folder_not_the_main_folder(): void
+    {
+        $od = (new \Tests\Support\FakeOneDrive)->install();
+        // The matter's folder, really there.
+        $main = $od->ensure('Work/Matters/2026-987');
+        \App\Models\MatterOneDriveFolder::where('matter_id', $this->second->id)->update(['drive_item_id' => $main]);
+        \App\Models\Setting::set(\App\Services\MMS\MatterOneDriveFolders::RECEIVED_EMAILS, '{{day}}', 'onedrive');
+        \App\Models\Setting::clearCache();
+
+        $this->collect($this->email(['subject' => 'مستندات القضية 987/2026', 'at' => '2026-10-16 09:00:00']));
+
+        $files = array_values(array_filter($od->tree(), fn (string $path) => str_contains($path, '.pdf')));
+        $this->assertNotEmpty($files, 'nothing was saved in OneDrive');
+        // Every file is under that day's folder — none directly in the matter's folder.
+        foreach ($files as $path) {
+            $this->assertStringStartsWith('Work/Matters/2026-987/2026-10-16/', $path);
+        }
     }
 
     public function test_a_matter_with_no_onedrive_folder_gets_the_email_to_download_by_hand(): void
