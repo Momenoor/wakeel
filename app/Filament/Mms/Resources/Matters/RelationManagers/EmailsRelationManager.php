@@ -57,10 +57,12 @@ class EmailsRelationManager extends RelationManager
     {
         return $table
             ->recordTitleAttribute('subject')
-            // Sent, and received ones that are on the matter — not those waiting for a matter, or set aside.
+            // Sent, and received ones that are on the matter — filed, or a reply (kept with no status) —
+            // not those waiting for a matter, or set aside.
             ->modifyQueryUsing(fn (Builder $query) => $query->where(fn (Builder $q) => $q
                 ->where('direction', MatterEmail::SENT)
-                ->orWhere('status', MatterEmail::FILED)))
+                ->orWhere('status', MatterEmail::FILED)
+                ->orWhereNull('status')))
             ->defaultSort('at', 'desc')
             ->columns([
                 TextColumn::make('at')
@@ -146,7 +148,7 @@ class EmailsRelationManager extends RelationManager
                     ->tooltip(__('Reads from OneDrive which PDFs, originals and attachments of the emails that came in are there'))
                     ->icon('heroicon-o-cloud-arrow-down')
                     ->color('gray')
-                    ->action(fn () => $this->checkOneDrive($this->getOwnerRecord()->emails()->where('direction', MatterEmail::RECEIVED)->where('status', MatterEmail::FILED)->get()->all())),
+                    ->action(fn () => $this->checkOneDrive($this->getOwnerRecord()->emails()->where('direction', MatterEmail::RECEIVED)->where(fn ($q) => $q->where('status', MatterEmail::FILED)->orWhereNull('status'))->get()->all())),
             ])
             ->emptyStateHeading(__('No emails yet'))
             ->emptyStateDescription(__('Emails sent from this matter, and those that come in from its parties, are listed here.'));
@@ -178,7 +180,8 @@ class EmailsRelationManager extends RelationManager
             __('Saved') => 'success',
             __('Not saved') => 'danger',
             __('Partly saved') => 'warning',
-            default => 'gray',
+            // An email that went out, with its files: "2 attachments".
+            default => is_string($state) && preg_match('/\d/', $state) ? 'info' : 'gray',
         };
     }
     /** The URL of the email's PDF (the first file kept), when there is one. */

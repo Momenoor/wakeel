@@ -58,6 +58,8 @@ class Type extends Model
         'party_capacities',
         'onedrive_subfolders',
         'onedrive_received_emails',
+        'onedrive_sent_emails',
+        'onedrive_signed_minutes',
     ];
 
     /**

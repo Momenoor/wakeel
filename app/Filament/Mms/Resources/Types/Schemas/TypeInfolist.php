@@ -153,14 +153,16 @@ class TypeInfolist
                             ->hiddenLabel()
                             ->state(fn (Type $record): HtmlString => self::tree(MatterOneDriveFolders::subfolders($record)))
                             ->html(),
-                        // Where the emails that come in are saved: its own structure, or the default.
-                        TextEntry::make('onedrive_received_emails')
-                            ->label(__('Received emails folder structure'))
-                            ->state(fn (Type $record): string => filled($record->onedrive_received_emails)
-                                ? $record->onedrive_received_emails
-                                : (MatterOneDriveFolders::receivedEmailsFolder() ?: __('Not saved in OneDrive')))
-                            ->helperText(fn (Type $record): string => filled($record->onedrive_received_emails) ? __('This type\'s own structure') : __('The default structure (Settings → OneDrive Folders)'))
-                            ->extraAttributes(['dir' => 'auto']),
+                        // Where the emails that come in, the emails sent and the signed minutes are saved: its own, or the default.
+                        ...collect([
+                            ['onedrive_received_emails', __('Received emails folder structure'), fn () => MatterOneDriveFolders::receivedEmailsFolder() ?: __('Not saved in OneDrive')],
+                            ['onedrive_sent_emails', __('Sent emails folder'), fn () => MatterOneDriveFolders::sentEmailsFolder() ?: __('Not saved in OneDrive')],
+                            ['onedrive_signed_minutes', __('Signed minutes folder'), fn () => MatterOneDriveFolders::signedMinutesFolder()],
+                        ])->map(fn (array $folder): TextEntry => TextEntry::make($folder[0])
+                            ->label($folder[1])
+                            ->state(fn (Type $record): string => filled($record->{$folder[0]}) ? $record->{$folder[0]} : (string) $folder[2]())
+                            ->helperText(fn (Type $record): string => filled($record->{$folder[0]}) ? __('This type\'s own structure') : __('The default structure (Settings → OneDrive Folders)'))
+                            ->extraAttributes(['dir' => 'auto']))->all(),
                     ]),
 
                 Section::make(__('Custom fields'))

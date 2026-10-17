@@ -161,6 +161,12 @@ class OneDriveSettings extends Page implements HasTable
                             ))
                             ->live(debounce: 500)
                             ->extraInputAttributes(['dir' => 'ltr']),
+                        Placeholder::make('type_sent_folders')
+                            ->label(__('Matter types with their own sent emails folder'))
+                            ->content(fn (): string => Type::query()->whereNotNull('onedrive_sent_emails')->where('onedrive_sent_emails', '!=', '')->orderBy('name')->pluck('name')->implode('، ') ?: __('None — every type uses the folder above.')),
+                        Placeholder::make('type_signed_folders')
+                            ->label(__('Matter types with their own signed minutes folder'))
+                            ->content(fn (): string => Type::query()->whereNotNull('onedrive_signed_minutes')->where('onedrive_signed_minutes', '!=', '')->orderBy('name')->pluck('name')->implode('، ') ?: __('None — every type uses the folder above.')),
                         Placeholder::make('type_received_structures')
                             ->label(__('Matter types with their own received emails folder'))
                             ->content(fn (): string => Type::query()->whereNotNull('onedrive_received_emails')->where('onedrive_received_emails', '!=', '')->orderBy('name')->pluck('name')->implode('، ') ?: __('None — every type uses the structure above.')),

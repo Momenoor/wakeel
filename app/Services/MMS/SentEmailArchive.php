@@ -4,6 +4,7 @@ namespace App\Services\MMS;
 
 use App\Mail\LetterEmail;
 use App\Models\Matter;
+use App\Models\MatterEmail;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -49,7 +50,7 @@ class SentEmailArchive
      * @param  list<string>  $to
      * @param  list<string>  $cc
      */
-    public function keepEmail(Matter $matter, LetterEmail $email, array $sender, string $names, array $to, array $cc, string $title, ?int $userId): void
+    public function keepEmail(Matter $matter, LetterEmail $email, array $sender, string $names, array $to, array $cc, string $title, ?int $userId, ?MatterEmail $record = null): void
     {
         try {
             // Its images from their files (in the email, they're embedded).
@@ -70,7 +71,9 @@ class SentEmailArchive
                 now(),
             );
 
-            $this->keep($matter, $pdf, $names, $title, $userId);
+            $kept = $this->keep($matter, $pdf, $names, $title, $userId);
+            // What was kept, and what it went with, on the email's record — for the matter's Emails tab.
+            $record?->noteKept($kept, count($email->files));
         } catch (Throwable $e) {
             Log::warning('Sent email not kept on its matter', ['matter' => $matter->getKey(), 'error' => $e->getMessage()]);
         }
@@ -81,9 +84,12 @@ class SentEmailArchive
      * matter's attachments (unless it's kept elsewhere already — a bulk
      * mail's), and in the OneDrive sent-emails folder.
      */
-    public function keep(Matter $matter, string $pdf, string $party, string $about, ?int $userId, bool $asAttachment = true): void
+    public function keep(Matter $matter, string $pdf, string $party, string $about, ?int $userId, bool $asAttachment = true): array
     {
-        $this->keepFile($matter, self::emailName(true, $party, $about).'.pdf', $pdf, 'application/pdf', MatterOneDriveFolders::sentEmailsFolderFor($matter), $userId, $asAttachment);
+        $name = self::emailName(true, $party, $about).'.pdf';
+        $path = $this->keepFile($matter, $name, $pdf, 'application/pdf', MatterOneDriveFolders::sentEmailsFolderFor($matter), $userId, $asAttachment, $inOneDrive);
+
+        return ['name' => $name, 'path' => $path, 'inOneDrive' => (bool) $inOneDrive];
     }
 
     /**

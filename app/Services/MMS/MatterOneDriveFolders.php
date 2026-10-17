@@ -609,9 +609,27 @@ class MatterOneDriveFolders
      */
     public static function receivedEmailsTemplate(?Matter $matter = null): string
     {
-        $own = $matter ? trim((string) $matter->loadMissing('type')->type?->getAttribute('onedrive_received_emails')) : '';
+        return self::templateOf($matter, 'onedrive_received_emails', self::receivedEmailsFolder());
+    }
 
-        return $own !== '' ? $own : self::receivedEmailsFolder();
+    /** The folder for sent emails as it is set for this matter: its type's own, else the default one. Empty: not saved in OneDrive. */
+    public static function sentEmailsTemplate(?Matter $matter = null): string
+    {
+        return self::templateOf($matter, 'onedrive_sent_emails', self::sentEmailsFolder());
+    }
+
+    /** The folder for signed minutes as it is set for this matter: its type's own, else the default one. */
+    public static function signedMinutesTemplate(?Matter $matter = null): string
+    {
+        return self::templateOf($matter, 'onedrive_signed_minutes', self::signedMinutesFolder());
+    }
+
+    /** The matter type's own setting (a column of the type), when it has one; else the default. */
+    private static function templateOf(?Matter $matter, string $column, string $default): string
+    {
+        $own = $matter ? trim((string) $matter->loadMissing('type')->type?->getAttribute($column)) : '';
+
+        return $own !== '' ? $own : $default;
     }
 
     /**
@@ -710,7 +728,7 @@ class MatterOneDriveFolders
      */
     public static function sentEmailsFolderFor(Matter $matter, ?CarbonInterface $at = null): string
     {
-        $template = self::sentEmailsFolder();
+        $template = self::sentEmailsTemplate($matter);
 
         return $template === '' ? '' : self::resolvePath($template, $matter, $at ?? now(), self::DEFAULT_SENT_EMAILS);
     }
@@ -718,7 +736,7 @@ class MatterOneDriveFolders
     /** The folder signed minutes are saved in, for this matter — the setting with the matter's placeholders filled in. */
     public static function signedMinutesFolderFor(Matter $matter): string
     {
-        return self::resolvePath(self::signedMinutesFolder(), $matter, now(), self::DEFAULT_SIGNED_MINUTES);
+        return self::resolvePath(self::signedMinutesTemplate($matter), $matter, now(), self::DEFAULT_SIGNED_MINUTES);
     }
 
     /** The subfolder sent emails are kept in — empty when they aren't. */

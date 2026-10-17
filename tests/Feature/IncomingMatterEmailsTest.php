@@ -289,9 +289,10 @@ class IncomingMatterEmailsTest extends TestCase
         $page->assertTableColumnStateSet('pdf_saved', 'Saved', $received)
             ->assertTableColumnStateSet('eml_saved', 'Not saved', $received)
             ->assertTableColumnStateSet('attachments_saved', 'Saved', $received)
-            ->assertTableColumnStateSet('pdf_saved', null, $sent)
+            // One that went out: its PDF and what it went with — not yet noted here; it has no original (.eml).
+            ->assertTableColumnStateSet('pdf_saved', 'Not checked', $sent)
             ->assertTableColumnStateSet('eml_saved', null, $sent)
-            ->assertTableColumnStateSet('attachments_saved', null, $sent);
+            ->assertTableColumnStateSet('attachments_saved', 'Not checked', $sent);
 
         // One that came with nothing; one not saved; one never checked.
         $plain = (new MatterEmail)->forceFill(['direction' => MatterEmail::RECEIVED, 'files' => [['name' => 'a.pdf', 'path' => 'x']], 'onedrive' => ['pdf' => true, 'eml' => false, 'attachments' => 0]]);

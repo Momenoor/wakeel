@@ -8,6 +8,7 @@ use App\Jobs\CreateMatterOneDriveFolder;
 use App\Livewire\MatterOneDriveFiles;
 use App\Models\Court;
 use App\Models\Matter;
+use App\Models\MatterEmail;
 use App\Models\MatterOneDriveFolder;
 use App\Models\MatterParty;
 use App\Models\Party;
@@ -366,6 +367,121 @@ class MatterOneDriveFolderTest extends TestCase
         $this->assertSame('', MatterOneDriveFolders::sentEmailsFolderFor($matter->fresh()));
         $this->assertSame(MatterOneDriveFolders::DEFAULT_SIGNED_MINUTES, MatterOneDriveFolders::signedMinutesFolderFor($matter->fresh()));
         \Illuminate\Support\Carbon::setTestNow();
+    }
+
+    public function test_sent_signed_and_received_folders_can_be_set_per_matter_type(): void
+    {
+        \Illuminate\Support\Carbon::setTestNow('2026-10-17 09:30:00');
+        $matter = $this->phaseOf('phase1');
+        $other = Matter::factory()->create(['type_id' => Type::factory()->create()->id, 'year' => 2026, 'number' => 55, 'custom_fields' => ['Phase' => 'p']]);
+
+        Setting::set(MatterOneDriveFolders::SENT_EMAILS, 'الصادرة', 'onedrive');
+        Setting::set(MatterOneDriveFolders::SIGNED_MINUTES, 'موقعة', 'onedrive');
+        Setting::set(MatterOneDriveFolders::RECEIVED_EMAILS, 'الواردة', 'onedrive');
+        Setting::clearCache();
+
+        $folders = fn (Matter $m): array => [
+            MatterOneDriveFolders::sentEmailsFolderFor($m->fresh()),
+            MatterOneDriveFolders::signedMinutesFolderFor($m->fresh()),
+            MatterOneDriveFolders::receivedEmailsFolderFor($m->fresh()),
+        ];
+
+        // No type's own: the default ones.
+        $this->assertSame(['الصادرة', 'موقعة', 'الواردة'], $folders($matter));
+
+        // This type's own, with placeholders; another type keeps the default ones.
+        $matter->type->update([
+            'onedrive_sent_emails' => '{{matter.custom.Phase}}/04 صادرة/{{day}}',
+            'onedrive_signed_minutes' => '{{matter.custom.Phase}}/06 محاضر',
+            'onedrive_received_emails' => '{{matter.custom.Phase}}/05 واردة/{{day}}',
+        ]);
+        $this->assertSame(['phase1/04 صادرة/2026-10-17', 'phase1/06 محاضر', 'phase1/05 واردة/2026-10-17'], $folders($matter));
+        $this->assertSame(['الصادرة', 'موقعة', 'الواردة'], $folders($other));
+
+        // Cleared: back to the default.
+        $matter->type->update(['onedrive_sent_emails' => '', 'onedrive_signed_minutes' => null]);
+        $this->assertSame(['الصادرة', 'موقعة', 'phase1/05 واردة/2026-10-17'], $folders($matter));
+
+        // The default empty (not saved) but a type that has its own: saved for that type only.
+        Setting::set(MatterOneDriveFolders::SENT_EMAILS, '', 'onedrive');
+        Setting::clearCache();
+        $matter->type->update(['onedrive_sent_emails' => 'صادرة النوع']);
+        $this->assertSame('صادرة النوع', MatterOneDriveFolders::sentEmailsFolderFor($matter->fresh()));
+        $this->assertSame('', MatterOneDriveFolders::sentEmailsFolderFor($other->fresh()));
+        \Illuminate\Support\Carbon::setTestNow();
+    }
+
+    public function test_the_matter_type_form_sets_its_three_folders(): void
+    {
+        \Illuminate\Support\Facades\Gate::before(fn () => true);
+        Filament::setCurrentPanel('mms');
+        $this->actingAs(User::factory()->create());
+        $type = Type::factory()->create();
+
+        Livewire::test(\App\Filament\Mms\Resources\Types\Pages\EditType::class, ['record' => $type->getRouteKey()])
+            ->fillForm([
+                'onedrive_received_emails' => '{{day}}',
+                'onedrive_sent_emails' => '{{matter.custom.Phase}}/Sent',
+                'onedrive_signed_minutes' => 'Signed',
+            ])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $type->refresh();
+        $this->assertSame(['{{day}}', '{{matter.custom.Phase}}/Sent', 'Signed'], [$type->onedrive_received_emails, $type->onedrive_sent_emails, $type->onedrive_signed_minutes]);
+
+        // Shown on its page.
+        Livewire::test(\App\Filament\Mms\Resources\Types\Pages\ViewType::class, ['record' => $type->getRouteKey()])
+            ->assertSee('{{matter.custom.Phase}}/Sent')
+            ->assertSee('Signed');
+    }
+
+    public function test_a_sent_email_says_what_was_kept_and_what_it_went_with(): void
+    {
+        $this->switchOn('{{matter.custom.Phase}}/01 system');
+        $od = (new \Tests\Support\FakeOneDrive)->install();
+        $matter = $this->phaseOf('phase1');
+        $this->assign($matter, $this->assistant());
+
+        // As the senders do: remembered when sent, its PDF kept after.
+        $record = MatterEmail::recordSent($matter->id, null, 'iflas', 'id-1', 'مستندات', ['a@x.ae'], null);
+        $this->assertInstanceOf(MatterEmail::class, $record);
+        $this->assertSame('Not checked', $record->oneDriveLabel('pdf'));
+
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $kept = app(\App\Services\MMS\SentEmailArchive::class)->keep($matter->fresh(), '%PDF', 'مكتب البنا', 'مستندات', User::factory()->create()->id);
+        $this->assertTrue($kept['inOneDrive']);
+        $this->assertNotNull($kept['path']);
+        $record->noteKept($kept, 2);
+
+        $record->refresh();
+        $this->assertSame('Saved', $record->oneDriveLabel('pdf'));
+        $this->assertSame('2 attachments', $record->oneDriveLabel('attachments'));
+        $this->assertNull($record->oneDriveLabel('eml'));
+        $this->assertSame([$kept['name']], array_column($record->files, 'name'));
+        $this->assertSame(['phase1' => 1], collect($od->names('Work/Matters/2026-1010 - خبرة - محاكم دبي'))->intersect(['phase1'])->countBy()->all());
+
+        // With none; not in OneDrive (no folder for it).
+        $none = MatterEmail::recordSent($matter->id, null, 'iflas', 'id-2', 'بدون', ['a@x.ae'], null);
+        $none->noteKept(['name' => 'x.pdf', 'path' => null, 'inOneDrive' => false], 0);
+        $this->assertSame('Without attachment', $none->fresh()->oneDriveLabel('attachments'));
+        $this->assertSame('Not saved', $none->fresh()->oneDriveLabel('pdf'));
+    }
+
+    public function test_replies_kept_without_a_status_are_filed_by_the_migration(): void
+    {
+        $matter = $this->matter();
+        $reply = MatterEmail::create(['matter_id' => $matter->id, 'direction' => MatterEmail::RECEIVED, 'sender_key' => 'iflas', 'subject' => 'رد', 'at' => now()]);
+        $campaignReply = MatterEmail::create(['matter_id' => null, 'direction' => MatterEmail::RECEIVED, 'sender_key' => 'iflas', 'subject' => 'حملة', 'at' => now()]);
+        $sent = MatterEmail::create(['matter_id' => $matter->id, 'direction' => MatterEmail::SENT, 'sender_key' => 'iflas', 'subject' => 'صادر', 'at' => now()]);
+        $this->assertNull($reply->status);
+
+        (require base_path('database/migrations/2020_01_01_000163_file_replies_kept_without_a_status.php'))->up();
+
+        $this->assertSame(MatterEmail::FILED, $reply->fresh()->status);
+        // A campaign's reply belongs to no matter; a sent email has no status.
+        $this->assertNull($campaignReply->fresh()->status);
+        $this->assertNull($sent->fresh()->status);
     }
 
     public function test_a_child_matter_shares_its_parents_main_folder_whatever_its_number(): void

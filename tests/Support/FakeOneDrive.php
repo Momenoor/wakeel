@@ -105,7 +105,19 @@ class FakeOneDrive
 
     private function resource(string $id): array
     {
-        return ['id' => $id, 'name' => $this->items[$id]['name'], 'webUrl' => 'https://od.test/'.$id, 'folder' => ['childCount' => count($this->childrenOf($id))]];
+        $base = ['id' => $id, 'name' => $this->items[$id]['name'], 'webUrl' => 'https://od.test/'.$id];
+
+        return $this->items[$id]['folder']
+            ? [...$base, 'folder' => ['childCount' => count($this->childrenOf($id))]]
+            : [...$base, 'file' => ['mimeType' => 'application/octet-stream'], 'size' => 1];
+    }
+
+    private function makeFile(string $parent, string $name): string
+    {
+        $id = 'f'.(++$this->next);
+        $this->items[$id] = ['name' => $name, 'parent' => $parent, 'folder' => false];
+
+        return $id;
     }
 
     private function answer(Request $request)
@@ -118,6 +130,14 @@ class FakeOneDrive
 
         $path = (string) preg_replace('~^https://graph\.microsoft\.com/v1\.0/users/[^/]+/drive/~', '', strtok($url, '?'));
         $method = $request->method();
+
+        // A file put in a folder: items/{id}:/name:/content
+        if ($method === 'PUT' && preg_match('~^(root|items/([^/:]+)):/(.+):/content$~', $path, $m)) {
+            $parent = $m[1] === 'root' ? self::ROOT : $m[2];
+            $file = $this->makeFile($parent, $m[3]);
+
+            return Http::response($this->resource($file), 201);
+        }
 
         // root:/path or items/{id}:/segment
         if (preg_match('~^(root|items/([^/:]+)):/(.+)$~', $path, $m)) {

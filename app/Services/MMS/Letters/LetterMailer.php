@@ -131,7 +131,7 @@ class LetterMailer
                 }
 
                 // Remembered, for its replies.
-                MatterEmail::recordSent($letter->matter_id, $letter, $senderKey, $sent?->getMessageId(), $email->emailSubject, [...$to, ...$groupCc], auth()->id());
+                $record = MatterEmail::recordSent($letter->matter_id, $letter, $senderKey, $sent?->getMessageId(), $email->emailSubject, [...$to, ...$groupCc], auth()->id());
 
                 $sentIds = [...$sentIds, ...$group->pluck('id')->all()];
                 $withoutRecipients['sent'] += $group->isEmpty() ? 1 : 0;
@@ -144,7 +144,7 @@ class LetterMailer
                 $keepTo = $to ?: $groupCc;
                 $keepCc = $to ? $groupCc : [];
                 $userId = auth()->id();
-                defer(fn () => $this->keepOnMatter($letter, $email, $sender, $group, $keepTo, $keepCc, $userId));
+                defer(fn () => $this->keepOnMatter($letter, $email, $sender, $group, $keepTo, $keepCc, $userId, $record));
             } catch (\Throwable $e) {
                 foreach ($group as $recipient) {
                     $failedIds[$recipient->id] = Str::limit($e->getMessage(), 1000);
@@ -190,10 +190,10 @@ class LetterMailer
      * @param  list<string>  $to
      * @param  list<string>  $cc
      */
-    private function keepOnMatter(MatterLetter $letter, LetterEmail $email, array $sender, Collection $group, array $to, array $cc, ?int $userId): void
+    private function keepOnMatter(MatterLetter $letter, LetterEmail $email, array $sender, Collection $group, array $to, array $cc, ?int $userId, ?MatterEmail $record = null): void
     {
         if ($letter->matter) {
-            app(SentEmailArchive::class)->keepEmail($letter->matter, $email, $sender, $group->pluck('name')->filter()->implode('، '), $to, $cc, (string) $letter->reference, $userId);
+            app(SentEmailArchive::class)->keepEmail($letter->matter, $email, $sender, $group->pluck('name')->filter()->implode('، '), $to, $cc, (string) $letter->reference, $userId, $record);
         }
     }
 

@@ -98,6 +98,8 @@ class TypeForm
                     ->schema([
                         self::oneDriveStructureField(),
                         self::receivedEmailsField(),
+                        self::sentEmailsField(),
+                        self::signedMinutesField(),
                     ]),
             ]);
     }
@@ -112,6 +114,34 @@ class TypeForm
             ->label(__('Received emails folder structure'))
             ->helperText(__('Where the emails that come in are saved inside the matter\'s folder, for this type\'s matters. Folders are separated by "/", and each may use the matter\'s placeholders, like the letters do, e.g. {{matter.custom.Phase}}/01 system. {{day}} is the day the email reached us, so the emails of one day go in the same folder. Leave empty for the default one (Settings → OneDrive Folders).'))
             ->placeholder(fn (): string => MatterOneDriveFolders::receivedEmailsFolder())
+            ->maxLength(500)
+            ->extraInputAttributes(['dir' => 'ltr']);
+    }
+
+    /**
+     * Where the emails that are sent are saved inside the matter's folder, for this type:
+     * a path whose folders may use the matter's placeholders. Empty: the default one.
+     */
+    public static function sentEmailsField(string $name = 'onedrive_sent_emails'): TextInput
+    {
+        return TextInput::make($name)
+            ->label(__('Sent emails folder'))
+            ->helperText(__('Where the emails sent from the matter are saved, for this type\'s matters. Folders are separated by "/", and each may use the matter\'s placeholders, like the letters do, e.g. {{matter.custom.Phase}}/Sent/{{day}}. {{day}} is the day it is sent. Leave empty for the default one (Settings → OneDrive Folders).'))
+            ->placeholder(fn (): string => MatterOneDriveFolders::sentEmailsFolder())
+            ->maxLength(500)
+            ->extraInputAttributes(['dir' => 'ltr']);
+    }
+
+    /**
+     * Where the signed minutes are saved inside the matter's folder, for this type.
+     * Empty: the default one.
+     */
+    public static function signedMinutesField(string $name = 'onedrive_signed_minutes'): TextInput
+    {
+        return TextInput::make($name)
+            ->label(__('Signed minutes folder'))
+            ->helperText(__('Where the signed minutes are saved, for this type\'s matters. Folders are separated by "/", and each may use the matter\'s placeholders, like the letters do, e.g. {{matter.custom.Phase}}/06 signed minutes. Leave empty for the default one (Settings → OneDrive Folders).'))
+            ->placeholder(fn (): string => MatterOneDriveFolders::signedMinutesFolder())
             ->maxLength(500)
             ->extraInputAttributes(['dir' => 'ltr']);
     }

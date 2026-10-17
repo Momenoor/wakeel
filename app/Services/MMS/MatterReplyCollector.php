@@ -310,6 +310,8 @@ class MatterReplyCollector
         $reply = $this->record($message, $id, (string) $answers->sender_key, [
             'matter_id' => $matter?->getKey(),
             'parent_id' => $answers->getKey(),
+            // A reply on a matter is on it (listed in its Emails tab); one to a campaign with no matter is nobody's.
+            'status' => $matter ? MatterEmail::FILED : null,
         ]);
         [$pdf, $files, $name, $source] = $this->rendered($message, (string) $answers->sender_key, true);
         $oneDrive = null;

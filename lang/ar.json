@@ -4036,5 +4036,13 @@
     "Supplementary matter": "قضية مكمّلة",
     "Shown when adding a supplementary matter": "يظهر عند إضافة قضية مكمّلة",
     "A folder may use the matter's placeholders, like the letters do; {{day}} is the day it is saved.": "يجوز أن يستخدم المجلد متغيرات القضية كما في الخطابات؛ والمتغير {{day}} هو يوم الحفظ.",
-    "A folder may use the matter's placeholders, like the letters do; {{day}} is the day it is sent.": "يجوز أن يستخدم المجلد متغيرات القضية كما في الخطابات؛ والمتغير {{day}} هو يوم الإرسال."
+    "A folder may use the matter's placeholders, like the letters do; {{day}} is the day it is sent.": "يجوز أن يستخدم المجلد متغيرات القضية كما في الخطابات؛ والمتغير {{day}} هو يوم الإرسال.",
+    "Matter types with their own sent emails folder": "أنواع القضايا ذات مجلد خاص للرسائل الصادرة",
+    "Matter types with their own signed minutes folder": "أنواع القضايا ذات مجلد خاص للمحاضر الموقعة",
+    "None — every type uses the folder above.": "لا يوجد — كل الأنواع تستخدم المجلد أعلاه.",
+    "Sent emails folder": "مجلد الرسائل الصادرة",
+    "Signed minutes folder": "مجلد المحاضر الموقعة",
+    "Where the emails sent from the matter are saved, for this type's matters. Folders are separated by \"/\", and each may use the matter's placeholders, like the letters do, e.g. {{matter.custom.Phase}}/Sent/{{day}}. {{day}} is the day it is sent. Leave empty for the default one (Settings → OneDrive Folders).": "مكان حفظ الرسائل الصادرة من القضية، لقضايا هذا النوع. تُفصل المجلدات بـ «/» ويجوز أن يستخدم كل منها متغيرات القضية كما في الخطابات، مثل {{matter.custom.Phase}}/Sent/{{day}}. المتغير {{day}} هو يوم الإرسال. اتركه فارغاً للافتراضي (الإعدادات ← مجلدات OneDrive).",
+    "Where the signed minutes are saved, for this type's matters. Folders are separated by \"/\", and each may use the matter's placeholders, like the letters do, e.g. {{matter.custom.Phase}}/06 signed minutes. Leave empty for the default one (Settings → OneDrive Folders).": "مكان حفظ المحاضر الموقعة، لقضايا هذا النوع. تُفصل المجلدات بـ «/» ويجوز أن يستخدم كل منها متغيرات القضية كما في الخطابات، مثل {{matter.custom.Phase}}/06 signed minutes. اتركه فارغاً للافتراضي (الإعدادات ← مجلدات OneDrive).",
+    ":count attachment|:count attachments": ":count مرفق|:count مرفقات"
 }

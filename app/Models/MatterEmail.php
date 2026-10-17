@@ -65,10 +65,10 @@ class MatterEmail extends Model
      *
      * @param  list<string>  $to  everyone it went to, copied in too
      */
-    public static function recordSent(?int $matterId, ?Model $source, string $senderKey, ?string $messageId, string $subject, array $to, ?int $userId): void
+    public static function recordSent(?int $matterId, ?Model $source, string $senderKey, ?string $messageId, string $subject, array $to, ?int $userId): ?self
     {
         try {
-            static::create([
+            return static::create([
                 'matter_id' => $matterId,
                 'direction' => self::SENT,
                 'source_type' => $source?->getMorphClass(),
@@ -82,6 +82,26 @@ class MatterEmail extends Model
             ]);
         } catch (Throwable $e) {
             Log::warning('Matter email not recorded: '.$e->getMessage());
+
+            return null;
+        }
+    }
+
+    /**
+     * What was kept of an email that was sent: its PDF (where, and whether it is in the matter's
+     * OneDrive) and how many files it went with.
+     *
+     * @param  array{name: string, path: ?string, inOneDrive: bool}  $pdf
+     */
+    public function noteKept(array $pdf, int $attachmentsSent): void
+    {
+        try {
+            $this->update([
+                'files' => filled($pdf['path'] ?? null) ? [['name' => $pdf['name'], 'path' => $pdf['path']]] : [],
+                'onedrive' => ['pdf' => (bool) ($pdf['inOneDrive'] ?? false), 'sent_attachments' => $attachmentsSent, 'checked_at' => now()->toDateTimeString()],
+            ]);
+        } catch (Throwable $e) {
+            Log::warning('What was kept of a sent email was not noted: '.$e->getMessage());
         }
     }
 
@@ -144,8 +164,20 @@ class MatterEmail extends Model
      */
     public function oneDriveLabel(string $what): ?string
     {
+        // An email that went out: its PDF is kept, and it went with some files or none — which are in
+        // the PDF's list of them, not kept apart. It has no original (.eml).
         if ($this->direction === self::SENT) {
-            return null;
+            if ($what === 'eml') {
+                return null;
+            }
+
+            if ($what === 'attachments') {
+                $sent = ((array) $this->onedrive)['sent_attachments'] ?? null;
+
+                return $sent === null
+                    ? __('Not checked')
+                    : ((int) $sent > 0 ? trans_choice(':count attachment|:count attachments', (int) $sent, ['count' => (int) $sent]) : __('Without attachment'));
+            }
         }
 
         if ($what === 'attachments') {

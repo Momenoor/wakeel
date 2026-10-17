@@ -102,10 +102,11 @@ class MinutesSender
             $theirs = MatterContact::copiedFor($minutes->matter_id, $emails, collect($group['rows'])->pluck('party_id')->filter()->all(), $contactsCc);
             $copied = Addresses::without(Addresses::emails([...$cc, ...$theirs]), $emails);
 
-            $sent = $this->attempt($minutes, array_values($group['rows']), MinutesDelivery::EMAIL, Str::limit(implode(', ', $emails), 250, ''), $userId, $result, function () use ($senderKey, $email, $emails, $copied, $minutes, $userId) {
+            $record = null;
+            $sent = $this->attempt($minutes, array_values($group['rows']), MinutesDelivery::EMAIL, Str::limit(implode(', ', $emails), 250, ''), $userId, $result, function () use ($senderKey, $email, $emails, $copied, $minutes, $userId, &$record) {
                 $message = SenderMailer::using(SenderMailer::sender($senderKey), fn () => Mail::to($emails)->cc($copied)->send($email));
                 // Remembered, for its replies.
-                MatterEmail::recordSent($minutes->matter_id, $minutes, $senderKey, $message?->getMessageId(), $email->emailSubject, [...$emails, ...$copied], $userId);
+                $record = MatterEmail::recordSent($minutes->matter_id, $minutes, $senderKey, $message?->getMessageId(), $email->emailSubject, [...$emails, ...$copied], $userId);
 
                 return null;
             });
@@ -119,7 +120,7 @@ class MinutesSender
                 $title = __('Minutes no. :number', ['number' => $minutes->number]);
                 $sender = SenderMailer::sender($senderKey);
                 if ($minutes->matter) {
-                    defer(fn () => app(SentEmailArchive::class)->keepEmail($minutes->matter, $email, $sender, $names, $emails, $copied, $title, $userId));
+                    defer(fn () => app(SentEmailArchive::class)->keepEmail($minutes->matter, $email, $sender, $names, $emails, $copied, $title, $userId, $record));
                 }
             }
         }

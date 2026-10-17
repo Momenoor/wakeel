@@ -171,6 +171,17 @@ class MatterRepliesTest extends TestCase
         $this->assertSame('reply-1@dubaipolice.gov.ae', $reply->message_id);
         $this->assertSame('شرطة دبي <info@dubaipolice.gov.ae>', $reply->from);
 
+        // On the matter: filed, listed in its Emails tab with what of it is in OneDrive.
+        $this->assertSame(MatterEmail::FILED, $reply->status);
+        $this->assertSame(['pdf' => true, 'eml' => false, 'attachments' => 1], $reply->onedrive);
+        \Livewire\Livewire::test(\App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager::class, [
+            'ownerRecord' => $this->matter,
+            'pageClass' => \App\Filament\Mms\Resources\Matters\Pages\ViewMatter::class,
+        ])
+            ->assertCanSeeTableRecords([$reply, $sent])
+            ->assertTableColumnStateSet('pdf_saved', 'Saved', $reply)
+            ->assertTableColumnStateSet('attachments_saved', 'Saved', $reply);
+
         // Its PDF and its file, with the matter and in the OneDrive replies folder.
         $files = $this->matter->attachments()->where('type', 'correspondence')->pluck('name')->all();
         $this->assertCount(2, $files);

@@ -68,6 +68,7 @@ class SendBulkMailBatch implements ShouldQueue
         }
 
         foreach ($recipients as $recipient) {
+            $record = null;
             $email = is_array($recipient->email) ? implode('; ', $recipient->email) : $recipient->email;
             try {
                 // 1. Send mail — stop everything if this fails
@@ -90,7 +91,7 @@ class SendBulkMailBatch implements ShouldQueue
                     'message_id' => $sent?->getMessageId(),
                 ]);
                 // Remembered by its recipient, for their reply — with a matter or not.
-                MatterEmail::recordSent($campaign->matter_id, $recipient, (string) $campaign->from_sender_key, $sent?->getMessageId(),
+                $record = MatterEmail::recordSent($campaign->matter_id, $recipient, (string) $campaign->from_sender_key, $sent?->getMessageId(),
                     $campaign->renderSubject($recipient), [...(array) $recipient->email, ...($campaign->cc_emails ?? []), ...($recipient->cc_emails ?? [])], $campaign->created_by);
                 $campaign->increment('sent_count');
                 // An email to a matter's parties: a step in its progress.
@@ -126,7 +127,7 @@ class SendBulkMailBatch implements ShouldQueue
             // 3. Copy to the mailbox's Sent folder and keep a PDF of it. The
             // mail has already gone out, so a failure here is logged but
             // never sends it again.
-            $archived = $this->archive($campaign, $recipient, $sent?->toString());
+            $archived = $this->archive($campaign, $recipient, $sent?->toString(), $record ?? null);
 
             BulkMailLog::create([
                 'campaign_id' => $campaign->id,
@@ -164,7 +165,7 @@ class SendBulkMailBatch implements ShouldQueue
     /**
      * @return array<string, string>
      */
-    private function archive(BulkMailCampaign $campaign, BulkMailRecipient $recipient, ?string $rawMessage): array
+    private function archive(BulkMailCampaign $campaign, BulkMailRecipient $recipient, ?string $rawMessage, ?MatterEmail $record = null): array
     {
         $result = [];
 
@@ -185,7 +186,7 @@ class SendBulkMailBatch implements ShouldQueue
             // An email of a matter: in its OneDrive too (kept with the
             // campaign already, not added to the matter's attachments).
             if ($campaign->matter) {
-                app(SentEmailArchive::class)->keep(
+                $kept = app(SentEmailArchive::class)->keep(
                     $campaign->matter,
                     (string) Storage::disk(BulkMailService::DISK)->get($pdfPath),
                     (string) $recipient->name,
@@ -193,6 +194,8 @@ class SendBulkMailBatch implements ShouldQueue
                     $campaign->created_by,
                     asAttachment: false,
                 );
+                // What was kept, and how many files it went with, for the matter's Emails tab.
+                $record?->noteKept($kept, count($campaign->attachmentsFor($recipient)));
             }
         } catch (\Throwable $e) {
             Log::warning("Bulk mail {$recipient->id} was sent but its PDF failed: ".$e->getMessage());
