@@ -88,8 +88,10 @@ class IntegrationsSettingsTab
                         TagsInput::make(MatterReplyCollector::IGNORED)
                             ->label(__('Never check emails from'))
                             ->placeholder(__('Add an email address, or @domain'))
+                            // Several at once: typed with a comma, space or semicolon between, or a list pasted.
+                            ->splitKeys(['Tab', ',', ' ', ';'])
                             ->nestedRecursiveRules(['regex:/^([^@\s]+)?@[^@\s]+\.[^@\s]+$/'])
-                            ->helperText(__('Emails from these addresses (or a whole domain written as @domain) are not read: not kept, not notified, and left unread in the mailbox.')),
+                            ->helperText(__('Emails from these addresses (or a whole domain written as @domain) are not read: not kept, not notified, and left unread in the mailbox. Add several at once by separating them with a comma, space or semicolon, or by pasting a list.')),
                         TextEntry::make('cron_url')
                             ->label(__('Link for cron-job.org'))
                             ->state(function (Get $get): string {

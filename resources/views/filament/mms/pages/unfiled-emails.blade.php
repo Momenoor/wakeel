@@ -6,7 +6,7 @@
                 <x-filament::tabs.item
                     :active="(string) $mailbox === (string) $key"
                     :badge="$tab['count'] ?: null"
-                    wire:click="$set('mailbox', @js((string) $key))"
+                    wire:click="$set('mailbox', '{{ $key }}')"
                 >
                     {{ $tab['label'] }}
                 </x-filament::tabs.item>

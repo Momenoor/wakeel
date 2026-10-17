@@ -4061,7 +4061,6 @@
     "No matter found": "لم تُعرف قضية",
     "Never check emails from": "عدم فحص الرسائل الواردة من",
     "Add an email address, or @domain": "أضف بريدًا إلكترونيًا، أو @النطاق",
-    "Emails from these addresses (or a whole domain written as @domain) are not read: not kept, not notified, and left unread in the mailbox.": "الرسائل الواردة من هذه العناوين (أو من نطاق كامل يُكتب ‎@domain) لا تُقرأ: لا تُحفظ، ولا يُرسل عنها إشعار، وتبقى غير مقروءة في صندوق البريد.",
     "Ignore sender": "تجاهل المرسل",
     "Never check emails from :address?": "عدم فحص الرسائل الواردة من :address مجددًا؟",
     "Their emails waiting here are set aside, and new ones are not read (they stay unread in the mailbox). The address can be taken off the list in Settings → Integrations.": "تُستبعد رسائله المنتظرة هنا، ولا تُقرأ رسائله الجديدة (تبقى غير مقروءة في صندوق البريد). يمكن حذف العنوان من القائمة في الإعدادات ← التكاملات.",
@@ -4072,5 +4071,6 @@
     "Search by its number: 986, 986/2026 or 2026/986.": "ابحث برقمها: 986 أو 986/2026 أو 2026/986.",
     "The email could not be moved": "تعذر نقل الرسالة",
     "Moved to matter :matter.": "نُقلت إلى القضية :matter.",
-    "Nothing of it was found in this matter's OneDrive to move.": "لم يُعثر على شيء منها في OneDrive هذه القضية لنقله."
+    "Nothing of it was found in this matter's OneDrive to move.": "لم يُعثر على شيء منها في OneDrive هذه القضية لنقله.",
+    "Emails from these addresses (or a whole domain written as @domain) are not read: not kept, not notified, and left unread in the mailbox. Add several at once by separating them with a comma, space or semicolon, or by pasting a list.": "الرسائل الواردة من هذه العناوين (أو من نطاق كامل يُكتب ‎@domain) لا تُقرأ: لا تُحفظ، ولا يُرسل عنها إشعار، وتبقى غير مقروءة في صندوق البريد. أضف عدة عناوين دفعة واحدة بفصلها بفاصلة أو مسافة أو فاصلة منقوطة، أو بلصق قائمة."
 }

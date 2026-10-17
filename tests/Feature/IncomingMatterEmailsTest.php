@@ -646,6 +646,9 @@ class IncomingMatterEmailsTest extends TestCase
         $third = MatterEmail::query()->where('sender_key', 'noreply')->sole();
         Livewire::test(UnfiledEmails::class)
             ->assertSee('third@gmail.com')
+            // Each tab, clicked, opens its mailbox.
+            ->assertSeeHtml('wire:click="$set(\'mailbox\', \'noreply\')"')
+            ->assertSeeHtml('wire:click="$set(\'mailbox\', \'\')"')
             ->set('mailbox', 'noreply')->assertCanSeeTableRecords([$third])->assertCanNotSeeTableRecords([$email])
             ->set('mailbox', 'iflas')->assertCanSeeTableRecords([$email])->assertCanNotSeeTableRecords([$third])
             ->set('mailbox', '')->assertCanSeeTableRecords([$email, $third]);
