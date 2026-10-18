@@ -2,10 +2,12 @@
 
 namespace App\Services\MMS\Requests;
 
+use App\Enums\AttachmentCategory;
 use App\Enums\NotificationChannel;
 use App\Enums\NotificationType;
 use App\Enums\RequestStatus;
 use App\Enums\RequestType;
+use App\Filament\Support\AttachmentFields;
 use App\Mail\NewRequestNotificationMail;
 use App\Mail\RequestActionNotificationMail;
 use App\Models\Matter;
@@ -21,7 +23,6 @@ use Filament\Schemas\Components\Component;
 use Illuminate\Mail\Mailable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Storage;
 
 abstract class BaseRequestService
 {
@@ -343,22 +344,12 @@ abstract class BaseRequestService
         );
     }
 
+    /**
+     * The request's files, kept on it: each is a path from the upload field (AttachmentFields::upload), or
+     * ['path' => …, 'source' => 'whatsapp'] for a file already stored (WhatsApp's) — AttachmentFields::attach.
+     */
     protected function storeFile($attachments): void
     {
-        if ($attachments) {
-            foreach ($attachments as $item) {
-                $path = $item['path'];
-                $this->request->attachments()->create([
-                    'name' => 'request-attachment-'.$this->request->id.'-'.basename($path),
-                    'path' => $path,
-                    'size' => Storage::disk('public')->size($path),
-                    'extension' => pathinfo($path, PATHINFO_EXTENSION),
-                    'type' => 'matter-request',
-                    'matter_id' => $this->request->matter_id,
-                    'matter_request_id' => $this->request->id,
-                    'user_id' => auth()->id(),
-                ]);
-            }
-        }
+        AttachmentFields::attach($this->request, (array) $attachments, AttachmentCategory::REQUEST);
     }
 }

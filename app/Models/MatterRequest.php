@@ -2,18 +2,22 @@
 
 namespace App\Models;
 
+use App\Enums\AttachmentCategory;
 use App\Enums\RequestStatus;
 use App\Enums\RequestType;
 use App\Models\Concerns\AnnouncesChanges;
+use App\Models\Concerns\HasAttachments;
+use App\Models\Contracts\AttachmentOwner;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
-class MatterRequest extends Model
+class MatterRequest extends Model implements AttachmentOwner
 {
     use AnnouncesChanges;
+    use HasAttachments;
     use LogsActivity;
 
     public function getActivitylogOptions(): LogOptions
@@ -50,7 +54,8 @@ class MatterRequest extends Model
             if ($counted > 0 && $request->matter->review_count > 0) {
                 $request->matter->update(['review_count' => max(0, $request->matter->review_count - $counted)]);
             }
-            $request->attachments->each->delete();
+            // Read again (a loaded relation may miss the latest files) and gone for good, file too.
+            $request->attachments()->withTrashed()->get()->each->forceDelete();
         });
     }
 
@@ -69,8 +74,20 @@ class MatterRequest extends Model
         return $this->belongsTo(User::class, 'approved_by');
     }
 
-    public function attachments(): HasMany
+    /** Its files, however they were attached (the owner is the request; older ones were backfilled with it). */
+    public function attachments(): MorphMany
     {
-        return $this->hasMany(Attachment::class, 'matter_request_id');
+        return $this->ownedAttachments();
+    }
+
+    public function attachmentMatterId(): ?int
+    {
+        return $this->matter_id;
+    }
+
+    /** @return list<AttachmentCategory> */
+    public function attachmentCategories(): array
+    {
+        return [AttachmentCategory::REQUEST, AttachmentCategory::GENERAL];
     }
 }

@@ -604,7 +604,8 @@ class MatterRepliesTest extends TestCase
         // Its PDF only: the original email (.eml) goes to OneDrive, never into the system.
         $this->assertCount(1, $downloads);
         $this->assertStringEndsWith('.pdf', $downloads[0]['name']);
-        $this->assertStringContainsString('attachments/emails/'.$this->matter->id, $downloads[0]['url']);
+        // Opened through the attachment controller, which checks who may.
+        $this->assertSame($this->matter->attachments()->where('type', 'correspondence')->sole()->url(), $downloads[0]['url']);
         $this->assertSame(1, $this->matter->attachments()->where('type', 'correspondence')->count());
 
         // In the action, as a bullet list.

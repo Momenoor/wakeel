@@ -5,8 +5,8 @@ namespace Tests\Feature;
 use App\Enums\MatterDifficulty;
 use App\Enums\RequestStatus;
 use App\Enums\RequestType;
-use Filament\Notifications\Notification;
 use App\Filament\Mms\Actions\Request\ApproveRequestAction;
+use App\Filament\Mms\Actions\Request\ResubmitRequestAction;
 use App\Filament\Mms\Resources\MatterRequests\Pages\ViewMatterRequest;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Models\Matter;
@@ -17,6 +17,7 @@ use App\Services\MMS\Requests\ChangeDistributedAtRequestService;
 use App\Services\MMS\Requests\ConfirmReportRequestService;
 use App\Services\MMS\Requests\RequestServiceFactory;
 use App\Services\MMS\Requests\ReviewReportRequestService;
+use Filament\Notifications\Notification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
@@ -264,6 +265,29 @@ class MatterRequestTest extends TestCase
 
         $this->assertEquals(RequestStatus::APPROVED, $request->fresh()->status);
         $this->assertEquals('2026-05-01', $matter->fresh()->distributed_at->toDateString());
+    }
+
+    public function test_the_matter_page_offers_a_report_sent_back_for_changes_to_be_sent_again_by_its_requester_only(): void
+    {
+        $this->allowEverything();
+        $matter = $this->makeMatter();
+        $assistant = User::factory()->create();
+        $request = MatterRequest::create(['matter_id' => $matter->id, 'request_by' => $assistant->id, 'type' => RequestType::REVIEW_REPORT, 'status' => RequestStatus::NEEDS_CHANGES, 'comment' => 'report', 'approved_comment' => 'Fix the dates']);
+        $pending = MatterRequest::create(['matter_id' => $matter->id, 'request_by' => $assistant->id, 'type' => RequestType::CONFIRM_REPORT, 'status' => RequestStatus::PENDING, 'comment' => 'final']);
+
+        // The requester sees it, on the request that needs changes — from the matter itself.
+        $this->actingAs($assistant);
+        $page = Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()]);
+        $page->assertSee('Fix the dates');
+        $this->assertSame(
+            [RequestStatus::NEEDS_CHANGES],
+            collect($matter->requests()->get())->filter(fn ($r) => ResubmitRequestAction::make()->record($r)->isVisible())->pluck('status')->all(),
+        );
+
+        // Someone else — even with every permission — does not.
+        $this->actingAs(User::factory()->create());
+        $this->assertFalse(ResubmitRequestAction::make()->record($request)->isVisible());
+        $this->assertFalse(ResubmitRequestAction::make()->record($pending)->isVisible());
     }
 
     public function test_auto_confirm_command_applies_the_proposed_date_and_leaves_recent_requests_alone(): void

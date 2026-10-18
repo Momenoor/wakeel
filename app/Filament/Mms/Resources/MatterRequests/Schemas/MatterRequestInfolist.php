@@ -11,7 +11,6 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\FontWeight;
 use Filament\Support\Enums\TextSize;
-use Illuminate\Support\Facades\Storage;
 
 class MatterRequestInfolist
 {
@@ -109,7 +108,7 @@ class MatterRequestInfolist
                                             ->label(__('Name'))
                                             ->color('primary')
                                             ->icon('heroicon-o-document-text')
-                                            ->url(fn ($record) => Storage::disk('public')->url($record->path))
+                                            ->url(fn ($record) => $record->url())
                                             ->openUrlInNewTab()
                                             ->alignJustify()
                                             ->columnSpan(2),

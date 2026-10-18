@@ -2,11 +2,9 @@
 
 namespace App\Filament\Mms\Actions\Request;
 
-use App\Helpers\FileUploadHelper;
+use App\Filament\Support\AttachmentFields;
 use App\Services\MMS\Requests\RequestServiceFactory;
 use Filament\Actions\Action;
-use Filament\Forms\Components\FileUpload;
-use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Textarea;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Schema;
@@ -41,19 +39,9 @@ class ApproveRequestAction extends Action
             Group::make()
                 ->schema(fn ($record) => RequestServiceFactory::classFor($record->type)::approvalFormFields())
                 ->columnSpanFull(),
-            Repeater::make('attachments')
+            AttachmentFields::upload('attachments')
                 ->label(__('Attachments'))
-                ->defaultItems(0)
-                ->schema([
-                    FileUpload::make('path')
-                        ->label(__('File'))
-                        ->disk('public')
-                        ->directory('requests-attachments')
-                        ->preserveFilenames()
-                        ->getUploadedFileNameForStorageUsing(fn ($file) => FileUploadHelper::getUniqueFilename($file, 'requests-attachments')),
-                ])
-                ->lazy()
-                ->collapsible(),
+                ->required(false),
         ]);
     }
 }

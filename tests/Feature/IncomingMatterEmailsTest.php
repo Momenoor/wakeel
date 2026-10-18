@@ -562,7 +562,9 @@ class IncomingMatterEmailsTest extends TestCase
         $actions = array_column($notice->data['actions'], 'name');
         $this->assertContains('download', $actions);
         $download = collect($notice->data['actions'])->firstWhere('name', 'download');
-        $this->assertStringContainsString('storage/attachments/emails/'.$this->second->id, $download['url']);
+        // Through the attachment controller (who may see the matter), not a public address.
+        $urls = $this->second->attachments()->where('path', 'like', 'attachments/emails/'.$this->second->id.'/%')->get()->map->url()->all();
+        $this->assertContains($download['url'], $urls);
         $this->assertStringContainsString('Not saved in OneDrive', $notice->data['body']);
     }
 

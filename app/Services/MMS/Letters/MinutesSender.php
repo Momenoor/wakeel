@@ -19,7 +19,6 @@ use App\Support\Addresses;
 use App\Support\EmailGrouping;
 use App\Support\Honorific;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
@@ -254,10 +253,10 @@ class MinutesSender
      */
     private function pdf(MatterMinutes $minutes, LetterComposer $composer): string
     {
-        $path = $minutes->attachment?->path;
+        $attachment = $minutes->attachment;
 
-        return $path && Storage::disk('public')->exists($path)
-            ? (string) Storage::disk('public')->get($path)
+        return $attachment?->fileExists()
+            ? (string) $attachment->storage()->get($attachment->path)
             : (new LetterPdf($composer))->render();
     }
 

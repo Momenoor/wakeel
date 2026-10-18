@@ -130,13 +130,13 @@ class ReportReviewWhatsApp
     private function reportFile(MatterRequest $request): ?array
     {
         $from = (int) (collect((array) ($request->extra['rounds'] ?? []))->last()['attachments_from'] ?? 0);
-        $disk = Storage::disk('public');
 
         $attachment = $request->attachments()->where('id', '>', $from)->oldest('id')->get()
-            ->first(fn ($attachment) => filled($attachment->path) && $disk->exists($attachment->path));
+            ->first(fn ($attachment) => $attachment->fileExists());
 
+        // Wherever it is kept: the private disk, or the public one for a file not moved yet.
         return $attachment
-            ? ['path' => $disk->path($attachment->path), 'mime' => (string) ($disk->mimeType($attachment->path) ?: 'application/pdf'), 'name' => (string) ($attachment->name ?: basename($attachment->path))]
+            ? ['path' => $attachment->storage()->path($attachment->path), 'mime' => (string) ($attachment->storage()->mimeType($attachment->path) ?: 'application/pdf'), 'name' => (string) ($attachment->name ?: basename($attachment->path))]
             : null;
     }
 
@@ -273,7 +273,8 @@ class ReportReviewWhatsApp
             $mime = strtolower(trim(explode(';', $file['mime'] ?: (string) ($media['mime_type'] ?? ''))[0]));
             $extension = pathinfo((string) ($media['filename'] ?? ''), PATHINFO_EXTENSION) ?: (MimeTypes::getDefault()->getExtensions($mime)[0] ?? 'bin');
             $name = filled($media['filename'] ?? null) ? MatterOneDriveExplorer::cleanName((string) $media['filename']) : $type.'.'.$extension;
-            $path = 'requests-attachments/'.Str::random(8).'-'.$name;
+            // A folder of its own: the file keeps the name it was sent with when it is attached.
+            $path = 'requests-attachments/'.Str::uuid().'/'.$name;
             Storage::disk('public')->put($path, $file['data']);
             $files[] = $path;
 
@@ -342,7 +343,7 @@ class ReportReviewWhatsApp
         $service = RequestServiceFactory::make($request);
         $data = [
             'approved_comment' => trim(implode("\n", (array) $delivery->pending_texts)) ?: ($decision === 'approved' ? null : __('See the attached files.')),
-            'attachments' => array_map(fn (string $path): array => ['path' => $path], (array) $delivery->pending_files),
+            'attachments' => array_map(fn (string $path): array => ['path' => $path, 'source' => 'whatsapp'], (array) $delivery->pending_files),
         ];
 
         $this->actingAs($delivery->user, fn () => match ($decision) {

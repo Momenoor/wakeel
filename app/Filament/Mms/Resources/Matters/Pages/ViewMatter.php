@@ -2,14 +2,15 @@
 
 namespace App\Filament\Mms\Resources\Matters\Pages;
 
+use App\Enums\AttachmentCategory;
 use App\Enums\MatterCollectionStatus;
 use App\Enums\MatterLevel;
 use App\Filament\Mms\Actions\Calendar\CreateSingleCalendarEventAction;
 use App\Filament\Mms\Actions\Calendar\SyncToOutlookAction;
 use App\Filament\Mms\Resources\CalendarEvents\Schemas\CalendarEventForm;
 use App\Filament\Mms\Resources\Matters\MatterResource;
+use App\Filament\Support\AttachmentFields;
 use App\Filament\Support\CustomFieldInput;
-use App\Helpers\FileUploadHelper;
 use App\Models\Matter;
 use App\Models\MatterFieldDefinition;
 use App\Services\MMS\MatterContactsExport;
@@ -20,7 +21,6 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
 use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
@@ -29,9 +29,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Support\Colors\Color;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\On;
 
 class ViewMatter extends ViewRecord
@@ -94,14 +92,10 @@ class ViewMatter extends ViewRecord
                 ->disabled(fn ($record) => $record->initial_report_at !== null)
                 ->label(fn ($record) => $record->initial_report_at ? __('Initial Report Submitted') : __('Submit Initial Report'))
                 ->schema([
-                    FileUpload::make('screen_shot')
+                    AttachmentFields::upload('screen_shot')
                         ->label(__('Screenshot'))
-                        ->acceptedFileTypes(['image/*', 'application/pdf'])
-                        ->disk('public')
-                        ->directory('matter-attachments')
-                        ->visibility('public')
-                        ->required()
-                        ->getUploadedFileNameForStorageUsing(fn ($file) => FileUploadHelper::getUniqueFilename($file, 'matter-attachments')),
+                        ->multiple(false)
+                        ->acceptedFileTypes(['image/*', 'application/pdf']),
                     DatePicker::make('date')
                         ->label(__('Date'))
                         ->visible(auth()->user()->can('UpdateInitialReportDate:Matter')),
@@ -270,20 +264,10 @@ class ViewMatter extends ViewRecord
 
     private function initialReportSubmit($record, array $data): void
     {
-        $path = $data['screen_shot'];
-        $disk = Storage::disk('public');
-
         $record->initial_report_at = $data['date'] ?? now();
         $record->save();
 
-        $record->attachments()->create([
-            'user_id' => Auth::id(),
-            'type' => 'initial_report_submission',
-            'path' => $path,
-            'name' => basename($path),
-            'size' => $disk->exists($path) ? $disk->size($path) : 0,
-            'extension' => pathinfo($path, PATHINFO_EXTENSION) ?? 0,
-        ]);
+        AttachmentFields::attach($record, [$data['screen_shot']], AttachmentCategory::REPORT, description: __('Initial Report'));
 
         Notification::make('Initial Report Submitted')
             ->title(__('Initial Report Submitted'))

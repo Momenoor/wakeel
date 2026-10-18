@@ -30,6 +30,9 @@ abstract class TestCase extends BaseTestCase
         // turned up in the next.
         \App\Models\Setting::clearCache();
 
+        // Attached files go to the private disk: never the real one from a test.
+        \Illuminate\Support\Facades\Storage::fake('attachments');
+
         $connection = config('database.default');
         $database = config("database.connections.{$connection}.database");
 

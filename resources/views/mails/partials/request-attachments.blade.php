@@ -5,7 +5,7 @@
         <ul style="font-size: 14px; color: #1B3A5C; padding-inline-start: 20px;">
             @foreach($matterRequest->attachments as $attachment)
                 <li>
-                    <a href="{{ Storage::disk('public')->url($attachment->path) }}"
+                    <a href="{{ $attachment->url() }}"
                        style="color: #1B3A5C; text-decoration: underline;">
                         {{ $attachment->name }}
                     </a>

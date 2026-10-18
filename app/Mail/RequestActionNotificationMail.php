@@ -10,7 +10,6 @@ use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Storage;
 
 class RequestActionNotificationMail extends Mailable
 {
@@ -59,19 +58,17 @@ class RequestActionNotificationMail extends Mailable
         $mailAttachments = [];
 
         foreach ($attachments as $attachment) {
-            $exists = Storage::disk('public')->exists($attachment->path);
-
-            if (! $exists) {
-                \Log::warning('Attachment file not found on public disk: '.$attachment->path);
+            if (! $attachment->fileExists()) {
+                \Log::warning('Attachment file not found: '.$attachment->path);
 
                 continue;
             }
 
             try {
-                $mailAttachments[] = Attachment::fromStorageDisk('public', $attachment->path)
+                $mailAttachments[] = Attachment::fromStorageDisk($attachment->disk ?: 'public', $attachment->path)
                     ->as($attachment->name)
                     ->withMime(
-                        Storage::disk('public')->mimeType($attachment->path) ?? 'application/octet-stream'
+                        $attachment->storage()->mimeType($attachment->path) ?? 'application/octet-stream'
                     );
             } catch (\Exception $e) {
                 \Log::error('Failed to attach file: '.$attachment->path.' Error: '.$e->getMessage());

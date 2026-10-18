@@ -2,15 +2,18 @@
 
 namespace App\Observers;
 
-use Illuminate\Support\Facades\Storage;
+use App\Models\Attachment;
 
 class AttachmentObserver
 {
-    public function deleting($attachment): void
+    /**
+     * The file goes with the row when it is deleted for good — not when it is only hidden (financial
+     * evidence, soft deleted: both stay).
+     */
+    public function forceDeleted(Attachment $attachment): void
     {
-        if (Storage::disk('public')->exists($attachment->path)) {
-            Storage::disk('public')->delete($attachment->path);
+        if (filled($attachment->path) && $attachment->storage()->exists($attachment->path)) {
+            $attachment->storage()->delete($attachment->path);
         }
-
     }
 }

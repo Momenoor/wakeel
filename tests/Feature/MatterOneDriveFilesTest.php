@@ -265,6 +265,7 @@ class MatterOneDriveFilesTest extends TestCase
     public function test_a_request_takes_its_file_from_onedrive_instead_of_an_upload(): void
     {
         Storage::fake('public');
+        Storage::fake('attachments');
         Mail::fake();
 
         // Review report: a file required — one from OneDrive will do.
@@ -281,9 +282,10 @@ class MatterOneDriveFilesTest extends TestCase
             ->assertHasNoErrors();
 
         $attachment = $this->matter->requests()->sole()->attachments()->sole();
-        $this->assertStringEndsWith('report.pdf', $attachment->path);
-        // Kept as it was then, like an upload.
-        $this->assertSame('%PDF-report', Storage::disk('public')->get($attachment->path));
+        $this->assertSame('report.pdf', $attachment->name);
+        // Kept as it was then, like an upload, on the private disk.
+        $this->assertSame('attachments', $attachment->disk);
+        $this->assertSame('%PDF-report', Storage::disk('attachments')->get($attachment->path));
         $this->assertSame('pdf', $attachment->extension);
     }
 

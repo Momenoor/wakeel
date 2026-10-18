@@ -4156,5 +4156,22 @@
     "The matter's experts chosen in Settings → Letters & emails and the email template's own CC are put here; remove any you don't want.": "يُضاف هنا خبراء القضية المحددون في الإعدادات ← المراسلات ← الخطابات والمراسلات ونسخة قالب البريد؛ احذف من لا تريده.",
     "Copied in whenever this email is used, besides the matter's experts chosen in Settings → Letters & emails. Can still be changed when sending.": "نسخة في كل مرة يُستخدم فيها هذا البريد، إضافةً إلى خبراء القضية المحددين في الإعدادات ← المراسلات ← الخطابات والمراسلات. يمكن تعديلها عند الإرسال.",
     "The system": "النظام",
-    "Leave empty to keep the current password.": "اتركها فارغة للإبقاء على كلمة المرور الحالية."
+    "Leave empty to keep the current password.": "اتركها فارغة للإبقاء على كلمة المرور الحالية.",
+    "Court document": "مستند محكمة",
+    "Fee invoice": "فاتورة أتعاب",
+    "Payment receipt": "إيصال دفع",
+    "Bank transfer": "تحويل بنكي",
+    "Cheque": "شيك",
+    "Uploaded by": "رُفع بواسطة",
+    "No attachments yet": "لا توجد مرفقات بعد",
+    ":count attached files": ":count ملفات مرفقة",
+    "Up to :size MB each.": "حتى :size ميغابايت للملف الواحد.",
+    ":record does not take attachments.": ":record لا يقبل مرفقات.",
+    "The file is no longer there.": "الملف لم يعد موجوداً.",
+    ":name was already attached here — it was attached again.": "الملف :name مرفق هنا من قبل — وقد أُرفق مرة أخرى.",
+    "The file :name could not be attached": "تعذّر إرفاق الملف :name",
+    "A :category file cannot be attached here.": "لا يمكن إرفاق ملف من نوع :category هنا.",
+    "A :extension file cannot be attached.": "لا يمكن إرفاق ملف بامتداد :extension.",
+    "The file is bigger than :size MB.": "حجم الملف أكبر من :size ميغابايت.",
+    "Receipts": "الإيصالات"
 }

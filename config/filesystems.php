@@ -38,6 +38,15 @@ return [
             'report' => false,
         ],
 
+        // Files attached to records: private, opened only through the attachment controller (config/attachments.php).
+        'attachments' => [
+            'driver' => 'local',
+            'root' => storage_path('app/attachments'),
+            'visibility' => 'private',
+            'throw' => false,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

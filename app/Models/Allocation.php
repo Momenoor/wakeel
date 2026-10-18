@@ -2,7 +2,10 @@
 
 namespace App\Models;
 
+use App\Enums\AttachmentCategory;
 use App\Models\Concerns\AnnouncesChanges;
+use App\Models\Concerns\HasAttachments;
+use App\Models\Contracts\AttachmentOwner;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,9 +14,10 @@ use Illuminate\Support\Carbon;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
-class Allocation extends Model
+class Allocation extends Model implements AttachmentOwner
 {
     use AnnouncesChanges;
+    use HasAttachments;
     use HasFactory;
     use LogsActivity;
 
@@ -128,5 +132,16 @@ class Allocation extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function attachmentMatterId(): ?int
+    {
+        return $this->matter_id;
+    }
+
+    /** @return list<AttachmentCategory> */
+    public function attachmentCategories(): array
+    {
+        return [AttachmentCategory::PAYMENT_RECEIPT, AttachmentCategory::BANK_TRANSFER, AttachmentCategory::CHEQUE, AttachmentCategory::GENERAL];
     }
 }

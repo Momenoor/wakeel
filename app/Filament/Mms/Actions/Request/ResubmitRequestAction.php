@@ -3,11 +3,9 @@
 namespace App\Filament\Mms\Actions\Request;
 
 use App\Enums\RequestStatus;
-use App\Helpers\FileUploadHelper;
+use App\Filament\Support\AttachmentFields;
 use App\Services\MMS\Requests\RequestServiceFactory;
 use Filament\Actions\Action;
-use Filament\Forms\Components\FileUpload;
-use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Textarea;
 use Filament\Schemas\Schema;
 
@@ -39,21 +37,9 @@ class ResubmitRequestAction extends Action
     {
         return $schema->components([
             Textarea::make('comment')->label(__('What was changed'))->required()->rows(3),
-            Repeater::make('attachments')
+            AttachmentFields::upload('attachments')
                 ->label(__('Corrected report'))
-                ->schema([
-                    FileUpload::make('path')
-                        ->label(__('File'))
-                        ->disk('public')
-                        ->directory('requests-attachments')
-                        ->required()
-                        ->preserveFilenames()
-                        ->getUploadedFileNameForStorageUsing(fn ($file) => FileUploadHelper::getUniqueFilename($file, 'requests-attachments')),
-                ])
-                ->minItems(1)
-                ->defaultItems(1)
-                ->required()
-                ->collapsible(),
+                ->minFiles(1),
         ]);
     }
 }

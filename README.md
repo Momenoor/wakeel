@@ -142,6 +142,20 @@ php artisan storage:link
 npm run build
 ```
 
+### Attached files: private disk and the one-time move
+
+Files attached to records (fees, allocations, requests, matters …) are kept on the **private** disk `attachments` (`storage/app/attachments`) and opened only through the app, after a permission check — never by a public `/storage/…` address. Files attached before that was introduced are still on the public disk (`storage/app/public`) until they are moved. After updating an installation that has some, run once on the server (the migrations first):
+
+```bash
+php artisan migrate
+php artisan attachments:move --dry-run   # reports what it would move; changes nothing
+php artisan attachments:move             # does it
+```
+
+Each file is copied, checked against the original (size and sha256), its record pointed at the copy, and only then is the public copy deleted. It can be stopped and run again (it only looks at files still on the public disk), and in steps on shared hosting: `--limit=500 --chunk=100`. A file that is missing is counted and left; one that fails is reported (exit code 1) and left where it was. The old `/storage/…` address of a moved file still opens it for a signed-in user who may see it. The files an email of a matter lists stay on the public disk, where that email reads them.
+
+**Backups must include `storage/app/attachments`** (as well as `storage/app/public` and the database).
+
 ---
 
 ## Setting Up an Office

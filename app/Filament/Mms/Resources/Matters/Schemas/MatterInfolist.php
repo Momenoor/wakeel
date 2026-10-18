@@ -8,6 +8,8 @@ use App\Filament\Mms\Actions\Fee\CollectFeeAction;
 use App\Filament\Mms\Actions\Request\ApproveRequestAction;
 use App\Filament\Mms\Actions\Request\CreateRequestAction;
 use App\Filament\Mms\Actions\Request\RejectRequestAction;
+use App\Filament\Mms\Actions\Request\RequestChangesAction;
+use App\Filament\Mms\Actions\Request\ResubmitRequestAction;
 use App\Filament\Mms\Resources\CalendarEvents\CalendarEventResource;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
@@ -16,8 +18,8 @@ use App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager;
 use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
 use App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager;
 use App\Filament\Mms\Resources\Matters\RelationManagers\ProgressRelationManager;
+use App\Filament\Support\AttachFilesAction;
 use App\Filament\Support\EntryTable;
-use App\Helpers\FileUploadHelper;
 use App\Livewire\MatterContacts;
 use App\Livewire\MatterOneDriveFiles;
 use App\Models\CalendarEvent;
@@ -33,9 +35,6 @@ use App\Support\Currency;
 use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\FileUpload;
-use Filament\Forms\Components\Hidden;
-use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -59,8 +58,6 @@ use Filament\Support\Enums\TextSize;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Storage;
-use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class MatterInfolist
 {
@@ -598,13 +595,17 @@ class MatterInfolist
                                 TextEntry::make('name')
                                     ->hiddenLabel()
                                     ->icon('heroicon-o-paper-clip')
-                                    ->url(fn ($record) => Storage::disk('public')->url($record->path))
+                                    ->url(fn ($record) => $record->url())
                                     ->openUrlInNewTab()
                                     ->color('primary'),
                             ]),
+                        // The same as on the request's own page, for whoever works from the matter and has no
+                        // Requests list: approve, ask for changes, reject — and the assistant's corrected report.
                         Actions::make([
                             static::approveRequestAction(),
+                            RequestChangesAction::make(),
                             static::rejectRequestAction(),
+                            ResubmitRequestAction::make(),
                         ])
                             ->columnSpanFull()
                             ->alignEnd(),
@@ -1103,7 +1104,7 @@ class MatterInfolist
                             ->columnSpan(4)
                             ->alignStart()
                             ->icon('heroicon-o-document-text')
-                            ->url(fn ($record) => Storage::disk('public')->url($record->path))
+                            ->url(fn ($record) => $record->url())
                             ->openUrlInNewTab()
                             ->alignJustify(),
                         Actions::make([
@@ -1322,65 +1323,17 @@ class MatterInfolist
 
     private static function addAttachmentsAction(): Action
     {
-        return Action::make('addAttachments')
+        // The matter's own categories; it may be asked of whoever may add attachments to a matter.
+        return AttachFilesAction::make('addAttachments')
             ->label(__('Add Attachments'))
             ->icon('heroicon-o-plus')
             ->visible(fn ($record) => auth()->user()->can('createAttachment', $record))
             ->modalHeading(__('Add New Attachments'))
-            ->schema([
-                Repeater::make('attachments_data')
-                    ->label(__('Files'))
-                    ->schema([
-                        FileUpload::make('file')
-                            ->label(__('Attachment'))
-                            ->disk('public')
-                            ->directory('matter-attachments')
-                            ->visibility('public')
-                            ->required()
-                            ->getUploadedFileNameForStorageUsing(fn ($file) => FileUploadHelper::getUniqueFilename($file, 'matter-attachments'))
-                            ->live()
-                            ->afterStateUpdated(function ($state, $set) {
-                                if ($state instanceof TemporaryUploadedFile) {
-                                    $set('name', $state->getClientOriginalName());
-                                }
-                            }),
-                        Hidden::make('name'),
-                        Select::make('type')
-                            ->label(__('Type'))
-                            ->options([
-                                'initial_report' => __('Initial Report'),
-                                'final_report' => __('Final Report'),
-                                'supporting_document' => __('Supporting Document'),
-                                'correspondence' => __('Correspondence'),
-                                'minutes_signed' => __('Minutes signed'),
-                                'other' => __('Other'),
-                            ])
-                            ->required(),
-                    ])
-                    ->columns(2)
-                    ->addActionLabel(__('Add Another File')),
-            ])
-            ->action(function (array $data, $record, $component) {
-                $disk = Storage::disk('public');
-                if ($data['attachments_data']) {
-                    foreach ($data['attachments_data'] as $item) {
-                        $path = $item['file'];
-                        $record->attachments()->create([
-                            'user_id' => auth()->id(),
-                            'type' => $item['type'],
-                            'path' => $path,
-                            'name' => $item['name'] ?? basename($path),
-                            'size' => $disk->exists($path) ? $disk->size($path) : 0,
-                            'extension' => pathinfo($path, PATHINFO_EXTENSION) ?? '',
-                        ]);
-                    }
-                }
-
+            ->after(function ($record, $component) {
                 $record->refresh();
                 $record->unsetRelation('attachments');
                 static::refreshComponent($component);
-            })
-            ->successNotificationTitle(__('Attachments added successfully.'));
+            });
     }
 
     private static function downloadAttachmentAction(): Action
@@ -1403,7 +1356,6 @@ class MatterInfolist
             ->visible(fn ($record, $livewire) => auth()->user()->can('deleteAttachment', static::pageMatter($record, $livewire)))
             ->requiresConfirmation()
             ->action(function ($record, $component) {
-                Storage::disk('public')->delete($record->path);
                 $record->delete();
                 $component->getLivewire()->getRecord()->refresh();
                 $component->getLivewire()->getRecord()->unsetRelation('attachments');

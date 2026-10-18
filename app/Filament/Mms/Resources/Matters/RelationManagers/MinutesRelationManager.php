@@ -52,7 +52,6 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
 
 /**
@@ -548,7 +547,7 @@ class MinutesRelationManager extends RelationManager
                     ->state(fn (MinutesDelivery $record): array => collect($record->signed_attachments ?? [])
                         ->map(fn ($id) => $attachments->get($id))
                         ->filter()
-                        ->map(fn (Attachment $attachment): array => ['name' => $attachment->name, 'url' => Storage::disk('public')->url($attachment->path)])
+                        ->map(fn (Attachment $attachment): array => ['name' => $attachment->name, 'url' => $attachment->url()])
                         ->values()
                         ->all())
                     ->formatStateUsing(fn (array $state): string => (string) $state['name'])

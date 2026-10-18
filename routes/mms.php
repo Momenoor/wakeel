@@ -1,15 +1,16 @@
 <?php
 
 use App\Enums\BulkMailRecipientStatus;
+use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\BulkMailController;
 use App\Http\Controllers\EndOfServiceGratuityClosingVoucherPrintController;
 use App\Http\Controllers\IncentiveCalculationAssistantPrintController;
 use App\Http\Controllers\IncentiveCalculationPrintController;
 use App\Http\Controllers\LeaveRequestEmailActionController;
+use App\Http\Controllers\LegacyAttachmentPathController;
 use App\Http\Controllers\MatterReceivedNotificationController;
 use App\Http\Controllers\PayrollJournalVoucherPrintController;
 use App\Http\Controllers\SalaryAuthorizationFormPrintController;
-use App\Models\Attachment;
 use App\Models\BulkMailRecipient;
 use App\Models\MatterLetter;
 use App\Models\MatterMinutes;
@@ -18,7 +19,6 @@ use App\Services\MMS\Letters\LetterDocx;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterPdf;
 use App\Services\MMS\Letters\MinutesService;
-use App\Support\FileName;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\HeaderUtils;
@@ -117,16 +117,13 @@ Route::middleware('auth')->group(function () {
         return Storage::disk(BulkMailService::DISK)->download($path, BulkMailService::pdfFileName($recipient));
     })->name('bulk-mail.pdf');
 
-    Route::get('attachments/{attachment}/download', function (Attachment $attachment) {
-        abort_unless(auth()->user()->can('view', $attachment->matter), 403);
+    Route::get('attachments/{attachment}/download', AttachmentController::class)->name('attachment.download')->middleware('auth');
 
-        // The name it was saved under — "/" and the like taken out: a
-        // download named with one is refused.
-        return response()->download(
-            Storage::disk('public')->path($attachment->path),
-            FileName::safe((string) $attachment->name, 'attachment-'.$attachment->getKey())
-        );
-    })->name('attachment.download')->middleware('auth');
+    // A file attached before the private disk existed, at its old address: once moved off the public disk
+    // the web server finds nothing there and falls through to this — sent on to the file for who may see it.
+    // (Its parameter is not called {path}: Laravel's own route for the "local" disk has that very address, and
+    // the later of two routes of one address replaces the earlier.)
+    Route::get('storage/{oldPath}', LegacyAttachmentPathController::class)->where('oldPath', '.*')->name('attachment.legacy');
 
     Route::get('incentive/calculations/{calculation}/print', IncentiveCalculationPrintController::class)
         ->name('incentive.calculation.print')

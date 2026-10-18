@@ -2,11 +2,9 @@
 
 namespace App\Filament\Mms\Actions\Request;
 
-use App\Helpers\FileUploadHelper;
+use App\Filament\Support\AttachmentFields;
 use App\Services\MMS\Requests\RequestServiceFactory;
 use Filament\Actions\Action;
-use Filament\Forms\Components\FileUpload;
-use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Textarea;
 use Filament\Schemas\Schema;
 
@@ -35,21 +33,9 @@ class RejectRequestAction extends Action
     {
         return $schema->components([
             Textarea::make('approved_comment')->label(__('Reviewer Comment'))->required()->rows(2),
-            Repeater::make('attachments')
+            AttachmentFields::upload('attachments')
                 ->label(__('Attachments'))
-                ->schema([
-                    FileUpload::make('path')
-                        ->label(__('File'))
-                        ->disk('public')
-                        ->directory('requests-attachments')
-                        ->required()
-                        ->preserveFilenames()
-                        ->getUploadedFileNameForStorageUsing(fn ($file) => FileUploadHelper::getUniqueFilename($file, 'requests-attachments')),
-                ])
-                ->lazy()
-                ->defaultItems(fn ($record) => RequestServiceFactory::classFor($record->type)::rejectionRequiresAttachments() ? 1 : 0)
-                ->required(fn ($record) => RequestServiceFactory::classFor($record->type)::rejectionRequiresAttachments())
-                ->collapsible(),
+                ->required(fn ($record) => RequestServiceFactory::classFor($record->type)::rejectionRequiresAttachments()),
         ]);
     }
 }

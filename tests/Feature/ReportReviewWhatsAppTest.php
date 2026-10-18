@@ -55,6 +55,7 @@ class ReportReviewWhatsAppTest extends TestCase
         parent::setUp();
 
         Storage::fake('public');
+        Storage::fake('attachments');
         Mail::fake();
         // Who is told of a new request (admins and super admins).
         Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
@@ -217,8 +218,8 @@ class ReportReviewWhatsAppTest extends TestCase
 
         $this->press($mine, 'done');
 
-        // All four with the request, besides the report itself.
-        $this->assertSame(4, $this->request->refresh()->attachments()->where('name', 'like', 'request-attachment-%')->count());
+        // All four with the request (from WhatsApp, on the private disk), besides the report itself.
+        $this->assertSame(4, $this->request->refresh()->attachments()->where('source', 'whatsapp')->count());
         $this->assertSame(RequestStatus::NEEDS_CHANGES, $this->request->status);
     }
 
@@ -289,8 +290,9 @@ class ReportReviewWhatsAppTest extends TestCase
         $this->assertSame([RequestStatus::REJECTED, $this->reviewer->id], [$this->request->status, $this->request->approved_by]);
         $this->assertSame("Section 3 is wrong\nsee here", $this->request->approved_comment);
         // The picture kept with the request, as if uploaded there.
-        $picture = $this->request->attachments()->where('name', 'like', 'request-attachment-%')->sole();
-        $this->assertSame('PICTURE-BYTES', Storage::disk('public')->get($picture->path));
+        $picture = $this->request->attachments()->where('source', 'whatsapp')->sole();
+        $this->assertSame(['request', 'attachments'], [$picture->category->value, $picture->disk]);
+        $this->assertSame('PICTURE-BYTES', Storage::disk('attachments')->get($picture->path));
         // The assistant told, on the system.
         $this->assertSame('rejected', $mine->refresh()->decision);
         $this->assertCount(1, $this->assistant->notifications);

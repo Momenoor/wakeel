@@ -2,9 +2,12 @@
 
 namespace App\Models;
 
+use App\Enums\AttachmentCategory;
 use App\Enums\FeeStatus;
 use App\Enums\FeeType;
 use App\Models\Concerns\AnnouncesChanges;
+use App\Models\Concerns\HasAttachments;
+use App\Models\Contracts\AttachmentOwner;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,9 +16,10 @@ use Illuminate\Support\Facades\DB;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
-class Fee extends Model
+class Fee extends Model implements AttachmentOwner
 {
     use AnnouncesChanges;
+    use HasAttachments;
     use HasFactory;
     use LogsActivity;
 
@@ -234,5 +238,16 @@ class Fee extends Model
             $allocated <= $total + $allowance + $epsilon => FeeStatus::PAID,
             default => FeeStatus::OVERPAID,
         };
+    }
+
+    public function attachmentMatterId(): ?int
+    {
+        return $this->matter_id;
+    }
+
+    /** @return list<AttachmentCategory> */
+    public function attachmentCategories(): array
+    {
+        return [AttachmentCategory::FEE_INVOICE, AttachmentCategory::TAX_INVOICE, AttachmentCategory::CONTRACT, AttachmentCategory::GENERAL];
     }
 }

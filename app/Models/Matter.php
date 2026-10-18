@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Enums\AttachmentCategory;
 use App\Enums\MatterCollectionStatus;
 use App\Enums\MatterCommissiong;
 use App\Enums\MatterDifficulty;
 use App\Enums\MatterLevel;
 use App\Enums\MatterStatus;
 use App\Models\Concerns\AnnouncesChanges;
+use App\Models\Concerns\HasAttachments;
+use App\Models\Contracts\AttachmentOwner;
 use App\Observers\MatterObserver;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
@@ -29,9 +32,10 @@ use Spatie\Activitylog\Support\LogOptions;
  * @property mixed $status
  */
 #[ObservedBy(MatterObserver::class)]
-class Matter extends Model
+class Matter extends Model implements AttachmentOwner
 {
     use AnnouncesChanges;
+    use HasAttachments;
     use HasFactory;
     use LogsActivity;
     use SoftDeletes;
@@ -515,5 +519,16 @@ class Matter extends Model
         return CalendarEvent::query()->where(fn (Builder $query) => $query
             ->where('matter_id', $this->getKey())
             ->orWhereHas('matters', fn (Builder $q) => $q->whereKey($this->getKey())));
+    }
+
+    public function attachmentMatterId(): ?int
+    {
+        return $this->getKey();
+    }
+
+    /** @return list<AttachmentCategory> */
+    public function attachmentCategories(): array
+    {
+        return [AttachmentCategory::GENERAL, AttachmentCategory::COURT_DOCUMENT, AttachmentCategory::REPORT, AttachmentCategory::CORRESPONDENCE, AttachmentCategory::MINUTES_SIGNED, AttachmentCategory::CONTRACT];
     }
 }
