@@ -154,6 +154,9 @@ class NotificationPreferencesTest extends TestCase
 
         $key = fn (Type $type, Channel $channel) => Fields::STATE.'.'.str_replace('.', '__', $type->value).'.'.$channel->value;
 
+        // The whole width of the page, in two columns.
+        $this->assertSame(\Filament\Support\Enums\Width::Full, (new CustomProfile)->getMaxContentWidth());
+
         Livewire::test(CustomProfile::class)
             ->assertFormSet([$key(Type::REQUEST_DECIDED, Channel::MAIL) => true, $key(Type::REQUEST_DECIDED, Channel::BELL) => true, $key(Type::REQUEST_DECIDED, Channel::WHATSAPP) => false])
             // Mandatory is shown on and cannot be changed; what the role does not offer is not on the page.

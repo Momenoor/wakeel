@@ -79,6 +79,7 @@ class NotificationPreferenceFields
         foreach (collect($preferences->visibleTypes($user))->groupBy(fn (NotificationType $type): string => $type->area()) as $area => $types) {
             $sections[] = Section::make($area)
                 ->collapsible()
+                ->columnSpan(1)
                 ->schema($types->map(fn (NotificationType $type): Fieldset => Fieldset::make($type->label())
                     ->columns(3)
                     ->schema(collect($type->channels())

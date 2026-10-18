@@ -4155,5 +4155,6 @@
     "System Announcement": "الإعلان العام",
     "The matter's experts chosen in Settings → Letters & emails and the email template's own CC are put here; remove any you don't want.": "يُضاف هنا خبراء القضية المحددون في الإعدادات ← المراسلات ← الخطابات والمراسلات ونسخة قالب البريد؛ احذف من لا تريده.",
     "Copied in whenever this email is used, besides the matter's experts chosen in Settings → Letters & emails. Can still be changed when sending.": "نسخة في كل مرة يُستخدم فيها هذا البريد، إضافةً إلى خبراء القضية المحددين في الإعدادات ← المراسلات ← الخطابات والمراسلات. يمكن تعديلها عند الإرسال.",
-    "The system": "النظام"
+    "The system": "النظام",
+    "Leave empty to keep the current password.": "اتركها فارغة للإبقاء على كلمة المرور الحالية."
 }
