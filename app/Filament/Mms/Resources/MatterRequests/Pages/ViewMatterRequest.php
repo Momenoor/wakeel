@@ -4,6 +4,8 @@ namespace App\Filament\Mms\Resources\MatterRequests\Pages;
 
 use App\Filament\Mms\Actions\Request\ApproveRequestAction;
 use App\Filament\Mms\Actions\Request\RejectRequestAction;
+use App\Filament\Mms\Actions\Request\RequestChangesAction;
+use App\Filament\Mms\Actions\Request\ResubmitRequestAction;
 use App\Filament\Mms\Resources\MatterRequests\MatterRequestResource;
 use Filament\Resources\Pages\ViewRecord;
 
@@ -15,7 +17,9 @@ class ViewMatterRequest extends ViewRecord
     {
         return [
             ApproveRequestAction::make(),
+            RequestChangesAction::make(),
             RejectRequestAction::make(),
+            ResubmitRequestAction::make(),
             //            Action::make('sendWhatsApp')
             //                ->label('Send WhatsApp')
             //                ->icon('heroicon-o-phone')

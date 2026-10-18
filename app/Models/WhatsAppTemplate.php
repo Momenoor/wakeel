@@ -18,6 +18,9 @@ class WhatsAppTemplate extends Model
     /** Minutes sent to the attendees to sign and send back. */
     public const MINUTES_SIGNATURE = 'minutes_signature';
 
+    /** A report sent to its reviewer to approve, reject or ask for changes (3 quick-reply buttons). */
+    public const REPORT_REVIEW = 'report_review';
+
     protected $table = 'whatsapp_templates';
 
     public function casts(): array
@@ -44,7 +47,7 @@ class WhatsAppTemplate extends Model
      */
     public static function purposes(): array
     {
-        return [self::MINUTES_SIGNATURE => __('Minutes for signature')];
+        return [self::MINUTES_SIGNATURE => __('Minutes for signature'), self::REPORT_REVIEW => __('Report for review')];
     }
 
     public static function default(string $purpose): ?self

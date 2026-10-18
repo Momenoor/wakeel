@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\MMS\Letters\MinutesSignedCopies;
+use App\Services\MMS\Requests\ReportReviewWhatsApp;
 use App\Services\WhatsAppCloud;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -16,8 +17,9 @@ use function Illuminate\Support\defer;
  *
  * GET  — Meta checking the URL: the challenge back, for the right token.
  * POST — messages people sent in, signed with the app secret: a file sent
- *        back on minutes sent for signature is taken in — after the answer
- *        has gone, as Meta wants one within seconds.
+ *        back on minutes sent for signature is taken in, and so are the buttons
+ *        and replies of a report being reviewed — after the answer has gone, as
+ *        Meta wants one within seconds.
  */
 class WhatsAppWebhookController extends Controller
 {
@@ -30,7 +32,7 @@ class WhatsAppWebhookController extends Controller
         return response((string) $request->query('hub_challenge'), 200, ['Content-Type' => 'text/plain']);
     }
 
-    public function receive(Request $request, MinutesSignedCopies $copies): Response
+    public function receive(Request $request, MinutesSignedCopies $copies, ReportReviewWhatsApp $reviews): Response
     {
         abort_unless(WhatsAppCloud::validSignature($request->getContent(), $request->header('X-Hub-Signature-256')), 403);
 
@@ -42,10 +44,11 @@ class WhatsAppWebhookController extends Controller
             ->all();
 
         if ($messages !== []) {
-            defer(function () use ($messages, $copies) {
+            defer(function () use ($messages, $copies, $reviews) {
                 foreach ($messages as $message) {
                     try {
-                        $copies->receive($message);
+                        // A report being reviewed (a button, or the text of a rejection) first; anything else may be a signed copy.
+                        $reviews->receive($message) || $copies->receive($message);
                     } catch (\Throwable $e) {
                         Log::error('WhatsApp message not taken in', ['id' => $message['id'] ?? null, 'error' => $e->getMessage()]);
                     }

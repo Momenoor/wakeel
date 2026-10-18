@@ -340,6 +340,17 @@ class Party extends Model
             ->withTimestamps();
     }
 
+    /**
+     * The users who review this assistant's reports — on WhatsApp, when they have a number (see
+     * ReportReviewWhatsApp).
+     *
+     * @return BelongsToMany<User, $this>
+     */
+    public function reportReviewers(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'party_report_reviewers', 'party_id', 'user_id')->withTimestamps();
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');

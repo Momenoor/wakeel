@@ -84,7 +84,7 @@ class LeaveRequestsTable
             ->filters([
                 SelectFilter::make('status')
                     ->label(__('Status'))
-                    ->options(RequestStatus::class)
+                    ->options(collect(RequestStatus::cases())->reject(fn (RequestStatus $status) => $status === RequestStatus::NEEDS_CHANGES)->mapWithKeys(fn (RequestStatus $status) => [$status->value => $status->getLabel()])->all())
                     ->multiple()
                     // The queue opens on what still needs a decision. Anything
                     // already handled is one filter click away.

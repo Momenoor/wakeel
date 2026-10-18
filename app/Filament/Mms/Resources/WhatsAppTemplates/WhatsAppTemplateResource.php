@@ -123,7 +123,7 @@ class WhatsAppTemplateResource extends Resource
                 ->schema([
                     TextEntry::make('meta_help')
                         ->hiddenLabel()
-                        ->state(new HtmlString(nl2br(e(__('In WhatsApp Manager → Message templates → Create template: category Utility, the name and language above, header "Document", and the message text with the parameters by name (no parameter at the very start or end). Once Meta approves it, it can be sent.'))))),
+                        ->state(new HtmlString(nl2br(e(__('In WhatsApp Manager → Message templates → Create template: category Utility, the name and language above, header "Document", and the message text with the parameters by name (no parameter at the very start or end). Once Meta approves it, it can be sent. A template for a report for review also needs three quick-reply buttons in this order: Approve, Reject, Needs changes; and its parameters may use {{reviewer}}, {{assistant}}, {{request_type}}, {{request_number}}, {{matter}}, {{comment}} and {{file}}.'))))),
                 ]),
         ]);
     }

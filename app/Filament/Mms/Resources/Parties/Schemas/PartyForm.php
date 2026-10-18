@@ -87,6 +87,16 @@ class PartyForm
                             ->maxLength(255)
                             ->extraInputAttributes(['dir' => 'auto'])
                             ->visible(fn ($get) => in_array('assistant', $get('role.type') ?? [])),
+                        // Who reviews this assistant's reports: each Review Report / Confirm Report request goes to them on WhatsApp.
+                        Select::make('reportReviewers')
+                            ->label(__('Report reviewers (WhatsApp)'))
+                            ->relationship('reportReviewers', 'name')
+                            ->multiple()
+                            ->preload()
+                            ->searchable()
+                            ->helperText(__('Each report this assistant sends for review goes to these users on WhatsApp, to approve, reject or ask for changes there. They need a WhatsApp number on their profile; the first to answer decides.'))
+                            ->columnSpanFull()
+                            ->visible(fn ($get) => in_array('assistant', $get('role.type') ?? [])),
                         // A matter's folder is moved here once the matter is finished (its final report).
                         TextInput::make('onedrive_finished_path')
                             ->label(__('Folder for finished matters in their OneDrive'))

@@ -45,8 +45,10 @@ class MatterRequest extends Model
     protected static function booted(): void
     {
         static::deleting(function (MatterRequest $request) {
-            if ($request->type == RequestType::REVIEW_REPORT && $request->matter->review_count > 0) {
-                $request->matter->decrement('review_count');
+            // The review it was (a Review Report) and each time a reviewer asked for changes to it.
+            $counted = ($request->type == RequestType::REVIEW_REPORT ? 1 : 0) + (int) ($request->extra['modifications'] ?? 0);
+            if ($counted > 0 && $request->matter->review_count > 0) {
+                $request->matter->update(['review_count' => max(0, $request->matter->review_count - $counted)]);
             }
             $request->attachments->each->delete();
         });

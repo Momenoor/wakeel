@@ -81,8 +81,9 @@ class WhatsAppCloud
      *
      * @param  array<string, string>  $parameters
      * @param  array{id: string, filename: string}|null  $document
+     * @param  list<string>  $buttons  the payload of each quick-reply button, in order: what comes back when it is pressed
      */
-    public function sendTemplate(string $to, string $name, string $language, array $parameters, ?array $document = null): string
+    public function sendTemplate(string $to, string $name, string $language, array $parameters, ?array $document = null, array $buttons = []): string
     {
         $components = [];
 
@@ -94,6 +95,10 @@ class WhatsAppCloud
             $components[] = ['type' => 'body', 'parameters' => collect($parameters)
                 ->map(fn (string $text, string $key) => ['type' => 'text', 'parameter_name' => $key, 'text' => $text])
                 ->values()->all()];
+        }
+
+        foreach (array_values($buttons) as $index => $payload) {
+            $components[] = ['type' => 'button', 'sub_type' => 'quick_reply', 'index' => (string) $index, 'parameters' => [['type' => 'payload', 'payload' => $payload]]];
         }
 
         $response = $this->http()->post(self::GRAPH.'/'.config('services.whatsapp.phone_id').'/messages', [
@@ -120,6 +125,26 @@ class WhatsAppCloud
             'to' => $to,
             'type' => 'text',
             'text' => ['body' => $text],
+        ]));
+    }
+
+    /**
+     * A message with up to three buttons — allowed only within 24 hours of theirs. Each button's
+     * id comes back when it is pressed; its title is at most 20 characters.
+     *
+     * @param  array<string, string>  $buttons  id => title
+     */
+    public function sendButtons(string $to, string $text, array $buttons): void
+    {
+        $this->ok($this->http()->post(self::GRAPH.'/'.config('services.whatsapp.phone_id').'/messages', [
+            'messaging_product' => 'whatsapp',
+            'to' => $to,
+            'type' => 'interactive',
+            'interactive' => [
+                'type' => 'button',
+                'body' => ['text' => $text],
+                'action' => ['buttons' => collect($buttons)->take(3)->map(fn (string $title, string $id) => ['type' => 'reply', 'reply' => ['id' => $id, 'title' => mb_substr($title, 0, 20)]])->values()->all()],
+            ],
         ]));
     }
 

@@ -101,6 +101,70 @@ abstract class BaseRequestService
             || ($this->request->status === RequestStatus::PENDING && auth()->id() === $this->request->request_by);
     }
 
+    /** Whether a reviewer can send this type back for changes (reports). */
+    public static function supportsChanges(): bool
+    {
+        return false;
+    }
+
+    /**
+     * The reviewer wants changes: the request goes back to the assistant with what to change (their
+     * text and files), and it counts as a review of the matter. Not rejected — the assistant sends the
+     * corrected report on the same request (resubmit()).
+     *
+     * @param  array{approved_comment?: ?string, attachments?: array}  $data
+     */
+    public function requestChanges(array $data = [], $component = null): void
+    {
+        $this->request->update([
+            'status' => RequestStatus::NEEDS_CHANGES,
+            'approved_by' => auth()->id(),
+            'approved_at' => now(),
+            'approved_comment' => $data['approved_comment'] ?? null,
+        ]);
+        $this->storeFile($data['attachments'] ?? []);
+
+        $this->request->matter->increment('review_count');
+        $this->request->update(['extra' => [...(array) $this->request->extra, 'modifications' => (int) ($this->request->extra['modifications'] ?? 0) + 1]]);
+
+        $this->onActionNotify(
+            __('Changes requested'),
+            __('Changes were requested on your request. Details: :reason', ['reason' => $this->request->approved_comment])
+        );
+        $this->refresh($component);
+    }
+
+    /**
+     * The assistant's corrected report, sent for review again on the same request: back to pending, its
+     * files added, the reviewers told (on WhatsApp too). What was asked is kept in its history.
+     *
+     * @param  array{comment?: ?string, attachments?: array}  $data
+     */
+    public function resubmit(array $data = [], $component = null): void
+    {
+        $extra = (array) $this->request->extra;
+        $extra['rounds'] = [...($extra['rounds'] ?? []), [
+            'asked_at' => $this->request->approved_at?->toDateTimeString(),
+            'asked_by' => $this->request->approved_by,
+            'reason' => $this->request->approved_comment,
+            // The files of the new round are those added after this one.
+            'attachments_from' => (int) $this->request->attachments()->max('id'),
+        ]];
+
+        $this->request->update([
+            'status' => RequestStatus::PENDING,
+            'approved_by' => null,
+            'approved_at' => null,
+            'approved_comment' => null,
+            'comment' => filled($data['comment'] ?? null) ? $data['comment'] : $this->request->comment,
+            'extra' => $extra,
+        ]);
+        $this->storeFile($data['attachments'] ?? []);
+
+        $this->onCreateNotify(again: true);
+        $this->refresh($component);
+    }
+
     protected function markApproved(array $data): void
     {
         $this->request->update([
@@ -181,7 +245,7 @@ abstract class BaseRequestService
         }
     }
 
-    public function onCreateNotify(): void
+    public function onCreateNotify(bool $again = false): void
     {
         try {
             // Not an authorization decision — Gate::before has nothing to say
@@ -190,14 +254,21 @@ abstract class BaseRequestService
             // hardcoded literal that has to be kept in sync with it by hand.
             $users = User::role(['admin', Utils::getSuperAdminName()])->get();
             $this->notify(
-                __('Request Created'),
-                __('A new :type request has been created, for matter #:number / :year', [
+                $again ? __('Request Resubmitted') : __('Request Created'),
+                __($again ? 'The :type request for matter #:number / :year was corrected and sent again' : 'A new :type request has been created, for matter #:number / :year', [
                     'type' => $this->request->type->getLabel(),
                     'number' => $this->request->matter->number,
                     'year' => $this->request->matter->year,
                 ]),
                 $users
             );
+
+            // The assistant's reviewers (Parties → the assistant): the report on WhatsApp, to answer there.
+            try {
+                app(ReportReviewWhatsApp::class)->send($this->request);
+            } catch (\Throwable $e) {
+                \Log::warning('Report not sent to its reviewers on WhatsApp: '.$e->getMessage(), ['request' => $this->request->getKey()]);
+            }
 
             $whatsappUsers = $users->filter(function ($user) {
                 return $user->notify_by_whatsapp;

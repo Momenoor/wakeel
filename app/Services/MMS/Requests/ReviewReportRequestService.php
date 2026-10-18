@@ -7,6 +7,11 @@ use Filament\Forms\Components\Toggle;
 
 class ReviewReportRequestService extends BaseRequestService
 {
+    public static function supportsChanges(): bool
+    {
+        return true;
+    }
+
     public static function requiresAttachmentsOnCreate(): bool
     {
         return true;

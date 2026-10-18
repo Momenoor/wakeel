@@ -67,7 +67,7 @@ class MatterRequestsTable
                     ->options(RequestStatus::class)
                     ->multiple()
                     ->label(__('Status'))
-                    ->default([RequestStatus::PENDING, RequestStatus::DISPUTED]),
+                    ->default([RequestStatus::PENDING, RequestStatus::DISPUTED, RequestStatus::NEEDS_CHANGES]),
                 SelectFilter::make('type')
                     ->options(RequestType::class)
                     ->multiple()
