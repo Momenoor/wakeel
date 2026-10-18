@@ -73,13 +73,43 @@ class NotificationPreferenceFields
      */
     public static function forUser(User $user): array
     {
+        return array_column(self::areas($user), 'section');
+    }
+
+    /**
+     * The user's areas shared out between two columns, each stacking its sections — none beside a
+     * taller one, so no gaps — a section to the shorter column, longest first. The columns may start
+     * with something already (the weights: roughly the fields above them).
+     *
+     * @return array{0: list<Component>, 1: list<Component>}
+     */
+    public static function forUserInColumns(User $user, int $leftStart = 0, int $rightStart = 0): array
+    {
+        $columns = [[], []];
+        $heights = [$leftStart, $rightStart];
+
+        foreach (collect(self::areas($user))->sortByDesc('weight') as $area) {
+            $to = $heights[0] <= $heights[1] ? 0 : 1;
+            $columns[$to][] = $area['section'];
+            $heights[$to] += $area['weight'];
+        }
+
+        return $columns;
+    }
+
+    /**
+     * @return list<array{section: Section, weight: int}> each area, with how many fields it has
+     */
+    private static function areas(User $user): array
+    {
         $preferences = NotificationPreferences::make();
-        $sections = [];
+        $areas = [];
 
         foreach (collect($preferences->visibleTypes($user))->groupBy(fn (NotificationType $type): string => $type->area()) as $area => $types) {
-            $sections[] = Section::make($area)
+            $weight = 0;
+            $section = Section::make($area)
                 ->collapsible()
-                ->columnSpan(1)
+                ->columnSpanFull()
                 ->schema($types->map(fn (NotificationType $type): Fieldset => Fieldset::make($type->label())
                     ->columns(3)
                     ->schema(collect($type->channels())
@@ -90,9 +120,15 @@ class NotificationPreferenceFields
                             ->helperText($preferences->state($user, $type, $channel) === NotificationPreferences::LOCKED ? __('Required by your role') : null))
                         ->all()))
                     ->all());
+
+            foreach ($types as $type) {
+                $weight += 1 + collect($type->channels())->reject(fn (NotificationChannel $channel): bool => $preferences->state($user, $type, $channel) === NotificationPreferences::HIDDEN)->count();
+            }
+
+            $areas[] = ['section' => $section, 'weight' => $weight];
         }
 
-        return $sections;
+        return $areas;
     }
 
     /**

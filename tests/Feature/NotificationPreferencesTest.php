@@ -154,7 +154,8 @@ class NotificationPreferencesTest extends TestCase
 
         $key = fn (Type $type, Channel $channel) => Fields::STATE.'.'.str_replace('.', '__', $type->value).'.'.$channel->value;
 
-        // The whole width of the page, in two columns.
+        // The whole width of the page, in two columns — on the normal layout, where the pinned chat and to-do list make room.
+        $this->assertFalse(CustomProfile::isSimple());
         $this->assertSame(\Filament\Support\Enums\Width::Full, (new CustomProfile)->getMaxContentWidth());
 
         Livewire::test(CustomProfile::class)
@@ -171,6 +172,20 @@ class NotificationPreferencesTest extends TestCase
         $this->assertSame(Prefs::OFF, Prefs::make()->state($user, Type::REQUEST_DECIDED, Channel::MAIL));
         $this->assertSame(Prefs::ON, Prefs::make()->state($user, Type::REQUEST_DECIDED, Channel::WHATSAPP));
         $this->assertSame(Prefs::LOCKED, Prefs::make()->state($user, Type::REQUEST_DECIDED, Channel::BELL));
+    }
+
+    public function test_the_profile_areas_are_shared_between_two_columns_without_losing_any(): void
+    {
+        $user = $this->user();
+
+        $all = Fields::forUser($user);
+        [$left, $right] = Fields::forUserInColumns($user, leftStart: 8, rightStart: 3);
+
+        // Every area once, in one column or the other — and both columns have some.
+        $labels = fn (array $sections) => array_map(fn ($section) => $section->getHeading(), $sections);
+        $this->assertEqualsCanonicalizing($labels($all), [...$labels($left), ...$labels($right)]);
+        $this->assertNotEmpty($left);
+        $this->assertNotEmpty($right);
     }
 
     public function test_the_settings_page_sets_a_roles_states(): void

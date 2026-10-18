@@ -72,7 +72,7 @@ trait SharesPanelConfiguration
             ->darkModeBrandLogo(fn (): string => Branding::logoUrl(dark: true))
             ->brandLogoHeight('4rem')
             ->favicon(fn (): string => Branding::faviconUrl())
-            ->profile(CustomProfile::class)
+            ->profile(CustomProfile::class, isSimple: false)
             ->renderHook(
                 PanelsRenderHook::USER_MENU_PROFILE_AFTER,
                 fn () => Blade::render('@livewire(\'font-size-slider\')')

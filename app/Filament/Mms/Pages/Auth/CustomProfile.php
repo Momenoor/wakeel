@@ -7,7 +7,10 @@ use App\Services\Notifications\NotificationPreferences;
 use Filament\Auth\Pages\EditProfile;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\TextInput;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Text;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\Width;
 
@@ -15,11 +18,6 @@ class CustomProfile extends EditProfile
 {
     /** @var array<string, array<string, bool>> */
     protected array $notificationChoices = [];
-
-    public function hasLogo(): bool
-    {
-        return true;
-    }
 
     /** The whole width of the page: two columns of sections side by side. */
     public function getMaxContentWidth(): Width|string|null
@@ -29,52 +27,59 @@ class CustomProfile extends EditProfile
 
     public function form(Schema $schema): Schema
     {
-        return $schema
-            ->columns(2)
-            ->components([
-                // Who they are: the picture beside the name, display name and email.
-                Section::make(__('Account'))
-                    ->icon('heroicon-o-user')
-                    ->columnSpan(1)
-                    ->columns(2)
-                    ->schema([
-                        FileUpload::make('profile_photo_path')
-                            ->label(__('Avatar'))
-                            ->avatar()
-                            ->image()
-                            ->imageEditor()
-                            ->columnSpanFull()
-                            ->alignCenter(),
-                        TextInput::make('name')
-                            ->label(__('Name'))
-                            ->required(),
-                        TextInput::make('display_name')
-                            ->label(__('Display Name'))
-                            ->required(),
-                        TextInput::make('email')
-                            ->label(__('Email'))
-                            ->required()
-                            ->email()
-                            ->columnSpanFull(),
-                    ]),
-                // Changing it: the new one twice, and the current one to confirm.
-                Section::make(__('Password'))
-                    ->description(__('Leave empty to keep the current password.'))
-                    ->icon('heroicon-o-key')
-                    ->columnSpan(1)
-                    ->schema([
-                        $this->getPasswordFormComponent(),
-                        $this->getPasswordConfirmationFormComponent(),
-                        $this->getCurrentPasswordFormComponent(),
-                    ]),
-                // What they are told of, by which channel — within what their roles offer. The areas side by side.
-                Section::make(__('My notifications'))
-                    ->description(__('Choose what you are told of, and how: the bell (with its pop-up and your phone), email or WhatsApp. What your role requires is on and cannot be changed.'))
-                    ->icon('heroicon-o-bell')
-                    ->columnSpanFull()
-                    ->columns(2)
-                    ->schema(fn (): array => NotificationPreferenceFields::forUser($this->getUser())),
-            ]);
+        // The notification areas shared between the two columns by their size — the account has about
+        // eight fields above its column, the password three.
+        [$left, $right] = NotificationPreferenceFields::forUserInColumns($this->getUser(), leftStart: 8, rightStart: 3);
+
+        return $schema->components([
+            Grid::make(2)
+                ->columnSpanFull()
+                ->schema([
+                    // Each column its own stack of sections, so a short one never leaves a gap beside a tall one.
+                    Group::make([
+                        // Who they are: the picture, the name, display name and email.
+                        Section::make(__('Account'))
+                            ->icon('heroicon-o-user')
+                            ->columns(2)
+                            ->schema([
+                                FileUpload::make('profile_photo_path')
+                                    ->label(__('Avatar'))
+                                    ->avatar()
+                                    ->image()
+                                    ->imageEditor()
+                                    ->columnSpanFull()
+                                    ->alignCenter(),
+                                TextInput::make('name')
+                                    ->label(__('Name'))
+                                    ->required(),
+                                TextInput::make('display_name')
+                                    ->label(__('Display Name'))
+                                    ->required(),
+                                TextInput::make('email')
+                                    ->label(__('Email'))
+                                    ->required()
+                                    ->email()
+                                    ->columnSpanFull(),
+                            ]),
+                        // What they are told of, by which channel — within what their roles offer.
+                        Text::make(__('Choose what you are told of, and how: the bell (with its pop-up and your phone), email or WhatsApp. What your role requires is on and cannot be changed.'))
+                            ->color('gray'),
+                        ...$left,
+                    ])->columnSpan(1),
+                    Group::make([
+                        // Changing it: the new one twice, and the current one to confirm.
+                        Section::make(__('Password'))
+                            ->description(__('Leave empty to keep the current password.'))
+                            ->icon('heroicon-o-key')
+                            ->schema([
+                                $this->getPasswordFormComponent()->inlineLabel(false),
+                                $this->getPasswordConfirmationFormComponent()->inlineLabel(false),
+                                $this->getCurrentPasswordFormComponent()->inlineLabel(false),
+                            ]),
+                        ...$right,
+                    ])->columnSpan(1),
+                ]),
+        ]);
     }
 
     protected function mutateFormDataBeforeFill(array $data): array
