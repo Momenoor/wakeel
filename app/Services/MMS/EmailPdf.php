@@ -2,17 +2,18 @@
 
 namespace App\Services\MMS;
 
-use App\Support\Branding;
 use App\Models\LetterFont;
-use Mpdf\Config\ConfigVariables;
-use Mpdf\Exception\FontException;
-use Mpdf\Config\FontVariables;
+use App\Support\Branding;
+use App\Support\Tolerant;
 use Carbon\CarbonInterface;
 use DOMDocument;
 use DOMElement;
 use DOMXPath;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
+use Mpdf\Config\ConfigVariables;
+use Mpdf\Config\FontVariables;
+use Mpdf\Exception\FontException;
 use Mpdf\Mpdf;
 use Mpdf\Output\Destination;
 
@@ -152,11 +153,16 @@ class EmailPdf
 
         $recipient = (object) ['name' => $toName, 'email' => $to];
 
-        $mpdf->WriteHTML(view('mails.bulk-mail-pdf', compact(
+        $page = view('mails.bulk-mail-pdf', compact(
             'html', 'subject', 'sender', 'recipient', 'sentAt', 'cc', 'bcc', 'attachments', 'attachmentsSize', 'isRtl', 'brand', 'fontFamily',
-        ))->render());
+        ))->render();
 
-        return $mpdf->Output('', Destination::STRING_RETURN);
+        // mPDF warns over odd HTML (an Outlook email's "Undefined array key 'type'"): the PDF made all the same.
+        return Tolerant::run(function () use ($mpdf, $page): string {
+            $mpdf->WriteHTML($page);
+
+            return $mpdf->Output('', Destination::STRING_RETURN);
+        });
     }
 
     /**

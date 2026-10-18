@@ -4,6 +4,7 @@ namespace App\Services\MMS;
 
 use App\Models\BulkMailCampaign;
 use App\Models\BulkMailRecipient;
+use App\Support\FileName;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Mpdf\MpdfException;
@@ -120,7 +121,7 @@ class BulkMailService
         ]));
 
         // Characters Windows refuses in a file name, and runs of whitespace.
-        $name = trim(preg_replace(['/[\\\\\/:"*?<>|\x00-\x1F]+/u', '/\s+/u'], [' ', ' '], $name));
+        $name = FileName::safe($name, 'mail');
 
         return rtrim(mb_substr($name, 0, 75)).'.pdf';
     }

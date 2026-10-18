@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\PayrollRunStatus;
+use App\Models\Concerns\AnnouncesChanges;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -15,6 +16,7 @@ use Spatie\Activitylog\Support\LogOptions;
  */
 class PayrollRun extends Model
 {
+    use AnnouncesChanges;
     use LogsActivity;
 
     protected $fillable = [

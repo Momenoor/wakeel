@@ -18,6 +18,7 @@ use App\Services\MMS\Letters\LetterDocx;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterPdf;
 use App\Services\MMS\Letters\MinutesService;
+use App\Support\FileName;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\HeaderUtils;
@@ -119,9 +120,11 @@ Route::middleware('auth')->group(function () {
     Route::get('attachments/{attachment}/download', function (Attachment $attachment) {
         abort_unless(auth()->user()->can('view', $attachment->matter), 403);
 
+        // The name it was saved under — "/" and the like taken out: a
+        // download named with one is refused.
         return response()->download(
             Storage::disk('public')->path($attachment->path),
-            $attachment->name  // original filename from DB
+            FileName::safe((string) $attachment->name, 'attachment-'.$attachment->getKey())
         );
     })->name('attachment.download')->middleware('auth');
 

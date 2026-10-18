@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\AnnouncesChanges;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -19,6 +20,8 @@ use Throwable;
  */
 class MatterEmail extends Model
 {
+    use AnnouncesChanges;
+
     public const SENT = 'sent';
 
     public const RECEIVED = 'received';

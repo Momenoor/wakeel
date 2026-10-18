@@ -21,10 +21,12 @@ use App\Services\MMS\IncomingEmailMatcher;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterReplyCollector;
 use App\Services\MMS\SentFolder;
+use App\Support\Tolerant;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -652,7 +654,7 @@ class IncomingMatterEmailsTest extends TestCase
         // One that was unread in the mailbox, one already read, one collected long ago.
         $this->collect(
             $this->email(['subject' => 'مستندات 986/2026', 'message_id' => '<unread@albanna.ae>', 'was_read' => false]),
-            $this->email(['subject' => 'ملاحظات 986/2026', 'message_id' => '<read@albanna.ae>', 'was_read' => true]),
+            $this->email(['subject' => 'ملاحظات 986/2026', 'message_id' => '<read@albanna.ae>', 'was_read' => true, 'at' => now()->subDays(3)->toDateTimeString()]),
         );
         $this->collect($this->email(['subject' => 'قديم 986/2026', 'message_id' => '<old@albanna.ae>']));
         $old = MatterEmail::where('message_id', 'old@albanna.ae')->sole();
@@ -678,10 +680,39 @@ class IncomingMatterEmailsTest extends TestCase
         $pdfs = array_values(array_filter($od->names('Work/2026-986/واردة'), fn ($n) => str_ends_with($n, '.pdf')));
         $this->assertCount(1, $pdfs);
         $this->assertStringContainsString('قديم', $pdfs[0]);
-        // Read again from then, and at once.
-        $this->assertTrue(now()->subHours(2)->subMinute()->lt(Setting::get(MatterReplyCollector::checkedKey('iflas'))));
-        $this->assertTrue(now()->subHours(2)->addMinute()->gt(Setting::get(MatterReplyCollector::checkedKey('iflas'))));
+        // Read again from when the oldest of them arrived (three days back, a backlog), and at once.
+        $this->assertTrue(now()->subDays(3)->subMinute()->lt(Setting::get(MatterReplyCollector::checkedKey('iflas'))));
+        $this->assertTrue(now()->subDays(3)->addMinute()->gt(Setting::get(MatterReplyCollector::checkedKey('iflas'))));
         $this->assertTrue(MatterReplyCollector::isDue());
+    }
+
+    public function test_the_automatic_run_with_nobody_signed_in_still_keeps_the_pdf_with_the_matter(): void
+    {
+        Auth::forgetGuards();
+        $this->assertNull(auth()->id());
+
+        $this->collect($this->email(['subject' => 'مستندات القضية 986/2026']));
+
+        $email = MatterEmail::sole();
+        $this->assertNotNull($email->files[0]['path']);
+        $attachment = $this->first->attachments()->where('path', $email->files[0]['path'])->sole();
+        $this->assertNull($attachment->user_id);
+    }
+
+    public function test_a_library_warning_over_an_odd_email_does_not_lose_it(): void
+    {
+        // What the IMAP decoder and mPDF do with an odd byte or tag: warn — let pass, the work done.
+        $this->assertIsString(Tolerant::run(fn () => iconv('UTF-8', 'ASCII//IGNORE', "caf\xE9 ok")));
+        $this->assertNull(Tolerant::run(function () {
+            $part = [];
+
+            return $part['type'];
+        }));
+
+        // Outside it, Laravel still turns a warning into an error.
+        $this->expectException(\ErrorException::class);
+        $part = [];
+        $part['type'];
     }
 
     public function test_set_to_keep_every_email_a_strangers_goes_to_unfiled_to_file_on_any_matter(): void

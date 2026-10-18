@@ -7,6 +7,7 @@ use App\Livewire\NotificationPoller;
 use App\Models\User;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
+use Filament\Notifications\DatabaseNotification;
 use Filament\Notifications\Notification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
@@ -57,6 +58,29 @@ class DesktopNotificationTest extends TestCase
         Livewire::test(NotificationPoller::class)
             ->call('checkNotifications')
             ->assertNotDispatched('wakeel-desktop-notification');
+    }
+
+    public function test_a_page_opened_as_another_user_keeps_its_listener_after_the_session_changes(): void
+    {
+        // Opened as user A, then signed in as B (impersonating, another tab):
+        // the page is still on A's channel and its events name A. They used
+        // to fail the request ("Handler for event … does not exist").
+        $opener = User::factory()->create();
+        $other = User::factory()->create();
+        $other->notify(new DatabaseNotification(
+            Notification::make()->title('For the other user')->getDatabaseMessage(),
+        ));
+
+        $this->actingAs($opener);
+        $poller = Livewire::test(NotificationPoller::class);
+
+        $this->actingAs($other);
+        $poller->dispatch('echo-private:App.Models.User.'.$opener->id.',.database-notifications.sent')
+            ->assertOk()
+            ->assertNotDispatched('wakeel-desktop-notification');
+
+        // The other user's notification is left for their own page.
+        $this->assertNull($other->notifications()->sole()->read_at);
     }
 
     public function test_the_prompt_opens_on_the_first_page_after_every_login(): void

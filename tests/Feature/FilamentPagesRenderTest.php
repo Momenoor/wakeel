@@ -61,6 +61,15 @@ class FilamentPagesRenderTest extends TestCase
         }
     }
 
+    public function test_a_report_left_on_all_rows_opens_on_its_page_size_again(): void
+    {
+        $page = Livewire::test(AssistantMatterFeesReport::class)->set('tableRecordsPerPage', 'all');
+        $this->assertSame('all', session()->get($page->instance()->getTablePerPageSessionKey()));
+
+        // Opened again: its own page size, not every row.
+        Livewire::test(AssistantMatterFeesReport::class)->assertSet('tableRecordsPerPage', 50);
+    }
+
     public function test_the_table_pages_open_with_their_table(): void
     {
         Livewire::test(FlightTickets::class)->assertOk()->assertSeeHtml('fi-ta');

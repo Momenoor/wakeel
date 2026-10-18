@@ -14,6 +14,7 @@ use App\Models\MatterProgress;
 use App\Models\Party;
 use App\Models\Setting;
 use App\Models\User;
+use App\Support\Tolerant;
 use BezhanSalleh\FilamentShield\Support\Utils;
 use Carbon\CarbonInterface;
 use Closure;
@@ -1180,7 +1181,8 @@ class MatterReplyCollector
 
             $from = collect($header->get('from')?->all() ?? [])->first(fn ($a) => $a instanceof Address);
             $uid = (int) $header->uid;
-            $whole = self::once(fn () => $inbox->query()->leaveUnread()->setFetchFlags(false)->getMessageByUid($uid));
+            // Decoded tolerantly: a badly encoded part ("iconv(): Detected an illegal character") must not lose the email.
+            $whole = self::once(fn () => Tolerant::run(fn () => $inbox->query()->leaveUnread()->setFetchFlags(false)->getMessageByUid($uid)));
 
             yield [
                 'message_id' => (string) $header->getMessageId(),
@@ -1195,12 +1197,12 @@ class MatterReplyCollector
                 'at' => $date->year < 1971 ? now()->toIso8601String() : $date->toIso8601String(),
                 'was_read' => $header->hasFlag('seen'),
                 // The whole message, fetched once however many of these are asked for.
-                'body' => function () use ($whole): string {
+                'body' => fn (): string => Tolerant::run(function () use ($whole): string {
                     $message = $whole();
 
                     return $message->hasHTMLBody() ? $message->getHTMLBody() : nl2br(e($message->getTextBody()));
-                },
-                'attachments' => function () use ($whole): array {
+                }),
+                'attachments' => fn (): array => Tolerant::run(function () use ($whole): array {
                     $message = $whole();
                     $files = [];
 
@@ -1221,7 +1223,7 @@ class MatterReplyCollector
                     }
 
                     return $files;
-                },
+                }),
                 // The email as it came: its header, a blank line, its body.
                 'raw' => function () use ($whole): string {
                     $message = $whole();

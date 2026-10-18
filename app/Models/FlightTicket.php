@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\FlightTicketStatus;
+use App\Models\Concerns\AnnouncesChanges;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,6 +18,7 @@ use Spatie\Activitylog\Support\LogOptions;
  */
 class FlightTicket extends Model
 {
+    use AnnouncesChanges;
     use LogsActivity;
 
     public const PAID_VIA_PAYROLL = 'payroll';

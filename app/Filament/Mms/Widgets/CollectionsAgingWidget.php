@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Widgets;
 
+use App\Filament\Concerns\RefreshesLive;
 use App\Support\Currency;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Widgets\ChartWidget;
@@ -33,6 +34,8 @@ use Illuminate\Support\Facades\DB;
  */
 class CollectionsAgingWidget extends ChartWidget
 {
+    use RefreshesLive;
+
     // Every 2 minutes — Filament's default is every 5 seconds: each open
     // dashboard kept the shared server busy all day.
     protected ?string $pollingInterval = '120s';

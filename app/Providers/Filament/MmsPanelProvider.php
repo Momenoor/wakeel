@@ -15,6 +15,7 @@ use App\Services\MMS\Calendar\UnmatchedEventReferences;
 use App\Services\Push\VapidKeys;
 use App\Support\Branding;
 use App\Support\Dock;
+use App\Support\Live;
 use BezhanSalleh\FilamentShield\Support\Utils;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\FileUpload;
@@ -214,6 +215,8 @@ class MmsPanelProvider extends PanelProvider
             fn (): string => Auth::check()
                 ? view('filament.partials.dock-script')->render().view('filament.partials.client-errors-script')->render()
                     .view('filament.partials.chat-voice-script')->render()
+                    // With Pusher: what the pages polled for, told to them (App\Support\Live).
+                    .(Live::viaPusher() ? view('filament.partials.live-events-script')->render() : '')
                 : '',
         );
 

@@ -118,7 +118,8 @@ class CollectFeeAction extends Action
                 // Paid before the fee's date: the fee now dated from it — said so.
                 $allocation->tellIfFeeDateMoved();
 
-                $record->matter->updateCollectionStatus();
+                // A deleted matter too: whoever may see deleted ones collects on them.
+                $record->matter()->withTrashed()->first()?->updateCollectionStatus();
                 $record->refresh();
                 $record->unsetRelation('allocations');
             })

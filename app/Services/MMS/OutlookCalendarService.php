@@ -5,9 +5,11 @@ namespace App\Services\MMS;
 use App\Models\CalendarEvent;
 use Carbon\Carbon;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class OutlookCalendarService
 {
@@ -33,7 +35,7 @@ class OutlookCalendarService
     {
         return Cache::remember('outlook_access_token', 50 * 60, function () {
             $config = config('services.outlook');
-            $response = Http::asForm()->post("https://login.microsoftonline.com/{$config['tenant_id']}/oauth2/v2.0/token", [
+            $response = self::onceMore(Http::asForm())->post("https://login.microsoftonline.com/{$config['tenant_id']}/oauth2/v2.0/token", [
                 'client_id' => $config['client_id'],
                 'client_secret' => $config['client_secret'],
                 'grant_type' => 'client_credentials',
@@ -46,6 +48,18 @@ class OutlookCalendarService
 
             return $response->json('access_token');
         });
+    }
+
+    /**
+     * Tried once more when Microsoft can't be reached — a timeout, a name
+     * that didn't resolve, a dropped connection: one such blip failed the
+     * whole calendar sync. A connection that can't be made gives up after
+     * 10 seconds; an error answer is returned as it is, for the caller.
+     */
+    private static function onceMore(PendingRequest $request): PendingRequest
+    {
+        return $request->connectTimeout(10)
+            ->retry(2, 1000, fn (Throwable $e): bool => $e instanceof ConnectionException, throw: false);
     }
 
     /**
@@ -105,6 +119,7 @@ class OutlookCalendarService
             'online_meeting_url' => $event->is_teams_meeting ? self::teamsLink($outlookEvent) : null,
         ]);
     }
+
     public function createEvent(array $eventData): array
     {
         $payload = $this->eventPayload($eventData);
@@ -162,15 +177,17 @@ class OutlookCalendarService
 
         try {
             $token = $this->getAccessToken();
-            // The user's id: the onlineMeetings API takes it, not the address.
-            // The same mailbox every time: asked once a day, not for each meeting.
-            $userId = Cache::get('outlook_user_id:'.$this->getUserEmail())
-                ?? tap(Http::withToken($token)->get("https://graph.microsoft.com/v1.0/users/{$this->getUserEmail()}", ['$select' => 'id'])->json('id'), fn ($id) => filled($id) ? Cache::put('outlook_user_id:'.$this->getUserEmail(), $id, 86400) : null);
+            $userId = $this->mailboxUserId($token, $joinUrl);
+
+            if (blank($userId)) {
+                return false;
+            }
+
             // The filter written out: a space must be %20 (the client's own query encoding makes it "+", which Graph refuses).
             $meetings = Http::withToken($token)->get("https://graph.microsoft.com/v1.0/users/{$userId}/onlineMeetings?\$filter=".rawurlencode("JoinWebUrl eq '".str_replace("'", "''", $joinUrl)."'"));
             $meetingId = $meetings->json('value.0.id') ?: self::meetingId($userId, $joinUrl);
 
-            if (blank($userId) || blank($meetingId)) {
+            if (blank($meetingId)) {
                 Log::warning('Teams auto-record: the online meeting was not found', ['status' => $meetings->status(), 'body' => $meetings->body()]);
 
                 return false;
@@ -183,11 +200,54 @@ class OutlookCalendarService
             }
 
             return $patched->successful();
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             Log::warning('Teams auto-record failed: '.$e->getMessage());
 
             return false;
         }
+    }
+
+    /**
+     * The mailbox's user id: the onlineMeetings API takes it, not the
+     * address. The same mailbox every time: asked once a day, not for each
+     * meeting — or, when Graph won't say (no permission to read users), the
+     * organizer's id the join link carries. Without one the lookup went to
+     * /users//onlineMeetings, which Graph read as a filter on one user
+     * ("The specified filter against a single entity is invalid").
+     */
+    private function mailboxUserId(string $token, string $joinUrl): ?string
+    {
+        $key = 'outlook_user_id:'.$this->getUserEmail();
+
+        if (filled($id = Cache::get($key))) {
+            return $id;
+        }
+
+        $user = Http::withToken($token)->get("https://graph.microsoft.com/v1.0/users/{$this->getUserEmail()}", ['$select' => 'id']);
+        $id = $user->json('id') ?: self::organizerId($joinUrl);
+
+        if (blank($id)) {
+            Log::warning('Teams auto-record: the mailbox\'s user id was not found', ['status' => $user->status(), 'body' => $user->body()]);
+
+            return null;
+        }
+
+        Cache::put($key, $id, 86400);
+
+        return $id;
+    }
+
+    /**
+     * The organizer's user id in a join link: "Oid" in its context
+     * (…/meetup-join/…?context={"Tid":"…","Oid":"…"}).
+     */
+    public static function organizerId(string $joinUrl): ?string
+    {
+        parse_str((string) parse_url($joinUrl, PHP_URL_QUERY), $query);
+        $context = json_decode((string) ($query['context'] ?? ''), true);
+        $oid = is_array($context) ? ($context['Oid'] ?? null) : null;
+
+        return is_string($oid) && preg_match('/^[0-9a-f-]{36}$/i', $oid) ? $oid : null;
     }
 
     /**
@@ -203,6 +263,7 @@ class OutlookCalendarService
 
         return base64_encode('1*'.$userId.'*0**'.urldecode($m[1]));
     }
+
     /**
      * The Teams link of an event Outlook made — only a real online meeting
      * has one. (Its webLink opens the event in Outlook; it was kept as a
@@ -312,7 +373,7 @@ class OutlookCalendarService
         while ($url !== null && $pages++ < 100) {
             // The next page's link is called as it is: an empty query array
             // would replace — and so drop — the query string it carries.
-            $http = Http::withToken($this->getAccessToken())->timeout(30);
+            $http = self::onceMore(Http::withToken($this->getAccessToken())->timeout(30));
             $response = $query === [] ? $http->get($url) : $http->get($url, $query);
 
             if ($response->failed()) {

@@ -4,6 +4,7 @@ namespace App\Filament\Pms\Widgets;
 
 use App\Enums\PMS\InstallmentPaymentStatus;
 use App\Enums\PMS\UnitStatus;
+use App\Filament\Concerns\RefreshesLive;
 use App\Filament\Pms\Support\PortfolioScope;
 use App\Models\Installment;
 use App\Models\Lease;
@@ -22,6 +23,8 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
  */
 class PMSOverviewWidget extends StatsOverviewWidget
 {
+    use RefreshesLive;
+
     // Every 2 minutes — Filament's default is every 5 seconds: each open
     // dashboard kept the shared server busy all day.
     protected ?string $pollingInterval = '120s';

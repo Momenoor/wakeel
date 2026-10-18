@@ -78,9 +78,15 @@ class TodoNote extends Component
         return max(self::MIN_WIDTH, min(self::MAX_WIDTH, $width));
     }
 
-    /** Opened or hidden — already, in the browser; kept here for the next page. */
-    public function setOpen(bool $open): void
+    /** Opened or hidden — already, in the browser; kept here for the next page. No answer (null): nothing. */
+    public function setOpen(?bool $open): void
     {
+        if ($open === null) {
+            $this->skipRender();
+
+            return;
+        }
+
         $this->isOpen = $open;
         session([self::STATE => $open]);
 

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\FeeType;
+use App\Enums\MatterCollectionStatus;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Models\Fee;
 use App\Models\Matter;
@@ -78,5 +79,18 @@ class MatterFeeEditTest extends TestCase
         // A payment after it: the fee's date stays.
         $this->page()->callAction($this->action('collect_fee'), ['amount' => 100, 'date' => '2026-02-01', 'description' => null]);
         $this->assertSame('2026-01-02', $this->fee->refresh()->date->toDateString());
+    }
+
+    public function test_a_fee_of_a_deleted_matter_is_collected(): void
+    {
+        // Open to whoever may see deleted matters (Gate::before here).
+        $this->matter->delete();
+
+        $this->page()
+            ->callAction($this->action('collect_fee'), ['amount' => 1000, 'date' => '2026-01-20', 'description' => null])
+            ->assertHasNoActionErrors();
+
+        $this->assertSame(1000.0, (float) $this->fee->allocations()->sum('amount'));
+        $this->assertSame(MatterCollectionStatus::PAID, Matter::withTrashed()->find($this->matter->id)->collection_status);
     }
 }

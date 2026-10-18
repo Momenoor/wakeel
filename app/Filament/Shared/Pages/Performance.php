@@ -535,6 +535,8 @@ class Performance extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
+            ->modelLabel(__('Screen'))
+            ->pluralModelLabel(__('Screens'))
             ->records(fn (): array => $this->screens()
                 ->mapWithKeys(fn (object $row): array => [$row->name => (array) $row])
                 ->all())

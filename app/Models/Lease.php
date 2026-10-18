@@ -14,6 +14,7 @@ use App\Enums\PMS\LeaseStatus;
 use App\Enums\PMS\PropertyClassification;
 use App\Enums\PMS\UnitType;
 use App\Enums\PMS\YesNo;
+use App\Models\Concerns\AnnouncesChanges;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -34,6 +35,7 @@ use Spatie\Activitylog\Support\LogOptions;
  */
 class Lease extends Model
 {
+    use AnnouncesChanges;
     use HasFactory;
     use LogsActivity;
     use SoftDeletes;

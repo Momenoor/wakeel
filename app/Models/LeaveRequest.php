@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\LeaveType;
 use App\Enums\RequestStatus;
+use App\Models\Concerns\AnnouncesChanges;
 use App\Observers\LeaveRequestObserver;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
@@ -24,6 +25,7 @@ use Spatie\Activitylog\Support\LogOptions;
 #[ObservedBy(LeaveRequestObserver::class)]
 class LeaveRequest extends Model
 {
+    use AnnouncesChanges;
     use LogsActivity;
     use SoftDeletes;
 

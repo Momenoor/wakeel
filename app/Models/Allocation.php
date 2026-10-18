@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\AnnouncesChanges;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -12,6 +13,7 @@ use Spatie\Activitylog\Support\LogOptions;
 
 class Allocation extends Model
 {
+    use AnnouncesChanges;
     use HasFactory;
     use LogsActivity;
 

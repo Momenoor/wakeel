@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Widgets;
 
+use App\Filament\Concerns\RefreshesLive;
 use App\Models\MatterParty;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Support\RawJs;
@@ -9,6 +10,8 @@ use Filament\Widgets\ChartWidget;
 
 class AssistantMattersCountChartWidget extends ChartWidget
 {
+    use RefreshesLive;
+
     // Every 2 minutes — Filament's default is every 5 seconds: each open
     // dashboard kept the shared server busy all day.
     protected ?string $pollingInterval = '120s';

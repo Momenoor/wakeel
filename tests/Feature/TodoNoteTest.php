@@ -190,5 +190,9 @@ class TodoNoteTest extends TestCase
 
         Livewire::test(TodoNote::class)->call('setOpen', true);
         Livewire::test(TodoNote::class)->assertSet('isOpen', true);
+
+        // The browser sent null (a click that fell through to the bubble): left as it was.
+        Livewire::test(TodoNote::class)->call('setOpen', null)->assertSet('isOpen', true);
+        $this->assertTrue(session('wakeel.todo.open'));
     }
 }

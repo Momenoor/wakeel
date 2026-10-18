@@ -7,7 +7,9 @@ use App\Services\MMS\Calendar\EventMatterLinker;
 use App\Services\MMS\Calendar\OutlookCalendarSync;
 use App\Services\MMS\OutlookCalendarService;
 use Illuminate\Console\Command;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -44,6 +46,13 @@ class SyncOutlookCalendar extends Command
 
         try {
             $counts = $sync->sync($from, $to);
+        } catch (ConnectionException $exception) {
+            // Microsoft out of reach even after a second try: the next run (in
+            // five minutes) picks it up. A line in the log, not an error report.
+            $this->warn('Outlook sync skipped: '.$exception->getMessage());
+            Log::warning('Outlook calendar sync skipped — Microsoft could not be reached: '.$exception->getMessage());
+
+            return self::FAILURE;
         } catch (Throwable $exception) {
             $this->error('Outlook sync failed: '.$exception->getMessage());
             report($exception);

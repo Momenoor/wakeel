@@ -330,7 +330,8 @@ class MatterOneDriveExplorer
     /** A name OneDrive takes: no \ / : * ? " < > | and no leading or trailing dots or spaces. */
     public static function cleanName(string $name): string
     {
-        $name = trim((string) preg_replace(['/[\\\\\/:*?"<>|]+/u', '/\s+/u'], ' ', $name), " .\t");
+        // Control characters too (OneDrive's "illegal characters"); broken bytes made readable first.
+        $name = trim((string) preg_replace(['/[\p{Cc}\\\\\/:*?"<>|]+/u', '/\s+/u'], ' ', mb_scrub($name, 'UTF-8')), " .\t");
 
         if ($name === '') {
             throw new RuntimeException(__('Give it a name.'));

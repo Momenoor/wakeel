@@ -19,6 +19,7 @@ use App\Http\Middleware\TrackCurrentSystem;
 use App\Http\Middleware\TrackPerformance;
 use App\Http\Middleware\TrackUserLastSeen;
 use App\Support\Branding;
+use App\Support\Live;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use CraftForge\FilamentLanguageSwitcher\FilamentLanguageSwitcherPlugin;
 use Filament\FontProviders\LocalFontProvider;
@@ -120,7 +121,7 @@ trait SharesPanelConfiguration
             ->databaseNotifications()
             // With Pusher, new notifications arrive live (NotificationsUpdated),
             // so polling is only a slow safety net.
-            ->databaseNotificationsPolling(fn (): string => filled(config('filament.broadcasting.echo')) ? '60s' : '10s')
+            ->databaseNotificationsPolling(fn (): ?string => Live::viaPusher() ? null : '10s')
             ->databaseTransactions()
             // Ctrl+K anywhere. Only resources that declare
             // $isGloballySearchable themselves are searched — the rest
@@ -153,6 +154,7 @@ trait SharesPanelConfiguration
     {
         return $panel->discoverClusters(in: app_path('Filament/Shared/Clusters'), for: 'App\Filament\Shared\Clusters');
     }
+
     protected function usersPlugin(): FilamentUsersPlugin
     {
         return FilamentUsersPlugin::make()

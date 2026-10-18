@@ -100,7 +100,7 @@ class SystemSettings extends Page
             'mail_from_name' => Setting::get('mail_from_name', config('mail.from.name', '')),
 
             'default_notify_by_email' => Setting::get('default_notify_by_email', true),
-            LiveRefresh::SETTING => LiveRefresh::seconds(),
+            LiveRefresh::SETTING => LiveRefresh::configured(),
             'default_notify_by_whatsapp' => Setting::get('default_notify_by_whatsapp', false),
             'system_announcement' => Setting::get('system_announcement', ''),
             'show_system_announcement' => Setting::get('show_system_announcement', false),

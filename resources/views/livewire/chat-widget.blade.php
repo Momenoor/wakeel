@@ -110,7 +110,14 @@
     {{-- The bubble and the Chat page check alike (LiveRefresh), in a
          background tab too, Pusher or not: Pusher not delivering (its channel
          refused, the connection lost) left a page waiting for a refresh. --}}
-    {!! \App\Support\LiveRefresh::poll('checkForNewMessages', inBackground: ! $isPopup) !!}
+    {{-- With Pusher, messages, ticks and who is online come over it: only "still reading" while a conversation is open. Without it, the check on the interval. --}}
+    @if (\App\Support\Live::viaPusher())
+        @if ($activeConversationId !== null && ($isOpen || ! $isPopup))
+            {!! \App\Support\LiveRefresh::readingPulse('keepReading') !!}
+        @endif
+    @else
+        {!! \App\Support\LiveRefresh::poll('checkForNewMessages', inBackground: ! $isPopup) !!}
+    @endif
     @if ($isPopup)
         wire:key="chat-widget-popup"
         :style="placement()"

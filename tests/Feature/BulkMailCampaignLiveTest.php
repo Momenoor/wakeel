@@ -74,12 +74,15 @@ class BulkMailCampaignLiveTest extends TestCase
             ->assertDontSeeHtml('wire:poll.10s="refreshCampaign"');
     }
 
-    public function test_with_pusher_the_poll_is_only_a_slow_safety_net(): void
+    public function test_with_pusher_the_page_is_told_and_does_not_poll(): void
     {
         config(['filament.broadcasting.echo' => ['broadcaster' => 'pusher', 'key' => 'k']]);
 
         Livewire::test(ViewBulkMailCampaign::class, ['record' => $this->campaign->getRouteKey()])
-            ->assertSeeHtml('wire:poll.60s="refreshCampaign"');
+            ->assertDontSeeHtml('wire:poll')
+            // A lost connection back: it catches up.
+            ->dispatch('wakeel-reconnected')
+            ->assertDispatched('bulk-mail-campaign-refreshed');
     }
 
     public function test_a_refresh_picks_up_the_new_status_and_tells_the_stats_and_table(): void

@@ -72,8 +72,11 @@
             },
             // Shown or hidden at once, here; the server keeps it (and fills the
             // panel when opened) meanwhile. Waiting for it first made every
-            // open and close take a round trip.
+            // open and close take a round trip. Open or shut only: a voice
+            // note's play button (its own toggle()) falls through to this one
+            // when its player didn't start, with no answer.
             toggle(open) {
+                if (typeof open !== 'boolean') { return; }
                 this.$wire.isOpen = open;
                 this.$wire.setOpen(open);
                 this.storeOpen(open);

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\AnnouncesChanges;
 use App\Services\MMS\MatterOneDriveFolders;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,6 +12,7 @@ use Spatie\Activitylog\Support\LogOptions;
 
 class MatterParty extends Model
 {
+    use AnnouncesChanges;
     use LogsActivity;
 
     public function getActivitylogOptions(): LogOptions

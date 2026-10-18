@@ -7,6 +7,7 @@ use App\Enums\MatterCommissiong;
 use App\Enums\MatterDifficulty;
 use App\Enums\MatterLevel;
 use App\Enums\MatterStatus;
+use App\Models\Concerns\AnnouncesChanges;
 use App\Observers\MatterObserver;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
@@ -30,6 +31,7 @@ use Spatie\Activitylog\Support\LogOptions;
 #[ObservedBy(MatterObserver::class)]
 class Matter extends Model
 {
+    use AnnouncesChanges;
     use HasFactory;
     use LogsActivity;
     use SoftDeletes;
@@ -98,7 +100,7 @@ class Matter extends Model
      */
     public function scopeInProgress(Builder $query): void
     {
-        $query->whereNull(['initial_report_at','final_report_at','final_report_memo_date']);
+        $query->whereNull(['initial_report_at', 'final_report_at', 'final_report_memo_date']);
     }
 
     protected static function booted()

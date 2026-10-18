@@ -37,6 +37,23 @@ trait PrintableReport
             ]);
     }
 
+    /**
+     * "All" rows is for printing: a report opened again starts on its page size, not loading every row —
+     * remembered from a print whose way back never arrived, it made a 31 MB page every visit.
+     */
+    public function bootPrintableReport(): void
+    {
+        // This page's tables' remembered page sizes (Filament keeps them as "tables.<md5 of the class>…_per_page"):
+        // read without the table, which is not made yet.
+        $mine = md5(static::class);
+
+        foreach ((array) session('tables', []) as $key => $value) {
+            if ($value === 'all' && str_starts_with((string) $key, $mine) && str_ends_with((string) $key, '_per_page')) {
+                session()->forget('tables.'.$key);
+            }
+        }
+    }
+
     /** Built again when drawn — after the filters are applied, not before (see RendersFreshContent). */
     public function renderingPrintableReport(): void
     {

@@ -22,6 +22,10 @@ Broadcast::channel('minutes.{minutesId}', function ($user, $minutesId) {
     return $minutes?->matter !== null && $user->can('view', $minutes->matter);
 });
 
+// Something the dashboards and the lists' counts show has changed (RecordsChanged) — for anyone signed in;
+// it carries nothing but the table's name.
+Broadcast::channel('records', fn ($user) => $user !== null);
+
 // Presence channel every signed-in user joins from the chat widget — who
 // is online, live, instead of waiting on last_seen_at and polling.
 Broadcast::channel('online', function ($user) {

@@ -99,6 +99,16 @@ class ChatReadingTest extends TestCase
         $this->assertSame(LiveRefresh::DEFAULT, LiveRefresh::seconds());
         Setting::set(LiveRefresh::SETTING, 500, 'notifications');
         $this->assertSame(LiveRefresh::MAX, LiveRefresh::seconds());
+
+        // With Pusher, messages come live: the check is only a safety net, never more often than WITH_PUSHER —
+        // and who is online follows, so an open page does not flicker off between checks.
+        Setting::set(LiveRefresh::SETTING, 5, 'notifications');
+        config(['filament.broadcasting.echo' => ['broadcaster' => 'pusher', 'key' => 'k']]);
+        $this->assertSame(LiveRefresh::WITH_PUSHER, LiveRefresh::seconds());
+        $this->assertSame(5, LiveRefresh::configured());
+        $this->assertGreaterThan(LiveRefresh::WITH_PUSHER * 2, User::onlineWithinSeconds());
+        config(['filament.broadcasting.echo' => null]);
+        $this->assertSame(5, LiveRefresh::seconds());
         Setting::set(LiveRefresh::SETTING, 3, 'notifications');
 
         // The Chat page keeps checking in a background tab; the bubble pauses there.

@@ -220,7 +220,7 @@ class ChatWidgetTest extends TestCase
             ->assertSeeHtml('src="'.route('chat.attachment', [$message, 0]).'"')
             ->assertSeeHtml('href="'.route('chat.attachment', [$message, 1]).'?download=1"')
             // Previewed over the page, not opened in a new one.
-            ->assertSeeHtml("x-on:chat-preview=\"preview = \$event.detail\"")
+            ->assertSeeHtml('x-on:chat-preview="preview = $event.detail"')
             ->assertSeeHtml("\$dispatch('chat-preview', { type: 'image'")
             ->assertSeeHtml("\$dispatch('chat-preview', { type: 'pdf'")
             ->assertDontSeeHtml('target="_blank" rel="noopener" style="display: block; margin-bottom: 6px;"')
@@ -732,5 +732,13 @@ class ChatWidgetTest extends TestCase
         $popup->call('setOpen', false)->assertSet('isOpen', false);
         $this->assertFalse(session('chat.popup')['open']);
         $this->assertArrayNotHasKey('html', $popup->effects);
+    }
+
+    public function test_the_popup_ignores_an_open_or_shut_with_no_answer(): void
+    {
+        $popup = Livewire::test(ChatWidget::class, ['mode' => 'popup'])->call('setOpen', true);
+
+        // The browser sent null (a click that fell through to the bubble): left as it was.
+        $popup->call('setOpen', null)->assertSet('isOpen', true);
     }
 }

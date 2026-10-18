@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Events\ChatMessagesStatusChanged;
 use App\Filament\Mms\Pages\Chat;
+use App\Livewire\Concerns\ListensOnOwnChannel;
 use App\Livewire\Concerns\SavesDockWidth;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
@@ -40,6 +41,7 @@ use Throwable;
  */
 class ChatWidget extends Component
 {
+    use ListensOnOwnChannel;
     use SavesDockWidth;
 
     /** Session key holding the popup's open state and conversation. */
@@ -350,7 +352,7 @@ class ChatWidget extends Component
      */
     protected function getListeners(): array
     {
-        if (! Auth::check()) {
+        if (! Auth::check() && $this->listenerUserId === null) {
             return [];
         }
 
@@ -359,14 +361,22 @@ class ChatWidget extends Component
         // Echo listens for "App\Events\chat.message.sent" instead, which
         // never arrives — messages then only showed at the next slow poll.
         return [
-            'echo-private:App.Models.User.'.Auth::id().',.chat.message.sent' => 'onMessageReceived',
+            // Named after the user the page was opened as (ListensOnOwnChannel).
+            $this->ownChannelEvent('chat.message.sent') => 'onMessageReceived',
             // Messages of mine delivered or read: the redraw shows the ticks.
-            'echo-private:App.Models.User.'.Auth::id().',.chat.status' => '$refresh',
+            $this->ownChannelEvent('chat.status') => '$refresh',
+            // Pusher back after being lost: the messages sent meanwhile.
+            'wakeel-reconnected' => 'checkForNewMessages',
         ];
     }
 
     public function onMessageReceived(): void
     {
+        // Someone else signed in since the page opened: not their message to show.
+        if (! $this->listenerIsSignedIn()) {
+            return;
+        }
+
         // The event payload isn't consumed directly — the message is read
         // back from the database, and the re-render after this shows it.
         $this->checkForNewMessages();
@@ -387,10 +397,17 @@ class ChatWidget extends Component
     /**
      * The popup opened or closed — already, in the browser (see the
      * bubble's click): this keeps it, and fills it when opened. A close
-     * sends nothing back: what it hides needs no redraw.
+     * sends nothing back: what it hides needs no redraw. No answer (null —
+     * a click meant for a voice note whose player didn't start): nothing.
      */
-    public function setOpen(bool $open): void
+    public function setOpen(?bool $open): void
     {
+        if ($open === null) {
+            $this->skipRender();
+
+            return;
+        }
+
         if (! $open) {
             $this->stopReading();
         }
@@ -892,6 +909,16 @@ class ChatWidget extends Component
         if ($this->activeConversationId !== null && ($this->isOpen || $this->mode !== 'popup')) {
             ChatReading::mark((int) Auth::id(), (int) $this->activeConversationId);
         }
+    }
+
+    /**
+     * With Pusher, in place of the check: the conversation on screen is still being read (no bell or
+     * push for what they watch arrive) — nothing else to fetch or redraw.
+     */
+    public function keepReading(): void
+    {
+        $this->markReading();
+        $this->skipRender();
     }
 
     /** Off screen now: notified again. */

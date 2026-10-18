@@ -4,6 +4,7 @@
 
 namespace App\Livewire;
 
+use App\Livewire\Concerns\ListensOnOwnChannel;
 use App\Services\Chat\ChatBellNotifications;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -14,30 +15,37 @@ use Livewire\Component;
 
 class NotificationPoller extends Component
 {
+    use ListensOnOwnChannel;
+
     /**
      * Toasts a new notification the moment NotificationsUpdated reaches this
-     * user's private channel over Pusher.
+     * user's private channel over Pusher — the user the page was opened as
+     * (ListensOnOwnChannel).
      *
      * @return array<string, string>
      */
     protected function getListeners(): array
     {
-        if (! Auth::check()) {
+        if (! Auth::check() && $this->listenerUserId === null) {
             return [];
         }
 
         return [
-            'echo-private:App.Models.User.'.Auth::id().',.database-notifications.sent' => 'checkNotifications',
+            $this->ownChannelEvent('database-notifications.sent') => 'checkNotifications',
+            // Pusher back after being lost: what was sent meanwhile.
+            'wakeel-reconnected' => 'checkNotifications',
         ];
     }
 
     public function checkNotifications(): void
     {
-        $user = Auth::user();
-
-        if (! $user) {
+        // Signed in as someone else since the page opened: their
+        // notifications are not this page's to show (or mark read).
+        if (! $this->listenerIsSignedIn()) {
             return;
         }
+
+        $user = Auth::user();
 
         foreach ($user->unreadNotifications as $notification) {
             // A chat entry stays unread in the bell, counting up — the chat

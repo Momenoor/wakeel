@@ -3,6 +3,7 @@
 namespace App\Filament\Pms\Widgets;
 
 use App\Enums\PMS\InstallmentPaymentStatus;
+use App\Filament\Concerns\RefreshesLive;
 use App\Filament\Pms\Support\PortfolioScope;
 use App\Models\Installment;
 use App\Support\Currency;
@@ -17,6 +18,8 @@ use Filament\Widgets\Concerns\InteractsWithPageFilters;
  */
 class PmsRevenueChartWidget extends ChartWidget
 {
+    use RefreshesLive;
+
     // Every 2 minutes — Filament's default is every 5 seconds: each open
     // dashboard kept the shared server busy all day.
     protected ?string $pollingInterval = '120s';

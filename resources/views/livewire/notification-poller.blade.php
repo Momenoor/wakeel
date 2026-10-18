@@ -1,2 +1,2 @@
-{{-- With Pusher, NotificationsUpdated triggers checkNotifications live (see getListeners()), so polling is only a slow safety net. --}}
-<div wire:poll.{{ filled(config('filament.broadcasting.echo')) ? '60s' : '10s' }}="checkNotifications" style="display: none;"></div>
+{{-- With Pusher, NotificationsUpdated triggers checkNotifications live (see getListeners()), and a lost connection catches up when back: no polling. Without it, every 10 seconds. --}}
+<div @unless(\App\Support\Live::viaPusher()) wire:poll.10s="checkNotifications" @endunless style="display: none;"></div>

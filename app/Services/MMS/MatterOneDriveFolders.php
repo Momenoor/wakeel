@@ -125,7 +125,9 @@ class MatterOneDriveFolders
 
     public static function clean(string $name): string
     {
-        $name = preg_replace('/["*:<>?\/\\\\|]+/u', ' ', $name);
+        // Broken bytes made readable first (a /u pattern gives up on them), then control characters out:
+        // OneDrive refuses those as "illegal characters" too (a badly decoded subject carries them).
+        $name = preg_replace('/[\p{Cc}"*:<>?\/\\\\|]+/u', ' ', mb_scrub($name, 'UTF-8'));
         $name = preg_replace('/\s+/u', ' ', (string) $name);
 
         // OneDrive also refuses a name ending in a dot or a space.

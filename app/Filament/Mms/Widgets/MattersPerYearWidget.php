@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Widgets;
 
+use App\Filament\Concerns\RefreshesLive;
 use App\Models\Matter;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Widgets\ChartWidget;
@@ -10,6 +11,8 @@ use Flowframe\Trend\TrendValue;
 
 class MattersPerYearWidget extends ChartWidget
 {
+    use RefreshesLive;
+
     // Every 2 minutes — Filament's default is every 5 seconds: each open
     // dashboard kept the shared server busy all day.
     protected ?string $pollingInterval = '120s';

@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 use App\Enums\ProgressType;
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Concerns\RefreshesMatterPage;
+use App\Jobs\CollectMatterEmails;
 use App\Models\MatterEmail;
 use App\Models\MatterProgress;
 use App\Services\MMS\MatterReplyCollector;
@@ -27,7 +28,6 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\HtmlString;
 
 /**
  * A matter's progress, newest first: what Wakeel recorded as it happened
@@ -142,34 +142,15 @@ class ProgressRelationManager extends RelationManager
                     ->icon('heroicon-o-envelope-open')
                     ->color('gray')
                     ->visible(fn (): bool => MatterEmail::query()->where('direction', MatterEmail::SENT)->exists())
+                    // On the queue: reading the mailboxes can take a minute, and the page must not wait on it.
                     ->action(function (): void {
-                        @set_time_limit(300);
-                        $result = app(MatterReplyCollector::class)->collect($this->getOwnerRecord()->getKey());
-                        // One point each: what was kept, the matters with no OneDrive folder to keep it in, and what went wrong.
-                        $points = [
-                            $result['emails'] ? trans_choice(':count other email from the parties kept.|:count other emails from the parties kept.', $result['emails'], ['count' => $result['emails']]) : null,
-                            // No folder to find them in: the matter, and the emails to download and keep by hand.
-                            ...array_map(fn (array $matter): HtmlString => new HtmlString(
-                                e(__('Matter :matter is not linked to a OneDrive folder: its emails were kept in the system only.', ['matter' => $matter['label']]))
-                                .' <a href="'.e($matter['url']).'" style="text-decoration: underline;">'.e(__('Open the matter')).'</a>'
-                                .($matter['downloads'] !== []
-                                    ? '<div>'.e(__('Download to put in OneDrive by hand:')).'</div>'.MatterReplyCollector::bullets(array_map(
-                                        fn (array $file): HtmlString => new HtmlString('<a href="'.e($file['url']).'" target="_blank" download style="text-decoration: underline;">'.e($file['name']).'</a>'),
-                                        $matter['downloads'],
-                                    ))->toHtml()
-                                    : '')
-                            ), $result['unlinked']),
-                            ...$result['errors'],
-                        ];
-                        $warn = $result['errors'] !== [] || $result['unlinked'] !== [];
+                        CollectMatterEmails::dispatch($this->getOwnerRecord()->getKey(), auth()->id());
 
                         Notification::make()
-                            ->title(trans_choice('No new replies.|:count new reply kept.|:count new replies kept.', $result['replies'], ['count' => $result['replies']]))
-                            ->body(array_filter($points) !== [] ? MatterReplyCollector::bullets($points) : null)
-                            ->status($warn ? 'warning' : 'success')
-                            ->duration($warn ? 'persistent' : 6000)
+                            ->title(__('Checking for emails'))
+                            ->body(__('This takes up to a minute or two; what comes of it appears in your notifications.'))
+                            ->info()
                             ->send();
-
                     }),
                 CreateAction::make()
                     ->label(__('Add progress'))

@@ -233,6 +233,20 @@ class SignatureLayoutTest extends TestCase
         Livewire::test(ListSignatureLayouts::class)->assertCanSeeTableRecords([$layout])->assertSuccessful();
     }
 
+    public function test_the_designer_survives_an_emptied_number_box(): void
+    {
+        $layout = $this->layout();
+
+        // A position or size cleared (or mistyped) is text, not a number: the box draws on, it does not fail.
+        Livewire::test(DesignSignatureLayout::class, ['record' => $layout->id])
+            ->set('elements.0.x', '')
+            ->set('elements.0.y', 'abc')
+            ->set('elements.0.width', '')
+            ->set('elements.0.font_size', '')
+            ->set('elements.2.height', '')
+            ->assertSuccessful();
+    }
+
     public function test_the_editor_offers_saved_blocks(): void
     {
         $this->layout();

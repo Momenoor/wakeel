@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Widgets;
 
 use App\Enums\MatterCollectionStatus;
+use App\Filament\Concerns\RefreshesLive;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Models\Matter;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
@@ -12,6 +13,8 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
 
 class MatterStatsWidget extends StatsOverviewWidget
 {
+    use RefreshesLive;
+
     // Every 2 minutes — Filament's default is every 5 seconds: each open
     // dashboard kept the shared server busy all day.
     protected ?string $pollingInterval = '120s';

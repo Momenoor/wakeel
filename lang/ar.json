@@ -4083,5 +4083,10 @@
     ":count made unread again in the mailbox.": "أُعيدت :count منها غير مقروءة في صندوق البريد.",
     "Not undone: :errors": "لم يُتراجع عن: :errors",
     "Read the inboxes back (days)": "قراءة صناديق الوارد للخلف (أيام)",
-    "How far back a mailbox is read the first time, for one matter, or after the checks stopped for a while. Each check still reads a little at a time — a long period is caught up over several checks, never in one long one.": "إلى أي مدى يُقرأ صندوق البريد للخلف: في المرة الأولى، أو لقضية واحدة، أو بعد توقف الفحص فترة. يقرأ كل فحص جزءًا صغيرًا في كل مرة — وتُستكمل المدة الطويلة على عدة فحوصات، لا في فحص واحد طويل."
+    "How far back a mailbox is read the first time, for one matter, or after the checks stopped for a while. Each check still reads a little at a time — a long period is caught up over several checks, never in one long one.": "إلى أي مدى يُقرأ صندوق البريد للخلف: في المرة الأولى، أو لقضية واحدة، أو بعد توقف الفحص فترة. يقرأ كل فحص جزءًا صغيرًا في كل مرة — وتُستكمل المدة الطويلة على عدة فحوصات، لا في فحص واحد طويل.",
+    "Checking for emails": "جارٍ فحص البريد",
+    "This takes up to a minute or two; what comes of it appears in your notifications.": "يستغرق ذلك دقيقة أو دقيقتين؛ وتظهر النتيجة في إشعاراتك.",
+    "With Pusher set up, messages arrive the moment they are sent and the chat does not check for them: this is used only without Pusher.": "مع إعداد Pusher تصل الرسائل لحظة إرسالها ولا تفحص الدردشة عنها: يُستخدم هذا فقط بدون Pusher.",
+    "Screen": "شاشة",
+    "Screens": "الشاشات"
 }

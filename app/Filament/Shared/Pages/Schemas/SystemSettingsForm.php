@@ -4,6 +4,7 @@ namespace App\Filament\Shared\Pages\Schemas;
 
 use App\Filament\Schemas\BrandingSettingsSection;
 use App\Filament\Support\EmailSendFields;
+use App\Models\LetterFont;
 use App\Models\MatterLetter;
 use App\Models\Party;
 use App\Services\MMS\SenderMailer;
@@ -284,7 +285,7 @@ class SystemSettingsForm
                                         ->columnSpanFull(),
                                     Select::make(Branding::EMAIL_PDF_FONT)
                                         ->label(__('Email PDF font'))
-                                        ->options(fn () => \App\Models\LetterFont::query()->orderBy('name')->pluck('name', 'id'))
+                                        ->options(fn () => LetterFont::query()->orderBy('name')->pluck('name', 'id'))
                                         ->placeholder(__('Calibri, when uploaded; otherwise the standard font'))
                                         ->helperText(__('A font uploaded under Letter fonts. The emails kept as PDF are written in it.'))
                                         ->columnSpanFull(),
@@ -313,7 +314,8 @@ class SystemSettingsForm
                                         ->suffix(__('seconds'))
                                         ->default(LiveRefresh::DEFAULT)
                                         ->required()
-                                        ->helperText(__('Shorter: messages and online status sooner, but more requests to the server. If "Error while loading" notices appear, make it longer.')),
+                                        ->helperText(fn (): string => __('Shorter: messages and online status sooner, but more requests to the server. If "Error while loading" notices appear, make it longer.')
+                                            .(filled(config('filament.broadcasting.echo')) ? ' '.__('With Pusher set up, messages arrive the moment they are sent and the chat does not check for them: this is used only without Pusher.') : '')),
 
                                     // Who hears of a new leave request (email + bell).
                                     TagsInput::make('leave_request_recipients')

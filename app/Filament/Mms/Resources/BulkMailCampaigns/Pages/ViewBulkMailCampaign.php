@@ -8,6 +8,7 @@ use App\Filament\Mms\Resources\BulkMailCampaigns\Widgets\CampaignStatsWidget;
 use App\Jobs\SendBulkMailBatch;
 use App\Mail\BulkMailMessage;
 use App\Models\BulkMailRecipient;
+use App\Support\Live;
 use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
@@ -30,6 +31,8 @@ class ViewBulkMailCampaign extends ViewRecord
         return [
             ...parent::getListeners(),
             'echo-private:bulk-mail-campaign.'.$this->record->getKey().',.campaign.updated' => 'refreshCampaign',
+            // Pusher back after being lost: what happened meanwhile.
+            'wakeel-reconnected' => 'refreshCampaign',
         ];
     }
 
@@ -48,17 +51,17 @@ class ViewBulkMailCampaign extends ViewRecord
     }
 
     /**
-     * While a campaign is sending: with Pusher the page is already live, so
-     * only a slow safety net; without it, every 10 seconds. Nothing to poll
-     * for once it isn't active.
+     * While a campaign is sending, without Pusher: every 10 seconds. With it the page is told of each
+     * recipient sent (and catches up if the connection was lost): no polling. Nothing to poll for once
+     * it isn't active.
      */
     public function pollInterval(): ?string
     {
-        if ($this->record->status !== BulkMailCampaignStatus::Active) {
+        if ($this->record->status !== BulkMailCampaignStatus::Active || Live::viaPusher()) {
             return null;
         }
 
-        return filled(config('filament.broadcasting.echo')) ? '60s' : '10s';
+        return '10s';
     }
 
     /**

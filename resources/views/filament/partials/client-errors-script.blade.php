@@ -75,7 +75,41 @@
         };
         if (window.Echo) { watchEcho(); } else { window.addEventListener('EchoLoaded', watchEcho, { once: true }); }
 
+        // A check the page makes on its own (new messages, notifications) that got no answer at all —
+        // a phone that locked or put the page in the background mid-request, a dropped connection —
+        // is not a notice for the user: the next check, seconds later, does it again. Filament's
+        // notice reads its settings as the failure is handled; this hook is registered before
+        // Filament's (it is in the head), so it can say "none" for that one failure. Errors the
+        // server answered (a 500, an expired session) and failed actions the user clicked still show.
+        const BACKGROUND = ['checkForNewMessages', 'checkNotifications', '$refresh'];
+        const isBackground = (request) => {
+            try {
+                const components = request?.payload?.components ?? [];
+
+                return components.length > 0 && components.every((c) => (c.calls ?? []).length > 0 && c.calls.every((call) => BACKGROUND.includes(call.method)));
+            } catch (e) {
+                return false;
+            }
+        };
+        let quiet = false;
+        let notices = window.filamentErrorNotifications;
+        Object.defineProperty(window, 'filamentErrorNotifications', {
+            configurable: true,
+            get: () => (quiet ? null : notices),
+            set: (value) => { notices = value; },
+        });
+
         document.addEventListener('livewire:init', () => {
+            Livewire.interceptRequest(({ request, onFailure }) => {
+                if (! isBackground(request)) {
+                    return;
+                }
+                onFailure(() => {
+                    quiet = true;
+                    setTimeout(() => { quiet = false; }, 0);
+                });
+            });
+
             Livewire.interceptRequest(({ request, onError, onFailure }) => {
                 // Filament's own notices failing: as Filament itself, not
                 // reported — they only follow another failure, already told.

@@ -17,10 +17,12 @@ use App\Models\Party;
 use App\Models\Setting;
 use App\Models\Type;
 use App\Models\User;
+use App\Services\MMS\MatterOneDriveExplorer;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\SentEmailArchive;
 use App\Services\MMS\SentMailImporter;
 use Filament\Facades\Filament;
+use Illuminate\Contracts\Queue\Job;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Carbon;
@@ -718,6 +720,25 @@ class MatterOneDriveFolderTest extends TestCase
         $this->assertTrue($matter->fresh()->assistantsOnly()->exists());
     }
 
+    public function test_on_a_real_queue_no_onedrive_account_fails_at_once_without_retries(): void
+    {
+        // Each of the three tries threw and was logged as an error, though no
+        // retry could find an account the profile doesn't have.
+        $this->switchOn();
+        Queue::fake();
+
+        $this->assign($this->matter(), $this->assistant(['onedrive_email' => null]));
+        $folder = MatterOneDriveFolder::sole();
+
+        $job = new CreateMatterOneDriveFolder($folder->getKey());
+        $job->setJob(\Mockery::mock(Job::class));
+        $job->handle(app(MatterOneDriveFolders::class));
+
+        $folder->refresh();
+        $this->assertSame(MatterOneDriveFolder::FAILED, $folder->status);
+        $this->assertStringContainsString('No OneDrive account', $folder->error);
+    }
+
     public function test_retrying_queues_only_what_is_not_made(): void
     {
         $this->switchOn();
@@ -894,5 +915,9 @@ class MatterOneDriveFolderTest extends TestCase
     {
         $this->assertSame('2026-5 - a b c', MatterOneDriveFolders::clean('2026-5 - a/b:c?'));
         $this->assertSame('name', MatterOneDriveFolders::clean('name. '));
+        // Control characters (a badly decoded subject) and broken bytes: never sent to OneDrive.
+        $this->assertSame('رد طلب', MatterOneDriveFolders::clean("رد\x01\x1F طلب\x7F"));
+        $this->assertNotSame('', MatterOneDriveFolders::clean("caf\xE9 report"));
+        $this->assertSame('a b.pdf', MatterOneDriveExplorer::cleanName("a\x00b.pdf"));
     }
 }

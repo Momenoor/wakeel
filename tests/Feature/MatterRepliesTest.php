@@ -537,7 +537,9 @@ class MatterRepliesTest extends TestCase
         // From the matter's Progress tab: now, not at the next round.
         Livewire::test(ProgressRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
             ->callTableAction('collectReplies')
-            ->assertNotified(trans_choice('No new replies.|:count new reply kept.|:count new replies kept.', 1, ['count' => 1]));
+            ->assertNotified(__('Checking for emails'));
+        // Read on the queue: what came of it in the notifications of whoever asked.
+        $this->assertContains(trans_choice('No new replies.|:count new reply kept.|:count new replies kept.', 1, ['count' => 1]), auth()->user()->notifications()->get()->pluck('data.title')->all());
 
         // The file it came with — in OneDrive only, not a signature's inline picture.
         $reply = MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->sole();
@@ -591,6 +593,8 @@ class MatterRepliesTest extends TestCase
 
         Livewire::test(ProgressRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
             ->callTableAction('collectReplies')
-            ->assertNotified(trans_choice('No new replies.|:count new reply kept.|:count new replies kept.', 1, ['count' => 1]));
+            ->assertNotified(__('Checking for emails'));
+        // Read on the queue: what came of it in the notifications of whoever asked.
+        $this->assertContains(trans_choice('No new replies.|:count new reply kept.|:count new replies kept.', 1, ['count' => 1]), auth()->user()->notifications()->get()->pluck('data.title')->all());
     }
 }

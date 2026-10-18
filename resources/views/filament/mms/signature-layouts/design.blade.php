@@ -1,6 +1,8 @@
 @php
     $boxWidth = max(10, (float) $this->record->width);
     $boxHeight = max(10, (float) $this->record->height);
+    // A number box left empty or mistyped is text: it counts as its default, instead of breaking the page.
+    $num = fn ($value, $default = 0): float => is_numeric($value) ? (float) $value : (float) $default;
     $selectedElement = $selected !== null ? ($elements[$selected] ?? null) : null;
     $types = [
         'signature' => __('Signature'),
@@ -62,11 +64,11 @@
                             wire:key="sign-element-{{ $index }}-{{ $element['type'] }}"
                             x-on:pointerdown.prevent="start($event, {{ $index }})"
                             dir="auto"
-                            style="position: absolute; cursor: move; left: {{ ($element['x'] ?? 0) / $boxWidth * 100 }}%; top: {{ ($element['y'] ?? 0) / $boxHeight * 100 }}%;
+                            style="position: absolute; cursor: move; left: {{ $num($element['x'] ?? 0) / $boxWidth * 100 }}%; top: {{ $num($element['y'] ?? 0) / $boxHeight * 100 }}%;
                                 @if ($isText)
-                                    width: {{ ($element['width'] ?? $boxWidth) / $boxWidth * 100 }}%; font-size: {{ ($element['font_size'] ?? 12) * 0.3528 * 100 / $boxWidth }}cqw; line-height: 1.35; color: {{ e($element['color'] ?? '#111827') }}; text-align: {{ e($element['align'] ?? 'center') }}; font-weight: {{ ! empty($element['bold']) ? 700 : 400 }}; white-space: nowrap;
+                                    width: {{ $num($element['width'] ?? $boxWidth, $boxWidth) / $boxWidth * 100 }}%; font-size: {{ $num($element['font_size'] ?? 12, 12) * 0.3528 * 100 / $boxWidth }}cqw; line-height: 1.35; color: {{ e($element['color'] ?? '#111827') }}; text-align: {{ e($element['align'] ?? 'center') }}; font-weight: {{ ! empty($element['bold']) ? 700 : 400 }}; white-space: nowrap;
                                 @else
-                                    height: {{ ($element['height'] ?? 20) / $boxHeight * 100 }}%;
+                                    height: {{ $num($element['height'] ?? 20, 20) / $boxHeight * 100 }}%;
                                 @endif
                                 outline: {{ $selected === $index ? '2px solid #2563eb' : '1px dashed rgba(107,114,128,.5)' }};"
                         >

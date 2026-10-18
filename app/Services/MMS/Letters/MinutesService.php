@@ -8,6 +8,7 @@ use App\Models\MatterMinutes;
 use App\Models\MatterParty;
 use App\Models\Party;
 use App\Services\MMS\MatterProgressRecorder;
+use App\Support\FileName;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -509,6 +510,6 @@ class MinutesService
         $name = trim(__('Minutes').' '.$minutes->number.' — '.str_replace('/', '-', (string) $minutes->matter?->reference)
             .($minutes->meeting_at ? ' — '.$minutes->meeting_at->format('d-m-Y') : ''));
 
-        return trim(preg_replace(['/[\\\\\/:"*?<>|\x00-\x1F]+/u', '/\s+/u'], ' ', $name));
+        return FileName::safe($name, 'minutes');
     }
 }

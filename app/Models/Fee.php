@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\FeeStatus;
 use App\Enums\FeeType;
+use App\Models\Concerns\AnnouncesChanges;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,6 +15,7 @@ use Spatie\Activitylog\Support\LogOptions;
 
 class Fee extends Model
 {
+    use AnnouncesChanges;
     use HasFactory;
     use LogsActivity;
 

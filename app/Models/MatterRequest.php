@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\RequestStatus;
 use App\Enums\RequestType;
+use App\Models\Concerns\AnnouncesChanges;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -12,6 +13,7 @@ use Spatie\Activitylog\Support\LogOptions;
 
 class MatterRequest extends Model
 {
+    use AnnouncesChanges;
     use LogsActivity;
 
     public function getActivitylogOptions(): LogOptions

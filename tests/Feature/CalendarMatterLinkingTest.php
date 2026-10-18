@@ -19,8 +19,10 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -387,6 +389,41 @@ class CalendarMatterLinkingTest extends TestCase
 
         $this->assertSame([$matter->id], $old->matters()->pluck('matters.id')->all());
         Http::assertSent(fn (Request $request) => str_contains($request->url(), '/users/calendar@firm.ae/calendarView'));
+    }
+
+    public function test_a_blip_reaching_microsoft_is_tried_again(): void
+    {
+        // A timed-out or unresolved request failed the whole sync (and was
+        // reported as an error every time).
+        Sleep::fake();
+        $blips = ['token' => 1, 'calendar' => 1];
+
+        Http::fake(function (Request $request) use (&$blips) {
+            $which = str_contains($request->url(), 'login.microsoftonline.com') ? 'token' : 'calendar';
+
+            if ($blips[$which]-- > 0) {
+                return Http::failedConnection()($request);
+            }
+
+            return $which === 'token'
+                ? Http::response(['access_token' => 'token'])
+                : Http::response(['value' => [$this->remote('new', 'Session', now()->addDay()->utc()->format('Y-m-d\T10:00:00'))]]);
+        });
+
+        $counts = app(OutlookCalendarSync::class)->sync(now()->subDay(), now()->addMonth());
+
+        $this->assertSame(1, $counts['added']);
+    }
+
+    public function test_microsoft_out_of_reach_is_a_warning_not_an_error_report(): void
+    {
+        Sleep::fake();
+        Exceptions::fake();
+        Http::fake(fn (Request $request) => Http::failedConnection()($request));
+
+        $this->artisan('calendar:sync-outlook')->assertFailed();
+
+        Exceptions::assertNothingReported();
     }
 
     public function test_without_outlook_set_up_the_command_does_nothing(): void

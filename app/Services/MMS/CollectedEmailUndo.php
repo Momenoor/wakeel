@@ -52,7 +52,11 @@ class CollectedEmailUndo
         foreach (self::since($hours)->with('matter')->get() as $email) {
             try {
                 $this->undoOne($email, $result);
-                $mailboxes[(string) $email->sender_key] = true;
+                $key = (string) $email->sender_key;
+                // Read again from when the oldest of them arrived — an email collected in these hours may
+                // have come in days before (a backlog caught up).
+                $arrived = $email->at && $email->at->lt($from) ? $email->at : $from;
+                $mailboxes[$key] = isset($mailboxes[$key]) ? $mailboxes[$key]->min($arrived) : $arrived->copy();
                 $result['undone']++;
             } catch (Throwable $e) {
                 Log::warning('Collected email not undone: '.$e->getMessage(), ['email' => $email->getKey()]);
@@ -61,11 +65,11 @@ class CollectedEmailUndo
         }
 
         // Each mailbox read again from then — not from where it had got to.
-        foreach (array_keys($mailboxes) as $key) {
+        foreach ($mailboxes as $key => $since) {
             $checked = Setting::get(MatterReplyCollector::checkedKey($key));
 
-            if ($checked === null || $from->lt($checked)) {
-                Setting::set(MatterReplyCollector::checkedKey($key), $from->toDateTimeString(), 'mail');
+            if ($checked === null || $since->lt($checked)) {
+                Setting::set(MatterReplyCollector::checkedKey($key), $since->toDateTimeString(), 'mail');
             }
         }
 

@@ -32,6 +32,12 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     // app open never flickers off; gone, they show offline within it.
     public const ONLINE_WITHIN_SECONDS = 30;
 
+    /** Seen within this many seconds counts as online: at least two chat checks, so an open page never flickers off. */
+    public static function onlineWithinSeconds(): int
+    {
+        return max(self::ONLINE_WITHIN_SECONDS, LiveRefresh::seconds() * 2 + 5);
+    }
+
     use HasFactory, HasInbox, HasRoles, Notifiable;
     use LogsActivity;
 
@@ -103,7 +109,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     public static function onlineIds(): array
     {
         return Cache::remember('users.online', LiveRefresh::seconds(), fn (): array => static::query()
-            ->where('last_seen_at', '>', now()->subSeconds(self::ONLINE_WITHIN_SECONDS))
+            ->where('last_seen_at', '>', now()->subSeconds(self::onlineWithinSeconds()))
             ->pluck('id')
             ->map(fn ($id) => (int) $id)
             ->all());
@@ -111,7 +117,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
 
     public function isOnline(): bool
     {
-        return (bool) $this->last_seen_at?->gt(now()->subSeconds(self::ONLINE_WITHIN_SECONDS));
+        return (bool) $this->last_seen_at?->gt(now()->subSeconds(self::onlineWithinSeconds()));
     }
 
     /**

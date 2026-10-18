@@ -6,8 +6,8 @@
 
       - after anything done on the page (an action, a bulk action, a
         restore): the counts the records moved between;
-      - every minute, and when the tab comes back into view: what
-        others changed meanwhile.
+      - when others change something (over Pusher — or, without it, every
+        minute), and when the tab comes back into view.
 
     Only while the page is on screen; the request is the counts alone, not
     the table. Rendered on the pages that have such tabs (see the panel
@@ -68,7 +68,13 @@
                 }
             }));
 
-            setInterval(refresh, 60000);
+            // With Pusher: when something changes (wakeel-records-changed, see live-events-script);
+            // without it, every minute.
+            @if (\App\Support\Live::viaPusher())
+                window.addEventListener('wakeel-records-changed', soon);
+            @else
+                setInterval(refresh, 60000);
+            @endif
             document.addEventListener('visibilitychange', () => document.hidden || soon());
         };
 

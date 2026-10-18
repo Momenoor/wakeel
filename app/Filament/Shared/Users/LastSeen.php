@@ -56,7 +56,7 @@ class LastSeen
         return Filter::make('online')
             ->label(fn () => __('Online now'))
             ->toggle()
-            ->query(fn (Builder $query): Builder => $query->where('last_seen_at', '>', now()->subSeconds(User::ONLINE_WITHIN_SECONDS)));
+            ->query(fn (Builder $query): Builder => $query->where('last_seen_at', '>', now()->subSeconds(User::onlineWithinSeconds())));
     }
 
     public static function entry(): TextEntry
