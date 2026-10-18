@@ -43,6 +43,9 @@ final class AttachmentFields
 
     public const DIRECTORY = 'attachments-incoming';
 
+    /** The fields given() adds — to leave out of the record's own data. */
+    public const GIVEN = ['files', 'file_category'];
+
     /**
      * Many files at once, each checked as it is chosen against the kinds and the size attachments allow
      * (config/attachments.php). It holds the paths of what was uploaded — hand them to save() or attach().
@@ -103,6 +106,38 @@ final class AttachmentFields
     public static function schema(Model|Closure|null $owner = null): array
     {
         return [self::upload(), self::category($owner), self::description()];
+    }
+
+    /**
+     * Files given while the record itself is made (a fee, a payment): optional, the category among those
+     * the new record will allow. Kept with saveGiven() once the record exists.
+     *
+     *   ...AttachmentFields::given(new Fee),
+     *   $fee = Fee::create(Arr::except($data, AttachmentFields::GIVEN)); AttachmentFields::saveGiven($fee, $data);
+     *
+     * @return list<FileUpload|Select>
+     */
+    public static function given(Model $prototype): array
+    {
+        return [
+            self::upload(self::GIVEN[0])->label(__('Attachments'))->required(false),
+            self::category(fn (): Model => $prototype, self::GIVEN[1])->label(__('Attachment category')),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return Collection<int, Attachment>
+     */
+    public static function saveGiven(Model $owner, array $data): Collection
+    {
+        if (blank($data[self::GIVEN[0]] ?? null) || ! ($fallback = self::categories($owner)[0] ?? null)) {
+            return collect();
+        }
+
+        $category = AttachmentCategory::tryFrom((string) ($data[self::GIVEN[1]] ?? '')) ?? $fallback;
+
+        return self::attach($owner, (array) $data[self::GIVEN[0]], $category);
     }
 
     /**

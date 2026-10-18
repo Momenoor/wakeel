@@ -60,14 +60,15 @@ class AttachFilesAction extends Action
             ->icon('heroicon-o-paper-clip')
             ->modalHeading(__('Attach files'))
             ->successNotificationTitle(__('Attachments added successfully.'))
-            ->visible(fn (): bool => ($owner = $this->getOwner()) !== null && AttachmentFields::canAttach($owner))
-            ->schema(fn (): array => AttachmentFields::schema(fn (): ?Model => $this->getOwner()))
-            ->action(function (array $data): void {
-                $owner = $this->getOwner();
+            // The button given, never $this: in a repeated row (a fee's, a payment's) each row has its own copy.
+            ->visible(fn (self $action): bool => ($owner = $action->getOwner()) !== null && AttachmentFields::canAttach($owner))
+            ->schema(fn (self $action): array => AttachmentFields::schema(fn (): ?Model => $action->getOwner()))
+            ->action(function (array $data, self $action): void {
+                $owner = $action->getOwner();
 
                 // Nothing attached (each refusal was told): not a success.
                 if (! $owner || AttachmentFields::save($owner, $data)->isEmpty()) {
-                    $this->failure();
+                    $action->failure();
                 }
             });
     }

@@ -19,10 +19,13 @@ use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
 use App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager;
 use App\Filament\Mms\Resources\Matters\RelationManagers\ProgressRelationManager;
 use App\Filament\Support\AttachFilesAction;
+use App\Filament\Support\AttachmentFields;
+use App\Filament\Support\AttachmentList;
 use App\Filament\Support\EntryTable;
 use App\Livewire\MatterContacts;
 use App\Livewire\MatterOneDriveFiles;
 use App\Models\CalendarEvent;
+use App\Models\Fee;
 use App\Models\IncentiveAssistantLine;
 use App\Models\Matter;
 use App\Models\Party;
@@ -33,6 +36,7 @@ use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\OneDriveFolderLinker;
 use App\Support\Currency;
 use App\Support\ScreenPermissions;
+use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -56,6 +60,7 @@ use Filament\Support\Enums\FontWeight;
 use Filament\Support\Enums\IconPosition;
 use Filament\Support\Enums\TextSize;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -745,6 +750,7 @@ class MatterInfolist
     private static function feesSection(): Section
     {
         return Section::make(__('Fees & Collections'))
+            ->key('feesSection', isInheritable: false)
             ->icon('heroicon-o-banknotes')
             ->headerActions([
                 Action::make('create_fee')
@@ -770,8 +776,11 @@ class MatterInfolist
                             ->default(now()),
                         Textarea::make('description')
                             ->label(__('Description')),
+                        // The invoice, the contract … with it, if there is one.
+                        ...AttachmentFields::given(new Fee),
                     ])->action(function (array $data, $record, $component) {
-                        $record->fees()->create($data);
+                        $fee = $record->fees()->create(Arr::except($data, AttachmentFields::GIVEN));
+                        AttachmentFields::saveGiven($fee, $data);
                         $record->updateCollectionStatus();
                         $record->refresh();
                         $component->getLivewire()->refresh();
@@ -805,11 +814,13 @@ class MatterInfolist
 
                         Actions::make([
                             static::collectFeeAction(),
+                            static::attachFilesAction('attachFeeFiles', fn () => auth()->user()->can('CreateFee:Matter') || auth()->user()->can('UpdateFee:Matter')),
                             static::editFeeAction(),
                             static::deleteFeeAction(),
                         ])->alignEnd(),
                         TextEntry::make('description')->label(__('Description'))
                             ->placeholder('—')->columnSpan(2),
+                        AttachmentList::make(),
                         RepeatableEntry::make('allocations')
                             ->label(__('Payment History'))
                             ->columns(4)
@@ -821,7 +832,9 @@ class MatterInfolist
                                 TextEntry::make('date')->label(__('Date'))->date(),
                                 TextEntry::make('description')->label(__('Notes'))
                                     ->placeholder('—')->columnSpan(2),
+                                AttachmentList::make()->label(__('Receipts')),
                                 Actions::make([
+                                    static::attachFilesAction('attachPaymentFiles', fn () => auth()->user()->can('CollectFee:Matter')),
                                     static::editAllocationAction(),
                                     static::deleteAllocationAction(),
                                 ])->columnSpanFull(),
@@ -1215,6 +1228,16 @@ class MatterInfolist
             static::refreshRecord($component);
         });
 
+    }
+
+    /** Files for the fee or the payment the button is on (its own categories), by whoever deals with fees. */
+    private static function attachFilesAction(string $name, Closure $visible): Action
+    {
+        return AttachFilesAction::make($name)
+            ->iconButton()
+            ->tooltip(__('Attach files'))
+            ->visible($visible)
+            ->after(fn ($component) => static::refreshRecord($component));
     }
 
     private static function editFeeAction(): Action

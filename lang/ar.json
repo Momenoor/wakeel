@@ -4173,5 +4173,6 @@
     "A :category file cannot be attached here.": "لا يمكن إرفاق ملف من نوع :category هنا.",
     "A :extension file cannot be attached.": "لا يمكن إرفاق ملف بامتداد :extension.",
     "The file is bigger than :size MB.": "حجم الملف أكبر من :size ميغابايت.",
-    "Receipts": "الإيصالات"
+    "Receipts": "الإيصالات",
+    "Attachment category": "نوع المرفق"
 }

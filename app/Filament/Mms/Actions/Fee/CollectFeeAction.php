@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Actions\Fee;
 
+use App\Filament\Support\AttachmentFields;
 use App\Models\Allocation;
 use App\Support\Currency;
 use Filament\Actions\Action;
@@ -101,6 +102,8 @@ class CollectFeeAction extends Action
                     ->label(__('Notes / Reference'))
                     ->rows(2)
                     ->placeholder(__('Cheque number, bank transfer ref, etc.')),
+                // The receipt, the transfer, the cheque — if there is one.
+                ...AttachmentFields::given(new Allocation),
             ])
             ->action(function (array $data, $record, $component) {
                 $amount = $record->type?->isNegative()
@@ -114,6 +117,8 @@ class CollectFeeAction extends Action
                     'date' => $data['date'],
                     'description' => $data['description'] ?? null,
                 ]);
+
+                AttachmentFields::saveGiven($allocation, $data);
 
                 // Paid before the fee's date: the fee now dated from it — said so.
                 $allocation->tellIfFeeDateMoved();

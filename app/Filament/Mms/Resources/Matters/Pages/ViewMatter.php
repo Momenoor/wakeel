@@ -42,7 +42,7 @@ class ViewMatter extends ViewRecord
      */
     protected function resolveRecord(int|string $key): Model
     {
-        return parent::resolveRecord($key)->loadMissing(['requests.attachments', 'requests.requestBy']);
+        return parent::resolveRecord($key)->loadMissing(['requests.attachments', 'requests.requestBy', 'fees.ownedAttachments', 'fees.allocations.ownedAttachments']);
     }
 
     /**
