@@ -23,6 +23,7 @@ class MatterRequestsTable
                     ->label(__('Matter')),
                 TextColumn::make('requestBy.display_name')
                     ->label(__('Request By'))
+                    ->placeholder(__('The system'))
                     ->numeric()
                     ->sortable(),
                 TextColumn::make('status')

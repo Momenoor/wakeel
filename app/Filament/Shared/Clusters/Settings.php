@@ -9,9 +9,10 @@ use Filament\Support\Icons\Heroicon;
 /**
  * Every settings, lookup and maintenance screen behind one "Settings"
  * sidebar entry, in both panels — the screens list themselves in the
- * cluster's own side menu, grouped General, Master Data and Maintenance
- * (each screen's navigation group; the sort numbers keep those sections in
- * that order). Users, Roles and the activity log sit beside it rather than
+ * cluster's own side menu, grouped General, Communication, Integrations,
+ * Master Data and Maintenance (each screen's navigation group; the sort
+ * numbers keep those sections in that order: 10s General, 20s-30s
+ * Communication, 40s Integrations, 50s Master Data, 60s Maintenance). Users, Roles and the activity log sit beside it rather than
  * inside: those come from plugins whose pages can't be moved into a cluster.
  */
 class Settings extends Cluster

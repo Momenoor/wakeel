@@ -2,6 +2,8 @@
 
 namespace App\Livewire;
 
+use App\Enums\NotificationChannel;
+use App\Enums\NotificationType;
 use App\Events\ChatMessagesStatusChanged;
 use App\Filament\Mms\Pages\Chat;
 use App\Livewire\Concerns\ListensOnOwnChannel;
@@ -12,6 +14,7 @@ use App\Models\User;
 use App\Services\Chat\ChatBellNotifications;
 use App\Services\Chat\ChatMessenger;
 use App\Services\Chat\ChatReading;
+use App\Services\Notifications\NotificationPreferences;
 use App\Services\Notify\UserAlert;
 use App\Support\Dock;
 use BezhanSalleh\FilamentShield\Support\Utils;
@@ -200,15 +203,18 @@ class ChatWidget extends Component
         // the same tag as its push, so it never shows twice. Not for the
         // conversation on screen: it is being read.
         $latest->loadMissing(['sender', 'conversation']);
+        // Nor when chat messages are turned off in the bell (the desktop one follows it).
         $onScreen = (int) $latest->chat_conversation_id === (int) $this->activeConversationId && ($this->isOpen || $this->mode !== 'popup');
-        $onScreen || $this->dispatch(
-            'wakeel-desktop-notification',
-            id: 'chat-'.$latest->chat_conversation_id,
-            // In a group: the group, then who wrote.
-            title: ($latest->conversation?->is_group ? $latest->conversation->name.' — ' : '').(string) ($latest->sender?->display_name ?: $latest->sender?->name ?: __('Chat')),
-            body: $latest->preview(),
-            url: ChatMessenger::chatUrl($latest),
-        );
+        if (! $onScreen && NotificationPreferences::wants(Auth::user(), NotificationType::CHAT_MESSAGE, NotificationChannel::BELL)) {
+            $this->dispatch(
+                'wakeel-desktop-notification',
+                id: 'chat-'.$latest->chat_conversation_id,
+                // In a group: the group, then who wrote.
+                title: ($latest->conversation?->is_group ? $latest->conversation->name.' — ' : '').(string) ($latest->sender?->display_name ?: $latest->sender?->name ?: __('Chat')),
+                body: $latest->preview(),
+                url: ChatMessenger::chatUrl($latest),
+            );
+        }
 
         // A conversation on screen is being read as its messages arrive —
         // otherwise its own new message counted as unread elsewhere.
@@ -525,6 +531,7 @@ class ChatWidget extends Component
                 ChatMessenger::chatUrl($message),
                 'info',
                 'heroicon-o-face-smile',
+                NotificationType::CHAT_REACTION,
             );
         }
 

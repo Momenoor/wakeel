@@ -168,7 +168,7 @@ class LettersRelationManager extends RelationManager
                 'formats' => ['pdf'],
                 'recipients' => $record->recipients->pluck('id')->all(),
                 'grouping' => EmailGrouping::ALL,
-                // The matter's experts of the kinds System Settings names.
+                // The matter's experts of the kinds Settings → Letters & emails names.
                 // …and the covering email's own.
                 'cc' => EmailSendFields::startingCc($record->matter, self::coverEmail($record)?->getKey()),
                 // …and, on the email to each, whom they brought in.

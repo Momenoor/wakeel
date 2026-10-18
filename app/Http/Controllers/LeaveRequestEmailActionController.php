@@ -84,8 +84,16 @@ class LeaveRequestEmailActionController
         ]);
     }
 
+    /**
+     * An employee with a user hears the decision from the service, by what they chose — whoever
+     * decided; this is for one with no user, who has only the email.
+     */
     private function notifyRequester(LeaveRequest $leaveRequest): void
     {
+        if ($leaveRequest->party->user_id) {
+            return;
+        }
+
         $email = $leaveRequest->party->email;
 
         if (blank($email)) {

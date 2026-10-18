@@ -7,6 +7,13 @@ use App\Filament\Mms\Pages\Auth\CustomLogin;
 use App\Filament\Mms\Pages\Auth\CustomProfile;
 use App\Filament\Mms\Support\SystemSwitcher;
 use App\Filament\Shared\ActivityLog\AuditDashboard;
+use App\Filament\Shared\Pages\AnnouncementSettings;
+use App\Filament\Shared\Pages\GeneralSettings;
+use App\Filament\Shared\Pages\IntegrationsSettings;
+use App\Filament\Shared\Pages\LettersSettings;
+use App\Filament\Shared\Pages\MailServerSettings;
+use App\Filament\Shared\Pages\NotificationSettings;
+use App\Filament\Shared\Pages\OfflineSettings;
 use App\Filament\Shared\Pages\Performance;
 use App\Filament\Shared\Pages\SystemSettings;
 use App\Filament\Shared\Pages\SystemUpdates;
@@ -141,7 +148,15 @@ trait SharesPanelConfiguration
     protected function sharedPages(Panel $panel): Panel
     {
         return $panel->pages([
+            // The old one-page System Settings: now only a landing that redirects.
             SystemSettings::class,
+            GeneralSettings::class,
+            MailServerSettings::class,
+            LettersSettings::class,
+            NotificationSettings::class,
+            AnnouncementSettings::class,
+            IntegrationsSettings::class,
+            OfflineSettings::class,
             SystemUpdates::class,
             Performance::class,
             UserGuide::class,

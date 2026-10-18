@@ -34,7 +34,7 @@ class FinancialConfiguration extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::AdjustmentsHorizontal;
 
-    protected static ?int $navigationSort = 12;
+    protected static ?int $navigationSort = 53;
 
     protected static ?string $cluster = Settings::class;
 
@@ -49,7 +49,7 @@ class FinancialConfiguration extends Page
 
     public static function getNavigationGroup(): ?string
     {
-        return __('General');
+        return __('Master Data');
     }
 
     public function getTitle(): string

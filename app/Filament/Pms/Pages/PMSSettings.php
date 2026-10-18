@@ -16,7 +16,7 @@ class PMSSettings extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::AdjustmentsHorizontal;
 
-    protected static ?int $navigationSort = 11;
+    protected static ?int $navigationSort = 54;
 
     protected static ?string $cluster = Settings::class;
 
@@ -29,7 +29,7 @@ class PMSSettings extends Page
 
     public static function getNavigationGroup(): ?string
     {
-        return __('General');
+        return __('Master Data');
     }
 
     public function getTitle(): string

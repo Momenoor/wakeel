@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\NotificationType as Type;
 use App\Enums\ProgressType;
 use App\Filament\Mms\Resources\BulkMailCampaigns\Pages\ViewBulkMailCampaign;
 use App\Filament\Mms\Resources\BulkMailCampaigns\RelationManagers\RecipientsRelationManager;
@@ -27,6 +28,7 @@ use App\Services\MMS\MatterReplyCollector;
 use App\Services\MMS\SenderMailer;
 use App\Services\MMS\SentEmailArchive;
 use App\Services\MMS\SentFolder;
+use App\Services\Notifications\NotificationPreferences as Prefs;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -156,6 +158,25 @@ class MatterRepliesTest extends TestCase
         $this->assertSame(['mona@example.com', 'boss@jpa.ae'], $sent->to);
         $this->assertNotNull($sent->message_id);
         $this->assertTrue($sent->source->is($letter));
+    }
+
+    public function test_the_sender_is_told_of_a_reply_only_when_they_want_the_bell(): void
+    {
+        $sent = $this->sentEmail();
+        Prefs::make()->saveUser($this->user, [Type::MATTER_REPLY_RECEIVED->value => ['bell' => false]]);
+
+        $this->assertSame(1, app(MatterReplyCollector::class)->handle([$this->reply(['references' => ['<abc123@jpa.ae>']])], collect([$sent])));
+        $this->assertSame(0, $this->user->notifications()->count());
+
+        // Mandatory for the role: told whatever they chose, and the notification knows what it is.
+        $role = Role::create(['name' => 'sender', 'guard_name' => 'web']);
+        Prefs::make()->saveRole($role, [Type::MATTER_REPLY_RECEIVED->value => ['bell' => Prefs::LOCKED]]);
+        $this->user->assignRole($role);
+
+        $again = $this->reply(['message_id' => '<reply-2@dubaipolice.gov.ae>', 'references' => ['<abc123@jpa.ae>']]);
+        $this->assertSame(1, app(MatterReplyCollector::class)->handle([$again], collect([$sent->fresh()])));
+        $told = $this->user->refresh()->notifications()->sole();
+        $this->assertSame(Type::MATTER_REPLY_RECEIVED->value, $told->data['viewData'][Type::DATA_KEY]);
     }
 
     public function test_a_reply_is_kept_with_its_files_in_onedrive_and_progress_and_the_sender_told(): void

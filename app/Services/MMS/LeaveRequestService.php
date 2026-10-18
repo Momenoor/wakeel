@@ -3,16 +3,23 @@
 namespace App\Services\MMS;
 
 use App\Enums\LeaveType;
+use App\Enums\NotificationChannel;
+use App\Enums\NotificationType;
 use App\Enums\RequestStatus;
+use App\Mail\LeaveRequestDecisionMail;
 use App\Models\LeaveRequest;
 use App\Models\LeaveRequestPeriod;
 use App\Models\PartyLeave;
 use App\Models\User;
-use App\Services\Notify\UserAlert;
+use App\Services\Notifications\NotificationPreferences;
+use App\Services\Notifications\Notifier;
+use Filament\Notifications\Notification;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 use RuntimeException;
+use Throwable;
 
 /**
  * Approval and rejection of leave requests.
@@ -131,32 +138,53 @@ class LeaveRequestService
     }
 
     /**
-     * The employee hears the decision in the system — bell, desktop, phone —
-     * however it was made (the panel or the office email's one-click link).
+     * The employee hears the decision however it was made (the panel or the office email's one-click
+     * link), by what they chose (NotificationType::LEAVE_DECIDED): the bell — with the desktop and phone
+     * notifications — the decision email, WhatsApp. An employee with no user is not asked: the email
+     * link alone sends them the email (LeaveRequestEmailActionController).
      */
     private function tellRequester(LeaveRequest $request, bool $approved): void
     {
+        $user = $request->party?->user;
+
+        if (! $user) {
+            return;
+        }
+
         $period = __(':start to :end', [
             'start' => $request->start_date?->format('d/m/Y') ?? '—',
             'end' => $request->end_date?->format('d/m/Y') ?? '—',
         ]);
+        $status = $approved ? 'success' : 'danger';
+        $type = NotificationType::LEAVE_DECIDED;
 
-        $user = $request->party?->user;
-
-        UserAlert::send(
-            $user,
+        Notifier::send(
+            $type,
+            [$user],
             $approved ? __('Leave request approved') : __('Leave request rejected'),
             $approved
                 ? __('Your leave request for :period was approved.', ['period' => $period])
                 : __('Your leave request for :period was rejected: :reason', ['period' => $period, 'reason' => (string) $request->approved_comment]),
             // The request itself, for whoever may open it; the list otherwise.
             match (true) {
-                $user?->can('update', $request) && Route::has('filament.mms.resources.leave-requests.edit') => route('filament.mms.resources.leave-requests.edit', $request),
+                $user->can('update', $request) && Route::has('filament.mms.resources.leave-requests.edit') => route('filament.mms.resources.leave-requests.edit', $request),
                 Route::has('filament.mms.resources.leave-requests.index') => route('filament.mms.resources.leave-requests.index'),
                 default => null,
             },
-            $approved ? 'success' : 'danger',
+            fn (Notification $notification) => $notification->status($status)->iconColor($status),
+            [NotificationChannel::BELL, NotificationChannel::WHATSAPP],
         );
+
+        // To the address the employee gave as a party, else their user's.
+        $address = filled($request->party->email) ? $request->party->email : $user->email;
+
+        if (filled($address) && NotificationPreferences::wants($user, $type, NotificationChannel::MAIL)) {
+            try {
+                Mail::to($address)->locale('ar')->queue(new LeaveRequestDecisionMail($request));
+            } catch (Throwable $e) {
+                report($e);
+            }
+        }
     }
 
     /**

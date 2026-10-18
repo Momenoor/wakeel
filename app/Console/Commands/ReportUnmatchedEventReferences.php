@@ -2,11 +2,14 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\NotificationChannel;
+use App\Enums\NotificationType;
 use App\Filament\Mms\Pages\AdminDashboard;
 use App\Mail\UnmatchedEventReferencesMail;
 use App\Models\CalendarEvent;
 use App\Models\User;
 use App\Services\MMS\Calendar\UnmatchedEventReferences;
+use App\Services\Notifications\NotificationPreferences;
 use BezhanSalleh\FilamentShield\Support\Utils;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Mail;
@@ -34,13 +37,15 @@ class ReportUnmatchedEventReferences extends Command
             return self::SUCCESS;
         }
 
-        $recipients = User::role(['admin', Utils::getSuperAdminName()])
-            ->get()
-            ->filter(fn (User $user) => filled($user->email))
-            ->unique('email');
+        // Of the admins, those who want it by email (a role can make it mandatory, a user can mute it).
+        $recipients = NotificationPreferences::wanting(
+            NotificationType::CALENDAR_UNMATCHED,
+            User::role(['admin', Utils::getSuperAdminName()])->get()->filter(fn (User $user) => filled($user->email))->unique('email'),
+            NotificationChannel::MAIL,
+        );
 
         if ($recipients->isEmpty()) {
-            $this->warn('No super admin or admin with an email address.');
+            $this->warn('No super admin or admin with an email address who wants it.');
 
             return self::SUCCESS;
         }

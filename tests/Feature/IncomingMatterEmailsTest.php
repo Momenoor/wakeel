@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\NotificationType as NType;
 use App\Enums\ProgressType;
 use App\Filament\Mms\Pages\UnfiledEmails;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
@@ -21,6 +22,7 @@ use App\Services\MMS\IncomingEmailMatcher;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterReplyCollector;
 use App\Services\MMS\SentFolder;
+use App\Services\Notifications\NotificationPreferences as Prefs;
 use App\Support\Tolerant;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -264,6 +266,33 @@ class IncomingMatterEmailsTest extends TestCase
         $this->collect($this->email(['message_id' => '<pending-1@albanna.ae>']));
         $this->assertSame(2, $otherAdmin->notifications()->count());
         $this->assertTrue($otherAdmin->notifications()->get()->contains(fn ($note) => str_starts_with((string) ($note->data['title'] ?? ''), 'Which matter is this email from')));
+    }
+
+    public function test_an_email_is_told_only_to_those_who_want_it_in_the_bell(): void
+    {
+        $muted = $this->assistantOn($this->second);
+        $kept = $this->assistantOn($this->second);
+        Prefs::make()->saveUser($muted, [NType::MATTER_EMAIL_RECEIVED->value => ['bell' => false], NType::MATTER_EMAIL_UNFILED->value => ['bell' => false]]);
+        Prefs::make()->saveUser($kept, [NType::MATTER_EMAIL_RECEIVED->value => ['bell' => false]]);
+        // Mandatory for their role: told whatever they chose.
+        $role = Role::create(['name' => 'assistants', 'guard_name' => 'web']);
+        Prefs::make()->saveRole($role, [NType::MATTER_EMAIL_RECEIVED->value => ['bell' => Prefs::LOCKED]]);
+        $kept->assignRole($role);
+
+        $this->collect($this->email(['subject' => 'مستندات القضية 987/2026']));
+
+        $this->assertSame(0, $muted->notifications()->count());
+        $note = $kept->refresh()->notifications()->sole();
+        $this->assertSame(NType::MATTER_EMAIL_RECEIVED->value, $note->data['viewData'][NType::DATA_KEY]);
+        $this->assertSame(['View'], array_column($note->data['actions'], 'label'));
+        // The super admins keep theirs, with the bullets as before.
+        $this->assertStringContainsString('<li>', (string) $this->user->notifications()->sole()->data['body']);
+
+        // Asked to choose a matter: the same for that type.
+        $this->assistantOn($this->first);
+        $this->collect($this->email(['message_id' => '<pending-1@albanna.ae>']));
+        $this->assertSame(0, $muted->notifications()->count());
+        $this->assertSame(NType::MATTER_EMAIL_UNFILED->value, $this->user->notifications()->get()->first(fn ($note) => str_starts_with((string) $note->data['title'], 'Which matter is this email from'))->data['viewData'][NType::DATA_KEY]);
     }
 
     public function test_filing_by_hand_tells_the_people_of_the_matter_but_not_who_filed_it(): void

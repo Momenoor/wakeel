@@ -111,7 +111,7 @@ final class ScreenPermissions
 
     public const FINANCIAL_PAYROLL_TAB = 'View:FinancialPayrollTab';
 
-    // ── System Settings tabs ─────────────────────────────────────────────
+    // ── System Settings pages — once its tabs; each page is gated by its tab's permission ──
     public const SETTINGS_MAINTENANCE_TAB = 'View:SystemSettingsMaintenanceTab';
 
     public const SETTINGS_GENERAL_TAB = 'View:SystemSettingsGeneralTab';

@@ -71,16 +71,16 @@ class MatterLetter extends Model
     /**
      * JPA/{matter year}/{matter number}/{sequence}.
      */
-    /** The letter reference format until it is changed in System Settings. */
+    /** The letter reference format until it is changed in Settings → Letters & emails. */
     public const DEFAULT_REFERENCE_FORMAT = 'JPA/{year}/{number}/{seq}';
 
-    /** Copied in on a letter's email until System Settings says otherwise: the assistants. */
+    /** Copied in on a letter's email until Settings → Letters & emails says otherwise: the assistants. */
     public const DEFAULT_CC_EXPERT_TYPES = ['assistant', 'external-assistant'];
 
     /**
      * Which of the matter's experts are copied in on every letter's email
      * (Party::expertTypeOptions(): certified, assistant, external,
-     * external-assistant) — System Settings; none ticked, no one.
+     * external-assistant) — Settings → Letters & emails; none ticked, no one.
      *
      * @return list<string>
      */
@@ -93,7 +93,7 @@ class MatterLetter extends Model
 
     /**
      * The emails of the matter's experts copied in on its letters and
-     * minutes — the kinds ticked in System Settings (the assistants, unless
+     * minutes — the kinds ticked in Settings → Letters & emails (the assistants, unless
      * changed) — from their party, or the account they sign in with.
      *
      * @return list<string>

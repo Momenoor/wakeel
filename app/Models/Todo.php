@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\NotificationType;
+use App\Services\Notifications\Notifier;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
@@ -141,6 +143,7 @@ class Todo extends Model
         $this->sharedWith()->sync($mentioned->pluck('id')->all());
 
         $this->tell(
+            NotificationType::TODO_MENTIONED,
             $mentioned->reject(fn (User $u) => in_array($u->id, $before, true)),
             __(':name mentioned you in a to-do', ['name' => $this->user?->name]),
             'heroicon-o-at-symbol',
@@ -155,6 +158,7 @@ class Todo extends Model
 
         if ($done) {
             $this->tell(
+                NotificationType::TODO_COMPLETED,
                 $this->participants()->reject(fn (User $u) => $u->is($user)),
                 __(':name completed a shared to-do', ['name' => $user->name]),
                 'heroicon-o-check-circle',
@@ -195,23 +199,26 @@ class Todo extends Model
     /**
      * @param  Collection<int, User>  $users
      */
-    private function tell(Collection $users, string $title, string $icon): void
+    private function tell(NotificationType $type, Collection $users, string $title, string $icon): void
     {
         if ($users->isEmpty()) {
             return;
         }
 
         try {
-            Notification::make()
-                ->title($title)
-                ->icon($icon)
-                ->iconColor('warning')
-                ->body($this->title.' — '.self::dayLabel($this->due_on))
-                ->actions([
-                    // The page they were on, the note opened.
-                    Action::make('open')->label(__('Open the to-do list'))->url(rtrim((string) (Filament::getCurrentPanel()?->getUrl() ?? url('/mms')), '/').'?todo=1')->markAsRead(),
-                ])
-                ->sendToDatabase($users);
+            Notifier::send(
+                $type,
+                $users,
+                $title,
+                $this->title.' — '.self::dayLabel($this->due_on),
+                configure: fn (Notification $notification) => $notification
+                    ->icon($icon)
+                    ->iconColor('warning')
+                    ->actions([
+                        // The page they were on, the note opened.
+                        Action::make('open')->label(__('Open the to-do list'))->url(rtrim((string) (Filament::getCurrentPanel()?->getUrl() ?? url('/mms')), '/').'?todo=1')->markAsRead(),
+                    ]),
+            );
         } catch (Throwable $e) {
             Log::info('To-do notification not sent: '.$e->getMessage());
         }

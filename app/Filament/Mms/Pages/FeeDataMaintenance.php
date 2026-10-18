@@ -37,7 +37,7 @@ class FeeDataMaintenance extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedWrenchScrewdriver;
 
-    protected static ?int $navigationSort = 30;
+    protected static ?int $navigationSort = 61;
 
     protected static ?string $cluster = Settings::class;
 

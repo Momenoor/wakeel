@@ -36,7 +36,8 @@ class MatterRequestInfolist
                                             ->url(fn ($record) => route('filament.mms.resources.matters.view', $record->matter_id))
                                             ->formatStateUsing(fn ($state) => "{$state->number}/{$state->year}"),
                                         TextEntry::make('requestBy.display_name')
-                                            ->label(__('Request By')),
+                                            ->label(__('Request By'))
+                                            ->placeholder(__('The system')),
                                         Grid::make(2)->schema([
                                             TextEntry::make('type')
                                                 ->label(__('Request Type'))

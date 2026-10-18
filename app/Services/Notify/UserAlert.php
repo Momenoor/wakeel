@@ -2,7 +2,10 @@
 
 namespace App\Services\Notify;
 
+use App\Enums\NotificationChannel;
+use App\Enums\NotificationType;
 use App\Models\User;
+use App\Services\Notifications\NotificationPreferences;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Collection;
@@ -21,13 +24,18 @@ class UserAlert
      * @param  User|iterable<User|null>|null  $users
      * @param  'info'|'success'|'warning'|'danger'  $status
      * @param  string|null  $icon  in place of the status's own icon
+     * @param  NotificationType|null  $type  what it is: kept in the notification, and only those who want it in the bell are told (their preferences)
      */
-    public static function send(User|iterable|null $users, string $title, ?string $body = null, ?string $url = null, string $status = 'info', ?string $icon = null): void
+    public static function send(User|iterable|null $users, string $title, ?string $body = null, ?string $url = null, string $status = 'info', ?string $icon = null, ?NotificationType $type = null): void
     {
         $recipients = Collection::wrap($users instanceof User ? [$users] : ($users ?? []))
             ->filter(fn ($user) => $user instanceof User)
             ->unique(fn (User $user) => $user->getKey())
             ->values();
+
+        if ($type) {
+            $recipients = NotificationPreferences::wanting($type, $recipients, NotificationChannel::BELL);
+        }
 
         if ($recipients->isEmpty()) {
             return;
@@ -35,6 +43,10 @@ class UserAlert
 
         try {
             $notification = Notification::make()->title($title)->status($status);
+
+            if ($type) {
+                $notification->viewData([NotificationType::DATA_KEY => $type->value]);
+            }
 
             if (filled($body)) {
                 $notification->body($body);

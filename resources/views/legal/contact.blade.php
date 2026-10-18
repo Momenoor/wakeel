@@ -1,4 +1,4 @@
-{{-- The office's contact details (System Settings), on the legal pages. --}}
+{{-- The office's contact details (Settings → General), on the legal pages. --}}
 @php
     $email = \App\Support\CompanyContact::email();
     $phone = \App\Support\CompanyContact::phone();

@@ -61,10 +61,10 @@ parameters:
 			path: app/Filament/Mms/Pages/Payroll/EndOfServiceGratuityClosingVoucher.php
 
 		-
-			message: '#^Access to an undefined property App\\Filament\\Mms\\Pages\\SystemSettings\:\:\$form\.$#'
+			message: '#^Access to an undefined property App\\Filament\\Shared\\Pages\\SettingsFormPage\:\:\$form\.$#'
 			identifier: property.notFound
 			count: 2
-			path: app/Filament/Shared/Pages/SystemSettings.php
+			path: app/Filament/Shared/Pages/SettingsFormPage.php
 
 		-
 			message: '#^Cannot access property \$id on Illuminate\\Database\\Eloquent\\Model\|int\|string\.$#'

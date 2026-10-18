@@ -28,7 +28,7 @@ class AccessControlMaintenance extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShieldCheck;
 
-    protected static ?int $navigationSort = 31;
+    protected static ?int $navigationSort = 62;
 
     protected static ?string $cluster = Settings::class;
 

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Letters;
 
+use App\Enums\NotificationType as NType;
 use App\Enums\ProgressType;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
@@ -21,6 +22,7 @@ use App\Models\User;
 use App\Models\WhatsAppTemplate;
 use App\Services\MMS\Letters\MinutesSender;
 use App\Services\MMS\Letters\MinutesService;
+use App\Services\Notifications\NotificationPreferences as Prefs;
 use App\Services\WhatsAppCloud;
 use App\Support\CompanyContact;
 use App\Support\EmailGrouping;
@@ -359,6 +361,39 @@ class MinutesSignatureTest extends TestCase
             ->assertTableColumnStateSet('signed', '1 / 1', $this->minutes)
             ->mountTableAction('signatures', $this->minutes)
             ->assertMountedActionModalSee(['https://od/signed/file.pdf', __('In OneDrive'), __('Signed').' '.$delivery->fresh()->signed_at->format('d/m/Y H:i')]);
+    }
+
+    public function test_the_sender_is_told_of_a_reply_only_when_they_want_the_bell(): void
+    {
+        $this->send();
+        Setting::set(WhatsAppCloud::APP_SECRET, encrypt('app-secret'), 'whatsapp');
+        $post = function (string $id, string $text) {
+            $payload = json_encode(['entry' => [['changes' => [['value' => ['messages' => [[
+                'from' => '971501132801', 'id' => $id, 'type' => 'text', 'timestamp' => '1791000000',
+                'context' => ['id' => 'wamid.sent1'],
+                'text' => ['body' => $text],
+            ]]]]]]]]);
+
+            return $this->call('POST', '/webhooks/whatsapp', [], [], [], [
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_X_HUB_SIGNATURE_256' => 'sha256='.hash_hmac('sha256', $payload, 'app-secret'),
+            ], $payload);
+        };
+        $sender = User::findOrFail($this->minutes->deliveries()->where('channel', MinutesDelivery::WHATSAPP)->sole()->sent_by);
+        Prefs::make()->saveUser($sender, [NType::MINUTES_REPLY->value => ['bell' => false]]);
+
+        $post('wamid.text1', 'سأرسله موقعاً غداً')->assertOk();
+        $this->assertSame(0, $sender->notifications()->count());
+
+        // Mandatory for their role: told whatever they chose — the notification knowing what it is.
+        $role = Role::create(['name' => 'minutes-senders', 'guard_name' => 'web']);
+        Prefs::make()->saveRole($role, [NType::MINUTES_REPLY->value => ['bell' => Prefs::LOCKED]]);
+        $sender->assignRole($role);
+
+        $post('wamid.text2', 'وعندي ملاحظة على البند 3')->assertOk();
+        $told = $sender->notifications()->sole();
+        $this->assertStringContainsString('وعندي ملاحظة على البند 3', $told->data['body']);
+        $this->assertSame(NType::MINUTES_REPLY->value, $told->data['viewData'][NType::DATA_KEY]);
     }
 
     public function test_a_text_sent_back_instead_is_kept_told_and_answered_once(): void

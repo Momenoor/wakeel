@@ -2,13 +2,16 @@
 
 namespace Tests\Feature;
 
+use App\Enums\NotificationType as Type;
 use App\Livewire\TodoNote;
 use App\Models\Todo;
 use App\Models\User;
+use App\Services\Notifications\NotificationPreferences as Prefs;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
@@ -145,6 +148,34 @@ class TodoNoteTest extends TestCase
         $this->assertEqualsCanonicalizing([$sara->id, $ahmed->id], $todo->sharedWith()->pluck('users.id')->all());
         $this->assertSame(1, $ahmed->notifications()->count());
         $this->assertSame(1, $sara->notifications()->count());
+    }
+
+    public function test_mentions_and_completions_are_told_only_to_those_who_want_the_bell(): void
+    {
+        $sara = User::factory()->create(['name' => 'Sara']);
+        $ali = User::factory()->create(['name' => 'Ali']);
+        Prefs::make()->saveUser($sara, [Type::TODO_MENTIONED->value => ['bell' => false]]);
+        Prefs::make()->saveUser($this->user, [Type::TODO_COMPLETED->value => ['bell' => false]]);
+
+        $todo = $this->todo('Send the report to @Sara and @Ali', '2026-10-12');
+        $todo->shareWithMentioned();
+
+        // Shared with both, but only Ali is told — with what it is kept in the notification.
+        $this->assertSame(2, $todo->sharedWith()->count());
+        $this->assertSame(0, $sara->notifications()->count());
+        $this->assertSame(Type::TODO_MENTIONED->value, $ali->notifications()->sole()->data['viewData'][Type::DATA_KEY]);
+
+        // Ticked by Sara: the creator, who turned it off, is not told …
+        $todo->refresh()->tickBy($sara);
+        $this->assertSame(0, $this->user->notifications()->count());
+        // … until their role makes it mandatory.
+        $role = Role::create(['name' => 'noters', 'guard_name' => 'web']);
+        Prefs::make()->saveRole($role, [Type::TODO_COMPLETED->value => ['bell' => Prefs::LOCKED]]);
+        $this->user->assignRole($role);
+        $todo->refresh()->tickBy($sara);
+        $todo->refresh()->tickBy($sara);
+        $told = $this->user->refresh()->notifications()->sole();
+        $this->assertSame(Type::TODO_COMPLETED->value, $told->data['viewData'][Type::DATA_KEY]);
     }
 
     public function test_a_shared_to_do_is_ticked_once_for_all_and_only_its_creator_changes_it(): void

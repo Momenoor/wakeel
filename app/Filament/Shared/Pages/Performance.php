@@ -56,7 +56,7 @@ class Performance extends Page implements HasTable
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Bolt;
 
-    protected static ?int $navigationSort = 33;
+    protected static ?int $navigationSort = 64;
 
     protected static ?string $cluster = Settings::class;
 

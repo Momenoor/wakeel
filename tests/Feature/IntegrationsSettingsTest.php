@@ -2,11 +2,10 @@
 
 namespace Tests\Feature;
 
-use App\Filament\Shared\Pages\SystemSettings;
+use App\Filament\Shared\Pages\IntegrationsSettings;
 use App\Models\Setting;
 use App\Models\User;
 use App\Observers\LeaveRequestObserver;
-use App\Services\Installer\EnvironmentFileWriter;
 use App\Support\Integrations;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -17,7 +16,7 @@ use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
- * Each office's own outside services, from System Settings → Integrations:
+ * Each office's own outside services, from Settings → Integrations:
  * on when filled in (over .env), off when not, secrets kept encrypted.
  */
 class IntegrationsSettingsTest extends TestCase
@@ -95,18 +94,11 @@ class IntegrationsSettingsTest extends TestCase
         $this->assertSame('tenant-2', Integrations::get(Integrations::MS_TENANT));
     }
 
-    public function test_the_super_admin_sets_them_in_system_settings(): void
+    public function test_the_super_admin_sets_them_on_the_integrations_page(): void
     {
-        // Saving writes APP_LOCALE to .env — never the real one.
-        $envPath = sys_get_temp_dir().'/integrations-test-'.uniqid().'.env';
-        file_put_contents($envPath, "APP_LOCALE=en\n");
-        $this->app->instance(EnvironmentFileWriter::class, new EnvironmentFileWriter($envPath));
-
-        Livewire::test(SystemSettings::class)
-            ->assertSee(__('Integrations'))
+        Livewire::test(IntegrationsSettings::class)
             ->fillForm([
                 Integrations::PUSHER_APP => '9', Integrations::PUSHER_KEY => 'k', Integrations::PUSHER_SECRET => 's', Integrations::PUSHER_CLUSTER => 'eu',
-                'mail_mailer' => 'log',
             ])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -115,7 +107,7 @@ class IntegrationsSettingsTest extends TestCase
         $this->assertNotSame('s', Setting::query()->where('key', Integrations::PUSHER_SECRET)->value('value'));
 
         // Saved secrets don't come back to the page.
-        Livewire::test(SystemSettings::class)->assertSet('data.'.Integrations::PUSHER_SECRET, null);
+        Livewire::test(IntegrationsSettings::class)->assertSet('data.'.Integrations::PUSHER_SECRET, null);
     }
 
     public function test_leave_requests_go_to_the_set_addresses_or_whoever_approves_leave(): void

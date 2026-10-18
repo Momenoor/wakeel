@@ -2,6 +2,8 @@
 
 namespace App\Services\MMS\Requests;
 
+use App\Enums\NotificationChannel;
+use App\Enums\NotificationType;
 use App\Enums\RequestStatus;
 use App\Enums\RequestType;
 use App\Mail\NewRequestNotificationMail;
@@ -9,11 +11,15 @@ use App\Mail\RequestActionNotificationMail;
 use App\Models\Matter;
 use App\Models\MatterRequest;
 use App\Models\User;
+use App\Services\Notifications\NotificationPreferences;
+use App\Services\Notifications\Notifier;
 use App\Services\WhatsAppService;
 use BezhanSalleh\FilamentShield\Support\Utils;
-use Filament\Actions\Action;
+use Closure;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Component;
+use Illuminate\Mail\Mailable;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
@@ -128,6 +134,7 @@ abstract class BaseRequestService
         $this->request->update(['extra' => [...(array) $this->request->extra, 'modifications' => (int) ($this->request->extra['modifications'] ?? 0) + 1]]);
 
         $this->onActionNotify(
+            NotificationType::REQUEST_CHANGES,
             __('Changes requested'),
             __('Changes were requested on your request. Details: :reason', ['reason' => $this->request->approved_comment])
         );
@@ -205,44 +212,64 @@ abstract class BaseRequestService
         }
     }
 
-    private function notify(string $title, string $body, mixed $recipients): void
+    /**
+     * The bell, to those of them who want it so (the "View" button is kept untranslated, so each
+     * reader sees it in their own language when shown — AppServiceProvider).
+     *
+     * @param  Collection<int, User>  $recipients
+     */
+    private function notify(NotificationType $type, string $title, string $body, Collection $recipients): void
     {
-        // The button kept as "View" — untranslated, so each reader sees it
-        // in their own language when shown (AppServiceProvider); it showed
-        // "View" in Arabic — and an icon, which it had none of.
-        Notification::make()
-            ->title($title)
-            ->body($body)
-            ->icon('heroicon-o-clipboard-document-list')
-            ->iconColor('info')
-            ->actions([
-                Action::make('view')
-                    ->label('View')->translateLabel(false)
-                    ->url(route('filament.mms.resources.matter-requests.view', $this->request))
-                    ->markAsRead(),
-            ])
-            ->sendToDatabase($recipients);
+        Notifier::bell(
+            $type,
+            NotificationPreferences::wanting($type, $recipients, NotificationChannel::BELL),
+            $title,
+            $body,
+            $this->requestUrl(),
+            fn (Notification $notification) => $notification->icon('heroicon-o-clipboard-document-list'),
+        );
     }
 
-    private function onActionNotify(string $title, string $body): void
+    private function requestUrl(): string
+    {
+        return route('filament.mms.resources.matter-requests.view', $this->request);
+    }
+
+    /**
+     * The request's own email, one to each of those who want it so (never one with everybody in To:);
+     * one that cannot be sent does not stop the others.
+     *
+     * @param  Collection<int, User>  $recipients
+     * @param  Closure(): Mailable  $mail
+     */
+    private function mailEach(NotificationType $type, Collection $recipients, Closure $mail): void
+    {
+        $wanting = NotificationPreferences::wanting($type, $recipients, NotificationChannel::MAIL)
+            ->filter(fn (User $user): bool => filled($user->email));
+
+        foreach ($wanting as $user) {
+            try {
+                Mail::to($user->email)->send($mail());
+            } catch (\Throwable $e) {
+                \Log::warning('Request email not sent: '.$e->getMessage(), ['user' => $user->getKey(), 'request' => $this->request->getKey()]);
+            }
+        }
+    }
+
+    /** Tells the matter's assistants (their users) what was decided on their request. */
+    private function onActionNotify(NotificationType $type, string $title, string $body): void
     {
         $statusLabel = $this->request->status->getLabel();
 
         $assistants = $this->request->matter->assistantsOnly
             ->map(fn ($mp) => $mp->party?->user)
-            ->filter();
-        $assistants->each(fn ($user) => $this->notify($title, $body, $user));
+            ->filter()
+            ->unique(fn (User $user) => $user->getKey())
+            ->values();
 
-        if ($assistants->isNotEmpty()) {
-            $emails = $assistants->pluck('email')->filter();
-            if ($emails->isNotEmpty()) {
-                Mail::to($emails)->send(new RequestActionNotificationMail(
-                    $this->request->matter,
-                    $this->request,
-                    $statusLabel
-                ));
-            }
-        }
+        $this->notify($type, $title, $body, $assistants);
+        $this->mailEach($type, $assistants, fn () => new RequestActionNotificationMail($this->request->matter, $this->request, $statusLabel));
+        Notifier::whatsapp(NotificationPreferences::wanting($type, $assistants, NotificationChannel::WHATSAPP), $title, $body, $this->requestUrl());
     }
 
     public function onCreateNotify(bool $again = false): void
@@ -253,7 +280,25 @@ abstract class BaseRequestService
             // role, but through Shield's own configured name rather than a
             // hardcoded literal that has to be kept in sync with it by hand.
             $users = User::role(['admin', Utils::getSuperAdminName()])->get();
+
+            // The assistant's reviewers (Parties → the assistant): the report on WhatsApp, to answer there. One who
+            // got it is not also told of a new request, by bell, email or WhatsApp: it is the same thing.
+            $reached = [];
+            try {
+                $reached = app(ReportReviewWhatsApp::class)->send($this->request)['reached'];
+            } catch (\Throwable $e) {
+                \Log::warning('Report not sent to its reviewers on WhatsApp: '.$e->getMessage(), ['request' => $this->request->getKey()]);
+            }
+            $users = $users->reject(fn (User $user): bool => in_array($user->getKey(), $reached, true))->values();
+
+            if ($users->isEmpty()) {
+                return;
+            }
+
+            $type = NotificationType::REQUEST_CREATED;
+
             $this->notify(
+                $type,
                 $again ? __('Request Resubmitted') : __('Request Created'),
                 __($again ? 'The :type request for matter #:number / :year was corrected and sent again' : 'A new :type request has been created, for matter #:number / :year', [
                     'type' => $this->request->type->getLabel(),
@@ -263,26 +308,15 @@ abstract class BaseRequestService
                 $users
             );
 
-            // The assistant's reviewers (Parties → the assistant): the report on WhatsApp, to answer there.
-            try {
-                app(ReportReviewWhatsApp::class)->send($this->request);
-            } catch (\Throwable $e) {
-                \Log::warning('Report not sent to its reviewers on WhatsApp: '.$e->getMessage(), ['request' => $this->request->getKey()]);
+            foreach (NotificationPreferences::wanting($type, $users, NotificationChannel::WHATSAPP) as $user) {
+                try {
+                    WhatsAppService::notifyNewRequest($user, $this->request);
+                } catch (\Throwable $e) {
+                    \Log::warning('New request not sent on WhatsApp: '.$e->getMessage(), ['user' => $user->getKey(), 'request' => $this->request->getKey()]);
+                }
             }
 
-            $whatsappUsers = $users->filter(function ($user) {
-                return $user->notify_by_whatsapp;
-            });
-            $whatsappUsers->map(function ($user) {
-                WhatsAppService::notifyNewRequest($user, $this->request);
-            });
-            $emails = $users->pluck('email');
-            Mail::to($emails)
-                ->send(new NewRequestNotificationMail(
-                    $this->request->matter,
-                    $this->request
-                )
-                );
+            $this->mailEach($type, $users, fn () => new NewRequestNotificationMail($this->request->matter, $this->request));
 
         } catch (\Exception $e) {
             \Log::error('Failed to send notification: '.$e->getMessage());
@@ -293,6 +327,7 @@ abstract class BaseRequestService
     protected function onApproveNotify(): void
     {
         $this->onActionNotify(
+            NotificationType::REQUEST_DECIDED,
             __('Request Approved'),
             __('Your request has been approved.')
         );
@@ -302,6 +337,7 @@ abstract class BaseRequestService
     {
         $reason = $this->request->approved_comment;
         $this->onActionNotify(
+            NotificationType::REQUEST_DECIDED,
             __('Request Rejected'),
             __('Your request has been rejected. Reason: :reason', ['reason' => $reason])
         );

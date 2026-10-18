@@ -46,7 +46,7 @@ class SystemUpdates extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::ArrowPathRoundedSquare;
 
-    protected static ?int $navigationSort = 32;
+    protected static ?int $navigationSort = 63;
 
     protected static ?string $cluster = Settings::class;
 

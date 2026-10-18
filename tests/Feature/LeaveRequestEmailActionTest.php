@@ -68,14 +68,15 @@ class LeaveRequestEmailActionTest extends TestCase
 
         $request = $this->request($this->employee());
 
-        Mail::assertQueued(
-            LeaveRequestSubmittedMail::class,
-            fn (LeaveRequestSubmittedMail $mail): bool => $mail->leaveRequest->is($request)
-                && $mail->hasTo('redha@jpaemirates.com')
-                && $mail->hasCc('expert@jpaemirates.com')
-                && $mail->hasCc('momen.noor@jpaemirates.com')
-                && $mail->hasCc('info@jpaemirates.com'),
-        );
+        // One mail to each address (each user's own choice applies to theirs), none copied to the others.
+        Mail::assertQueued(LeaveRequestSubmittedMail::class, 4);
+
+        foreach (['redha@jpaemirates.com', 'expert@jpaemirates.com', 'momen.noor@jpaemirates.com', 'info@jpaemirates.com'] as $address) {
+            Mail::assertQueued(
+                LeaveRequestSubmittedMail::class,
+                fn (LeaveRequestSubmittedMail $mail): bool => $mail->leaveRequest->is($request) && $mail->hasTo($address) && count($mail->to) === 1 && $mail->cc === [],
+            );
+        }
     }
 
     public function test_the_submitted_mail_carries_the_employees_annual_leave_balance(): void

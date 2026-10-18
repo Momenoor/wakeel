@@ -148,8 +148,8 @@ npm run build
 
 Everything an office needs is set from inside the system — no `.env` editing:
 
-1. **System Settings → General**: system and company name, company **phone, WhatsApp and email** (shown on the legal pages and available as `{{company.*}}` everywhere), default language, letter reference format, logos and favicon.
-2. **System Settings → Integrations** (super admin only) — each service is **off until filled in**, with a *Connected / Off* badge and a *Turn off* button:
+1. **Settings → General**: system and company name, company **phone, WhatsApp and email** (shown on the legal pages and available as `{{company.*}}` everywhere), default language, currency, logos and favicon. The letter reference format and who is copied in on letters are under **Settings → Communication → Letters & emails**.
+2. **Settings → Integrations** (super admin only) — each service is **off until filled in**, with a *Connected / Off* badge and a *Turn off* button:
 
    | Service | What it powers | Without it |
    |---|---|---|
@@ -159,9 +159,9 @@ Everything an office needs is set from inside the system — no `.env` editing:
    | **WhatsApp** (phone number ID, access token) | Sending minutes and messages on WhatsApp | Off |
 
    Secrets are stored encrypted and never sent back to the page.
-3. **Settings → Mail senders**: the office's mailboxes, each **cPanel (SMTP)** or **Microsoft 365**.
+3. **Settings → Communication → Mail senders**: the office's mailboxes, each **cPanel (SMTP)** or **Microsoft 365**.
 4. **Templates**: letterheads, letter templates, email templates (letters / minutes for signature), WhatsApp templates (and the webhook's app secret).
-5. **System Settings → Notifications**: who receives new leave requests (empty: whoever can approve leave).
+5. **Settings → Communication**: *Notifications* (what each role is told of, and how), and *Announcements & delivery* (the announcement banner, who receives new leave requests — empty: whoever can approve leave — and how often the chat checks for messages).
 
 Values in `.env` still work as a fallback for installations set up before these settings existed.
 
@@ -175,7 +175,7 @@ composer run dev          # PHP server, queue worker and Vite together
 
 Or separately: `php artisan serve`, `npm run dev`, `php artisan queue:work`.
 
-On a server, either point a real cron at `php artisan schedule:run` every minute, or create a **cron-job.org** job for the link shown in **System Settings → Integrations → Scheduled tasks**.
+On a server, either point a real cron at `php artisan schedule:run` every minute, or create a **cron-job.org** job for the link shown in **Settings → Integrations → Scheduled tasks**.
 
 ---
 
@@ -207,7 +207,7 @@ On a server, either point a real cron at `php artisan schedule:run` every minute
 
 ## Environment Variables
 
-Most configuration lives in **System Settings**. `.env` holds what the server needs before the database is reachable:
+Most configuration lives in **Settings** (General, Communication, Integrations, Master Data, Maintenance). `.env` holds what the server needs before the database is reachable:
 
 | Variable | Description | Example |
 |---|---|---|
@@ -219,7 +219,7 @@ Most configuration lives in **System Settings**. `.env` holds what the server ne
 | `MODULE_MMS_ENABLED`, `MODULE_PMS_ENABLED` (and `MODULE_MMS_PAYROLL_ENABLED`, `…_COMMUNICATIONS_ENABLED`, `…_CALENDAR_ENABLED`) | Which panels and modules this installation has | `true` |
 | `LICENSE_SERVER_URL` | Licence server (the key is entered in the installer) | — |
 
-Optional fallbacks (prefer **System Settings → Integrations**): `PUSHER_*`, `MICROSOFT_*` / `MICROSOFT_GRAPH_*`, `WHATSAPP_*`, `CRON_TOKEN`.
+Optional fallbacks (prefer **Settings → Integrations**): `PUSHER_*`, `MICROSOFT_*` / `MICROSOFT_GRAPH_*`, `WHATSAPP_*`, `CRON_TOKEN`.
 
 ---
 
@@ -243,7 +243,7 @@ wakeel/
 │   ├── Filament/
 │   │   ├── Mms/            # Matter Management panel: resources, pages, actions, widgets
 │   │   ├── Pms/            # Property Management panel
-│   │   └── Shared/         # Both panels: System Settings, Updates, Performance, User Guide, chat
+│   │   └── Shared/         # Both panels: the settings pages, Updates, Performance, User Guide, chat
 │   ├── Http/               # Controllers (cron, WhatsApp webhook, prints, decisions) and middleware
 │   ├── Livewire/           # Chat widget, installer, notification poller
 │   ├── Models/             # Eloquent models
@@ -266,7 +266,7 @@ wakeel/
 
 ## Releasing a New Version
 
-Installations learn about new versions from the licence server on their regular check-in. Super admins see an **update available** banner and update from **System Settings → System Updates** (or **Ctrl+Alt+U**). The updater checks out the release's git tag, runs `composer install`, migrates, refreshes permissions and rebuilds caches, with the site in maintenance mode.
+Installations learn about new versions from the licence server on their regular check-in. Super admins see an **update available** banner and update from **Settings → Maintenance → System Updates** (or **Ctrl+Alt+U**). The updater checks out the release's git tag, runs `composer install`, migrates, refreshes permissions and rebuilds caches, with the site in maintenance mode.
 
 To publish a release:
 

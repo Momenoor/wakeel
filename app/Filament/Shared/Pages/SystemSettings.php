@@ -3,46 +3,42 @@
 namespace App\Filament\Shared\Pages;
 
 use App\Filament\Shared\Clusters\Settings;
-use App\Filament\Shared\Pages\Schemas\SystemSettingsForm;
-use App\Filament\Support\EmailSendFields;
-use App\Filament\Support\SettingsForm;
-use App\Models\MatterLetter;
-use App\Models\Setting;
-use App\Services\Installer\EnvironmentFileWriter;
-use App\Services\MMS\MatterReplyCollector;
-use App\Services\MMS\SenderMailer;
-use App\Support\Branding;
-use App\Support\CompanyContact;
-use App\Support\Integrations;
-use App\Support\LiveRefresh;
-use BackedEnum;
-use Filament\Actions\Action;
-use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
-use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 
+/**
+ * Once one page with a tab for every kind of setting; now a landing for the
+ * old address (/settings/system-settings, with or without ?tab=): it sends
+ * the visitor to the page that holds what that tab held, or to the first
+ * settings page they may open. Each kind of setting is its own page in the
+ * Settings menu — see {@see self::pages()}. The View:SystemSettings
+ * permission still opens the whole group (each page then asks for its tab's
+ * permission, as the tabs did), and Shield still lists it under Pages.
+ */
 class SystemSettings extends Page
 {
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::Cog6Tooth;
-
-    protected static ?int $navigationSort = 10;
-
     protected static ?string $cluster = Settings::class;
 
-    public ?array $data = [];
+    protected static bool $shouldRegisterNavigation = false;
+
+    /**
+     * What each old tab became, by a word of its name ("letters-emails" is
+     * Letters, not Email: the more specific words come first).
+     */
+    private const TABS = [
+        'letters' => LettersSettings::class,
+        'notification' => AnnouncementSettings::class,
+        'announcement' => AnnouncementSettings::class,
+        'integration' => IntegrationsSettings::class,
+        'maintenance' => OfflineSettings::class,
+        'offline' => OfflineSettings::class,
+        'general' => GeneralSettings::class,
+        'email' => MailServerSettings::class,
+    ];
 
     public static function getNavigationLabel(): string
     {
         return __('System Settings');
-    }
-
-    public static function getNavigationGroup(): ?string
-    {
-        return __('General');
     }
 
     public function getTitle(): string
@@ -61,191 +57,48 @@ class SystemSettings extends Page
         return auth()->user()?->can('View:SystemSettings') ?? false;
     }
 
+    /**
+     * The pages that were this one's tabs, in the order of the Settings menu.
+     *
+     * @return list<class-string<SettingsFormPage>>
+     */
+    public static function pages(): array
+    {
+        return [
+            GeneralSettings::class,
+            MailServerSettings::class,
+            LettersSettings::class,
+            AnnouncementSettings::class,
+            IntegrationsSettings::class,
+            OfflineSettings::class,
+        ];
+    }
+
     public function mount(): void
     {
-        $this->form->fill([
-            'app_offline' => Setting::get('app_offline', false),
-            'offline_message' => Setting::get('offline_message', __('System is currently undergoing scheduled maintenance. Please check back later.')),
-            'offline_allow_admins' => Setting::get('offline_allow_admins', true),
-
-            'app_name' => Setting::get('app_name', config('app.name', 'JPA Emirates')),
-            'company_name' => Setting::get('company_name', 'JPA Auditing & Accounting'),
-            ...collect(CompanyContact::KEYS)->mapWithKeys(fn (string $key): array => [$key => Setting::get($key)])->all(),
-            'leave_request_recipients' => (array) Setting::get('leave_request_recipients', []),
-            // Integrations: saved secrets stay on the server (empty here).
-            ...collect(Integrations::KEYS)->mapWithKeys(fn (string $key): array => [$key => in_array($key, Integrations::SECRETS, true) ? null : Integrations::get($key)])->all(),
-            // app_timezone_display is a Placeholder — it reads config('app.timezone')
-            // directly in the schema and carries no state of its own.
-            'app_locale' => Setting::get('app_locale', 'ar'),
-            'currency_code' => Setting::get('currency_code', 'AED'),
-            'records_per_page' => Setting::get('records_per_page', 25),
-            'letter_reference_format' => Setting::get('letter_reference_format', MatterLetter::DEFAULT_REFERENCE_FORMAT),
-            'letter_cc_expert_types' => MatterLetter::ccExpertTypes(),
-            ...collect(Branding::KEYS)->mapWithKeys(fn (string $key): array => [$key => Setting::get($key)])->all(),
-            Branding::EMAIL_PDF => Setting::get(Branding::EMAIL_PDF, Branding::EMAIL_PDF_OUTLOOK),
-            Branding::EMAIL_PDF_FONT => Setting::get(Branding::EMAIL_PDF_FONT),
-
-            'mail_sender_key' => Setting::get('mail_sender_key'),
-            MatterReplyCollector::KEEP_ALL => MatterReplyCollector::keepsAll(),
-            MatterReplyCollector::LOOK_BACK => MatterReplyCollector::lookBackDays(),
-            MatterReplyCollector::IGNORED => MatterReplyCollector::ignoredSenders(),
-            EmailSendFields::DEFAULT_SENDER => Setting::get(EmailSendFields::DEFAULT_SENDER),
-            'mail_mailer' => Setting::get('mail_mailer', config('mail.default', 'smtp')),
-            'mail_host' => Setting::get('mail_host', config('mail.mailers.smtp.host', '')),
-            'mail_port' => Setting::get('mail_port', config('mail.mailers.smtp.port', 587)),
-            'mail_username' => Setting::get('mail_username', config('mail.mailers.smtp.username', '')),
-            'mail_password' => Setting::get('mail_password', config('mail.mailers.smtp.password', '')),
-            'mail_encryption' => Setting::get('mail_encryption', config('mail.mailers.smtp.encryption', 'tls')),
-            'mail_from_address' => Setting::get('mail_from_address', config('mail.from.address', '')),
-            'mail_from_name' => Setting::get('mail_from_name', config('mail.from.name', '')),
-
-            'default_notify_by_email' => Setting::get('default_notify_by_email', true),
-            LiveRefresh::SETTING => LiveRefresh::configured(),
-            'default_notify_by_whatsapp' => Setting::get('default_notify_by_whatsapp', false),
-            'system_announcement' => Setting::get('system_announcement', ''),
-            'show_system_announcement' => Setting::get('show_system_announcement', false),
-        ]);
-    }
-
-    public function form(Schema $schema): Schema
-    {
-        return SystemSettingsForm::configure($schema)
-            ->statePath('data');
-    }
-
-    public function content(Schema $schema): Schema
-    {
-        return $schema
-            ->components([
-                SettingsForm::make($this->getFormActions()),
-            ]);
+        $this->redirect(static::landingUrl((string) request()->query('tab')));
     }
 
     /**
-     * @return array<Action>
+     * The page for an old tab name, else the first one the user may open,
+     * else the Settings menu itself (which opens whatever it has for them).
      */
-    protected function getFormActions(): array
+    public static function landingUrl(?string $tab = null): string
     {
-        return [
-            SettingsForm::saveAction(),
-        ];
-    }
+        $tab = Str::lower((string) $tab);
 
-    /**
-     * @return array<Action>
-     */
-    protected function getHeaderActions(): array
-    {
-        return [
-            Action::make('sendTestEmail')
-                ->label(__('Send Test Email'))
-                ->icon(Heroicon::PaperAirplane)
-                ->color('gray')
-                ->form([
-                    TextInput::make('recipient')
-                        ->label(__('Recipient Email Address'))
-                        ->email()
-                        ->required()
-                        ->default(fn () => auth()->user()?->email),
-                ])
-                ->action(function (array $data): void {
-                    $this->sendTestEmail($data['recipient']);
-                }),
-        ];
-    }
-
-    public function save(): void
-    {
-        $state = $this->form->getState();
-
-        $groupMap = [
-            'app_offline' => 'system',
-            'offline_message' => 'system',
-            'offline_allow_admins' => 'system',
-
-            'app_name' => 'general',
-            'company_name' => 'general',
-            'company_phone' => 'general',
-            'company_whatsapp' => 'general',
-            'company_email' => 'general',
-            'app_locale' => 'general',
-            'currency_code' => 'general',
-            'records_per_page' => 'general',
-            'letter_reference_format' => 'general',
-            'letter_cc_expert_types' => 'general',
-
-            'mail_sender_key' => 'mail',
-            MatterReplyCollector::KEEP_ALL => 'mail',
-            MatterReplyCollector::LOOK_BACK => 'mail',
-            MatterReplyCollector::IGNORED => 'mail',
-            EmailSendFields::DEFAULT_SENDER => 'mail',
-            'mail_mailer' => 'mail',
-            'mail_host' => 'mail',
-            'mail_port' => 'mail',
-            'mail_username' => 'mail',
-            'mail_password' => 'mail',
-            'mail_encryption' => 'mail',
-            'mail_from_address' => 'mail',
-            'mail_from_name' => 'mail',
-
-            'default_notify_by_email' => 'notifications',
-            LiveRefresh::SETTING => 'notifications',
-            'default_notify_by_whatsapp' => 'notifications',
-            'system_announcement' => 'notifications',
-            'show_system_announcement' => 'notifications',
-        ];
-
-        Branding::save($state);
-        Integrations::save($state);
-
-        foreach (Arr::except($state, [...Branding::KEYS, ...Integrations::KEYS]) as $key => $value) {
-            $group = $groupMap[$key] ?? 'general';
-            Setting::set($key, $value, $group);
+        foreach (self::TABS as $word => $page) {
+            if ($tab !== '' && str_contains($tab, $word) && $page::canAccess()) {
+                return $page::getUrl();
+            }
         }
 
-        Setting::applyMailConfig();
-
-        // The live default language is APP_LOCALE (config('app.locale')),
-        // not this setting — keep .env in step, as the installer does.
-        if (filled($state['app_locale'] ?? null)) {
-            app(EnvironmentFileWriter::class)->set(['APP_LOCALE' => $state['app_locale']]);
+        foreach (static::pages() as $page) {
+            if ($page::canAccess()) {
+                return $page::getUrl();
+            }
         }
 
-        Notification::make()
-            ->title(__('Settings saved successfully'))
-            ->success()
-            ->send();
-    }
-
-    protected function sendTestEmail(string $recipient): void
-    {
-        try {
-            Setting::applyMailConfig();
-
-            Mail::raw(
-                __('This is a test email sent from :app to verify that your email server settings are properly configured.', [
-                    'app' => Setting::get('app_name', config('app.name', 'JPA Emirates')),
-                ]),
-                function ($message) use ($recipient) {
-                    $message->to($recipient)
-                        ->subject(__('Test Email - :app', [
-                            'app' => Setting::get('app_name', config('app.name', 'JPA Emirates')),
-                        ]));
-                }
-            );
-
-            Notification::make()
-                ->title(__('Test email sent successfully'))
-                ->body(__('A test email has been dispatched to :recipient.', ['recipient' => $recipient]))
-                ->success()
-                ->send();
-        } catch (\Throwable $e) {
-            Notification::make()
-                ->title(__('Failed to send test email'))
-                ->body(SenderMailer::reason($e))
-                ->persistent()
-                ->danger()
-                ->send();
-        }
+        return Settings::getUrl();
     }
 }

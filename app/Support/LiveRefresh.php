@@ -7,7 +7,7 @@ use Throwable;
 
 /**
  * How often the chat checks for new messages — the bubble and the Chat page
- * alike, Pusher or not: one interval, set in System Settings (Notifications)
+ * alike, Pusher or not: one interval, set in Settings → Announcements & delivery
  * so it can be eased on a busy server without a release. A check with
  * nothing new sends nothing back.
  *
@@ -29,7 +29,7 @@ final class LiveRefresh
     /** With Pusher: how often a conversation on screen says it is still being read (nothing else is checked). */
     public const WITH_PUSHER = 60;
 
-    /** The interval as set in System Settings. */
+    /** The interval as set in Settings → Announcements & delivery. */
     public static function configured(): int
     {
         try {

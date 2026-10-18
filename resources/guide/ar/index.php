@@ -50,7 +50,7 @@ return [
         $m('الإدارة', 'users', 'shared', 'heroicon-o-users', 'المستخدمون', 'الحسابات وكلمات المرور والتقمص'),
         $m('الإدارة', 'roles', 'shared', 'heroicon-o-shield-check', 'الأدوار والصلاحيات', 'من يرى ماذا ويفعل ماذا'),
         $m('الإدارة', 'activity', 'shared', 'heroicon-o-clipboard-document-list', 'سجلات النشاط ولوحة المراجعة', 'أثر المراجعة لكل عملية'),
-        $m('الإدارة', 'sysettings', 'shared', 'heroicon-o-cog-6-tooth', 'إعدادات النظام', 'الهوية والبريد والإشعارات والصيانة'),
+        $m('الإدارة', 'sysettings', 'shared', 'heroicon-o-cog-6-tooth', 'إعدادات النظام', 'الهوية والبريد والخطابات والتكاملات والإعلان والصيانة'),
         $m('الإدارة', 'maintenance', 'mms', 'heroicon-o-wrench-screwdriver', 'صفحات الصيانة', 'الصلاحيات والأتعاب وصعوبة القضايا'),
         $m('الإدارة', 'updates', 'mms', 'heroicon-o-arrow-path', 'التحديثات ومجلدات OneDrive', 'تحديث النظام وربط OneDrive'),
     ],

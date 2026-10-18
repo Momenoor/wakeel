@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Filament\Mms\Resources\MailSenders\Pages\ManageMailSenders;
-use App\Filament\Shared\Pages\SystemSettings;
+use App\Filament\Shared\Pages\MailServerSettings;
 use App\Models\MailSender;
 use App\Models\Setting;
 use App\Models\User;
@@ -152,7 +152,7 @@ class MailSenderDetectionTest extends TestCase
         $this->assertSame('custom@jpaemirates.com', config('mail.from.address'));
     }
 
-    public function test_system_settings_offer_the_senders(): void
+    public function test_the_email_settings_offer_the_senders(): void
     {
         MailSender::create(['key' => 'noreply', 'name' => 'JPA Emirates', 'address' => 'noreply@jpaemirates.com', 'driver' => MailSender::MICROSOFT]);
 
@@ -163,7 +163,7 @@ class MailSenderDetectionTest extends TestCase
         $envPath = tempnam(sys_get_temp_dir(), 'env');
         $this->app->instance(EnvironmentFileWriter::class, new EnvironmentFileWriter($envPath));
 
-        Livewire::test(SystemSettings::class)
+        Livewire::test(MailServerSettings::class)
             ->fillForm(['mail_sender_key' => 'noreply'])
             ->call('save')
             ->assertHasNoFormErrors();

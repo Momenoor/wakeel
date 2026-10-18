@@ -50,7 +50,7 @@ class OneDriveSettings extends Page implements HasTable
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCloud;
 
-    protected static ?int $navigationSort = 13;
+    protected static ?int $navigationSort = 41;
 
     protected static ?string $cluster = Settings::class;
 
@@ -70,7 +70,7 @@ class OneDriveSettings extends Page implements HasTable
 
     public static function getNavigationGroup(): ?string
     {
-        return __('General');
+        return __('Integrations');
     }
 
     public function getTitle(): string

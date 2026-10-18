@@ -27,7 +27,7 @@ class CourtResource extends Resource
 
     protected static string|null|BackedEnum $navigationIcon = 'heroicon-o-building-library';
 
-    protected static ?int $navigationSort = 22;
+    protected static ?int $navigationSort = 52;
 
     protected static ?string $cluster = Settings::class;
 

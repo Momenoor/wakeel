@@ -2,6 +2,7 @@
 
 namespace App\Services\MMS;
 
+use App\Enums\NotificationType;
 use App\Filament\Mms\Pages\OneDriveSettings;
 use App\Jobs\CreateMatterOneDriveFolder;
 use App\Jobs\MoveMatterOneDriveFolder;
@@ -15,6 +16,7 @@ use App\Models\Setting;
 use App\Models\Type;
 use App\Models\User;
 use App\Services\MMS\Calendar\MatterReferenceMatcher;
+use App\Services\Notifications\Notifier;
 use Carbon\CarbonInterface;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -251,24 +253,33 @@ class MatterOneDriveFolders
     private function tellManagers(MatterOneDriveFolder $folder, array $candidates): void
     {
         try {
-            $managers = User::query()->get()->filter(fn (User $user): bool => $user->can('View:OneDriveSettings'));
+            // Roles and permissions loaded at once: asked of every user here, and again for their preferences.
+            $managers = User::query()->with(['roles.permissions', 'permissions'])->get()->filter(fn (User $user): bool => $user->can('View:OneDriveSettings'));
 
             if ($managers->isEmpty()) {
                 return;
             }
 
-            Notification::make()
-                ->warning()
-                ->icon('heroicon-o-folder-open')
-                ->title(__('A OneDrive folder for :matter is already there', ['matter' => $folder->matter?->number.'/'.$folder->matter?->year]))
-                ->body(__(':assistant has :names — no new folder was made. Decide whether to standardise and link it.', [
+            $matter = $folder->matter?->number.'/'.$folder->matter?->year;
+            $url = OneDriveSettings::getUrl(panel: 'mms');
+
+            Notifier::send(
+                NotificationType::ONEDRIVE_FOLDER_REVIEW,
+                $managers,
+                __('A OneDrive folder for :matter is already there', ['matter' => $matter]),
+                __(':assistant has :names — no new folder was made. Decide whether to standardise and link it.', [
                     'assistant' => $folder->party?->name,
                     'names' => collect($candidates)->pluck('name')->implode('، '),
-                ]))
-                ->actions([
-                    Action::make('review')->label('Review')->translateLabel(false)->url(OneDriveSettings::getUrl(panel: 'mms'))->markAsRead(),
-                ])
-                ->sendToDatabase($managers);
+                ]),
+                $url,
+                fn (Notification $notification) => $notification
+                    ->warning()
+                    ->icon('heroicon-o-folder-open')
+                    ->iconColor('warning')
+                    ->actions([
+                        Action::make('review')->label('Review')->translateLabel(false)->url($url)->markAsRead(),
+                    ]),
+            );
         } catch (\Throwable $e) {
             Log::info('OneDrive folder notice not sent', ['folder' => $folder->getKey(), 'error' => $e->getMessage()]);
         }

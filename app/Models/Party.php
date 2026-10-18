@@ -301,6 +301,12 @@ class Party extends Model
         return isset($this->role['role']) && in_array('expert', (array) $this->role['role']);
     }
 
+    /** An expert of the assistant type — whose matter folders are made in their OneDrive and whose reports are reviewed. */
+    public function isAssistant(): bool
+    {
+        return $this->isExpert() && in_array('assistant', (array) ($this->role['type'] ?? []), true);
+    }
+
     /**
      * Whether this party is on the payroll.
      *

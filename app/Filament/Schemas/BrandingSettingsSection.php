@@ -8,7 +8,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Support\Icons\Heroicon;
 
 /**
- * Shared by System Settings (MMS) and PMS Settings — lives outside both
+ * Shared by General Settings (both panels) and PMS Settings — lives outside both
  * modules' folders so pruning either one never removes it. Saved through
  * {@see Branding::save()}, never as ordinary settings keys. Every upload
  * has the image editor, for cropping before it's saved.

@@ -6,7 +6,7 @@ use App\Models\Setting;
 use Throwable;
 
 /**
- * The office's own outside services, entered in System Settings →
+ * The office's own outside services, entered in Settings →
  * Integrations: Microsoft 365 (OneDrive, Outlook calendar, Microsoft 365
  * mailboxes), Pusher (live updates), the cron-job.org link (scheduled tasks
  * and the queue) and WhatsApp. Each office has its own; nothing is shared.

@@ -2,11 +2,14 @@
 
 namespace App\Services\Chat;
 
+use App\Enums\NotificationChannel;
+use App\Enums\NotificationType;
 use App\Events\ChatMessageSent;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\PushSubscription;
 use App\Models\User;
+use App\Services\Notifications\NotificationPreferences;
 use App\Services\Push\WebPushSender;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Route;
@@ -64,9 +67,11 @@ class ChatMessenger
         // with no Wakeel tab open.
         // Not those with the conversation on screen (ChatReading): they see
         // it arrive — no bell, no push.
-        $recipients = $conversation->participants->pluck('id')
-            ->reject(fn ($id) => $id === $sender->getKey() || ChatReading::isReading((int) $id, (int) $conversation->id))
-            ->values()->all();
+        // Nor those who turned chat messages off in the bell (the push follows the bell).
+        $recipients = $conversation->participants
+            ->reject(fn (User $user) => $user->getKey() === $sender->getKey() || ChatReading::isReading((int) $user->getKey(), (int) $conversation->id))
+            ->filter(fn (User $user) => NotificationPreferences::wants($user, NotificationType::CHAT_MESSAGE, NotificationChannel::BELL))
+            ->pluck('id')->values()->all();
 
         // In the bell, one entry per sender counting up while unread.
         foreach ($conversation->participants as $participant) {

@@ -14,6 +14,7 @@ use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
@@ -31,6 +32,7 @@ use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 
 /**
@@ -45,7 +47,7 @@ class MailSenderResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedAtSymbol;
 
-    protected static ?int $navigationSort = 14;
+    protected static ?int $navigationSort = 21;
 
     protected static ?string $cluster = Settings::class;
 
@@ -56,7 +58,7 @@ class MailSenderResource extends Resource
 
     public static function getNavigationGroup(): ?string
     {
-        return __('General');
+        return __('Communication');
     }
 
     public static function getModelLabel(): string
@@ -181,7 +183,7 @@ class MailSenderResource extends Resource
                 ->columnSpanFull()
                 ->schema([
                     // Its logos side by side stay so in the editor too.
-                    \Filament\Forms\Components\Placeholder::make('signature_css')->hiddenLabel()->content(new \Illuminate\Support\HtmlString(MailSender::previewCss())),
+                    Placeholder::make('signature_css')->hiddenLabel()->content(new HtmlString(MailSender::previewCss())),
                     RichEditor::make('signature')->hiddenLabel()->extraAttributes(['class' => 'wk-signature'], merge: true)->extraInputAttributes(['dir' => 'ltr'], merge: true)->tap(RichEditorDirection::apply(...)),
                 ]),
         ]);

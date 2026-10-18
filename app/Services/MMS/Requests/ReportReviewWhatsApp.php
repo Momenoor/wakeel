@@ -15,6 +15,7 @@ use App\Services\WhatsAppService;
 use Closure;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -68,11 +69,11 @@ class ReportReviewWhatsApp
      * The report to each reviewer. Nothing when it is not a report request, WhatsApp is not set up, no
      * template for it is, or the assistant has no reviewers — the request goes as before.
      *
-     * @return array{sent: int, failed: int}
+     * @return array{sent: int, failed: int, reached: list<int>} the ids of the reviewers it reached
      */
     public function send(MatterRequest $request): array
     {
-        $result = ['sent' => 0, 'failed' => 0];
+        $result = ['sent' => 0, 'failed' => 0, 'reached' => []];
         $template = WhatsAppTemplate::default(WhatsAppTemplate::REPORT_REVIEW);
         $reviewers = self::reviewersOf($request);
 
@@ -109,6 +110,7 @@ class ReportReviewWhatsApp
 
                 $delivery->update(['message_id' => $messageId, 'sent_at' => now()]);
                 $result['sent']++;
+                $result['reached'][] = $reviewer->getKey();
             } catch (Throwable $e) {
                 $delivery->update(['status' => ReportReviewDelivery::FAILED, 'error' => mb_substr($e->getMessage(), 0, 2000)]);
                 Log::warning('Report not sent to its reviewer on WhatsApp', ['request' => $request->getKey(), 'reviewer' => $reviewer->getKey(), 'error' => $e->getMessage()]);
@@ -195,7 +197,13 @@ class ReportReviewWhatsApp
      */
     private function pressed(string $from, int $deliveryId, string $action, array $message): bool
     {
-        $delivery = ReportReviewDelivery::with(['request.matter', 'user'])->find($deliveryId);
+        // "Send decision" waits for the files still being taken in; two presses at once decide once.
+        return DB::transaction(fn (): bool => $this->pressedLocked($from, $deliveryId, $action, $message));
+    }
+
+    private function pressedLocked(string $from, int $deliveryId, string $action, array $message): bool
+    {
+        $delivery = ReportReviewDelivery::with(['request.matter', 'user'])->lockForUpdate()->find($deliveryId);
 
         // Only from the number it was sent to.
         if (! $delivery || $delivery->phone !== $from || ! $delivery->request) {
@@ -234,7 +242,15 @@ class ReportReviewWhatsApp
     /** The text or file of a rejection being sent. */
     private function collect(string $from, array $message): bool
     {
-        $delivery = ReportReviewDelivery::query()->where('phone', $from)->whereNotNull('awaiting')->latest('id')->first();
+        // Pictures sent together reach the server as separate calls, at the same moment: each one reads
+        // what was collected and writes it back with its own added — without a lock the last to write
+        // wins and the others' files are lost. One at a time, then.
+        return DB::transaction(fn (): bool => $this->collectLocked($from, $message));
+    }
+
+    private function collectLocked(string $from, array $message): bool
+    {
+        $delivery = ReportReviewDelivery::query()->where('phone', $from)->whereNotNull('awaiting')->latest('id')->lockForUpdate()->first();
 
         if (! $delivery || $this->seen($delivery, $message)) {
             return (bool) $delivery;

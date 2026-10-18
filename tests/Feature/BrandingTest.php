@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Filament\Shared\Pages\SystemSettings;
+use App\Filament\Shared\Pages\GeneralSettings;
 use App\Models\Setting;
 use App\Models\User;
 use App\Support\Branding;
@@ -15,7 +15,7 @@ use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
- * Light/dark logos, favicon and default avatar set under System Settings →
+ * Light/dark logos, favicon and default avatar set under Settings → General
  * Branding, with their fallbacks to the images shipped in public/images.
  */
 class BrandingTest extends TestCase
@@ -74,7 +74,7 @@ class BrandingTest extends TestCase
         $this->actingAs($admin);
         Filament::setCurrentPanel('pms');
 
-        $uploads = collect(Livewire::test(SystemSettings::class)->instance()->form->getFlatComponents())
+        $uploads = collect(Livewire::test(GeneralSettings::class)->instance()->form->getFlatComponents())
             ->filter(fn ($component): bool => $component instanceof FileUpload && in_array($component->getName(), Branding::KEYS, true));
 
         $this->assertCount(count(Branding::KEYS), $uploads);

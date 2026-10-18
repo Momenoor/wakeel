@@ -2,6 +2,7 @@
 
 namespace App\Services\Chat;
 
+use App\Enums\NotificationType;
 use App\Events\NotificationsUpdated;
 use App\Models\ChatMessage;
 use App\Models\User;
@@ -102,6 +103,7 @@ class ChatBellNotifications
                 self::KEY => (int) $message->chat_conversation_id,
                 'chat_sender' => (int) $message->user_id,
                 'chat_count' => $count,
+                NotificationType::DATA_KEY => NotificationType::CHAT_MESSAGE->value,
             ])
             ->actions([
                 Action::make('view')->label('View')->translateLabel(false)->url(ChatMessenger::chatUrl($message))->markAsRead(),

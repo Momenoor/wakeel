@@ -2,18 +2,22 @@
 
 namespace Tests\Feature;
 
+use App\Enums\NotificationType;
 use App\Enums\RequestStatus;
 use App\Enums\RequestType;
 use App\Filament\Mms\Actions\Request\ResubmitRequestAction;
+use App\Mail\NewRequestNotificationMail;
 use App\Models\Matter;
 use App\Models\MatterParty;
 use App\Models\MatterRequest;
 use App\Models\Party;
 use App\Models\ReportReviewDelivery;
+use App\Models\Type;
 use App\Models\User;
 use App\Models\WhatsAppTemplate;
 use App\Services\MMS\Requests\ReportReviewWhatsApp;
 use App\Services\MMS\Requests\RequestServiceFactory;
+use App\Services\Notifications\NotificationPreferences;
 use BezhanSalleh\FilamentShield\Support\Utils;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -121,7 +125,8 @@ class ReportReviewWhatsAppTest extends TestCase
     {
         $result = app(ReportReviewWhatsApp::class)->send($this->request);
 
-        $this->assertSame(['sent' => 2, 'failed' => 0], $result);
+        $this->assertSame(['sent' => 2, 'failed' => 0], array_intersect_key($result, ['sent' => 1, 'failed' => 1]));
+        $this->assertEqualsCanonicalizing([$this->reviewer->id, $this->other->id], $result['reached']);
         [$first] = $this->messages();
         $this->assertSame('971501234567', $first['to']);
         $this->assertSame('report_review', $first['template']['name']);
@@ -149,7 +154,72 @@ class ReportReviewWhatsAppTest extends TestCase
         // Not a report.
         $this->assistant->party->reportReviewers()->attach($this->reviewer->id);
         $other = MatterRequest::create(['matter_id' => $this->matter->id, 'request_by' => $this->assistant->id, 'type' => RequestType::CHANGE_DIFFICULTY, 'status' => RequestStatus::PENDING, 'comment' => 'x']);
-        $this->assertSame(['sent' => 0, 'failed' => 0], app(ReportReviewWhatsApp::class)->send($other));
+        $this->assertSame(['sent' => 0, 'failed' => 0, 'reached' => []], app(ReportReviewWhatsApp::class)->send($other));
+    }
+
+    public function test_a_parameter_can_hold_several_placeholders(): void
+    {
+        $this->matter->update(['type_id' => Type::factory()->create(['name' => 'Commercial'])->id]);
+        // Set in the template record: the reference and the type, in one parameter, with the system's own placeholders.
+        $template = WhatsAppTemplate::query()->where('purpose', WhatsAppTemplate::REPORT_REVIEW)->sole();
+        $template->update(['parameters' => [['name' => 'reviewer', 'value' => '{{reviewer}}'], ['name' => 'matter', 'value' => '{{matter.reference}} - {{matter.type}}'], ['name' => 'assistant', 'value' => '{{assistant}}']]]);
+
+        app(ReportReviewWhatsApp::class)->send($this->request);
+
+        $body = collect($this->messages()[0]['template']['components'])->firstWhere('type', 'body')['parameters'];
+        $this->assertSame($this->matter->fresh()->reference.' - Commercial', $body[1]['text']);
+    }
+
+    public function test_a_reviewer_who_is_also_an_admin_is_not_told_of_the_request_as_well(): void
+    {
+        $this->reviewer->assignRole('admin');
+        $this->reviewer->refresh();
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        // The admin has WhatsApp turned on for new requests (the reviewer too, were they not reached).
+        foreach ([$this->reviewer, $admin->refresh()] as $user) {
+            NotificationPreferences::make()->saveUser($user, [NotificationType::REQUEST_CREATED->value => ['whatsapp' => true]]);
+        }
+        Party::factory()->create(['user_id' => $admin->id, 'phone' => ['0509999999']]);
+
+        RequestServiceFactory::make($this->request)->onCreateNotify();
+
+        // The other admin is told as before: bell, email and WhatsApp.
+        $this->assertCount(1, $admin->notifications);
+        Mail::assertSent(NewRequestNotificationMail::class, fn ($mail) => $mail->hasTo($admin->email) && ! $mail->hasTo($this->reviewer->email));
+        $templates = fn (string $phone) => collect($this->messages())->where('to', $phone)->pluck('template.name')->all();
+        $this->assertSame(['new_request_notification'], $templates('971509999999'));
+        // The reviewer: the report only.
+        $this->assertCount(0, $this->reviewer->notifications);
+        $this->assertSame(['report_review'], $templates('971501234567'));
+
+        // Nobody else to tell (everyone reached): no mail at all, and no error.
+        Mail::fake();
+        $this->request->update(['status' => RequestStatus::PENDING]);
+        $admin->removeRole('admin');
+        $this->other->assignRole('admin');
+        RequestServiceFactory::make($this->request)->onCreateNotify();
+        Mail::assertNothingSent();
+    }
+
+    public function test_every_file_a_reviewer_sends_is_kept_with_the_request(): void
+    {
+        app(ReportReviewWhatsApp::class)->send($this->request);
+        $mine = $this->deliveryOf($this->reviewer);
+        $reviews = app(ReportReviewWhatsApp::class);
+
+        $this->press($mine, 'changes');
+        foreach (['m1', 'm2', 'm3'] as $id) {
+            $reviews->receive(['type' => 'image', 'from' => $mine->phone, 'id' => $id, 'image' => ['id' => 'media-'.$id, 'mime_type' => 'image/jpeg']]);
+        }
+        $reviews->receive(['type' => 'document', 'from' => $mine->phone, 'id' => 'm4', 'document' => ['id' => 'media-m4', 'mime_type' => 'application/pdf', 'filename' => 'notes.pdf']]);
+        $this->assertCount(4, $mine->refresh()->pending_files);
+
+        $this->press($mine, 'done');
+
+        // All four with the request, besides the report itself.
+        $this->assertSame(4, $this->request->refresh()->attachments()->where('name', 'like', 'request-attachment-%')->count());
+        $this->assertSame(RequestStatus::NEEDS_CHANGES, $this->request->status);
     }
 
     public function test_approve_decides_the_request_as_the_reviewer(): void

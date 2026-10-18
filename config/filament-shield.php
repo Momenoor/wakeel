@@ -14,6 +14,13 @@ use App\Filament\Mms\Resources\LetterTemplates\LetterTemplateResource;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\PayrollRuns\PayrollRunResource;
 use App\Filament\Shared\Clusters\Settings;
+use App\Filament\Shared\Pages\AnnouncementSettings;
+use App\Filament\Shared\Pages\GeneralSettings;
+use App\Filament\Shared\Pages\IntegrationsSettings;
+use App\Filament\Shared\Pages\LettersSettings;
+use App\Filament\Shared\Pages\MailServerSettings;
+use App\Filament\Shared\Pages\NotificationSettings;
+use App\Filament\Shared\Pages\OfflineSettings;
 use App\Support\ScreenPermissions;
 use BezhanSalleh\FilamentShield\Resources\Roles\RoleResource;
 use Filament\Pages\Dashboard;
@@ -314,6 +321,16 @@ return [
             // resources) is in it.
             Settings::class,
             Templates::class,
+            // The pages System Settings was split into answer to View:SystemSettings
+            // and their old tab's permission (custom permissions, below) — not
+            // to a permission of their own for each page.
+            GeneralSettings::class,
+            MailServerSettings::class,
+            LettersSettings::class,
+            NotificationSettings::class,
+            AnnouncementSettings::class,
+            IntegrationsSettings::class,
+            OfflineSettings::class,
         ],
     ],
 

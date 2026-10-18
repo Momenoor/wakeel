@@ -159,7 +159,7 @@ class CalendarEventForm
                         ->hidden(fn ($record) => $record instanceof CalendarEvent)
                         ->disabled(fn (Get $get) => empty($get('matter_id'))),
 
-                    // Only with Microsoft 365 set up (System Settings → Integrations).
+                    // Only with Microsoft 365 set up (Settings → Integrations).
                     Toggle::make('sync_to_outlook')
                         ->label(__('Sync to Outlook Calendar'))
                         ->default(fn (): bool => self::outlookOn())

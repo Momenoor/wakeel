@@ -41,7 +41,7 @@ class WhatsAppService
                             'parameters' => [
                                 ['type' => 'text', 'parameter_name' => 'name', 'text' => (string) $user->display_name],
                                 ['type' => 'text', 'parameter_name' => 'request_number', 'text' => (string) $matterRequest->id],
-                                ['type' => 'text', 'parameter_name' => 'request_by', 'text' => (string) $matterRequest->requestBy->display_name],
+                                ['type' => 'text', 'parameter_name' => 'request_by', 'text' => (string) ($matterRequest->requestBy?->display_name ?: __('The system'))],
                                 ['type' => 'text', 'parameter_name' => 'matter_number', 'text' => (string) $matterRequest->matter->number.'/'.$matterRequest->matter->year.'-'.(string) $matterRequest->matter->type->name],
                                 ['type' => 'text', 'parameter_name' => 'request_type', 'text' => (string) $matterRequest->type->getLabel()],
                                 ['type' => 'text', 'parameter_name' => 'request_date', 'text' => (string) $matterRequest->created_at->format('Y-m-d')],

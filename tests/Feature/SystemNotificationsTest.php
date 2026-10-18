@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\NotificationType as Type;
 use App\Enums\RequestStatus;
 use App\Enums\SalaryComponent;
 use App\Livewire\ChatWidget;
@@ -16,14 +17,18 @@ use App\Models\Party;
 use App\Models\PushSubscription;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\Chat\ChatMessenger;
+use App\Services\Chat\ChatReading;
 use App\Services\MMS\LeaveRequestService;
 use App\Services\MMS\NewMatterNotification;
+use App\Services\Notifications\NotificationPreferences as Prefs;
 use App\Services\Notify\UserAlert;
 use App\Services\Push\WebPushSender;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
@@ -117,6 +122,59 @@ class SystemNotificationsTest extends TestCase
 
         $widget->call('checkForNewMessages')
             ->assertDispatched('wakeel-desktop-notification', id: 'chat-'.$conversation->id, body: 'Hello');
+    }
+
+    public function test_a_chat_message_reaches_the_bell_the_push_and_the_desktop_only_for_those_who_want_it(): void
+    {
+        $me = $this->subscribed(User::factory()->create(['name' => 'Amr']));
+        $muted = $this->subscribed(User::factory()->create());
+        $conversation = ChatConversation::betweenUsers($me, $muted);
+        Prefs::make()->saveUser($muted, [Type::CHAT_MESSAGE->value => ['bell' => false]]);
+
+        // Their page is open when the message comes.
+        $this->actingAs($muted);
+        $widget = Livewire::test(ChatWidget::class, ['mode' => 'popup']);
+        app(ChatMessenger::class)->send($conversation, $me, 'Are you in the office?');
+
+        // The message itself is there; no bell entry, no push, no desktop notification.
+        $this->assertSame(1, ChatMessage::count());
+        $this->assertSame(0, $muted->notifications()->count());
+        $this->assertSame([], $this->pushed);
+        $widget->call('checkForNewMessages')->assertNotDispatched('wakeel-desktop-notification');
+
+        // Mandatory for their role: all three, and the bell entry knows what it is.
+        $role = Role::create(['name' => 'chatters', 'guard_name' => 'web']);
+        Prefs::make()->saveRole($role, [Type::CHAT_MESSAGE->value => ['bell' => Prefs::LOCKED]]);
+        $muted->assignRole($role)->refresh();
+        $conversation = $conversation->fresh();
+        // The first message opened the conversation on their page; they have moved on from it.
+        session()->forget('chat.popup');
+        $widget = Livewire::test(ChatWidget::class, ['mode' => 'popup']);
+        ChatReading::forget($muted->id, $conversation->id);
+        app(ChatMessenger::class)->send($conversation, $me, 'Hello again');
+
+        $this->assertSame(Type::CHAT_MESSAGE->value, $muted->notifications()->sole()->data['viewData'][Type::DATA_KEY]);
+        $this->assertSame([$muted->id], array_column($this->pushed, 0));
+        $widget->call('checkForNewMessages')->assertDispatched('wakeel-desktop-notification', id: 'chat-'.$conversation->id);
+    }
+
+    public function test_a_reaction_is_told_to_its_writer_only_when_they_want_the_bell(): void
+    {
+        $me = User::factory()->create(['name' => 'Amr']);
+        $writer = User::factory()->create();
+        $conversation = ChatConversation::betweenUsers($me, $writer);
+        $message = ChatMessage::create(['chat_conversation_id' => $conversation->id, 'user_id' => $writer->id, 'body' => 'Done!']);
+        Prefs::make()->saveUser($writer, [Type::CHAT_REACTION->value => ['bell' => false]]);
+
+        $this->actingAs($me);
+        $chat = Livewire::test(ChatWidget::class)->call('selectConversation', $conversation->id);
+        $chat->call('react', $message->id, '❤️');
+        $this->assertSame(0, $writer->notifications()->count());
+
+        $chat->call('react', $message->id, '❤️')->call('react', $message->id, '👍');
+        Prefs::make()->saveUser($writer, [Type::CHAT_REACTION->value => ['bell' => true]]);
+        $chat->call('react', $message->id, '😂');
+        $this->assertSame(Type::CHAT_REACTION->value, $writer->notifications()->sole()->data['viewData'][Type::DATA_KEY]);
     }
 
     public function test_an_assistant_is_told_about_a_new_matter(): void

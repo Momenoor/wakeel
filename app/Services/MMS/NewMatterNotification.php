@@ -2,12 +2,15 @@
 
 namespace App\Services\MMS;
 
+use App\Enums\NotificationChannel;
+use App\Enums\NotificationType;
 use App\Enums\RequestStatus;
 use App\Enums\RequestType;
 use App\Mail\NewMatterNotificationMail;
 use App\Models\Matter;
 use App\Models\MatterRequest;
-use App\Services\Notify\UserAlert;
+use App\Services\Notifications\NotificationPreferences;
+use App\Services\Notifications\Notifier;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
@@ -57,25 +60,31 @@ class NewMatterNotification
                     ],
                 ]);
 
-                Mail::to($party->email)
-                    ->locale('ar')
-                    ->queue(new NewMatterNotificationMail($matter, $party, $matterRequest));
+                // An assistant with a user is told as that user chose; one with none, by email as always.
+                $user = $party->user;
+                $type = NotificationType::MATTER_ASSIGNED;
 
-                Log::info("NewMatterNotification: Mail queued for party #{$party->id} on Matter #{$matter->id}.");
+                if (! $user || NotificationPreferences::wants($user, $type, NotificationChannel::MAIL)) {
+                    Mail::to($party->email)
+                        ->locale('ar')
+                        ->queue(new NewMatterNotificationMail($matter, $party, $matterRequest));
 
-                // And in the system — bell, desktop and phone — linked to
-                // the request where the received date is confirmed.
-                UserAlert::send(
-                    $party->user,
-                    __('New matter assigned'),
-                    __('Matter :number/:year — :type — :court. Please confirm the received date.', [
+                    Log::info("NewMatterNotification: Mail queued for party #{$party->id} on Matter #{$matter->id}.");
+                }
+
+                if ($user) {
+                    $title = __('New matter assigned');
+                    $body = __('Matter :number/:year — :type — :court. Please confirm the received date.', [
                         'number' => $matter->number,
                         'year' => $matter->year,
                         'type' => $matter->type?->getAttribute('name') ?? '—',
                         'court' => $matter->court?->getAttribute('name') ?? '—',
-                    ]),
-                    self::url('filament.mms.resources.matter-requests.view', $matterRequest),
-                );
+                    ]);
+
+                    // The rest in the system — bell, desktop and phone — and on WhatsApp, linked to
+                    // the request where the received date is confirmed.
+                    Notifier::send($type, [$user], $title, $body, self::url('filament.mms.resources.matter-requests.view', $matterRequest), only: [NotificationChannel::BELL, NotificationChannel::WHATSAPP]);
+                }
 
             } catch (\Throwable $e) {
                 Log::error("NewMatterNotification: Failed to process party #{$party->id} on Matter #{$matter->id}.", [

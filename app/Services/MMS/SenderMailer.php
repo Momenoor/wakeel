@@ -132,7 +132,7 @@ class SenderMailer
 
     /**
      * Makes the mailbox the app's mailer — until put back (using()), or
-     * for the whole request: System Settings can name a sender for the
+     * for the whole request: Settings → Email Settings can name a sender for the
      * app's own emails (notifications), applied at boot by
      * Setting::applyMailConfig().
      *

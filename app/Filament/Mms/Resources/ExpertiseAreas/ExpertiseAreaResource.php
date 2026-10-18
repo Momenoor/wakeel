@@ -29,7 +29,7 @@ class ExpertiseAreaResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-academic-cap';
 
-    protected static ?int $navigationSort = 21;
+    protected static ?int $navigationSort = 51;
 
     protected static ?string $cluster = Settings::class;
 

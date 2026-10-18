@@ -12,6 +12,7 @@ use App\Models\PushSubscription;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\MMS\Calendar\UnmatchedEventReferences;
+use App\Services\Notifications\NotificationPreferences;
 use App\Services\Push\WebPushSender;
 use App\Support\CachedAuditSchema;
 use App\Support\Currency;
@@ -50,6 +51,9 @@ class AppServiceProvider extends ServiceProvider
         // One instance for the request: its terminate() reads what its
         // handle() counted (Laravel otherwise makes a new one for each).
         $this->app->singleton(TrackPerformance::class);
+
+        // Who is told of what, read once for the request or the job.
+        $this->app->scoped(NotificationPreferences::class);
     }
 
     /**

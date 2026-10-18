@@ -9,114 +9,176 @@ use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 
+/**
+ * A party, in sections: who they are, how to reach them, what they are to the office (role, expert
+ * type, expertise) — and, for an assistant, where their matter folders are and who reviews their
+ * reports. The state is the same as ever (role.role / role.type / role.field …); only the layout is new.
+ */
 class PartyForm
 {
     public static function configure(Schema $schema): Schema
     {
         return $schema
+            ->columns(2)
             ->components([
-                Grid::make(2)
-                    ->schema([
-                        TextInput::make('name')
-                            ->label(__('Name'))
-                            ->datalist(fn () => Party::pluck('name'))
-                            ->required()
-                            ->unique(ignoreRecord: true)
-                            ->columnSpanFull(),
-                        // As it must appear in letters and templates — an assistant's
-                        // full registered name. Empty: the name above.
-                        TextInput::make('legal_name')
-                            ->label(__('Legal name'))
-                            ->helperText(__('As it must appear in letters and templates (e.g. an assistant\'s full registered name). Leave empty to use the name.'))
-                            ->maxLength(255)
-                            ->columnSpanFull(),
-                        ContactFields::phone()
-                            ->nestedRecursiveRules([
-                                'min:9',
-                                'max:10',
-                                'starts_with:050,052,053,054,055,056,057,058,02,03,04,06,07,08,09',
-                            ]),
-                        ContactFields::email()
-                            ->placeholder(__('Enter email addresses separated by comma')),
-                        TextInput::make('fax')
-                            ->label(__('Fax')),
-                        // The company of an employee, the party an attendee came for.
-                        Select::make('parent_id')
-                            ->label(__('Belongs to'))
-                            ->relationship('parent', 'name', fn ($query, $record) => $query->when($record, fn ($q) => $q->whereKeyNot($record->getKey())))
-                            ->searchable()
-                            ->placeholder('—'),
-                        CheckboxList::make('role.role')
-                            ->label(__('Role'))
-                            ->options(Party::roleOptions())
-                            ->default(['party'])
-                            ->required()
-                            ->columns(4)
-                            ->columnSpanFull()
-                            ->live(),
-                        CheckboxList::make('role.type')
-                            ->label(__('Expert Type'))
-                            ->options(Party::expertTypeOptions())
-                            ->required(fn ($get) => in_array('expert', $get('role.role')))
-                            ->visible(fn ($get) => in_array('expert', $get('role.role') ?? []))
-                            ->columns(2)
-                            ->columnSpanFull(),
-                        // Managed in Settings → Expertise Areas; a hidden area
-                        // still shows for the expert who has it.
-                        Select::make('role.field')
-                            ->options(fn (Get $get): array => ExpertiseArea::options($get('role.field')))
-                            ->searchable()
-                            ->label(__('Expertise Area'))
-                            ->visible(fn ($get) => in_array('expert', $get('role.role') ?? []))
-                            ->columnSpanFull(),
-                        // Where this assistant's matter folders are made — see
-                        // Settings → OneDrive Folders.
-                        TextInput::make('onedrive_email')
-                            ->label(__('OneDrive account (Microsoft 365 email)'))
-                            ->email()
-                            ->maxLength(255)
-                            ->visible(fn ($get) => in_array('assistant', $get('role.type') ?? [])),
-                        TextInput::make('onedrive_path')
-                            ->label(__('Folder for matters in their OneDrive'))
-                            ->placeholder('Work/Matters')
-                            ->helperText(__('Leave empty to put matter folders at the top of their OneDrive.'))
-                            ->maxLength(255)
-                            ->extraInputAttributes(['dir' => 'auto'])
-                            ->visible(fn ($get) => in_array('assistant', $get('role.type') ?? [])),
-                        // Who reviews this assistant's reports: each Review Report / Confirm Report request goes to them on WhatsApp.
-                        Select::make('reportReviewers')
-                            ->label(__('Report reviewers (WhatsApp)'))
-                            ->relationship('reportReviewers', 'name')
-                            ->multiple()
-                            ->preload()
-                            ->searchable()
-                            ->helperText(__('Each report this assistant sends for review goes to these users on WhatsApp, to approve, reject or ask for changes there. They need a WhatsApp number on their profile; the first to answer decides.'))
-                            ->columnSpanFull()
-                            ->visible(fn ($get) => in_array('assistant', $get('role.type') ?? [])),
-                        // A matter's folder is moved here once the matter is finished (its final report).
-                        TextInput::make('onedrive_finished_path')
-                            ->label(__('Folder for finished matters in their OneDrive'))
-                            ->placeholder('Work/Finished matters')
-                            ->helperText(__('When a matter is finished, its folder is moved here and the matter link follows it. Leave empty to keep the folders of finished matters where they are.'))
-                            ->maxLength(255)
-                            ->extraInputAttributes(['dir' => 'auto'])
-                            ->visible(fn ($get) => in_array('assistant', $get('role.type') ?? [])),
-                        //                        Toggle::make('black_list')
-                        //                            ->label(__('Black List'))
-                        //                            ->default(false)
-                        //                            ->dehydrateStateUsing(fn($state) => (bool)$state ? 1 : 0)
-                        //                            ->required(),
-                        Textarea::make('address')
-                            ->label(__('Address'))
-                            ->columnSpanFull(),
-                        Textarea::make('extra')
-                            ->label(__('Extra'))
-                            ->columnSpanFull(),
-                    ]),
+                self::identity(),
+                self::contact(),
+                self::roles(),
+                self::assistant(),
+                self::notes(),
             ]);
+    }
+
+    private static function identity(): Section
+    {
+        return Section::make(__('Identity'))
+            ->icon('heroicon-o-user')
+            ->columnSpan(1)
+            ->schema([
+                TextInput::make('name')
+                    ->label(__('Name'))
+                    ->datalist(fn () => Party::pluck('name'))
+                    ->required()
+                    ->unique(ignoreRecord: true),
+                // As it must appear in letters and templates — an assistant's
+                // full registered name. Empty: the name above.
+                TextInput::make('legal_name')
+                    ->label(__('Legal name'))
+                    ->helperText(__('As it must appear in letters and templates (e.g. an assistant\'s full registered name). Leave empty to use the name.'))
+                    ->maxLength(255),
+                // The company of an employee, the party an attendee came for.
+                Select::make('parent_id')
+                    ->label(__('Belongs to'))
+                    ->relationship('parent', 'name', fn ($query, $record) => $query->when($record, fn ($q) => $q->whereKeyNot($record->getKey())))
+                    ->searchable()
+                    ->placeholder('—'),
+            ]);
+    }
+
+    private static function contact(): Section
+    {
+        return Section::make(__('Contact'))
+            ->icon('heroicon-o-phone')
+            ->columnSpan(1)
+            ->schema([
+                ContactFields::phone()
+                    ->nestedRecursiveRules([
+                        'min:9',
+                        'max:10',
+                        'starts_with:050,052,053,054,055,056,057,058,02,03,04,06,07,08,09',
+                    ]),
+                ContactFields::email()
+                    ->placeholder(__('Enter email addresses separated by comma')),
+                TextInput::make('fax')
+                    ->label(__('Fax')),
+                Textarea::make('address')
+                    ->label(__('Address'))
+                    ->rows(2),
+            ]);
+    }
+
+    private static function roles(): Section
+    {
+        return Section::make(__('Roles & Expertise'))
+            ->icon('heroicon-o-briefcase')
+            ->columnSpanFull()
+            ->columns(2)
+            ->schema([
+                CheckboxList::make('role.role')
+                    ->label(__('Role'))
+                    ->options(Party::roleOptions())
+                    ->default(['party'])
+                    ->required()
+                    ->columns(4)
+                    ->columnSpanFull()
+                    ->live(),
+                CheckboxList::make('role.type')
+                    ->label(__('Expert Type'))
+                    ->options(Party::expertTypeOptions())
+                    ->required(fn (Get $get): bool => self::isExpert($get))
+                    ->visible(fn (Get $get): bool => self::isExpert($get))
+                    ->columns(2)
+                    ->live()
+                    ->columnSpanFull(),
+                // Managed in Settings → Expertise Areas; a hidden area
+                // still shows for the expert who has it.
+                Select::make('role.field')
+                    ->options(fn (Get $get): array => ExpertiseArea::options($get('role.field')))
+                    ->searchable()
+                    ->label(__('Expertise Area'))
+                    ->visible(fn (Get $get): bool => self::isExpert($get))
+                    ->columnSpanFull(),
+            ]);
+    }
+
+    /** An assistant's own settings: shown only for an expert of the assistant type. */
+    private static function assistant(): Section
+    {
+        return Section::make(__('Assistant settings'))
+            ->description(__('Where this assistant\'s matter folders are made in OneDrive, and who reviews their reports.'))
+            ->icon('heroicon-o-cloud')
+            ->columnSpanFull()
+            ->columns(2)
+            ->visible(fn (Get $get): bool => self::isAssistant($get))
+            ->schema([
+                // Where this assistant's matter folders are made — see
+                // Settings → OneDrive Folders.
+                TextInput::make('onedrive_email')
+                    ->label(__('OneDrive account (Microsoft 365 email)'))
+                    ->email()
+                    ->maxLength(255)
+                    ->columnSpanFull(),
+                TextInput::make('onedrive_path')
+                    ->label(__('Folder for matters in their OneDrive'))
+                    ->placeholder('Work/Matters')
+                    ->helperText(__('Leave empty to put matter folders at the top of their OneDrive.'))
+                    ->maxLength(255)
+                    ->extraInputAttributes(['dir' => 'auto']),
+                // A matter's folder is moved here once the matter is finished (its final report).
+                TextInput::make('onedrive_finished_path')
+                    ->label(__('Folder for finished matters in their OneDrive'))
+                    ->placeholder('Work/Finished matters')
+                    ->helperText(__('When a matter is finished, its folder is moved here and the matter link follows it. Leave empty to keep the folders of finished matters where they are.'))
+                    ->maxLength(255)
+                    ->extraInputAttributes(['dir' => 'auto']),
+                // Who reviews this assistant's reports: each Review Report / Confirm Report request goes to them on WhatsApp.
+                Select::make('reportReviewers')
+                    ->label(__('Report reviewers (WhatsApp)'))
+                    ->relationship('reportReviewers', 'name')
+                    ->multiple()
+                    ->preload()
+                    ->searchable()
+                    ->helperText(__('Each report this assistant sends for review goes to these users on WhatsApp, to approve, reject or ask for changes there. They need a WhatsApp number on their profile; the first to answer decides.'))
+                    ->columnSpanFull(),
+            ]);
+    }
+
+    private static function notes(): Section
+    {
+        return Section::make(__('Notes'))
+            ->icon('heroicon-o-pencil-square')
+            ->columnSpanFull()
+            ->collapsible()
+            ->schema([
+                Textarea::make('extra')
+                    ->label(__('Extra'))
+                    ->rows(3),
+            ]);
+    }
+
+    /** Whether "expert" is ticked among the roles. */
+    private static function isExpert(Get $get): bool
+    {
+        return in_array('expert', (array) ($get('role.role') ?? []), true);
+    }
+
+    /** An expert of the assistant type — the same as Party::isAssistant(), on what is being typed. */
+    private static function isAssistant(Get $get): bool
+    {
+        return self::isExpert($get) && in_array('assistant', (array) ($get('role.type') ?? []), true);
     }
 }

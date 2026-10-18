@@ -31,7 +31,7 @@ final class EmailSendFields
     /** @var list<string> the OneDrive files fetched for this send */
     private static array $fetched = [];
 
-    /** The mailbox letters, minutes and bulk mail start from (Settings → Email). */
+    /** The mailbox letters, minutes and bulk mail start from (Settings → Letters & emails). */
     public const DEFAULT_SENDER = 'default_send_sender_key';
 
     /**
@@ -49,7 +49,7 @@ final class EmailSendFields
 
     /**
      * The default mailbox: the one set for letters and mail (Settings →
-     * Email), else the system's own, else the first.
+     * Letters & emails), else the system's own, else the first.
      */
     public static function defaultSender(): ?string
     {
@@ -65,7 +65,7 @@ final class EmailSendFields
     }
 
     /**
-     * Copied in: the matter's experts (System Settings) and the chosen
+     * Copied in: the matter's experts (Settings → Letters & emails) and the chosen
      * email template's own list; changed per send.
      */
     public static function cc(): TagsInput
@@ -73,7 +73,7 @@ final class EmailSendFields
         return TagsInput::make('cc')
             ->label(__('CC'))
             ->placeholder('name@example.com')
-            ->helperText(__('The matter\'s experts chosen in System Settings and the email template\'s own CC are put here; remove any you don\'t want.'))
+            ->helperText(__('The matter\'s experts chosen in Settings → Letters & emails and the email template\'s own CC are put here; remove any you don\'t want.'))
             ->splitKeys(['Tab', ' ', ',', 'Enter'])
             ->nestedRecursiveRules(['email'])
             ->live();

@@ -110,7 +110,7 @@ class EmailTemplateResource extends Resource
             TagsInput::make('cc')
                 ->label(__('CC'))
                 ->placeholder('name@example.com')
-                ->helperText(__('Copied in whenever this email is used, besides the matter\'s experts chosen in System Settings. Can still be changed when sending.'))
+                ->helperText(__('Copied in whenever this email is used, besides the matter\'s experts chosen in Settings → Letters & emails. Can still be changed when sending.'))
                 ->splitKeys(['Tab', ' ', ',', 'Enter'])
                 ->nestedRecursiveRules(['email'])
                 ->columnSpanFull(),

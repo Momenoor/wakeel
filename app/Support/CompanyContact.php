@@ -5,7 +5,7 @@ namespace App\Support;
 use App\Models\Setting;
 
 /**
- * The office's own contact details, set once in System Settings and used
+ * The office's own contact details, set once in Settings → General and used
  * wherever the office names how to reach it: the privacy policy and terms,
  * and as {{company.*}} in letters, emails and WhatsApp messages.
  */

@@ -2,11 +2,14 @@
 
 namespace App\Observers;
 
+use App\Enums\NotificationChannel;
+use App\Enums\NotificationType;
 use App\Mail\LeaveRequestSubmittedMail;
 use App\Models\LeaveRequest;
 use App\Models\Setting;
 use App\Models\User;
-use App\Services\Notify\UserAlert;
+use App\Services\Notifications\NotificationPreferences;
+use App\Services\Notifications\Notifier;
 use BezhanSalleh\FilamentShield\Support\Utils;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Mail;
@@ -29,13 +32,27 @@ class LeaveRequestObserver
             return;
         }
 
-        Mail::to($recipients[0])
-            ->cc(array_slice($recipients, 1))
-            ->locale('ar')
-            ->queue(new LeaveRequestSubmittedMail($leaveRequest));
+        $type = NotificationType::LEAVE_SUBMITTED;
+        $users = User::whereIn('email', $recipients)->get();
 
-        UserAlert::send(
-            User::whereIn('email', $recipients)->get(),
+        // The mail, one to each address: to those who are users, as they chose; an address that is
+        // no user's (typed in System Settings) always.
+        foreach ($recipients as $address) {
+            $owners = $users->filter(fn (User $user): bool => strcasecmp((string) $user->email, $address) === 0);
+
+            if ($owners->isNotEmpty() && NotificationPreferences::wanting($type, $owners, NotificationChannel::MAIL)->isEmpty()) {
+                continue;
+            }
+
+            Mail::to($address)
+                ->locale('ar')
+                ->queue(new LeaveRequestSubmittedMail($leaveRequest));
+        }
+
+        // The bell, and WhatsApp for those who chose it, to the users among them.
+        Notifier::send(
+            $type,
+            $users,
             __('New leave request'),
             __(':name requested leave from :start to :end.', [
                 'name' => $leaveRequest->party?->name ?? '—',
@@ -45,6 +62,7 @@ class LeaveRequestObserver
             Route::has('filament.mms.resources.leave-requests.edit')
                 ? route('filament.mms.resources.leave-requests.edit', $leaveRequest)
                 : null,
+            only: [NotificationChannel::BELL, NotificationChannel::WHATSAPP],
         );
     }
 

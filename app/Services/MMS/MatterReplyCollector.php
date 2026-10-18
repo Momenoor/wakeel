@@ -2,6 +2,7 @@
 
 namespace App\Services\MMS;
 
+use App\Enums\NotificationType;
 use App\Filament\Mms\Pages\UnfiledEmails;
 use App\Filament\Mms\Resources\BulkMailCampaigns\BulkMailCampaignResource;
 use App\Filament\Mms\Resources\Matters\MatterResource;
@@ -14,6 +15,7 @@ use App\Models\MatterProgress;
 use App\Models\Party;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\Notifications\Notifier;
 use App\Support\Tolerant;
 use BezhanSalleh\FilamentShield\Support\Utils;
 use Carbon\CarbonInterface;
@@ -1008,17 +1010,16 @@ class MatterReplyCollector
         }
 
         try {
-            Notification::make()
-                ->success()
-                ->icon('heroicon-o-envelope-open')
-                ->title($reply->matter
+            Notifier::send(
+                NotificationType::MATTER_REPLY_RECEIVED,
+                [$user],
+                $reply->matter
                     ? __(':name replied on matter :matter', ['name' => $reply->from, 'matter' => $reply->matter->year.'/'.$reply->matter->number])
-                    : __(':name replied to a bulk email', ['name' => $reply->from]))
-                ->body(trim($reply->subject.($files ? ' — '.trans_choice(':count file|:count files', $files, ['count' => $files]) : '')))
-                ->actions([
-                    Action::make('view')->label(__('View'))->url(self::replyUrl($reply, $answers))->markAsRead(),
-                ])
-                ->sendToDatabase($user);
+                    : __(':name replied to a bulk email', ['name' => $reply->from]),
+                trim($reply->subject.($files ? ' — '.trans_choice(':count file|:count files', $files, ['count' => $files]) : '')),
+                self::replyUrl($reply, $answers),
+                fn (Notification $notification) => $notification->success()->icon('heroicon-o-envelope-open')->iconColor('success'),
+            );
         } catch (Throwable $e) {
             Log::info('Reply notification not sent: '.$e->getMessage());
         }
@@ -1068,23 +1069,33 @@ class MatterReplyCollector
             return;
         }
 
+        // What was kept, one point each.
+        $points = [
+            trim($email->subject),
+            $files ? trans_choice(':count file|:count files', $files, ['count' => $files]) : null,
+            $notInOneDrive ? __('Not saved in OneDrive: this matter is not linked to a OneDrive folder, so the email and its files are kept in the system only.') : null,
+        ];
+        $url = MatterResource::getUrl('view', ['record' => $matter], panel: 'mms');
+
         try {
-            Notification::make()
-                ->success()
-                ->icon('heroicon-o-inbox-arrow-down')
-                ->title(__(':name emailed on matter :matter', ['name' => $email->from, 'matter' => $matter->year.'/'.$matter->number]))
-                // What was kept, one point each.
-                ->body(self::bullets([
-                    trim($email->subject),
-                    $files ? trans_choice(':count file|:count files', $files, ['count' => $files]) : null,
-                    $notInOneDrive ? __('Not saved in OneDrive: this matter is not linked to a OneDrive folder, so the email and its files are kept in the system only.') : null,
-                ]))
-                ->actions([
-                    Action::make('view')->label(__('View'))->url(MatterResource::getUrl('view', ['record' => $matter], panel: 'mms'))->markAsRead(),
-                    // No folder to find it in: the email, to download and keep by hand.
-                    ...($downloads !== [] ? [Action::make('download')->label(__('Download the email'))->icon('heroicon-o-arrow-down-tray')->url($downloads[0]['url'], shouldOpenInNewTab: true)] : []),
-                ])
-                ->sendToDatabase($users);
+            Notifier::send(
+                NotificationType::MATTER_EMAIL_RECEIVED,
+                $users,
+                __(':name emailed on matter :matter', ['name' => $email->from, 'matter' => $matter->year.'/'.$matter->number]),
+                // The email and the message take it as plain lines; the bell shows the bullets.
+                collect($points)->filter()->implode("\n"),
+                $url,
+                fn (Notification $notification) => $notification
+                    ->success()
+                    ->icon('heroicon-o-inbox-arrow-down')
+                    ->iconColor('success')
+                    ->body(self::bullets($points))
+                    ->actions([
+                        Action::make('view')->label(__('View'))->url($url)->markAsRead(),
+                        // No folder to find it in: the email, to download and keep by hand.
+                        ...($downloads !== [] ? [Action::make('download')->label(__('Download the email'))->icon('heroicon-o-arrow-down-tray')->url($downloads[0]['url'], shouldOpenInNewTab: true)] : []),
+                    ]),
+            );
         } catch (Throwable $e) {
             Log::info('Email notification not sent: '.$e->getMessage());
         }
@@ -1113,17 +1124,25 @@ class MatterReplyCollector
 
         $matters = Matter::query()->whereKey($candidates)->get(['id', 'year', 'number'])->map(fn (Matter $m) => $m->year.'/'.$m->number)->all();
 
+        $url = UnfiledEmails::getUrl(panel: 'mms');
+
         try {
-            Notification::make()
-                ->warning()
-                ->icon('heroicon-o-inbox-stack')
-                ->title(__('Which matter is this email from :name about?', ['name' => $email->from]))
-                // The subject, then the matters it may be about, one point each (none: a sender on no matter).
-                ->body(self::bullets($matters === [] ? [trim($email->subject)] : [trim($email->subject), new HtmlString(e(__('It may be about:')).self::bullets($matters)->toHtml())]))
-                ->actions([
-                    Action::make('choose')->label(__('Choose its matter'))->url(UnfiledEmails::getUrl(panel: 'mms'))->markAsRead(),
-                ])
-                ->sendToDatabase($users);
+            Notifier::send(
+                NotificationType::MATTER_EMAIL_UNFILED,
+                $users,
+                __('Which matter is this email from :name about?', ['name' => $email->from]),
+                collect([trim($email->subject), $matters === [] ? null : __('It may be about:').' '.implode('، ', $matters)])->filter()->implode("\n"),
+                $url,
+                fn (Notification $notification) => $notification
+                    ->warning()
+                    ->icon('heroicon-o-inbox-stack')
+                    ->iconColor('warning')
+                    // The subject, then the matters it may be about, one point each (none: a sender on no matter).
+                    ->body(self::bullets($matters === [] ? [trim($email->subject)] : [trim($email->subject), new HtmlString(e(__('It may be about:')).self::bullets($matters)->toHtml())]))
+                    ->actions([
+                        Action::make('choose')->label(__('Choose its matter'))->url($url)->markAsRead(),
+                    ]),
+            );
         } catch (Throwable $e) {
             Log::info('Unfiled email notification not sent: '.$e->getMessage());
         }

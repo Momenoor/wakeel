@@ -21,7 +21,6 @@ use Filament\Facades\Filament;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
 use Filament\Navigation\NavigationGroup;
 use Filament\Panel;
 use Filament\PanelProvider;
@@ -110,8 +109,7 @@ class MmsPanelProvider extends PanelProvider
         UserForm::register([
             TextInput::make('display_name')->label(__('Display name'))->required(),
             Select::make('party')->label(__('Party'))->searchable()->relationship('party', 'name'),
-            Toggle::make('notify_by_whatsapp')->label(__('Notify by Whatsapp'))->visible(fn () => auth()->user()->hasRole(Utils::getSuperAdminName()))->default(fn () => (bool) Setting::get('default_notify_by_whatsapp', false))->required(),
-            Toggle::make('notify_by_email')->label(__('Notify by Email'))->default(fn () => (bool) Setting::get('default_notify_by_email', true))->required(),
+
         ]);
         Table::configureUsing(fn (Table $table) => $table->striped()->stackedOnMobile());
         app(FilamentUserServices::class)->register([

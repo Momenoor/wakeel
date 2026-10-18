@@ -561,6 +561,7 @@ class MatterInfolist
                         TextEntry::make('id')->color('primary')->icon(Heroicon::Hashtag)->default(0)->label(__('Number'))->url(fn ($record) => route('filament.mms.resources.matter-requests.view', $record)),
                         TextEntry::make('requestBy.display_name')
                             ->label(__('Requester'))
+                            ->placeholder(__('The system'))
                             ->weight(FontWeight::SemiBold),
                         TextEntry::make('type')
                             ->label(__('Type'))

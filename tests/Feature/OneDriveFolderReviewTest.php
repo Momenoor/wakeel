@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\NotificationType as NType;
 use App\Filament\Mms\Pages\OneDriveSettings;
 use App\Filament\Mms\Resources\Types\Pages\ListTypes;
 use App\Models\Court;
@@ -15,6 +16,7 @@ use App\Models\Type;
 use App\Models\User;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\OneDriveFolderReviewer;
+use App\Services\Notifications\NotificationPreferences as Prefs;
 use Filament\Actions\Testing\TestAction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -222,6 +224,32 @@ class OneDriveFolderReviewTest extends TestCase
         app(OneDriveFolderReviewer::class)->scan();
         $this->assertSame(OneDriveFolderReview::SKIPPED, OneDriveFolderReview::where('matter_id', $skipped->id)->value('status'));
         $this->assertSame(OneDriveFolderReview::DONE, OneDriveFolderReview::where('matter_id', $matter->id)->value('status'));
+    }
+
+    public function test_the_folder_review_is_told_only_to_managers_who_want_it_in_the_bell(): void
+    {
+        $matter = $this->matter('3052', '2021');
+        $this->add('f1', 'DSI Case 3052_2021');
+        $muted = User::factory()->create()->assignRole('super-admin');
+        $outsider = User::factory()->create();
+        Prefs::make()->saveUser($muted, [NType::ONEDRIVE_FOLDER_REVIEW->value => ['bell' => false]]);
+        $make = fn () => MatterOneDriveFolder::create(['matter_id' => $matter->id, 'party_id' => $this->assistant->id,
+            'folder_name' => MatterOneDriveFolders::folderName($matter), 'status' => MatterOneDriveFolder::PENDING]);
+
+        app(MatterOneDriveFolders::class)->create($make());
+
+        $note = auth()->user()->notifications()->sole();
+        $this->assertSame(NType::ONEDRIVE_FOLDER_REVIEW->value, $note->data['viewData'][NType::DATA_KEY]);
+        $this->assertSame(['Review'], array_column($note->data['actions'], 'label'));
+        $this->assertSame(0, $muted->notifications()->count());
+        $this->assertSame(0, $outsider->notifications()->count());
+
+        // Mandatory for their role: told whatever they chose.
+        Prefs::make()->saveRole(Role::findByName('super-admin'), [NType::ONEDRIVE_FOLDER_REVIEW->value => ['bell' => Prefs::LOCKED]]);
+        MatterOneDriveFolder::query()->delete();
+        app(MatterOneDriveFolders::class)->create($make());
+
+        $this->assertSame(1, $muted->refresh()->notifications()->count());
     }
 
     public function test_a_new_matters_folder_found_already_waits_for_a_decision_instead_of_a_duplicate(): void

@@ -13,7 +13,16 @@ use App\Filament\Mms\Resources\MailSenders\MailSenderResource;
 use App\Filament\Mms\Resources\Types\TypeResource;
 use App\Filament\Pms\Pages\PMSSettings;
 use App\Filament\Shared\Clusters\Settings;
+use App\Filament\Shared\Pages\AnnouncementSettings;
+use App\Filament\Shared\Pages\GeneralSettings;
+use App\Filament\Shared\Pages\IntegrationsSettings;
+use App\Filament\Shared\Pages\LettersSettings;
+use App\Filament\Shared\Pages\MailServerSettings;
+use App\Filament\Shared\Pages\NotificationSettings;
+use App\Filament\Shared\Pages\OfflineSettings;
+use App\Filament\Shared\Pages\Performance;
 use App\Filament\Shared\Pages\SystemSettings;
+use App\Filament\Shared\Pages\SystemUpdates;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -22,7 +31,8 @@ use Tests\TestCase;
 
 /**
  * Every settings, lookup and maintenance screen sits in the one Settings
- * cluster: a single sidebar entry, with the screens in its own menu.
+ * cluster: a single sidebar entry, with the screens in its own menu, grouped
+ * General, Communication, Integrations, Master Data and Maintenance.
  */
 class SettingsNavigationTest extends TestCase
 {
@@ -41,6 +51,15 @@ class SettingsNavigationTest extends TestCase
     {
         foreach ([
             SystemSettings::class,
+            GeneralSettings::class,
+            MailServerSettings::class,
+            LettersSettings::class,
+            NotificationSettings::class,
+            AnnouncementSettings::class,
+            IntegrationsSettings::class,
+            OfflineSettings::class,
+            SystemUpdates::class,
+            Performance::class,
             PMSSettings::class,
             FinancialConfiguration::class,
             OneDriveSettings::class,
@@ -63,28 +82,38 @@ class SettingsNavigationTest extends TestCase
 
         $this->assertStringContainsString('href="'.Settings::getUrl().'"', $html);
         $this->assertStringNotContainsString('href="'.CourtResource::getUrl().'"', $html);
-        $this->assertStringNotContainsString('href="'.SystemSettings::getUrl().'"', $html);
+        $this->assertStringNotContainsString('href="'.GeneralSettings::getUrl().'"', $html);
     }
 
-    public function test_the_settings_menu_is_in_order(): void
+    public function test_the_settings_menu_is_grouped_and_in_order(): void
     {
         Filament::setCurrentPanel('mms');
 
-        $html = $this->get(SystemSettings::getUrl())->assertSuccessful()->getContent();
+        $html = $this->get(GeneralSettings::getUrl())->assertSuccessful()->getContent();
 
         $urls = [
             // General
-            SystemSettings::getUrl(),
-            FinancialConfiguration::getUrl(),
-            OneDriveSettings::getUrl(),
+            GeneralSettings::getUrl(),
+            // Communication
             MailSenderResource::getUrl(),
+            MailServerSettings::getUrl(),
+            LettersSettings::getUrl(),
+            NotificationSettings::getUrl(),
+            AnnouncementSettings::getUrl(),
+            // Integrations
+            IntegrationsSettings::getUrl(),
+            OneDriveSettings::getUrl(),
             // Master Data
             TypeResource::getUrl(),
             ExpertiseAreaResource::getUrl(),
             CourtResource::getUrl(),
+            FinancialConfiguration::getUrl(),
             // Maintenance
+            OfflineSettings::getUrl(),
             FeeDataMaintenance::getUrl(),
             AccessControlMaintenance::getUrl(),
+            SystemUpdates::getUrl(),
+            Performance::getUrl(),
         ];
 
         $positions = array_map(fn (string $url) => strpos($html, 'href="'.$url.'"'), $urls);
@@ -93,6 +122,43 @@ class SettingsNavigationTest extends TestCase
         $sorted = $positions;
         sort($sorted);
         $this->assertSame($sorted, $positions);
+
+        // The old single page is no longer a menu entry — only a landing.
+        $this->assertStringNotContainsString('href="'.SystemSettings::getUrl().'"', $html);
+    }
+
+    public function test_the_menu_groups_are_named_as_intended(): void
+    {
+        Filament::setCurrentPanel('mms');
+        app()->setLocale('en');
+
+        $groups = [
+            'General' => [GeneralSettings::class],
+            'Communication' => [MailSenderResource::class, MailServerSettings::class, LettersSettings::class, NotificationSettings::class, AnnouncementSettings::class],
+            'Integrations' => [IntegrationsSettings::class, OneDriveSettings::class],
+            'Master Data' => [TypeResource::class, ExpertiseAreaResource::class, CourtResource::class, FinancialConfiguration::class],
+            'Maintenance' => [OfflineSettings::class, FeeDataMaintenance::class, AccessControlMaintenance::class, SystemUpdates::class, Performance::class],
+        ];
+
+        foreach ($groups as $group => $screens) {
+            foreach ($screens as $screen) {
+                $this->assertSame($group, $screen::getNavigationGroup(), $screen);
+            }
+        }
+
+        $this->assertSame(array_keys($groups), array_values(array_unique(array_map(
+            fn (string $screen): string => $screen::getNavigationGroup(),
+            array_merge(...array_values($groups)),
+        ))));
+
+        // The sort numbers keep the groups in that order.
+        $sorts = collect($groups)->map(fn (array $screens): array => array_map(fn (string $screen): int => $screen::getNavigationSort(), $screens));
+        $this->assertSame($sorts->flatten()->sort()->values()->all(), $sorts->flatten()->values()->all());
+    }
+
+    public function test_pms_settings_is_in_master_data(): void
+    {
+        $this->assertSame(__('Master Data'), PMSSettings::getNavigationGroup());
     }
 
     public function test_both_panels_fill_the_same_settings_cluster(): void
@@ -100,11 +166,14 @@ class SettingsNavigationTest extends TestCase
         $mms = Filament::getPanel('mms')->getClusteredComponents(Settings::class);
         $pms = Filament::getPanel('pms')->getClusteredComponents(Settings::class);
 
-        $this->assertContains(SystemSettings::class, $mms);
+        foreach ([SystemSettings::class, GeneralSettings::class, MailServerSettings::class, LettersSettings::class, NotificationSettings::class, AnnouncementSettings::class, IntegrationsSettings::class, OfflineSettings::class] as $page) {
+            $this->assertContains($page, $mms);
+            $this->assertContains($page, $pms);
+        }
+
         $this->assertContains(CourtResource::class, $mms);
         $this->assertNotContains(PMSSettings::class, $mms);
 
-        $this->assertContains(SystemSettings::class, $pms);
         $this->assertContains(PMSSettings::class, $pms);
         $this->assertNotContains(CourtResource::class, $pms);
     }
