@@ -373,7 +373,7 @@ class MatterInfolist
                 ->tooltip(fn (CalendarEvent $record): ?string => $url($record) ? __('Open in the calendar') : null)
                 ->helperText(fn (CalendarEvent $record): string => collect([
                     filled($record->location) ? $record->location : null,
-                    $record->imported_from_outlook ? __('From Outlook') : __('Created in Wakeel'),
+                    $record->source()->getLabel(),
                     ($others = $record->matters->count() - 1) > 0
                         ? trans_choice('{1} with 1 other matter|[2,*] with :count other matters', $others, ['count' => $others])
                         : null,

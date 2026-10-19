@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Services\Updater\Updater;
 use Illuminate\Console\Scheduling\CallbackEvent;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
@@ -41,6 +42,9 @@ class CronWebhookRunner
     private ?Event $running = null;
 
     private float $startedAt = 0.0;
+
+    /** How long one call goes on starting update steps (a step started is always let finish). */
+    private const UPDATE_SECONDS = 50;
 
     public function __construct(private readonly Application $app) {}
 
@@ -92,6 +96,12 @@ class CronWebhookRunner
                 @set_time_limit(110);
             }
 
+            // An update under way goes on by itself — the page that started it may have been closed — and
+            // nothing else runs meanwhile (the scheduled tasks wait for the site to be back anyway).
+            if ($this->continueUpdate()) {
+                return;
+            }
+
             foreach ($this->schedule()->dueEvents($this->app) as $event) {
                 if (! $event->filtersPass($this->app)) {
                     // Said in the log when it is the overlap lock — a task still running, or one a
@@ -109,6 +119,27 @@ class CronWebhookRunner
             $this->running = null;
             $this->lock?->release();
         }
+    }
+
+    /**
+     * The next steps of an update under way, for as long as this call has time: a step already running
+     * (the page's, or the last call's) is left to finish — the updater's own lock says so.
+     *
+     * @return bool whether an update was under way
+     */
+    private function continueUpdate(): bool
+    {
+        $updater = $this->app->make(Updater::class);
+
+        if (! $updater->inProgress()) {
+            return false;
+        }
+
+        do {
+            $result = $updater->runNextStepIfIdle();
+        } while ($result === 'ran' && $updater->inProgress() && microtime(true) - $this->startedAt < self::UPDATE_SECONDS);
+
+        return true;
     }
 
     private function runEvent(Event $event): void

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\CalendarEventSource;
 use App\Observers\CalendarEventObserver;
 use App\Services\MMS\Calendar\MatterReferenceMatcher;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
@@ -82,6 +83,12 @@ class CalendarEvent extends Model
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** Made in the system, or outside it (Outlook, Teams, a phone) and brought in by the sync. */
+    public function source(): CalendarEventSource
+    {
+        return $this->imported_from_outlook ? CalendarEventSource::OUTSIDE : CalendarEventSource::SYSTEM;
     }
 
     public function scopeNotImportedFromOutlook(Builder $query): Builder

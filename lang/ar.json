@@ -4342,5 +4342,9 @@
     "An event of my matter tomorrow, and in an hour": "موعد في قضيتي غداً، وبعد ساعة",
     "Reminder: :event — :when": "تذكير: :event — :when",
     "in an hour, at :time": "بعد ساعة، الساعة :time",
-    "tomorrow at :time": "غداً الساعة :time"
+    "tomorrow at :time": "غداً الساعة :time",
+    "From Outlook, Teams or a phone": "من Outlook أو Teams أو الهاتف",
+    "Made in": "مصدر الإنشاء",
+    "You can close this page: the update carries on by itself every minute, and the site comes back online when it is done. Open this page again to follow it.": "يمكنك إغلاق هذه الصفحة: يستمر التحديث تلقائياً كل دقيقة، ويعود الموقع للعمل عند انتهائه. افتح هذه الصفحة مرة أخرى لمتابعته.",
+    "Keep this page open until the update is done: each step is started from here. To let an update run in the background, set up the web cron (Settings → Integrations).": "أبقِ هذه الصفحة مفتوحة حتى ينتهي التحديث: كل خطوة تبدأ من هنا. لتشغيل التحديث في الخلفية، اضبط المهمة المجدولة عبر الويب (الإعدادات ← التكاملات)."
 }

@@ -8,11 +8,13 @@ use Filament\Forms\Components\Placeholder;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Arr;
 use Illuminate\Support\HtmlString;
+use Livewire\Livewire;
 
 /**
  * A meeting made while another is still running asks first, in a danger
  * modal: "this meeting will be running during another one", with those
- * it overlaps, and Create anyway.
+ * it overlaps, and Create anyway — or Cancel, back to the form as it was
+ * filled (the only other way out: no ×, no click outside, no Esc).
  *
  * The action is shown again as that question: on submit it finds the
  * overlap, keeps what was filled in (an argument of itself), and mounts
@@ -31,6 +33,8 @@ class OverlapConfirmation
         // Its own form, as set (an array or a closure), and how it is filled when it opens.
         $own = (fn () => $this->schema)->call($action);
         $ownFill = (fn () => $this->mountUsing)->call($action);
+        // How its form closes otherwise (×, a click outside, Esc): kept for the form.
+        [$ownCloseButton, $ownClickAway, $ownEscape] = (fn () => [$this->hasModalCloseButton, $this->isModalClosedByClickingAway, $this->isModalClosedByEscaping])->call($action);
         $asking = fn (array $arguments): bool => isset($arguments['overlap']);
         $main = $action;
 
@@ -47,6 +51,11 @@ class OverlapConfirmation
             ->modalWidth(fn (array $arguments) => $asking($arguments) ? 'lg' : $width)
             // Cancelling the question goes back to the form, filled as it was.
             ->modalCancelAction(fn (Action $action, array $arguments) => $asking($arguments) ? self::backToForm($main) : $action)
+            // While it asks, it is left only by its two buttons: closed (×, a click outside, Esc) it was gone with
+            // everything typed; Cancel goes back to the form instead. The form closes as it always did.
+            ->modalCloseButton(fn (array $arguments) => $asking($arguments) ? false : $action->evaluate($ownCloseButton))
+            ->closeModalByClickingAway(fn (array $arguments) => $asking($arguments) ? false : $action->evaluate($ownClickAway))
+            ->closeModalByEscaping(fn (array $arguments) => $asking($arguments) ? false : $action->evaluate($ownEscape))
             ->mountUsing(function (Action $action, ?Schema $schema) use ($ownFill): void {
                 $restore = $action->getArguments()['restore'] ?? null;
 
@@ -79,7 +88,7 @@ class OverlapConfirmation
             ->button()
             ->action(function (Action $action) {
                 // The page the modal is on (a footer action is not given it before it is mounted).
-                $livewire = \Livewire\Livewire::current() ?? $action->getLivewire();
+                $livewire = Livewire::current() ?? $action->getLivewire();
                 $mounted = $livewire->mountedActions[0] ?? ['name' => null, 'arguments' => [], 'context' => []];
                 $arguments = Arr::except($mounted['arguments'] ?? [], ['overlap', 'overlap_data']);
 

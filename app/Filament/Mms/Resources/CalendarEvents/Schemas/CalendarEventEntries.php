@@ -2,7 +2,9 @@
 
 namespace App\Filament\Mms\Resources\CalendarEvents\Schemas;
 
+use App\Enums\CalendarEventSource;
 use App\Helpers\HtmlFormatter;
+use App\Models\CalendarEvent;
 use Closure;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
@@ -66,6 +68,12 @@ class CalendarEventEntries
     public static function syncStatusSection(string $meetingUrlField, Closure $meetingVisible): Section
     {
         return Section::make(__('Sync Status'))->schema([
+            TextEntry::make('source')
+                ->label(__('Made in'))
+                ->state(fn ($record): ?CalendarEventSource => $record instanceof CalendarEvent ? $record->source() : null)
+                ->badge()
+                ->visible(fn ($record): bool => $record instanceof CalendarEvent),
+
             TextEntry::make('outlook_event_id')
                 ->label(__('Outlook Event'))
                 ->placeholder(__('Not synced'))

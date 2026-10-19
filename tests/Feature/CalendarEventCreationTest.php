@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\MatterStatus;
 use App\Filament\Mms\Resources\CalendarEvents\Pages\ListCalendarEvents;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Models\CalendarEvent;
@@ -222,7 +223,7 @@ class CalendarEventCreationTest extends TestCase
         $initialed = $make(['initial_report_at' => now()->subWeek(), 'final_report_at' => null]);
         $finalised = $make(['initial_report_at' => now()->subMonth(), 'final_report_at' => now()->subWeek()]);
         // The status the matter shows is the same rule.
-        $this->assertSame(\App\Enums\MatterStatus::IN_PROGRESS, $inProgress->status);
+        $this->assertSame(MatterStatus::IN_PROGRESS, $inProgress->status);
         $this->assertSame([$inProgress->id], Matter::query()->inProgress()->pluck('id')->all());
 
         $listed = fn ($field) => collect(array_keys($field->getOptions()))->sort()->values()->all();
@@ -360,6 +361,65 @@ class CalendarEventCreationTest extends TestCase
         $this->assertSame(1, CalendarEvent::count());
 
         // Changed to a free time, it goes through.
+        $page->fillForm(['start_datetime' => '2026-10-20 13:00:00', 'end_datetime' => '2026-10-20 14:00:00'])->callMountedAction();
+        $this->assertSame(2, CalendarEvent::count());
+    }
+
+    public function test_the_overlap_question_is_left_only_by_its_buttons_while_the_form_closes_as_always(): void
+    {
+        CalendarEvent::create(['title' => 'الأول', 'type' => 'single', 'start_datetime' => '2026-10-20 10:00:00', 'end_datetime' => '2026-10-20 11:00:00']);
+
+        // The form: × , a click outside and Esc close it, as before.
+        $form = Livewire::test(ListCalendarEvents::class)->mountAction(TestAction::make('createSingle')->table());
+        $action = $form->instance()->getMountedAction();
+        $this->assertTrue($action->hasModalCloseButton());
+        $this->assertTrue($action->isModalClosedByEscaping());
+
+        // The question: none of them — closed, it lost what was typed; Cancel takes it back to the form.
+        $asking = $form
+            ->fillForm(['title' => 'الثاني', 'start_datetime' => '2026-10-20 10:30:00', 'end_datetime' => '2026-10-20 11:30:00', 'sync_to_outlook' => false])
+            ->callMountedAction();
+        $question = $asking->instance()->getMountedAction();
+        $this->assertArrayHasKey('overlap', $question->getArguments());
+        $this->assertFalse($question->hasModalCloseButton());
+        $this->assertFalse($question->isModalClosedByClickingAway());
+        $this->assertFalse($question->isModalClosedByEscaping());
+        $this->assertSame('cancel', $question->getModalCancelAction()?->getName());
+
+        // Back on the form (asking no more: it closes as always again), with what was typed.
+        $asking->call('mountAction', 'cancel');
+        $this->assertArrayNotHasKey('overlap', $asking->instance()->mountedActions[0]['arguments']);
+        $this->assertSame('الثاني', $asking->instance()->mountedActions[0]['data']['title']);
+    }
+
+    public function test_cancelling_a_bulk_events_overlap_question_returns_to_its_form_filled_as_it_was(): void
+    {
+        CalendarEvent::create(['title' => 'الأول', 'type' => 'single', 'start_datetime' => '2026-10-20 10:00:00', 'end_datetime' => '2026-10-20 11:00:00']);
+        $type = Type::factory()->create();
+        $court = Court::factory()->create(['name' => 'Court A']);
+        $matter = Matter::factory()->create(['type_id' => $type->id, 'court_id' => $court->id, 'number' => '11', 'year' => '2026']);
+
+        $page = Livewire::test(ListCalendarEvents::class)
+            ->mountAction(TestAction::make('createBulk')->table())
+            ->fillForm(['matter_type_id' => $type->id, 'court_id' => $court->id])
+            ->fillForm(['matter_ids' => [$matter->id], 'start_datetime' => '2026-10-20 10:30:00', 'end_datetime' => '2026-10-20 11:30:00', 'sync_to_outlook' => false])
+            ->callMountedAction();
+
+        // Asked, nothing made.
+        $this->assertArrayHasKey('overlap', $page->instance()->mountedActions[0]['arguments']);
+        $this->assertSame(1, CalendarEvent::count());
+
+        $page->call('mountAction', 'cancel');
+
+        // The bulk form again, with its court, type, matters and times.
+        $mounted = $page->instance()->mountedActions;
+        $this->assertCount(1, $mounted);
+        $this->assertSame('createBulk', $mounted[0]['name']);
+        $this->assertArrayNotHasKey('overlap', $mounted[0]['arguments']);
+        $this->assertSame([$court->id, $type->id, [$matter->id]], [(int) $mounted[0]['data']['court_id'], (int) $mounted[0]['data']['matter_type_id'], array_map('intval', $mounted[0]['data']['matter_ids'])]);
+        $this->assertStringStartsWith('2026-10-20 10:30', (string) $mounted[0]['data']['start_datetime']);
+
+        // Moved to a free time, it is made.
         $page->fillForm(['start_datetime' => '2026-10-20 13:00:00', 'end_datetime' => '2026-10-20 14:00:00'])->callMountedAction();
         $this->assertSame(2, CalendarEvent::count());
     }

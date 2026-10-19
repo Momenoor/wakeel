@@ -70,6 +70,14 @@ class Updater
         return is_array($state) ? $state : null;
     }
 
+    /** An update started and not stopped by a failure: what the web cron carries on. */
+    public function inProgress(): bool
+    {
+        $state = $this->state();
+
+        return $state !== null && ! $state['failed'];
+    }
+
     public function start(string $version): void
     {
         $this->saveState(['version' => $version, 'completed' => [], 'failed' => false, 'log' => '']);

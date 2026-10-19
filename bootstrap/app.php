@@ -50,6 +50,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // cannot be encrypted.
         $middleware->encryptCookies(except: ['laravel_maintenance']);
 
+        // The web cron is let through maintenance mode: it carries an update on when the page that started it
+        // was closed (CronWebhookRunner). The scheduled tasks themselves still wait for the site to be back.
+        $middleware->preventRequestsDuringMaintenance(except: ['cron/run']);
+
         $middleware->alias([
             'installer.guard' => RedirectIfInstalled::class,
         ]);

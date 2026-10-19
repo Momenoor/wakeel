@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Resources\CalendarEvents\Tables;
 
+use App\Enums\CalendarEventSource;
 use App\Filament\Mms\Actions\Calendar\CalendarMatterActions;
 use App\Filament\Mms\Actions\Calendar\CreateBulkCalendarEventAction;
 use App\Filament\Mms\Actions\Calendar\CreateSingleCalendarEventAction;
@@ -98,6 +99,12 @@ class CalendarEventsTable
                     ->timezone(config('app.timezone'))
                     ->dateTime('d M Y H:i')
                     ->sortable(),
+                // Made in the system, or outside it (Outlook, Teams, a phone).
+                TextColumn::make('source')
+                    ->label(__('Made in'))
+                    ->state(fn (CalendarEvent $record): CalendarEventSource => $record->source())
+                    ->badge()
+                    ->toggleable(),
                 IconColumn::make('synced_to_outlook')
                     ->boolean()
                     ->label(__('Synced')),
@@ -130,6 +137,14 @@ class CalendarEventsTable
                         'single' => __('Single'),
                         'bulk' => __('Bulk'),
                     ]),
+                SelectFilter::make('source')
+                    ->label(__('Made in'))
+                    ->options(CalendarEventSource::class)
+                    ->query(fn (Builder $query, array $data) => match ($data['value'] ?? null) {
+                        CalendarEventSource::SYSTEM->value => $query->where('imported_from_outlook', false),
+                        CalendarEventSource::OUTSIDE->value => $query->where('imported_from_outlook', true),
+                        default => $query,
+                    }),
                 TernaryFilter::make('synced_to_outlook')
                     ->label(__('Synced to Outlook')),
                 TrashedFilter::make(),

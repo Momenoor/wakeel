@@ -8,6 +8,7 @@ use App\Models\License;
 use App\Services\License\LicenseVerifier;
 use App\Services\Updater\Updater;
 use App\Support\AppUpdate;
+use App\Support\Integrations;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Infolists\Components\TextEntry;
@@ -195,6 +196,14 @@ class SystemUpdates extends Page
 
         return [
             Group::make([
+                // Whether the page may be closed: with the web cron, the update goes on by itself every minute.
+                Callout::make()
+                    ->description(Integrations::cronOn()
+                        ? __('You can close this page: the update carries on by itself every minute, and the site comes back online when it is done. Open this page again to follow it.')
+                        : __('Keep this page open until the update is done: each step is started from here. To let an update run in the background, set up the web cron (Settings → Integrations).'))
+                    ->color(Integrations::cronOn() ? 'info' : 'warning')
+                    ->extraAttributes(['x-show' => '! gaveUp', 'x-cloak' => true]),
+
                 Callout::make()
                     ->description(__('Waiting for the server to finish this step… This can take a few minutes. If nothing changes for a long time, reload the page — the update resumes where it stopped.'))
                     ->color('warning')

@@ -40,7 +40,10 @@ class CalendarWidget extends FullCalendarWidget
                 'start' => $event->start_datetime,
                 'end' => $event->end_datetime,
                 'allDay' => $event->is_all_day,
+                // Made outside the system (Outlook, Teams, a phone): in grey.
+                ...array_filter(['backgroundColor' => $event->source()->calendarColor(), 'borderColor' => $event->source()->calendarColor()]),
                 'extendedProps' => [
+                    'source' => $event->source()->getLabel(),
                     'location' => $event->location,
                     'description' => $event->description,
                     // Pass the matter numbers for the tooltip
@@ -54,7 +57,7 @@ class CalendarWidget extends FullCalendarWidget
     {
         return 'function({ event, timeText, isStart, isEnd, isMirror, isPast, isFuture, isToday, el, view }){
             el.setAttribute("x-tooltip", "tooltip");
-            el.setAttribute("x-data", "{ tooltip: \'"+event.title+"\' }");
+            el.setAttribute("x-data", "{ tooltip: " + JSON.stringify(event.title + (event.extendedProps.source ? " — " + event.extendedProps.source : "")) + " }");
         }';
     }
 
