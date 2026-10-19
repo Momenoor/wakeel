@@ -110,6 +110,7 @@ return [
         'use_sign_pdf' => 'توقيع وختم ملفات PDF',
         'use_shared_signature_stamp' => 'استخدام تواقيع وأختام المكتب',
         'manage_shared_signature_stamp' => 'إدارة تواقيع وأختام المكتب',
+        'use_split_pdf' => 'تقسيم ملفات PDF إلى أجزاء',
 
         // Matter — scope.
         'view_own' => 'عرض ملفاته فقط',

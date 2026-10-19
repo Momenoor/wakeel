@@ -131,6 +131,9 @@ final class ScreenPermissions
     /** Adding, changing and deleting the office's signatures and stamps. */
     public const MANAGE_SHARED_SIGNATURES = 'ManageShared:SignatureStamp';
 
+    /** Splitting a PDF into parts (the Split PDF page), from the computer or the user's own OneDrive. */
+    public const SPLIT_PDF = 'Use:SplitPdf';
+
     /**
      * Each permission, and the existing permissions whose holders could
      * already see that part — any one of them is enough.
@@ -205,6 +208,8 @@ final class ScreenPermissions
             self::SIGN_PDF => ['CreateAttachment:Matter'],
             self::SHARED_SIGNATURES => ['CreateAttachment:Matter'],
             self::MANAGE_SHARED_SIGNATURES => ['Update:Letterhead'],
+            // Splitting: whoever signs PDFs, as they too add files to matters (and meet the portals' size limits).
+            self::SPLIT_PDF => ['CreateAttachment:Matter'],
         ];
     }
 

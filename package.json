@@ -11,6 +11,7 @@
         "axios": "^1.11.0",
         "chartjs-plugin-datalabels": "^2.2.0",
         "concurrently": "^9.0.1",
+        "fflate": "0.8.2",
         "laravel-echo": "^2.3.7",
         "laravel-vite-plugin": "^2.0.0",
         "pdf-lib": "1.17.1",

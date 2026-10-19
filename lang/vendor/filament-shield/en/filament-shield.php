@@ -17,5 +17,6 @@ return [
         'use_sign_pdf' => 'Sign and stamp PDFs',
         'use_shared_signature_stamp' => 'Use the office\'s signatures and stamps',
         'manage_shared_signature_stamp' => 'Manage the office\'s signatures and stamps',
+        'use_split_pdf' => 'Split PDFs into parts',
     ],
 ];

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Filament\Mms\Clusters\Templates;
 use App\Filament\Mms\Pages\SignPdf;
+use App\Filament\Mms\Pages\SplitPdf;
 use App\Filament\Mms\Resources\BulkMailCampaigns\BulkMailCampaignResource;
 use App\Filament\Mms\Resources\CalendarEvents\CalendarEventResource;
 use App\Filament\Mms\Resources\EmployeeLoans\EmployeeLoanResource;
@@ -337,6 +338,8 @@ return [
             OfflineSettings::class,
             // Answers to its custom permission (ScreenPermissions::SIGN_PDF), which the attachments' "Sign & stamp" checks too.
             SignPdf::class,
+            // Answers to its custom permission (ScreenPermissions::SPLIT_PDF), which its OneDrive download route checks too.
+            SplitPdf::class,
         ],
     ],
 

@@ -6,6 +6,7 @@ use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Psr\Http\Message\StreamInterface;
 use RuntimeException;
 
 /**
@@ -197,7 +198,7 @@ class OneDriveClient
      * One file or folder: its name, where it is ("/drive/root:/Work/…", the
      * folder it is in), and — a file — a short-lived link to download it.
      *
-     * @return array{id: string, name: string, webUrl: string, path: string, folder: bool, size: ?int, downloadUrl: ?string}
+     * @return array{id: string, name: string, webUrl: string, path: string, folder: bool, size: ?int, mime: ?string, downloadUrl: ?string}
      */
     public function itemInfo(string $user, string $itemId): array
     {
@@ -210,6 +211,7 @@ class OneDriveClient
             'path' => (string) $response->json('parentReference.path'),
             'folder' => $response->json('folder') !== null,
             'size' => $response->json('size') !== null ? (int) $response->json('size') : null,
+            'mime' => $response->json('file.mimeType'),
             // A key with dots: not by json()'s dot path.
             'downloadUrl' => ((array) $response->json())['@microsoft.graph.downloadUrl'] ?? null,
         ];
@@ -245,6 +247,21 @@ class OneDriveClient
         }
 
         return $response->body();
+    }
+
+    /**
+     * A file's contents as they arrive, by the short-lived link OneDrive gives for it — read a piece at a
+     * time, never held whole (a file of a hundred megabytes would not fit in PHP's memory).
+     */
+    public function stream(string $downloadUrl): StreamInterface
+    {
+        $response = Http::withOptions(['stream' => true])->connectTimeout(20)->timeout(1800)->get($downloadUrl);
+
+        if (! $response->successful()) {
+            throw new RuntimeException('OneDrive '.$response->status().': '.__('the file could not be downloaded.'));
+        }
+
+        return $response->toPsrResponse()->getBody();
     }
 
     /**

@@ -1,11 +1,15 @@
 {
-  "__commonjsHelpers-CqkleIqs.js": {
-    "file": "assets/_commonjsHelpers-CqkleIqs.js",
-    "name": "_commonjsHelpers"
-  },
   "_drawing-hXHplTkP.js": {
     "file": "assets/drawing-hXHplTkP.js",
     "name": "drawing"
+  },
+  "_is-pdf-rCPWVA7f.js": {
+    "file": "assets/is-pdf-rCPWVA7f.js",
+    "name": "is-pdf"
+  },
+  "_pdf-lib-CGrX5hqQ.js": {
+    "file": "assets/pdf-lib-CGrX5hqQ.js",
+    "name": "pdf-lib"
   },
   "node_modules/pdfjs-dist/build/pdf.worker.min.mjs": {
     "file": "assets/pdf.worker.min-wgc6bjNh.mjs",
@@ -80,7 +84,7 @@
     "src": "node_modules/pdfjs-dist/wasm/qcms_bg.wasm"
   },
   "resources/css/app.css": {
-    "file": "assets/app-CL9krR7p.css",
+    "file": "assets/app-VUjbgpfz.css",
     "src": "resources/css/app.css",
     "isEntry": true,
     "name": "app",
@@ -89,7 +93,7 @@
     ]
   },
   "resources/css/filament/admin/theme.css": {
-    "file": "assets/theme-BBmB-yqz.css",
+    "file": "assets/theme-DEoX00nu.css",
     "src": "resources/css/filament/admin/theme.css",
     "isEntry": true,
     "name": "theme",
@@ -98,7 +102,7 @@
     ]
   },
   "resources/css/print.css": {
-    "file": "assets/print-B4O62WRc.css",
+    "file": "assets/print-oLmc6Oc1.css",
     "src": "resources/css/print.css",
     "isEntry": true,
     "name": "print",
@@ -107,22 +111,23 @@
     ]
   },
   "resources/js/app.js": {
-    "file": "assets/app-BR7yJ7Pl.js",
+    "file": "assets/app-DPPRcYx9.js",
     "name": "app",
     "src": "resources/js/app.js",
     "isEntry": true,
     "imports": [
-      "__commonjsHelpers-CqkleIqs.js"
+      "_pdf-lib-CGrX5hqQ.js"
     ]
   },
   "resources/js/pdf-signer.js": {
-    "file": "assets/pdf-signer-Dk2zb_bp.js",
+    "file": "assets/pdf-signer-DkwjtAX3.js",
     "name": "pdf-signer",
     "src": "resources/js/pdf-signer.js",
     "isEntry": true,
     "imports": [
       "_drawing-hXHplTkP.js",
-      "__commonjsHelpers-CqkleIqs.js"
+      "_pdf-lib-CGrX5hqQ.js",
+      "_is-pdf-rCPWVA7f.js"
     ],
     "assets": [
       "assets/jbig2-CgUnd2ou.wasm",
@@ -143,6 +148,16 @@
       "assets/LiberationSans-Italic-5QhGB3P9.ttf",
       "assets/LiberationSans-Regular-cbskN6YR.ttf",
       "assets/pdf.worker.min-wgc6bjNh.mjs"
+    ]
+  },
+  "resources/js/pdf-splitter.js": {
+    "file": "assets/pdf-splitter-Bsoz2YGC.js",
+    "name": "pdf-splitter",
+    "src": "resources/js/pdf-splitter.js",
+    "isEntry": true,
+    "imports": [
+      "_is-pdf-rCPWVA7f.js",
+      "_pdf-lib-CGrX5hqQ.js"
     ]
   },
   "resources/js/signature-pad-field.js": {

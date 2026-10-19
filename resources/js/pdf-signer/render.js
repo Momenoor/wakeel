@@ -69,9 +69,4 @@ export function renderPage(page, zoom) {
     return { canvas, task: page.render({ canvas, viewport }) };
 }
 
-export function isPdf(bytes) {
-    // "%PDF-" within the first kilobyte, where the format allows it to be.
-    const head = new TextDecoder('latin1').decode(bytes.subarray(0, 1024));
-
-    return head.includes('%PDF-');
-}
+export { isPdf } from '../pdf/is-pdf.js';
