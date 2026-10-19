@@ -14,6 +14,7 @@ use App\Support\ScreenPermissions;
 use App\Support\ThemeManager;
 use App\Support\ThemeOptions;
 use BackedEnum;
+use Closure;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -115,7 +116,7 @@ class ThemeResource extends Resource
                             self::optionField('topbar_style'),
                             self::optionField('content_width'),
                             ToggleButtons::make('radius')->label(__('Corners'))->options(ThemeRadius::class)->default(ThemeRadius::MEDIUM)->required()->inline()->live(),
-                            ToggleButtons::make('density')->label(__('Spacing'))->options(ThemeDensity::class)->default(ThemeDensity::NORMAL)->required()->inline(),
+                            ToggleButtons::make('density')->label(__('Spacing'))->options(ThemeDensity::class)->default(ThemeDensity::NORMAL)->required()->inline()->live(),
                             self::optionField('collapsible_groups'),
                         ]),
 
@@ -147,6 +148,7 @@ class ThemeResource extends Resource
                         ->schema([
                             self::optionField('cards'),
                             self::optionField('headings'),
+                            self::optionField('table_striped'),
                             Select::make('latin_font_id')->label(__('English text'))->options($fonts)->searchable()
                                 ->helperText(__('From the fonts uploaded under Templates → Fonts. Empty: the office font.')),
                             Select::make('arabic_font_id')->label(__('Arabic text'))->options($fonts)->searchable(),
@@ -166,7 +168,7 @@ class ThemeResource extends Resource
             Placeholder::make('preview')
                 ->label(__('Preview'))
                 ->columnSpanFull()
-                ->content(fn (Get $get): HtmlString => self::preview($get)),
+                ->content(fn (Get $get): HtmlString => self::preview(fn (string $key): mixed => $get($key))),
         ]);
     }
 
@@ -218,7 +220,7 @@ class ThemeResource extends Resource
         $name = "options.{$key}";
 
         $field = match ($option['kind']) {
-            'toggle' => Toggle::make($name)->inline(false),
+            'toggle' => Toggle::make($name)->inline(false)->live(),
             'image' => FileUpload::make($name)->image()->disk(ThemeOptions::DISK)->directory(ThemeOptions::DIRECTORY)->maxSize(2048),
             default => ToggleButtons::make($name)->options($option['options'])->inline()->live(),
         };
@@ -295,10 +297,12 @@ class ThemeResource extends Resource
     }
 
     /**
-     * A small page in the colours, surfaces and corners being chosen — drawn with inline styles from the form
-     * itself, before anything is saved.
+     * A small page in the colours, surfaces, corners and spacing being chosen — drawn with inline styles from the
+     * form itself, before anything is saved.
+     *
+     * @param  Closure(string): mixed  $get  a value of the form, by its name
      */
-    private static function preview(Get $get): HtmlString
+    public static function preview(Closure $get): HtmlString
     {
         $color = function (string $name, string $fallback) use ($get): string {
             $value = $get("colors.{$name}");
@@ -325,14 +329,26 @@ class ThemeResource extends Resource
         $hardToRead = is_string($primaryHex) && preg_match('/^#[0-9a-f]{6}$/i', $primaryHex) === 1 && ! Color::isTextContrastRatioAccessible('#ffffff', $primaryHex);
         $isTop = $get('options.navigation') === 'top';
 
+        // The spacing chosen, in rem: Filament's table cells are 3 × it across and 4 × it down, its cards 6 × it.
+        $density = $get('density');
+        $space = ($density instanceof ThemeDensity ? $density : (ThemeDensity::tryFrom((string) $density) ?? ThemeDensity::NORMAL))->spacing();
+        $cell = fn (string $content, bool $head = false): string => '<'.($head ? 'th' : 'td').' style="text-align:start;padding:'.round($space * ($head ? 3.5 : 4), 3).'rem '.round($space * 3, 3).'rem;border-top:1px solid #e5e7eb;'.($head ? 'font-weight:600;background:#f9fafb;' : '').'">'.$content.'</'.($head ? 'th' : 'td').'>';
+        $striped = (bool) $get('options.table_striped');
+        $rows = [['1074/2025', __('Paid'), $color('success', '#16a34a')], ['19145/2026', __('Pending'), $color('warning', '#d97706')], ['1100/2021', __('New'), $color('info', '#0284c7')]];
+        $table = '<table style="width:100%;border-collapse:collapse;font-size:.85rem;">'
+            .'<tr>'.$cell(e(__('Matter')), true).$cell(e(__('Amount')), true).$cell(e(__('Status')), true).'</tr>'
+            .collect($rows)->map(fn (array $row, int $i): string => '<tr'.($striped && $i % 2 === 1 ? ' style="background:#f3f4f6;"' : '').'>'.$cell($row[0]).$cell(number_format(15000 / ($i + 1), 2)).$cell($badge($row[2], $row[1])).'</tr>')->implode('')
+            .'</table>';
+        $card = fn (string $content, string $padding): string => '<div style="margin-bottom:.6rem;padding:'.$padding.';border-radius:'.$corner.';background:'.e($surface('cards', '#ffffff')).';color:'.e($surface('text', '#111827')).';box-shadow:0 1px 2px rgb(0 0 0 / .08);overflow:hidden;">'.$content.'</div>';
+
         return new HtmlString(
             '<div style="display:flex;flex-direction:column;border:1px solid #e5e7eb;border-radius:'.$corner.';overflow:hidden;background:'.e($surface('background', '#f9fafb')).';">'
             .'<div style="padding:.5rem .8rem;background:'.e($topbar).';color:'.e($ink($topbar)).';font-weight:600;">'.e(__('Top bar')).($isTop ? ' · '.e(__('Matters')).' · '.e(__('Fees')) : '').'</div>'
             .'<div style="display:flex;min-height:9rem;">'
             .($isTop ? '' : '<div style="width:7rem;padding:.6rem;background:'.e($sidebar).';color:'.e($ink($sidebar)).';">'.e(__('Matters')).'<br>'.e(__('Fees')).'<br>'.e(__('Settings')).'</div>')
             .'<div style="flex:1;padding:.8rem;">'
-            .'<div style="padding:.8rem;border-radius:'.$corner.';background:'.e($surface('cards', '#ffffff')).';color:'.e($surface('text', '#111827')).';box-shadow:0 1px 2px rgb(0 0 0 / .08);">'
-            .$button($primary, __('Save'))
+            .$card(
+                $button($primary, __('Save'))
             .$button($color('secondary', '#d97706'), __('Secondary'))
             .$button($color('danger', '#dc2626'), __('Delete'))
             .'<div style="margin-top:.4rem;">'
@@ -340,7 +356,10 @@ class ThemeResource extends Resource
             .$badge($color('warning', '#d97706'), __('Pending'))
             .$badge($color('info', '#0284c7'), __('New'))
             .$badge($color('gray', '#6b7280'), __('Draft'))
-            .'</div></div></div></div></div>'
+            .'</div>', round($space * 6, 3).'rem')
+            // A table at the spacing chosen: compact, normal or comfortable.
+            .$card($table, '0')
+            .'</div></div></div>'
             .($hardToRead ? '<p style="color:#b45309;margin-top:.5rem;">'.e(__('White text is hard to read on this primary colour — choose a darker one.')).'</p>' : '')
         );
     }

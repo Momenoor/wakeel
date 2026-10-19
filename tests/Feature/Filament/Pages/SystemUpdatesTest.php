@@ -92,7 +92,7 @@ class SystemUpdatesTest extends TestCase
             ->assertSee('New reports')
             // The badge beside the version keeps its size: its label was cut off when it shrank.
             ->assertSee(__('Update available'))
-            ->assertSeeHtml('style="flex-shrink: 0;"');
+            ->assertSeeHtml('style="min-width: max-content;"');
     }
 
     public function test_a_running_update_shows_its_steps_and_a_failed_one_its_retry(): void

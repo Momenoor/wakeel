@@ -219,6 +219,12 @@ class ThemeManager
             default => '',
         };
 
+        // Every other row of every table, as a table of Filament's own does when it is striped.
+        if ($theme->option('table_striped')) {
+            $css .= ' .fi-ta-table tbody > .fi-ta-row:nth-child(even) { background-color: var(--gray-50); }'
+                .' html.dark .fi-ta-table tbody > .fi-ta-row:nth-child(even) { background-color: color-mix(in oklab, #ffffff 5%, transparent); }';
+        }
+
         if ($picture = self::imageUrl($theme->option('login_background'))) {
             $css .= " .fi-simple-layout { background: url('".e($picture)."') center / cover no-repeat; }";
         }

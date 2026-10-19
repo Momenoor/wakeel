@@ -193,6 +193,25 @@ class ThemesTest extends TestCase
         $this->assertSame('5rem', $panel->getBrandLogoHeight());
     }
 
+    public function test_the_preview_shows_a_table_at_the_spacing_chosen(): void
+    {
+        $preview = fn (array $form): string => ThemeResource::preview(fn (string $key): mixed => data_get($form, $key))->toHtml();
+
+        // Compact: cells 4 × 0.2rem down and 3 × 0.2rem across; comfortable: 4 × 0.3 and 3 × 0.3 — striped if asked.
+        $compact = $preview(['density' => ThemeDensity::COMPACT->value]);
+        $this->assertStringContainsString('padding:0.8rem 0.6rem', $compact);
+        $this->assertStringNotContainsString('<tr style="background:#f3f4f6;">', $compact);
+
+        $comfortable = $preview(['density' => ThemeDensity::COMFORTABLE, 'options' => ['table_striped' => true]]);
+        $this->assertStringContainsString('padding:1.2rem 0.9rem', $comfortable);
+        $this->assertStringContainsString('<tr style="background:#f3f4f6;">', $comfortable);
+
+        // On every table of the system, light and dark.
+        $css = ThemeManager::rules($this->theme(['options' => ['table_striped' => true]]));
+        $this->assertStringContainsString('.fi-ta-table tbody > .fi-ta-row:nth-child(even) { background-color: var(--gray-50); }', $css);
+        $this->assertStringContainsString('html.dark .fi-ta-table tbody > .fi-ta-row:nth-child(even)', $css);
+    }
+
     public function test_an_option_that_is_not_one_of_its_choices_never_reaches_the_page(): void
     {
         $theme = $this->theme(['options' => ['sidebar_width' => '99rem; } body { display:none', 'navigation' => 'top']]);

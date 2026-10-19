@@ -165,12 +165,12 @@ class SystemUpdates extends Page
     }
 
     /**
-     * A badge beside other content that never shrinks: next to a full-width entry (or a step's name) Filament
-     * let it shrink to its minimum, and its label was cut off.
+     * A badge beside other content, as wide as its words: Filament's badge hides what overflows it, so the boxes
+     * around it could squeeze it (next to a full-width entry, a step's name) and its label was cut off.
      */
     private static function badge(string $label, string $color): Text
     {
-        return Text::make($label)->badge()->color($color)->extraAttributes(['style' => 'flex-shrink: 0;']);
+        return Text::make($label)->badge()->color($color)->extraAttributes(['style' => 'min-width: max-content;']);
     }
 
     private function versionEntry(string $name, string $label, string $value): TextEntry

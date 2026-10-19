@@ -80,6 +80,8 @@ final class ThemeOptions
                 'bold' => __('Bold'),
             ]],
 
+            'table_striped' => ['kind' => 'toggle', 'label' => __('Striped table rows'), 'default' => false],
+
             // Branding
             'logo' => ['kind' => 'image', 'label' => __('Logo'), 'default' => null, 'help' => __('Empty: the office logo.')],
             'logo_dark' => ['kind' => 'image', 'label' => __('Logo in dark mode'), 'default' => null, 'help' => __('Empty: the logo above.')],
