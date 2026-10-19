@@ -37,6 +37,7 @@ enum NotificationType: string
 
     // Calendar
     case CALENDAR_UNMATCHED = 'calendar.unmatched';
+    case CALENDAR_REMINDER = 'calendar.reminder';
 
     public function label(): string
     {
@@ -57,6 +58,7 @@ enum NotificationType: string
             self::TODO_MENTIONED => __('I was mentioned in a to-do'),
             self::TODO_COMPLETED => __('A shared to-do was completed'),
             self::CALENDAR_UNMATCHED => __('Calendar events naming a matter that is not in the system'),
+            self::CALENDAR_REMINDER => __('An event of my matter tomorrow, and in an hour'),
         };
     }
 
@@ -69,7 +71,7 @@ enum NotificationType: string
             self::MINUTES_REPLY, self::ONEDRIVE_FOLDER_REVIEW => __('Matters'),
             self::LEAVE_SUBMITTED, self::LEAVE_DECIDED => __('Leave'),
             self::CHAT_MESSAGE, self::CHAT_REACTION, self::TODO_MENTIONED, self::TODO_COMPLETED => __('Chat and to-dos'),
-            self::CALENDAR_UNMATCHED => __('Calendar'),
+            self::CALENDAR_UNMATCHED, self::CALENDAR_REMINDER => __('Calendar'),
         };
     }
 

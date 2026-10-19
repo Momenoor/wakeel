@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\Models\CalendarEvent;
+use App\Services\MMS\Calendar\CalendarAlarms;
 use App\Services\MMS\Calendar\EventMatterLinker;
 use App\Services\MMS\OutlookCalendarService;
 use Illuminate\Support\Facades\Log;
@@ -23,6 +24,18 @@ class CalendarEventObserver
             app(EventMatterLinker::class)->link($event);
         } catch (\Throwable $e) {
             report($e);
+        }
+    }
+
+    /**
+     * Its reminder items taken out of the people's calendars before the event (and its alarms) go.
+     */
+    public function deleting(CalendarEvent $event): void
+    {
+        try {
+            app(CalendarAlarms::class)->forget($event);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to take the reminders of calendar event '.$event->id.' away: '.$e->getMessage());
         }
     }
 

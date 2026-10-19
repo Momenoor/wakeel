@@ -4338,5 +4338,9 @@
     "Striped table rows": "صفوف الجداول مخططة",
     "Keep every email of this inbox": "الاحتفاظ بكل رسائل هذا الصندوق",
     "Keeps every email": "يحتفظ بكل الرسائل",
-    "Off: only replies and emails from a matter's parties are kept from this mailbox. On: every other email too (except the office's own) goes to Unfiled emails, to file on a matter or set aside.": "إيقاف: يُحتفظ من هذا الصندوق بالردود ورسائل أطراف القضايا فقط. تشغيل: تذهب كل رسالة أخرى أيضاً (عدا رسائل المكتب نفسه) إلى الرسائل غير المصنفة، لإلحاقها بقضية أو تجنيبها."
+    "Off: only replies and emails from a matter's parties are kept from this mailbox. On: every other email too (except the office's own) goes to Unfiled emails, to file on a matter or set aside.": "إيقاف: يُحتفظ من هذا الصندوق بالردود ورسائل أطراف القضايا فقط. تشغيل: تذهب كل رسالة أخرى أيضاً (عدا رسائل المكتب نفسه) إلى الرسائل غير المصنفة، لإلحاقها بقضية أو تجنيبها.",
+    "An event of my matter tomorrow, and in an hour": "موعد في قضيتي غداً، وبعد ساعة",
+    "Reminder: :event — :when": "تذكير: :event — :when",
+    "in an hour, at :time": "بعد ساعة، الساعة :time",
+    "tomorrow at :time": "غداً الساعة :time"
 }

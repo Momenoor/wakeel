@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[ObservedBy(CalendarEventObserver::class)]
@@ -60,6 +61,12 @@ class CalendarEvent extends Model
             MatterReferenceMatcher::references($this->title),
             fn (array $ref): bool => ! in_array(MatterReferenceMatcher::key($ref), $ignored, true),
         ));
+    }
+
+    /** Its alarms, for each person and time (App\Services\MMS\Calendar\CalendarAlarms). */
+    public function alerts(): HasMany
+    {
+        return $this->hasMany(CalendarEventAlert::class);
     }
 
     public function matter(): BelongsTo

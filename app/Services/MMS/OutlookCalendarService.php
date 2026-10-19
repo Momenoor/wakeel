@@ -3,6 +3,7 @@
 namespace App\Services\MMS;
 
 use App\Models\CalendarEvent;
+use App\Services\MMS\Calendar\CalendarAlarms;
 use Carbon\Carbon;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
@@ -111,6 +112,8 @@ class OutlookCalendarService
             'end_datetime' => $event->end_datetime,
             'location' => $event->location,
             'is_teams_meeting' => $event->is_teams_meeting,
+            // Invited: the event in the matter's assistant's and expert's own calendars (Outlook, Teams, phone).
+            'attendees' => CalendarAlarms::attendees($event),
         ]);
 
         $event->update([
@@ -334,6 +337,71 @@ class OutlookCalendarService
         if ($response->failed() && $response->status() !== 404) {
             throw new \RuntimeException('Outlook event deletion failed: '.$response->json('error.message'));
         }
+    }
+
+    /**
+     * A reminder item in someone's own calendar (an alarm of App\Services\MMS\Calendar\CalendarAlarms): a few
+     * minutes long at the moment it rings, shown as free so it books none of their time, its alarm at its
+     * start — Outlook, Teams and a phone that shows Outlook ring for it.
+     *
+     * @return string its id in that mailbox
+     */
+    public function createReminderItem(string $mailbox, string $subject, string $body, Carbon $at): string
+    {
+        $response = Http::withToken($this->getAccessToken())
+            ->post('https://graph.microsoft.com/v1.0/users/'.rawurlencode($mailbox).'/events', [
+                'subject' => $subject,
+                'body' => ['contentType' => 'text', 'content' => $body],
+                ...$this->reminderTimes($at),
+                'showAs' => 'free',
+                'isReminderOn' => true,
+                'reminderMinutesBeforeStart' => 0,
+                // Never a Teams meeting, whatever the mailbox does by default.
+                'isOnlineMeeting' => false,
+                'categories' => ['Wakeel reminder'],
+            ]);
+
+        if ($response->failed() || blank($response->json('id'))) {
+            throw new \RuntimeException('Failed to put the reminder in '.$mailbox.': '.$response->json('error.message', $response->body()));
+        }
+
+        return (string) $response->json('id');
+    }
+
+    /** The reminder item moved to ring at another time (its event was moved). */
+    public function moveReminderItem(string $mailbox, string $itemId, Carbon $at): void
+    {
+        $response = Http::withToken($this->getAccessToken())
+            ->patch('https://graph.microsoft.com/v1.0/users/'.rawurlencode($mailbox).'/events/'.$itemId, $this->reminderTimes($at));
+
+        if ($response->failed()) {
+            throw new \RuntimeException('Failed to move the reminder in '.$mailbox.': '.$response->json('error.message', $response->body()));
+        }
+    }
+
+    /** The reminder item taken away (it has rung, or its event is gone). One already gone is no error. */
+    public function deleteReminderItem(string $mailbox, string $itemId): void
+    {
+        $response = Http::withToken($this->getAccessToken())
+            ->delete('https://graph.microsoft.com/v1.0/users/'.rawurlencode($mailbox).'/events/'.$itemId);
+
+        if ($response->failed() && $response->status() !== 404) {
+            throw new \RuntimeException('Failed to take the reminder away from '.$mailbox.': '.$response->json('error.message', $response->body()));
+        }
+    }
+
+    /**
+     * @return array{start: array<string, string>, end: array<string, string>}
+     */
+    private function reminderTimes(Carbon $at): array
+    {
+        $tz = $this->appTimezone();
+        $at = $at->copy()->setTimezone($tz);
+
+        return [
+            'start' => ['dateTime' => $at->format('Y-m-d\TH:i:s'), 'timeZone' => $tz],
+            'end' => ['dateTime' => $at->copy()->addMinutes(5)->format('Y-m-d\TH:i:s'), 'timeZone' => $tz],
+        ];
     }
 
     /**
