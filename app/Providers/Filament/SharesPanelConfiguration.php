@@ -37,6 +37,7 @@ use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Panel;
+use Filament\Support\Colors\Color;
 use Filament\Support\Enums\Width;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
@@ -67,6 +68,8 @@ trait SharesPanelConfiguration
             ->sidebarWidth('17rem')
             ->colors([
                 'primary' => $primary,
+                // For the office's own use (->color('secondary')); a theme gives it another.
+                'secondary' => Color::Amber,
             ])
             ->sidebarCollapsibleOnDesktop()
             ->font('Boutros MBC Dinkum', asset('fonts/Boutros.css'), provider: LocalFontProvider::class)

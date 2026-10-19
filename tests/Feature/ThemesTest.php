@@ -13,11 +13,14 @@ use App\Models\Theme;
 use App\Models\User;
 use App\Support\ThemeManager;
 use Filament\Actions\Testing\TestAction;
+use Filament\Enums\ThemeMode;
 use Filament\Facades\Filament;
 use Filament\Support\Colors\Color;
+use Filament\Support\Enums\Width;
 use Filament\Support\Facades\FilamentColor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -93,7 +96,7 @@ class ThemesTest extends TestCase
         $this->assertTrue($office->is(app(ThemeManager::class)->current($user->refresh())));
     }
 
-    public function test_themes_are_made_and_one_is_made_the_offices(): void
+    public function test_themes_are_made_from_filaments_palettes_or_own_colours_and_one_is_made_the_offices(): void
     {
         Gate::before(fn () => true);
         $this->actingAs(User::factory()->create());
@@ -103,28 +106,100 @@ class ThemesTest extends TestCase
             ->assertNotified()
             ->callAction('create', [
                 'name' => 'Our green',
-                'colors' => ['primary' => '#047857', 'gray' => '#6b7280'],
+                // A palette of Filament's, and a colour of our own.
+                'colors' => ['primary' => 'emerald', 'secondary' => 'custom', 'gray' => 'stone'],
+                'custom_colors' => ['secondary' => '#b45309'],
                 'radius' => ThemeRadius::LARGE->value,
                 'density' => ThemeDensity::COMFORTABLE->value,
                 'sidebar' => ThemeSidebar::COLORED->value,
+                'options' => [
+                    'navigation' => 'top',
+                    'mode_switch' => 'dark',
+                    'surfaces' => ['topbar' => ['light' => '#0f172a', 'dark' => '#020617']],
+                ],
             ])
             ->assertHasNoActionErrors();
 
-        $this->assertSame(count(ManageThemes::STARTERS) + 1, Theme::count());
+        // The original looks and one per Filament palette, and ours.
+        $this->assertSame(count(ManageThemes::starters()) + 1, Theme::count());
+        $this->assertSame(count(Color::all()) + 2, count(ManageThemes::starters()));
         $theme = Theme::where('name', 'Our green')->sole();
-        $this->assertSame([ThemeRadius::LARGE, '#047857'], [$theme->radius, $theme->colors['primary']]);
+        $this->assertSame(['emerald', '#b45309', 'stone'], [$theme->colors['primary'], $theme->colors['secondary'], $theme->colors['gray']]);
+        $this->assertSame(['top', 'dark', '#0f172a'], [$theme->option('navigation'), $theme->option('mode_switch'), $theme->surface('topbar', 'light')]);
+        // Filament's palette as it is; our own colour for Filament to make the shades of.
+        $this->assertSame([Color::Emerald, '#b45309'], [$theme->setColors()['primary'], $theme->setColors()['secondary']]);
 
-        // Not a colour: refused.
+        // Your own colour, but not a colour: refused.
         Livewire::test(ManageThemes::class)
-            ->callAction('create', ['name' => 'Bad', 'colors' => ['primary' => 'red'], 'radius' => 'md', 'density' => 'normal', 'sidebar' => 'plain'])
-            ->assertHasActionErrors(['colors.primary']);
+            ->callAction('create', ['name' => 'Bad', 'colors' => ['primary' => 'custom'], 'custom_colors' => ['primary' => 'red'], 'radius' => 'md', 'density' => 'normal', 'sidebar' => 'plain'])
+            ->assertHasActionErrors(['custom_colors.primary']);
+
+        // Edited: the hex comes back as "your own".
+        Livewire::test(ManageThemes::class)
+            ->mountAction(TestAction::make('edit')->table($theme))
+            ->assertActionDataSet(['colors.secondary' => 'custom', 'custom_colors.secondary' => '#b45309']);
 
         Livewire::test(ManageThemes::class)->callAction(TestAction::make('useForOffice')->table($theme));
         $this->assertSame((string) $theme->id, (string) Setting::get(ThemeManager::SETTING));
 
         // Starters added twice: still once each.
         Livewire::test(ManageThemes::class)->callAction('starters');
-        $this->assertSame(count(ManageThemes::STARTERS) + 1, Theme::count());
+        $this->assertSame(count(ManageThemes::starters()) + 1, Theme::count());
+    }
+
+    public function test_the_layout_light_and_dark_and_the_surfaces_reach_the_page(): void
+    {
+        Gate::before(fn () => true);
+        Storage::fake('public');
+        Storage::disk('public')->put('themes/logo.png', 'png');
+        $theme = $this->theme(['options' => [
+            'navigation' => 'top',
+            'sidebar_width' => '20rem',
+            'content_width' => 'full',
+            'mode' => 'dark',
+            'mode_switch' => 'dark',
+            'topbar_style' => 'primary',
+            'cards' => 'flat',
+            'headings' => 'bold',
+            'logo' => 'themes/logo.png',
+            'logo_height' => '5rem',
+            'surfaces' => [
+                'background' => ['light' => '#f5f5f4', 'dark' => '#0c0a09'],
+                'sidebar' => ['light' => '#fde68a'],
+            ],
+        ]]);
+        Setting::set(ThemeManager::SETTING, $theme->id, 'appearance');
+
+        $this->actingAs(User::factory()->create())
+            ->get(ThemeResource::getUrl())
+            ->assertOk()
+            ->assertSee('.fi-body { background-color: #f5f5f4; }', escape: false)
+            ->assertSee('html.dark .fi-body { background-color: #0c0a09; }', escape: false)
+            // A light sidebar: its words dark, to be read.
+            ->assertSee('.fi-sidebar, .fi-sidebar.fi-sidebar-open { background-color: #fde68a; }', escape: false)
+            ->assertSee('.fi-sidebar .fi-sidebar-item-label', escape: false)
+            ->assertSee('color: #111827;', escape: false)
+            ->assertSee('.fi-topbar { background-color: var(--primary-600); }', escape: false)
+            ->assertSee('--font-weight-semibold: 700;', escape: false)
+            ->assertSee('box-shadow: 0 0 0 1px var(--gray-200) !important;', escape: false)
+            ->assertSee(Storage::disk('public')->url('themes/logo.png'), escape: false);
+
+        $panel = Filament::getCurrentPanel();
+        $this->assertTrue($panel->hasTopNavigation());
+        $this->assertSame('20rem', $panel->getSidebarWidth());
+        $this->assertSame(Width::Full, $panel->getMaxContentWidth());
+        $this->assertSame(ThemeMode::Dark, $panel->getDefaultThemeMode());
+        $this->assertTrue($panel->hasDarkModeForced());
+        $this->assertSame('5rem', $panel->getBrandLogoHeight());
+    }
+
+    public function test_an_option_that_is_not_one_of_its_choices_never_reaches_the_page(): void
+    {
+        $theme = $this->theme(['options' => ['sidebar_width' => '99rem; } body { display:none', 'navigation' => 'top']]);
+
+        $this->assertSame('17rem', $theme->option('sidebar_width'));
+        $this->assertSame('top', $theme->option('navigation'));
+        $this->assertNull($theme->surface('cards', 'light'));
     }
 
     public function test_the_screen_is_for_whoever_looks_after_the_general_settings(): void
