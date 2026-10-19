@@ -82,9 +82,15 @@ trait SharesPanelConfiguration
                 PanelsRenderHook::USER_MENU_PROFILE_AFTER,
                 fn () => Blade::render('@livewire(\'font-size-slider\')')
             )
+            // The system switcher: at the top of the sidebar; in the top bar only when a theme puts the
+            // navigation there (no sidebar then).
+            ->renderHook(
+                PanelsRenderHook::SIDEBAR_NAV_START,
+                fn () => filament()->hasTopNavigation() ? '' : SystemSwitcher::render(inSidebar: true)
+            )
             ->renderHook(
                 PanelsRenderHook::GLOBAL_SEARCH_BEFORE,
-                fn () => SystemSwitcher::render()
+                fn () => filament()->hasTopNavigation() ? SystemSwitcher::render() : ''
             )
             ->renderHook(
                 PanelsRenderHook::CONTENT_START,

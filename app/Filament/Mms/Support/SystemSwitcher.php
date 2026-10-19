@@ -13,7 +13,7 @@ use Illuminate\Contracts\View\View;
  */
 class SystemSwitcher
 {
-    public static function render(): View
+    public static function render(bool $inSidebar = false): View
     {
         $user = auth()->user();
 
@@ -36,6 +36,7 @@ class SystemSwitcher
             'currentSystem' => Filament::getCurrentPanel()?->getId() === 'pms' ? 'pms' : 'mms',
             'mmsUrl' => url($mmsPanel->getPath()),
             'pmsUrl' => url($pmsPanel->getPath()),
+            'inSidebar' => $inSidebar,
         ]);
     }
 }
