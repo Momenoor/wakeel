@@ -82,6 +82,7 @@ class SplitPdf extends Page
                 'listLine' => __(':name — pages :from–:to — :size MB'),
                 'mb' => __(':size MB'),
                 'summary' => __('Done: ":name" (:pages pages, :size MB) was split :how into :parts parts in :seconds s.'),
+                'summaryOne' => __('Done: ":name" (:pages pages, :size MB) was split :how — it all fits in one part — in :seconds s.'),
                 'howSize' => __('by size, at most :limit MB each,'),
                 'howPages' => __('by pages, :count pages each,'),
                 'summarySizes' => __('The parts are :smallest to :largest MB.'),

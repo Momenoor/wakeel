@@ -9,6 +9,20 @@ import { zipFiles } from './pdf-splitter/zip.js';
 // under 5 MB however the page receiving it counts).
 const MB = 1_000_000;
 
+// A number as typed on any keyboard: Arabic-Indic (٠–٩) and Persian (۰–۹) digits, and "٫" or "," for the decimal
+// point. A number field (type="number") took none of them — on an Arabic phone keyboard what was typed read as
+// empty — so the fields are text, read here.
+export function numberFrom(typed) {
+    const text = String(typed ?? '')
+        .trim()
+        .replace(/[٠-٩]/g, (digit) => String(digit.charCodeAt(0) - 0x0660))
+        .replace(/[۰-۹]/g, (digit) => String(digit.charCodeAt(0) - 0x06f0))
+        .replace(/[٫,]/g, '.')
+        .replace(/\s+/g, '');
+
+    return /^\d+(\.\d+)?$|^\.\d+$/.test(text) ? Number(text) : NaN;
+}
+
 const fill = (text, values) => Object.entries(values).reduce((result, [key, value]) => result.replaceAll(`:${key}`, value), text);
 const megabytes = (bytes) => (bytes / MB).toFixed(2);
 
@@ -118,8 +132,8 @@ export default function pdfSplitter(config) {
         // ── Splitting ───────────────────────────────────────────────────────
 
         async split() {
-            const limit = Number(this.maxMb);
-            const perPart = Number(this.perPart);
+            const limit = numberFrom(this.maxMb);
+            const perPart = numberFrom(this.perPart);
 
             if (this.mode === 'size' && ! (limit >= 0.5)) {
                 return this.fail(this.labels.badLimit);
@@ -234,7 +248,7 @@ export default function pdfSplitter(config) {
                 : fill(this.labels.howPages, { count: perPart });
 
             return [
-                fill(this.labels.summary, {
+                fill(made.length === 1 ? this.labels.summaryOne : this.labels.summary, {
                     name: this.file.name,
                     pages: this.pageCount,
                     size: megabytes(this.file.size),

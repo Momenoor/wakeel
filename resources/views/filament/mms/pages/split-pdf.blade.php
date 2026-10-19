@@ -5,7 +5,6 @@
 @php
     $config = $this->splitterConfig();
     $card = 'rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10';
-    $field = 'block w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-white';
 @endphp
 
 <x-filament-panels::page>
@@ -66,25 +65,23 @@
             <div class="grid gap-4 sm:grid-cols-2" role="radiogroup" aria-label="{{ __('How to split') }}">
                 <div class="flex cursor-pointer flex-col gap-2 rounded-lg p-3 ring-1" x-on:click="busy || (mode = 'size')" x-bind:class="mode === 'size' ? 'ring-2 ring-primary-500' : 'ring-gray-200 dark:ring-white/10'">
                     <div class="flex items-center gap-2 text-sm font-medium text-gray-950 dark:text-white">
-                        <input type="radio" id="split-by-size" name="split-mode" value="size" class="text-primary-600" x-model="mode" x-bind:disabled="busy">
+                        <x-filament::input.radio id="split-by-size" name="split-mode" value="size" x-model="mode" x-bind:disabled="busy" />
                         <label for="split-by-size" class="cursor-pointer">{{ __('By size') }}</label>
                     </div>
-                    <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                        <span>{{ __('At most') }}</span>
-                        <input type="number" min="0.5" step="0.5" inputmode="decimal" class="{{ $field }} w-24" dir="ltr" aria-label="{{ __('MB per part') }}" x-model="maxMb" x-on:focus="mode = 'size'" x-bind:disabled="busy">
-                        <span>{{ __('MB per part') }}</span>
-                    </div>
+                    {{-- Filament's own field; text, not a number field: digits typed on any keyboard are read (numberFrom()). --}}
+                    <x-filament::input.wrapper :prefix="__('At most')" :suffix="__('MB per part')" alpine-disabled="busy">
+                        <x-filament::input type="text" inputmode="decimal" autocomplete="off" dir="ltr" :aria-label="__('MB per part')" x-model="maxMb" x-on:focus="mode = 'size'" x-bind:disabled="busy" />
+                    </x-filament::input.wrapper>
                 </div>
 
                 <div class="flex cursor-pointer flex-col gap-2 rounded-lg p-3 ring-1" x-on:click="busy || (mode = 'pages')" x-bind:class="mode === 'pages' ? 'ring-2 ring-primary-500' : 'ring-gray-200 dark:ring-white/10'">
                     <div class="flex items-center gap-2 text-sm font-medium text-gray-950 dark:text-white">
-                        <input type="radio" id="split-by-pages" name="split-mode" value="pages" class="text-primary-600" x-model="mode" x-bind:disabled="busy">
+                        <x-filament::input.radio id="split-by-pages" name="split-mode" value="pages" x-model="mode" x-bind:disabled="busy" />
                         <label for="split-by-pages" class="cursor-pointer">{{ __('By pages') }}</label>
                     </div>
-                    <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                        <input type="number" min="1" step="1" inputmode="numeric" class="{{ $field }} w-24" dir="ltr" aria-label="{{ __('pages per part') }}" x-model="perPart" x-on:focus="mode = 'pages'" x-bind:disabled="busy">
-                        <span>{{ __('pages per part') }}</span>
-                    </div>
+                    <x-filament::input.wrapper :suffix="__('pages per part')" alpine-disabled="busy">
+                        <x-filament::input type="text" inputmode="numeric" autocomplete="off" dir="ltr" :aria-label="__('pages per part')" x-model="perPart" x-on:focus="mode = 'pages'" x-bind:disabled="busy" />
+                    </x-filament::input.wrapper>
                 </div>
             </div>
 
@@ -148,7 +145,9 @@
                 </div>
 
                 <div class="flex flex-col gap-3 p-4">
-                    <input type="search" class="{{ $field }}" placeholder="{{ __('Search your OneDrive') }}" x-model="search" x-on:input.debounce.500ms="find()">
+                    <x-filament::input.wrapper prefix-icon="heroicon-o-magnifying-glass">
+                        <x-filament::input type="search" :placeholder="__('Search your OneDrive')" x-model="search" x-on:input.debounce.500ms="find()" />
+                    </x-filament::input.wrapper>
 
                     <nav class="flex flex-wrap items-center gap-1 text-sm" x-show="search.trim().length < 2">
                         <button type="button" class="font-medium text-primary-600 hover:underline dark:text-primary-400" x-on:click="goTo(-1)">{{ __('My OneDrive') }}</button>

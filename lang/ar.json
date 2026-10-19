@@ -4389,5 +4389,6 @@
     "The parts are :smallest to :largest MB.": "أحجام الأجزاء من :smallest إلى :largest ميغابايت.",
     "Nothing was uploaded. Download them all as a zip, or one by one below.": "لم يُرفع أي شيء. نزّلها كلها في ملف مضغوط، أو واحداً تلو الآخر أدناه.",
     "PDF tools": "أدوات PDF",
-    "Largest file: :size MB.": "أكبر حجم للملف: :size ميغابايت."
+    "Largest file: :size MB.": "أكبر حجم للملف: :size ميغابايت.",
+    "Done: \":name\" (:pages pages, :size MB) was split :how — it all fits in one part — in :seconds s.": "تم: قُسّم الملف \":name\" (:pages صفحة، :size ميغابايت) :how — ويتسع كله في جزء واحد — خلال :seconds ثانية."
 }
