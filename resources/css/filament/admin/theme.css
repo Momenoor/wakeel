@@ -512,7 +512,7 @@ html {
 }
 
 /*
- * The top bar on a phone: tighter gaps, the search box gives way, and the system
+ * The top bar on a phone: tighter gaps, the search box fills what is left, and the system
  * switcher (there when a theme puts the navigation on top) shows its icon only —
  * with everything at full size the bar ran past the screen and the profile
  * picture at its end was cut off.
@@ -532,10 +532,21 @@ html {
         column-gap: calc(var(--spacing) * 2);
     }
 
-    .fi-topbar .fi-global-search {
-        min-width: 0;
-        max-width: 9rem;
+    /* The search box takes all the room the icons leave. */
+    .fi-topbar-end {
         flex: 1 1 auto;
+    }
+
+    .fi-topbar .fi-global-search-ctn {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .fi-topbar .fi-global-search,
+    .fi-topbar .fi-global-search-field {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
     }
 
     .fi-topbar-end > :last-child {

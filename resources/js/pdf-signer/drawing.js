@@ -3,17 +3,39 @@
 import SignaturePad from 'signature_pad';
 
 export function createPad(canvas, { penColor = '#0b1f66' } = {}) {
-    return new SignaturePad(canvas, {
+    const pad = new SignaturePad(canvas, {
         penColor,
         minWidth: 0.8,
         maxWidth: 2.8,
         // Transparent: the ink alone goes on the paper.
         backgroundColor: 'rgba(0,0,0,0)',
     });
+
+    // Measured again as each stroke begins: on a phone the pad could be measured before it was laid out (0
+    // wide), its drawing surface left 1 pixel across and stretched over the box — nothing drawn showed.
+    pad.addEventListener('beginStroke', () => {
+        if (! isFitted(canvas)) {
+            fitPad(pad, canvas);
+        }
+    });
+
+    return pad;
+}
+
+// Whether the canvas's pixels match its box at the screen's density.
+function isFitted(canvas) {
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+
+    return canvas.offsetWidth === 0 || canvas.width === Math.round(canvas.offsetWidth * ratio);
 }
 
 // The canvas's pixels sized to its box at the screen's density (sharp ink), keeping what was drawn.
 export function fitPad(pad, canvas) {
+    // Not laid out yet (hidden, or still opening): measured later, at the first stroke or the next resize.
+    if (canvas.offsetWidth === 0 || canvas.offsetHeight === 0) {
+        return;
+    }
+
     const ratio = Math.max(window.devicePixelRatio || 1, 1);
     const strokes = pad.toData();
 

@@ -555,6 +555,8 @@ export default function pdfSigner(config) {
                 }
 
                 fitPad(pad, canvas);
+                // Once more after the window has been drawn (a phone lays it out a frame later).
+                requestAnimationFrame(() => fitPad(pad, canvas));
             });
         },
 
