@@ -145,8 +145,8 @@ class SystemUpdates extends Page
 
                     $this->versionEntry('latest', __('Latest version'), $latest ?? '—')
                         ->afterContent(match (true) {
-                            $this->latestIsNewer() => Text::make(__('Update available'))->badge()->color('warning'),
-                            $latest !== null => Text::make(__('Up to date'))->badge()->color('success'),
+                            $this->latestIsNewer() => self::badge(__('Update available'), 'warning'),
+                            $latest !== null => self::badge(__('Up to date'), 'success'),
                             default => null,
                         }),
 
@@ -162,6 +162,15 @@ class SystemUpdates extends Page
                         ->prose(),
                 ]),
         ];
+    }
+
+    /**
+     * A badge beside other content that never shrinks: next to a full-width entry (or a step's name) Filament
+     * let it shrink to its minimum, and its label was cut off.
+     */
+    private static function badge(string $label, string $color): Text
+    {
+        return Text::make($label)->badge()->color($color)->extraAttributes(['style' => 'flex-shrink: 0;']);
     }
 
     private function versionEntry(string $name, string $label, string $value): TextEntry
@@ -272,10 +281,10 @@ class SystemUpdates extends Page
             $rows[] = Flex::make([
                 Text::make($label)->weight(($done || $isCurrent) ? FontWeight::Medium : null),
                 match (true) {
-                    $done => Text::make(__('Done'))->badge()->color('success'),
-                    $isCurrent && $state['failed'] => Text::make(__('Failed'))->badge()->color('danger'),
+                    $done => self::badge(__('Done'), 'success'),
+                    $isCurrent && $state['failed'] => self::badge(__('Failed'), 'danger'),
                     $isCurrent => Html::make(generate_loading_indicator_html(new ComponentAttributeBag(['class' => 'h-5 w-5 text-primary-500']))),
-                    default => Text::make(__('Pending'))->badge()->color('gray'),
+                    default => self::badge(__('Pending'), 'gray'),
                 },
             ])->verticallyAlignCenter()->alignBetween();
         }

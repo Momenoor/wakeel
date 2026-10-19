@@ -89,7 +89,10 @@ class SystemUpdatesTest extends TestCase
         $this->get(SystemUpdates::getUrl())
             ->assertSuccessful()
             ->assertSee('1.2.0')
-            ->assertSee('New reports');
+            ->assertSee('New reports')
+            // The badge beside the version keeps its size: its label was cut off when it shrank.
+            ->assertSee(__('Update available'))
+            ->assertSeeHtml('style="flex-shrink: 0;"');
     }
 
     public function test_a_running_update_shows_its_steps_and_a_failed_one_its_retry(): void
