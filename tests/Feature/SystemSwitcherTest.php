@@ -40,6 +40,9 @@ class SystemSwitcherTest extends TestCase
 
         $this->assertStringContainsString('wk-system-switcher', $sidebar);
         $this->assertStringContainsString('x-show="$store.sidebar.isOpen"', $sidebar);
+        // A list inside the sidebar, not a floating menu that could leave the screen.
+        $this->assertStringContainsString('x-show="open && $store.sidebar.isOpen"', $sidebar);
+        $this->assertStringNotContainsString('fi-dropdown', $sidebar);
         $this->assertStringNotContainsString('wk-system-switcher', $topbar);
     }
 
