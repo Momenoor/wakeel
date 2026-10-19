@@ -84,7 +84,7 @@
     "src": "node_modules/pdfjs-dist/wasm/qcms_bg.wasm"
   },
   "resources/css/app.css": {
-    "file": "assets/app-VUjbgpfz.css",
+    "file": "assets/app-BG6Vo2fJ.css",
     "src": "resources/css/app.css",
     "isEntry": true,
     "name": "app",
@@ -93,7 +93,7 @@
     ]
   },
   "resources/css/filament/admin/theme.css": {
-    "file": "assets/theme-DEoX00nu.css",
+    "file": "assets/theme-CX-nY91F.css",
     "src": "resources/css/filament/admin/theme.css",
     "isEntry": true,
     "name": "theme",
@@ -151,7 +151,7 @@
     ]
   },
   "resources/js/pdf-splitter.js": {
-    "file": "assets/pdf-splitter-Bsoz2YGC.js",
+    "file": "assets/pdf-splitter-DyPyZ7hG.js",
     "name": "pdf-splitter",
     "src": "resources/js/pdf-splitter.js",
     "isEntry": true,

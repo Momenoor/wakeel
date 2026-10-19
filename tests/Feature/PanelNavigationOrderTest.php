@@ -26,6 +26,7 @@ class PanelNavigationOrderTest extends TestCase
 
         $this->assertSame([
             'Communication',
+            'PDF tools',
             'Financial',
             'Human Resources',
             'Administration',
@@ -45,6 +46,7 @@ class PanelNavigationOrderTest extends TestCase
 
         $this->assertSame([
             __('Communication'),
+            __('PDF tools'),
             __('Financial'),
             __('Human Resources'),
             __('filament-shield::filament-shield.nav.group'),

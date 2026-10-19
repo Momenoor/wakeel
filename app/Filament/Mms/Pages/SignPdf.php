@@ -35,7 +35,7 @@ class SignPdf extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedPencilSquare;
 
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 1;
 
     protected string $view = 'filament.mms.pages.sign-pdf';
 
@@ -61,7 +61,7 @@ class SignPdf extends Page
 
     public static function getNavigationGroup(): ?string
     {
-        return __('Communication');
+        return __('PDF tools');
     }
 
     public function getTitle(): string

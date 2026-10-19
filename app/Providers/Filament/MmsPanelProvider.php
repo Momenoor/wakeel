@@ -72,6 +72,8 @@ class MmsPanelProvider extends PanelProvider
             )
             ->navigationGroups([
                 NavigationGroup::make(fn () => __('Communication')),
+                // Signing, stamping and splitting PDFs.
+                NavigationGroup::make(fn () => __('PDF tools')),
                 NavigationGroup::make(fn () => __('Financial')),
                 NavigationGroup::make(fn () => __('Human Resources')),
                 // Administration: the Settings cluster, Users and Roles.

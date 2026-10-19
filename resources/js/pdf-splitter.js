@@ -44,6 +44,8 @@ export default function pdfSplitter(config) {
         parts: [],
         warnings: [],
         zipName: '',
+        // What was done, in words, once it is done.
+        summary: '',
 
         // The OneDrive picker.
         pickerOpen: false,
@@ -105,6 +107,7 @@ export default function pdfSplitter(config) {
             this.pageCount = 0;
             this.parts = [];
             this.warnings = [];
+            this.summary = '';
             this.error = null;
         },
 
@@ -130,7 +133,9 @@ export default function pdfSplitter(config) {
             this.error = null;
             this.parts = [];
             this.warnings = [];
+            this.summary = '';
             zip = null;
+            const startedAt = performance.now();
             blobs = [];
             signal = { cancelled: false };
 
@@ -185,7 +190,8 @@ export default function pdfSplitter(config) {
                     { name: 'parts.txt', text: this.listing() },
                 ], signal);
 
-                save(zip, this.zipName);
+                // Not downloaded by itself: it waits for "Download all (zip)", and each part for its own button.
+                this.summary = this.describe(made, limit, perPart, Math.max(1, Math.round((performance.now() - startedAt) / 1000)));
 
                 // Only who split what, and how: the file never leaves the browser.
                 Promise.resolve(this.$wire.recordSplit(this.file.name, this.file.source, this.mode, this.mode === 'size' ? limit : perPart, this.parts.length, pages)).catch(() => {});
@@ -218,6 +224,27 @@ export default function pdfSplitter(config) {
 
         sizeOf(bytes) {
             return fill(this.labels.mb, { size: megabytes(bytes) });
+        },
+
+        // What was done, in a sentence or two: the file, how it was split, into how many parts and how big.
+        describe(made, limit, perPart, seconds) {
+            const sizes = made.map((piece) => piece.size);
+            const how = this.mode === 'size'
+                ? fill(this.labels.howSize, { limit })
+                : fill(this.labels.howPages, { count: perPart });
+
+            return [
+                fill(this.labels.summary, {
+                    name: this.file.name,
+                    pages: this.pageCount,
+                    size: megabytes(this.file.size),
+                    how,
+                    parts: made.length,
+                    seconds,
+                }),
+                fill(this.labels.summarySizes, { smallest: megabytes(Math.min(...sizes)), largest: megabytes(Math.max(...sizes)) }),
+                this.labels.summaryNext,
+            ].join(' ');
         },
 
         // parts.txt: which pages went into which part, and how big each is.

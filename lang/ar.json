@@ -4382,5 +4382,12 @@
     "Download all (zip)": "تنزيل الكل (zip)",
     "Search your OneDrive": "ابحث في OneDrive الخاص بك",
     "My OneDrive": "OneDrive الخاص بي",
-    "No folders or PDF files here.": "لا توجد مجلدات أو ملفات PDF هنا."
+    "No folders or PDF files here.": "لا توجد مجلدات أو ملفات PDF هنا.",
+    "Done: \":name\" (:pages pages, :size MB) was split :how into :parts parts in :seconds s.": "تم: قُسّم الملف \":name\" (:pages صفحة، :size ميغابايت) :how إلى :parts أجزاء خلال :seconds ثانية.",
+    "by size, at most :limit MB each,": "حسب الحجم، بحد أقصى :limit ميغابايت لكل جزء،",
+    "by pages, :count pages each,": "حسب الصفحات، :count صفحات لكل جزء،",
+    "The parts are :smallest to :largest MB.": "أحجام الأجزاء من :smallest إلى :largest ميغابايت.",
+    "Nothing was uploaded. Download them all as a zip, or one by one below.": "لم يُرفع أي شيء. نزّلها كلها في ملف مضغوط، أو واحداً تلو الآخر أدناه.",
+    "PDF tools": "أدوات PDF",
+    "Largest file: :size MB.": "أكبر حجم للملف: :size ميغابايت."
 }

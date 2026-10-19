@@ -43,7 +43,7 @@ class SignatureStampResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedFingerPrint;
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 3;
 
     /** The form's helper fields: how the image is given — not columns of the record. */
     public const IMAGE_FIELDS = ['image_source', 'upload', 'drawing'];
@@ -65,7 +65,7 @@ class SignatureStampResource extends Resource
 
     public static function getNavigationGroup(): ?string
     {
-        return __('Communication');
+        return __('PDF tools');
     }
 
     /** Only what the user may use: their own, and the office's when allowed. */

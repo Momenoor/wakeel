@@ -25,7 +25,7 @@ class SplitPdf extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedScissors;
 
-    protected static ?int $navigationSort = 6;
+    protected static ?int $navigationSort = 2;
 
     protected string $view = 'filament.mms.pages.split-pdf';
 
@@ -41,7 +41,7 @@ class SplitPdf extends Page
 
     public static function getNavigationGroup(): ?string
     {
-        return __('Communication');
+        return __('PDF tools');
     }
 
     public function getTitle(): string
@@ -81,6 +81,11 @@ class SplitPdf extends Page
                 'tooBigPage' => __('Page :page alone is :size MB — larger than the :limit MB limit.'),
                 'listLine' => __(':name — pages :from–:to — :size MB'),
                 'mb' => __(':size MB'),
+                'summary' => __('Done: ":name" (:pages pages, :size MB) was split :how into :parts parts in :seconds s.'),
+                'howSize' => __('by size, at most :limit MB each,'),
+                'howPages' => __('by pages, :count pages each,'),
+                'summarySizes' => __('The parts are :smallest to :largest MB.'),
+                'summaryNext' => __('Nothing was uploaded. Download them all as a zip, or one by one below.'),
             ],
         ];
     }

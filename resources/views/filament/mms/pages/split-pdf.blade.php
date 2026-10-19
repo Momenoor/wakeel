@@ -46,6 +46,7 @@
             </div>
 
             <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                <span class="font-medium text-gray-700 dark:text-gray-300">{{ __('Largest file: :size MB.', ['size' => \App\Services\MMS\PersonalOneDrive::MAX_BYTES / 1024 / 1024]) }}</span>
                 {{ __('The PDF is split in your browser and is not uploaded: only a note that you split it is kept.') }}
                 {{ __('Very large files are best split on a computer: a phone may run out of memory.') }}
             </p>
@@ -60,29 +61,31 @@
         <section x-show="file" x-cloak class="{{ $card }}">
             <h3 class="mb-3 text-sm font-semibold text-gray-950 dark:text-white">{{ __('How to split') }}</h3>
 
-            <div class="grid gap-4 sm:grid-cols-2">
-                <label class="flex cursor-pointer flex-col gap-2 rounded-lg p-3 ring-1" x-bind:class="mode === 'size' ? 'ring-2 ring-primary-500' : 'ring-gray-200 dark:ring-white/10'">
-                    <span class="flex items-center gap-2 text-sm font-medium text-gray-950 dark:text-white">
-                        <input type="radio" value="size" class="text-primary-600" x-model="mode" x-bind:disabled="busy">
-                        {{ __('By size') }}
-                    </span>
-                    <span class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+            {{-- Each way is a box of its own, chosen by a tap anywhere on it. The number fields are not inside a
+                 <label>: a phone sent a tap in one to the label's first field (the radio) and it could not be typed in. --}}
+            <div class="grid gap-4 sm:grid-cols-2" role="radiogroup" aria-label="{{ __('How to split') }}">
+                <div class="flex cursor-pointer flex-col gap-2 rounded-lg p-3 ring-1" x-on:click="busy || (mode = 'size')" x-bind:class="mode === 'size' ? 'ring-2 ring-primary-500' : 'ring-gray-200 dark:ring-white/10'">
+                    <div class="flex items-center gap-2 text-sm font-medium text-gray-950 dark:text-white">
+                        <input type="radio" id="split-by-size" name="split-mode" value="size" class="text-primary-600" x-model="mode" x-bind:disabled="busy">
+                        <label for="split-by-size" class="cursor-pointer">{{ __('By size') }}</label>
+                    </div>
+                    <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                         <span>{{ __('At most') }}</span>
-                        <input type="number" min="0.5" step="0.5" inputmode="decimal" class="{{ $field }} w-24" dir="ltr" x-model="maxMb" x-on:focus="mode = 'size'" x-bind:disabled="busy">
+                        <input type="number" min="0.5" step="0.5" inputmode="decimal" class="{{ $field }} w-24" dir="ltr" aria-label="{{ __('MB per part') }}" x-model="maxMb" x-on:focus="mode = 'size'" x-bind:disabled="busy">
                         <span>{{ __('MB per part') }}</span>
-                    </span>
-                </label>
+                    </div>
+                </div>
 
-                <label class="flex cursor-pointer flex-col gap-2 rounded-lg p-3 ring-1" x-bind:class="mode === 'pages' ? 'ring-2 ring-primary-500' : 'ring-gray-200 dark:ring-white/10'">
-                    <span class="flex items-center gap-2 text-sm font-medium text-gray-950 dark:text-white">
-                        <input type="radio" value="pages" class="text-primary-600" x-model="mode" x-bind:disabled="busy">
-                        {{ __('By pages') }}
-                    </span>
-                    <span class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                        <input type="number" min="1" step="1" inputmode="numeric" class="{{ $field }} w-24" dir="ltr" x-model="perPart" x-on:focus="mode = 'pages'" x-bind:disabled="busy">
+                <div class="flex cursor-pointer flex-col gap-2 rounded-lg p-3 ring-1" x-on:click="busy || (mode = 'pages')" x-bind:class="mode === 'pages' ? 'ring-2 ring-primary-500' : 'ring-gray-200 dark:ring-white/10'">
+                    <div class="flex items-center gap-2 text-sm font-medium text-gray-950 dark:text-white">
+                        <input type="radio" id="split-by-pages" name="split-mode" value="pages" class="text-primary-600" x-model="mode" x-bind:disabled="busy">
+                        <label for="split-by-pages" class="cursor-pointer">{{ __('By pages') }}</label>
+                    </div>
+                    <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                        <input type="number" min="1" step="1" inputmode="numeric" class="{{ $field }} w-24" dir="ltr" aria-label="{{ __('pages per part') }}" x-model="perPart" x-on:focus="mode = 'pages'" x-bind:disabled="busy">
                         <span>{{ __('pages per part') }}</span>
-                    </span>
-                </label>
+                    </div>
+                </div>
             </div>
 
             <div class="mt-4 flex flex-wrap items-center gap-2">
@@ -116,6 +119,9 @@
                     {{ __('Download all (zip)') }}
                 </x-filament::button>
             </div>
+
+            {{-- What was done, in words. --}}
+            <p class="mb-3 rounded-lg bg-success-50 p-3 text-sm text-success-800 ring-1 ring-success-600/20 dark:bg-success-400/10 dark:text-success-300" dir="auto" x-show="summary" x-text="summary"></p>
 
             <template x-for="warning in warnings" :key="warning">
                 <p class="mb-2 rounded-lg bg-warning-50 p-2 text-sm text-warning-700 ring-1 ring-warning-600/20 dark:bg-warning-400/10 dark:text-warning-400" x-text="warning"></p>
