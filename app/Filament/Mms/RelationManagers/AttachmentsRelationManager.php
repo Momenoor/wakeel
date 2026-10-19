@@ -5,6 +5,7 @@ namespace App\Filament\Mms\RelationManagers;
 use App\Enums\AttachmentCategory;
 use App\Filament\Support\AttachFilesAction;
 use App\Filament\Support\AttachmentFields;
+use App\Filament\Support\SignPdfAction;
 use App\Models\Attachment;
 use App\Models\Contracts\AttachmentOwner;
 use Filament\Actions\Action;
@@ -142,6 +143,8 @@ class AttachmentsRelationManager extends RelationManager
                     ->iconButton()
                     ->authorize('view')
                     ->url(fn (Attachment $record): string => $record->url()),
+                // A PDF: signed and stamped on the Sign PDF page, its signed copy kept here beside it.
+                SignPdfAction::make(),
                 // The model decides what deleting means: financial evidence is only hidden, anything else
                 // goes with its file (Attachment::booted) — either way it is "deleted" for the user.
                 Action::make('delete')

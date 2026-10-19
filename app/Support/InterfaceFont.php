@@ -67,6 +67,12 @@ class InterfaceFont
         return $fonts[$id];
     }
 
+    /** A font that can be shown: it has its regular weight. */
+    private static function usable(?LetterFont $font): ?LetterFont
+    {
+        return $font && isset($font->pdfFiles()['R']) ? $font : null;
+    }
+
     private static function chosen(string $setting): ?LetterFont
     {
         try {
@@ -86,8 +92,10 @@ class InterfaceFont
      */
     public static function css(): string
     {
-        $latin = self::current();
-        $arabic = self::arabic();
+        // The theme's fonts first, then the office's choice (Fonts → Use for …).
+        $theme = app(ThemeManager::class)->current();
+        $latin = self::usable($theme?->latinFont) ?? self::current();
+        $arabic = self::usable($theme?->arabicFont) ?? self::arabic();
 
         if (! $latin && ! $arabic) {
             return '';

@@ -11,6 +11,7 @@ use Filament\Panel;
 use FilamentInbox\Concerns\HasInbox;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -58,6 +59,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         'notify_by_whatsapp',
         'profile_photo_path',
         'last_seen_at',
+        'theme_id',
     ];
 
     protected $with = [
@@ -143,6 +145,12 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     public function party(): HasOne
     {
         return $this->hasOne(Party::class);
+    }
+
+    /** The theme they chose (App\Support\ThemeManager decides whether it is used). */
+    public function theme(): BelongsTo
+    {
+        return $this->belongsTo(Theme::class);
     }
 
     public function incentiveCalculations(): HasMany

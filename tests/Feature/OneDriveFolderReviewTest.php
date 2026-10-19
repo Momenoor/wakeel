@@ -96,6 +96,11 @@ class OneDriveFolderReviewTest extends TestCase
                 return Http::response($item($id));
             }
 
+            // One item, by its id (a folder linked as it is).
+            if ($request->method() === 'GET' && preg_match('~/items/([^/:?]+)$~', $url, $m) && isset($this->drive[$m[1]])) {
+                return Http::response($item($m[1]));
+            }
+
             if ($request->method() === 'POST' && preg_match('~/(?:items/([^/]+)|root)/children~', $url, $m)) {
                 $parent = $m[1] ?? 'root';
                 $name = $request->data()['name'];
@@ -203,6 +208,29 @@ class OneDriveFolderReviewTest extends TestCase
         $link = MatterOneDriveFolder::where('matter_id', $matter->id)->sole();
         $this->assertSame('f1', $link->drive_item_id);
         $this->assertSame(MatterOneDriveFolder::CREATED, $link->status);
+    }
+
+    public function test_a_folder_found_is_linked_as_it_is_without_renaming_anything(): void
+    {
+        $matter = $this->matter('3052', '2021');
+        $this->add('f1', 'DSI Case 3052_2021');
+        $this->add('f2', '3052-21 copy');
+        $this->add('s1', '1- المراسلات', 'f2');
+        app(OneDriveFolderReviewer::class)->scan();
+        $review = OneDriveFolderReview::sole();
+
+        Livewire::test(OneDriveSettings::class)
+            ->assertActionVisible(TestAction::make('link')->table($review))
+            ->callAction(TestAction::make('link')->table($review), ['folder' => 'f2'])
+            ->assertHasNoActionErrors()
+            ->assertNotified();
+
+        // Linked under its own name; nothing renamed or made.
+        $this->assertSame([], $this->changes);
+        $this->assertSame(['3052-21 copy', '1- المراسلات'], [$this->drive['f2']['name'], $this->drive['s1']['name']]);
+        $link = MatterOneDriveFolder::where('matter_id', $matter->id)->sole();
+        $this->assertSame(['f2', '3052-21 copy'], [$link->drive_item_id, $link->folder_name]);
+        $this->assertSame([OneDriveFolderReview::DONE, auth()->id()], [$review->refresh()->status, $review->decided_by]);
     }
 
     public function test_none_found_one_is_made_and_a_skip_is_kept_through_a_new_scan(): void

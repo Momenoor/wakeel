@@ -248,6 +248,7 @@ class Fee extends Model implements AttachmentOwner
     /** @return list<AttachmentCategory> */
     public function attachmentCategories(): array
     {
-        return [AttachmentCategory::FEE_INVOICE, AttachmentCategory::TAX_INVOICE, AttachmentCategory::CONTRACT, AttachmentCategory::GENERAL];
+        // The first is the one offered by default.
+        return [AttachmentCategory::COURT_DECISION, AttachmentCategory::FEE_INVOICE, AttachmentCategory::TAX_INVOICE, AttachmentCategory::CONTRACT, AttachmentCategory::GENERAL];
     }
 }

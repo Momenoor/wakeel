@@ -17,6 +17,8 @@ enum AttachmentCategory: string
     case CONTRACT = 'contract';
 
     // Fees and allocations
+    // The decision that set the fee (the expert's fee, the deposit): what a fee's file usually is.
+    case COURT_DECISION = 'court_decision';
     case FEE_INVOICE = 'fee_invoice';
     case TAX_INVOICE = 'tax_invoice';
     case PAYMENT_RECEIPT = 'payment_receipt';
@@ -33,6 +35,7 @@ enum AttachmentCategory: string
             self::CORRESPONDENCE => __('Correspondence'),
             self::MINUTES_SIGNED => __('Minutes signed'),
             self::CONTRACT => __('Contract'),
+            self::COURT_DECISION => __('Court decision'),
             self::FEE_INVOICE => __('Fee invoice'),
             self::TAX_INVOICE => __('Tax invoice'),
             self::PAYMENT_RECEIPT => __('Payment receipt'),
@@ -47,7 +50,7 @@ enum AttachmentCategory: string
      */
     public function keepsEvidence(): bool
     {
-        return in_array($this, [self::FEE_INVOICE, self::TAX_INVOICE, self::PAYMENT_RECEIPT, self::BANK_TRANSFER, self::CHEQUE], true);
+        return in_array($this, [self::COURT_DECISION, self::FEE_INVOICE, self::TAX_INVOICE, self::PAYMENT_RECEIPT, self::BANK_TRANSFER, self::CHEQUE], true);
     }
 
     /** The category of a file made before categories, from the old free-text type. */

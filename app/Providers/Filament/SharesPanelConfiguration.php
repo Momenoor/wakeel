@@ -18,7 +18,9 @@ use App\Filament\Shared\Pages\Performance;
 use App\Filament\Shared\Pages\SystemSettings;
 use App\Filament\Shared\Pages\SystemUpdates;
 use App\Filament\Shared\Pages\UserGuide;
+use App\Filament\Shared\Resources\Themes\ThemeResource;
 use App\Filament\Shared\Users\TranslateUsersPluginLabels;
+use App\Http\Middleware\ApplyTheme;
 use App\Http\Middleware\CheckSystemOffline;
 use App\Http\Middleware\EnsureLicenseIsValid;
 use App\Http\Middleware\RedirectToInstaller;
@@ -114,11 +116,13 @@ trait SharesPanelConfiguration
                 CheckSystemOffline::class,
                 TrackUserLastSeen::class,
                 TrackCurrentSystem::class,
+                // The theme's colours: after the session (who is signed in) and after the panel's own.
+                ApplyTheme::class,
             ])
             // Also on the panel's Livewire requests — the notification and
             // chat polling — so reading one page for a while doesn't turn
             // a user "Offline"; page loads alone stamped it too rarely.
-            ->persistentMiddleware([TrackUserLastSeen::class])
+            ->persistentMiddleware([TrackUserLastSeen::class, ApplyTheme::class])
             ->authMiddleware([
                 Authenticate::class,
             ])
@@ -161,6 +165,9 @@ trait SharesPanelConfiguration
             Performance::class,
             UserGuide::class,
             AuditDashboard::class,
+        ])->resources([
+            // Settings → Themes.
+            ThemeResource::class,
         ]);
     }
 

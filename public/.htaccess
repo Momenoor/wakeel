@@ -1,3 +1,8 @@
+# The PDF viewer's worker is a JavaScript module (.mjs): browsers refuse to run one sent as anything else.
+<IfModule mod_mime.c>
+    AddType text/javascript .mjs
+</IfModule>
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes

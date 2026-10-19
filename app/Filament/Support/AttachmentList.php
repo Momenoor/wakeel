@@ -42,7 +42,7 @@ final class AttachmentList
                     ->badge()
                     ->color('gray')
                     ->formatStateUsing(fn (?AttachmentCategory $state): string => $state?->label() ?? ''),
-                Actions::make([self::deleteAction()])->alignEnd(),
+                Actions::make([SignPdfAction::make('signOwnedAttachment'), self::deleteAction()])->alignEnd(),
             ]);
     }
 

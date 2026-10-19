@@ -105,7 +105,7 @@ class AttachmentUiTest extends TestCase
         $this->assertSame(0, $fee->ownedAttachments()->count());
 
         $this->assertSame(
-            [Category::FEE_INVOICE, Category::TAX_INVOICE, Category::CONTRACT, Category::GENERAL],
+            [Category::COURT_DECISION, Category::FEE_INVOICE, Category::TAX_INVOICE, Category::CONTRACT, Category::GENERAL],
             AttachmentFields::categories($fee),
         );
     }
@@ -120,7 +120,7 @@ class AttachmentUiTest extends TestCase
         $first = AttachmentFields::save($fee, ['files' => [AttachmentFields::DIRECTORY.'/a/first.pdf']])->sole();
         $second = AttachmentFields::save($fee, ['files' => [AttachmentFields::DIRECTORY.'/b/second.pdf']], category: Category::CONTRACT)->sole();
 
-        $this->assertSame([Category::FEE_INVOICE, Category::CONTRACT], [$first->category, $second->category]);
+        $this->assertSame([Category::COURT_DECISION, Category::CONTRACT], [$first->category, $second->category]);
     }
 
     public function test_the_matters_attach_button_offers_the_matters_categories_and_attaches_to_it(): void

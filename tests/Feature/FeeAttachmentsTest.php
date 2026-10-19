@@ -81,6 +81,21 @@ class FeeAttachmentsTest extends TestCase
         $this->assertSame(1, Attachment::count());
     }
 
+    public function test_a_fees_file_is_a_court_decision_unless_told_otherwise(): void
+    {
+        $this->page()
+            ->mountAction(TestAction::make('create_fee')->schemaComponent('feesSection', 'infolist'))
+            ->assertSchemaStateSet(['file_category' => Category::COURT_DECISION->value])
+            ->fillForm(['type' => FeeType::cases()[0]->value, 'amount' => 300, 'date' => '2026-02-03', 'files' => [$this->pdf('Decision.pdf')]])
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        $file = $this->matter->fees()->latest('id')->first()->ownedAttachments()->sole();
+        $this->assertSame(Category::COURT_DECISION, $file->category);
+        // The decision that set the fee is kept like an invoice: only hidden when deleted.
+        $this->assertTrue($file->category->keepsEvidence());
+    }
+
     public function test_a_payment_takes_its_receipt(): void
     {
         $this->page()

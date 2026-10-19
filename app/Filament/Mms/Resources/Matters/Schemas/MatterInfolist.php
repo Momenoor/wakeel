@@ -22,6 +22,7 @@ use App\Filament\Support\AttachFilesAction;
 use App\Filament\Support\AttachmentFields;
 use App\Filament\Support\AttachmentList;
 use App\Filament\Support\EntryTable;
+use App\Filament\Support\SignPdfAction;
 use App\Livewire\MatterContacts;
 use App\Livewire\MatterOneDriveFiles;
 use App\Models\CalendarEvent;
@@ -1122,6 +1123,7 @@ class MatterInfolist
                             ->alignJustify(),
                         Actions::make([
                             static::downloadAttachmentAction(),
+                            SignPdfAction::make('signAttachment'),
                             static::deleteAttachmentAction(),
                         ])->alignEnd(),
                         TextEntry::make('type')

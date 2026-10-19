@@ -1,6 +1,86 @@
 {
+  "__commonjsHelpers-CqkleIqs.js": {
+    "file": "assets/_commonjsHelpers-CqkleIqs.js",
+    "name": "_commonjsHelpers"
+  },
+  "_drawing-BQR9u4NT.js": {
+    "file": "assets/drawing-BQR9u4NT.js",
+    "name": "drawing"
+  },
+  "node_modules/pdfjs-dist/build/pdf.worker.min.mjs": {
+    "file": "assets/pdf.worker.min-wgc6bjNh.mjs",
+    "src": "node_modules/pdfjs-dist/build/pdf.worker.min.mjs"
+  },
+  "node_modules/pdfjs-dist/standard_fonts/FoxitDingbats.pfb": {
+    "file": "assets/FoxitDingbats-BaQLufoW.pfb",
+    "src": "node_modules/pdfjs-dist/standard_fonts/FoxitDingbats.pfb"
+  },
+  "node_modules/pdfjs-dist/standard_fonts/FoxitFixed.pfb": {
+    "file": "assets/FoxitFixed-Dyd5Nipw.pfb",
+    "src": "node_modules/pdfjs-dist/standard_fonts/FoxitFixed.pfb"
+  },
+  "node_modules/pdfjs-dist/standard_fonts/FoxitFixedBold.pfb": {
+    "file": "assets/FoxitFixedBold-D5TuYRwj.pfb",
+    "src": "node_modules/pdfjs-dist/standard_fonts/FoxitFixedBold.pfb"
+  },
+  "node_modules/pdfjs-dist/standard_fonts/FoxitFixedBoldItalic.pfb": {
+    "file": "assets/FoxitFixedBoldItalic-BqlXQ_Yv.pfb",
+    "src": "node_modules/pdfjs-dist/standard_fonts/FoxitFixedBoldItalic.pfb"
+  },
+  "node_modules/pdfjs-dist/standard_fonts/FoxitFixedItalic.pfb": {
+    "file": "assets/FoxitFixedItalic-DqjQkmbS.pfb",
+    "src": "node_modules/pdfjs-dist/standard_fonts/FoxitFixedItalic.pfb"
+  },
+  "node_modules/pdfjs-dist/standard_fonts/FoxitSerif.pfb": {
+    "file": "assets/FoxitSerif-qbgiDIe-.pfb",
+    "src": "node_modules/pdfjs-dist/standard_fonts/FoxitSerif.pfb"
+  },
+  "node_modules/pdfjs-dist/standard_fonts/FoxitSerifBold.pfb": {
+    "file": "assets/FoxitSerifBold-DZZ4CclT.pfb",
+    "src": "node_modules/pdfjs-dist/standard_fonts/FoxitSerifBold.pfb"
+  },
+  "node_modules/pdfjs-dist/standard_fonts/FoxitSerifBoldItalic.pfb": {
+    "file": "assets/FoxitSerifBoldItalic-DSQtwd_X.pfb",
+    "src": "node_modules/pdfjs-dist/standard_fonts/FoxitSerifBoldItalic.pfb"
+  },
+  "node_modules/pdfjs-dist/standard_fonts/FoxitSerifItalic.pfb": {
+    "file": "assets/FoxitSerifItalic-CQs5lx9Y.pfb",
+    "src": "node_modules/pdfjs-dist/standard_fonts/FoxitSerifItalic.pfb"
+  },
+  "node_modules/pdfjs-dist/standard_fonts/FoxitSymbol.pfb": {
+    "file": "assets/FoxitSymbol-BVtbc20u.pfb",
+    "src": "node_modules/pdfjs-dist/standard_fonts/FoxitSymbol.pfb"
+  },
+  "node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf": {
+    "file": "assets/LiberationSans-Bold-BPt4bU5Z.ttf",
+    "src": "node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf"
+  },
+  "node_modules/pdfjs-dist/standard_fonts/LiberationSans-BoldItalic.ttf": {
+    "file": "assets/LiberationSans-BoldItalic-Bj53-jFw.ttf",
+    "src": "node_modules/pdfjs-dist/standard_fonts/LiberationSans-BoldItalic.ttf"
+  },
+  "node_modules/pdfjs-dist/standard_fonts/LiberationSans-Italic.ttf": {
+    "file": "assets/LiberationSans-Italic-5QhGB3P9.ttf",
+    "src": "node_modules/pdfjs-dist/standard_fonts/LiberationSans-Italic.ttf"
+  },
+  "node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf": {
+    "file": "assets/LiberationSans-Regular-cbskN6YR.ttf",
+    "src": "node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf"
+  },
+  "node_modules/pdfjs-dist/wasm/jbig2.wasm": {
+    "file": "assets/jbig2-CgUnd2ou.wasm",
+    "src": "node_modules/pdfjs-dist/wasm/jbig2.wasm"
+  },
+  "node_modules/pdfjs-dist/wasm/openjpeg.wasm": {
+    "file": "assets/openjpeg-CS7joWBh.wasm",
+    "src": "node_modules/pdfjs-dist/wasm/openjpeg.wasm"
+  },
+  "node_modules/pdfjs-dist/wasm/qcms_bg.wasm": {
+    "file": "assets/qcms_bg-CUfpE_h9.wasm",
+    "src": "node_modules/pdfjs-dist/wasm/qcms_bg.wasm"
+  },
   "resources/css/app.css": {
-    "file": "assets/app-D5UDS37F.css",
+    "file": "assets/app-e9B0d1rT.css",
     "src": "resources/css/app.css",
     "isEntry": true,
     "name": "app",
@@ -9,7 +89,7 @@
     ]
   },
   "resources/css/filament/admin/theme.css": {
-    "file": "assets/theme-BODWooRV.css",
+    "file": "assets/theme-W2p3MG_z.css",
     "src": "resources/css/filament/admin/theme.css",
     "isEntry": true,
     "name": "theme",
@@ -18,7 +98,7 @@
     ]
   },
   "resources/css/print.css": {
-    "file": "assets/print-C1XQk6NM.css",
+    "file": "assets/print-BTdfIgZH.css",
     "src": "resources/css/print.css",
     "isEntry": true,
     "name": "print",
@@ -27,9 +107,51 @@
     ]
   },
   "resources/js/app.js": {
-    "file": "assets/app-BnsGg2WE.js",
+    "file": "assets/app-BR7yJ7Pl.js",
     "name": "app",
     "src": "resources/js/app.js",
-    "isEntry": true
+    "isEntry": true,
+    "imports": [
+      "__commonjsHelpers-CqkleIqs.js"
+    ]
+  },
+  "resources/js/pdf-signer.js": {
+    "file": "assets/pdf-signer-vBhJ52Eb.js",
+    "name": "pdf-signer",
+    "src": "resources/js/pdf-signer.js",
+    "isEntry": true,
+    "imports": [
+      "_drawing-BQR9u4NT.js",
+      "__commonjsHelpers-CqkleIqs.js"
+    ],
+    "assets": [
+      "assets/jbig2-CgUnd2ou.wasm",
+      "assets/openjpeg-CS7joWBh.wasm",
+      "assets/qcms_bg-CUfpE_h9.wasm",
+      "assets/FoxitDingbats-BaQLufoW.pfb",
+      "assets/FoxitFixed-Dyd5Nipw.pfb",
+      "assets/FoxitFixedBold-D5TuYRwj.pfb",
+      "assets/FoxitFixedBoldItalic-BqlXQ_Yv.pfb",
+      "assets/FoxitFixedItalic-DqjQkmbS.pfb",
+      "assets/FoxitSerif-qbgiDIe-.pfb",
+      "assets/FoxitSerifBold-DZZ4CclT.pfb",
+      "assets/FoxitSerifBoldItalic-DSQtwd_X.pfb",
+      "assets/FoxitSerifItalic-CQs5lx9Y.pfb",
+      "assets/FoxitSymbol-BVtbc20u.pfb",
+      "assets/LiberationSans-Bold-BPt4bU5Z.ttf",
+      "assets/LiberationSans-BoldItalic-Bj53-jFw.ttf",
+      "assets/LiberationSans-Italic-5QhGB3P9.ttf",
+      "assets/LiberationSans-Regular-cbskN6YR.ttf",
+      "assets/pdf.worker.min-wgc6bjNh.mjs"
+    ]
+  },
+  "resources/js/signature-pad-field.js": {
+    "file": "assets/signature-pad-field-BhnCz1uf.js",
+    "name": "signature-pad-field",
+    "src": "resources/js/signature-pad-field.js",
+    "isEntry": true,
+    "imports": [
+      "_drawing-BQR9u4NT.js"
+    ]
   }
 }

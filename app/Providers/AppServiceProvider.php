@@ -19,6 +19,7 @@ use App\Support\Currency;
 use App\Support\Integrations;
 use App\Support\InterfaceFont;
 use App\Support\ModelLabels;
+use App\Support\ThemeManager;
 use Carbon\Carbon;
 use Carbon\Translator as CarbonTranslator;
 use Filament\Actions\Action;
@@ -54,6 +55,8 @@ class AppServiceProvider extends ServiceProvider
 
         // Who is told of what, read once for the request or the job.
         $this->app->scoped(NotificationPreferences::class);
+        // The theme of the page: found once per request (App\Support\ThemeManager).
+        $this->app->scoped(ThemeManager::class);
     }
 
     /**
@@ -135,6 +138,9 @@ class AppServiceProvider extends ServiceProvider
         // wanted" — after signing in the browser was sent to the font file
         // and offered to download it.
         FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): string => auth()->check() ? InterfaceFont::css() : '');
+
+        // The theme's corners, spacing and sidebar (its colours: App\Http\Middleware\ApplyTheme).
+        FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): string => app(ThemeManager::class)->css());
 
         // The rich editors' placeholders (merge tags) stay inside the editor.
         // Filament keeps each on one line, so a long name — an Arabic label,

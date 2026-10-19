@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Filament\Mms\Clusters\Templates;
+use App\Filament\Mms\Pages\SignPdf;
 use App\Filament\Mms\Resources\BulkMailCampaigns\BulkMailCampaignResource;
 use App\Filament\Mms\Resources\CalendarEvents\CalendarEventResource;
 use App\Filament\Mms\Resources\EmployeeLoans\EmployeeLoanResource;
@@ -13,6 +14,7 @@ use App\Filament\Mms\Resources\LetterItems\LetterItemResource;
 use App\Filament\Mms\Resources\LetterTemplates\LetterTemplateResource;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\PayrollRuns\PayrollRunResource;
+use App\Filament\Mms\Resources\SignatureStamps\SignatureStampResource;
 use App\Filament\Shared\Clusters\Settings;
 use App\Filament\Shared\Pages\AnnouncementSettings;
 use App\Filament\Shared\Pages\GeneralSettings;
@@ -296,7 +298,9 @@ return [
             ],
         ],
         'exclude' => [
-            //
+            // Its own owner-or-shared rule (SignatureStampPolicy) on three custom permissions — see
+            // ScreenPermissions — not the standard ones a resource would get.
+            SignatureStampResource::class,
         ],
     ],
 
@@ -331,6 +335,8 @@ return [
             AnnouncementSettings::class,
             IntegrationsSettings::class,
             OfflineSettings::class,
+            // Answers to its custom permission (ScreenPermissions::SIGN_PDF), which the attachments' "Sign & stamp" checks too.
+            SignPdf::class,
         ],
     ],
 

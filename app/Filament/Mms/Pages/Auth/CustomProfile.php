@@ -3,9 +3,12 @@
 namespace App\Filament\Mms\Pages\Auth;
 
 use App\Filament\Support\NotificationPreferenceFields;
+use App\Models\Theme;
 use App\Services\Notifications\NotificationPreferences;
+use App\Support\ThemeManager;
 use Filament\Auth\Pages\EditProfile;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Group;
@@ -60,6 +63,13 @@ class CustomProfile extends EditProfile
                                     ->required()
                                     ->email()
                                     ->columnSpanFull(),
+                                // Their own look, when the office lets each choose (Settings → Themes).
+                                Select::make('theme_id')
+                                    ->label(__('Theme'))
+                                    ->options(fn (): array => Theme::query()->orderBy('name')->pluck('name', 'id')->all())
+                                    ->placeholder(__('The office theme'))
+                                    ->visible(fn (): bool => app(ThemeManager::class)->allowsPersonal() && Theme::query()->exists())
+                                    ->columnSpanFull(),
                             ]),
                         // What they are told of, by which channel — within what their roles offer.
                         Text::make(__('Choose what you are told of, and how: the bell (with its pop-up and your phone), email or WhatsApp. What your role requires is on and cannot be changed.'))
@@ -101,5 +111,10 @@ class CustomProfile extends EditProfile
     protected function afterSave(): void
     {
         NotificationPreferences::make()->saveUser($this->getUser(), $this->notificationChoices);
+
+        // Another theme: the page is drawn again in it.
+        if ($this->getUser()->wasChanged('theme_id')) {
+            $this->js('window.location.reload()');
+        }
     }
 }

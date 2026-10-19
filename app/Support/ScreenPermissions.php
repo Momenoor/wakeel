@@ -122,6 +122,15 @@ final class ScreenPermissions
 
     public const SETTINGS_LETTERS_TAB = 'View:SystemSettingsLettersTab';
 
+    // ── Signing PDFs (the Sign PDF page and the signatures & stamps library) ──
+    public const SIGN_PDF = 'Use:SignPdf';
+
+    /** Putting the office's (shared) signatures and stamps on a PDF. */
+    public const SHARED_SIGNATURES = 'UseShared:SignatureStamp';
+
+    /** Adding, changing and deleting the office's signatures and stamps. */
+    public const MANAGE_SHARED_SIGNATURES = 'ManageShared:SignatureStamp';
+
     /**
      * Each permission, and the existing permissions whose holders could
      * already see that part — any one of them is enough.
@@ -190,6 +199,12 @@ final class ScreenPermissions
             self::SETTINGS_EMAIL_TAB => ['View:SystemSettings'],
             self::SETTINGS_NOTIFICATIONS_TAB => ['View:SystemSettings'],
             self::SETTINGS_LETTERS_TAB => ['View:SystemSettings'],
+
+            // Signing: whoever adds files to matters signs them; whoever looks after the letterheads
+            // (where the office's signature and stamp were kept until now) looks after the shared ones.
+            self::SIGN_PDF => ['CreateAttachment:Matter'],
+            self::SHARED_SIGNATURES => ['CreateAttachment:Matter'],
+            self::MANAGE_SHARED_SIGNATURES => ['Update:Letterhead'],
         ];
     }
 

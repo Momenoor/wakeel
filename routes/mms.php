@@ -11,6 +11,8 @@ use App\Http\Controllers\LegacyAttachmentPathController;
 use App\Http\Controllers\MatterReceivedNotificationController;
 use App\Http\Controllers\PayrollJournalVoucherPrintController;
 use App\Http\Controllers\SalaryAuthorizationFormPrintController;
+use App\Http\Controllers\SignatureStampImageController;
+use App\Http\Controllers\SignedAttachmentController;
 use App\Models\BulkMailRecipient;
 use App\Models\MatterLetter;
 use App\Models\MatterMinutes;
@@ -118,6 +120,12 @@ Route::middleware('auth')->group(function () {
     })->name('bulk-mail.pdf');
 
     Route::get('attachments/{attachment}/download', AttachmentController::class)->name('attachment.download')->middleware('auth');
+
+    // The signed copy of a PDF attachment, made in the browser on the Sign PDF page: kept beside the original.
+    Route::post('attachments/{attachment}/signed', SignedAttachmentController::class)->name('attachment.signed')->middleware('throttle:30,1');
+
+    // A signature's or a stamp's image, for whoever may put it on a PDF.
+    Route::get('signature-stamps/{signatureStamp}/image', SignatureStampImageController::class)->name('signature-stamps.image');
 
     // A file attached before the private disk existed, at its old address: once moved off the public disk
     // the web server finds nothing there and falls through to this — sent on to the file for who may see it.

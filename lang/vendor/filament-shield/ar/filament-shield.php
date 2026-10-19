@@ -107,6 +107,9 @@ return [
         'view_system_settings_notifications_tab' => 'تبويب إعدادات النظام: الإشعارات والإعلانات',
         'view_system_settings_letters_tab' => 'تبويب إعدادات النظام: الخطابات والمراسلات',
         'generate_eosg_closing_voucher' => 'توليد سند إقفال مكافأة نهاية الخدمة',
+        'use_sign_pdf' => 'توقيع وختم ملفات PDF',
+        'use_shared_signature_stamp' => 'استخدام تواقيع وأختام المكتب',
+        'manage_shared_signature_stamp' => 'إدارة تواقيع وأختام المكتب',
 
         // Matter — scope.
         'view_own' => 'عرض ملفاته فقط',

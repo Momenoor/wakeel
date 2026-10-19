@@ -6,6 +6,7 @@ use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Models\OneDriveFolderReview as Review;
 use App\Models\Party;
 use App\Services\MMS\MatterOneDriveFolders;
+use App\Services\MMS\OneDriveFolderLinker;
 use App\Services\MMS\OneDriveFolderReviewer;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Placeholder;
@@ -25,7 +26,8 @@ use Throwable;
  * folders in the assistants' OneDrive, found by matter number and year, and
  * brought in line with the standard one at a time — renamed to the standard
  * name, the standard subfolders renamed or made, and linked to the matter;
- * or, with none found, made. Each is the office's decision: Apply or Skip.
+ * or linked as it is (Link); or, with none found, made. Each is the office's
+ * decision: Apply, Link or Skip.
  * Nothing is ever deleted or moved.
  */
 trait ReviewsOneDriveFolders
@@ -113,6 +115,7 @@ trait ReviewsOneDriveFolders
             ])
             ->recordActions([
                 $this->applyAction(),
+                $this->linkAction(),
                 Action::make('skip')
                     ->label(__('Skip'))
                     ->icon(Heroicon::OutlinedForward)
@@ -142,6 +145,41 @@ trait ReviewsOneDriveFolders
             ])
             ->emptyStateHeading(__('Nothing to review'))
             ->emptyStateDescription(__('Scan OneDrive to find the active matters\' folders.'));
+    }
+
+    /**
+     * The folder found, linked to the matter as it is: its name and its subfolders left alone — for a
+     * folder the office keeps under its own name.
+     */
+    private function linkAction(): Action
+    {
+        return Action::make('link')
+            ->label(__('Link'))
+            ->icon(Heroicon::OutlinedLink)
+            ->color('gray')
+            ->visible(fn (Review $r): bool => in_array($r->status, Review::OPEN, true) && filled($r->candidates))
+            ->modalHeading(fn (Review $r): string => __('Link a folder to :matter as it is', ['matter' => $r->matter?->number.'/'.$r->matter?->year]))
+            ->modalDescription(__('Nothing is renamed or made: the folder keeps its name and its subfolders.'))
+            ->modalSubmitActionLabel(__('Link'))
+            ->fillForm(fn (Review $r): array => ['folder' => $r->candidates[0]['id'] ?? null])
+            ->schema(fn (Review $r): array => [
+                Radio::make('folder')
+                    ->label(__('Folder'))
+                    ->options(collect($r->candidates ?? [])->mapWithKeys(fn (array $f): array => [$f['id'] => $f['name']])->all())
+                    ->required(),
+            ])
+            ->action(function (Review $r, array $data): void {
+                try {
+                    $folder = app(OneDriveFolderLinker::class)->link($r->matter, $r->party, (string) $data['folder']);
+                } catch (Throwable $e) {
+                    Notification::make()->danger()->title(__('Not done'))->body($e->getMessage())->send();
+
+                    return;
+                }
+
+                $r->update(['decided_by' => auth()->id()]);
+                Notification::make()->success()->title(__('":name" linked to this matter.', ['name' => $folder->folder_name]))->send();
+            });
     }
 
     /**
