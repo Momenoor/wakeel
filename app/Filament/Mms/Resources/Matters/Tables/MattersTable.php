@@ -114,7 +114,10 @@ class MattersTable
                     ->label(__('Parties'))
                     ->getStateUsing(fn ($record) => $record->indexedParties
                         ->map(fn ($mp) => [
-                            'label' => __($mp->type ? ucfirst(str_replace('-', ' ', $mp->type)) : ''),
+                            // The side as the matter's type calls it (appellant, landlord …), as on the matter's page;
+                            // shown on every screen.
+                            'label' => $mp->type ? Type::sideLabel($record->type, $mp->type) : '',
+                            'alwaysLabelled' => true,
                             'index' => $mp->role_index,
                             'name' => $mp->party?->name ?? '—',
                             'color' => match ($mp->type) {

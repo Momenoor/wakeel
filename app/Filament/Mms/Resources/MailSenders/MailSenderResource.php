@@ -143,6 +143,11 @@ class MailSenderResource extends Resource
                         ->unique(ignoreRecord: true)
                         ->helperText(__('Short unique name, e.g. noreply.')),
                     Toggle::make('is_active')->label(__('Active'))->default(true)->inline(false),
+                    Toggle::make('keep_all_inbox')
+                        ->label(__('Keep every email of this inbox'))
+                        ->default(false)
+                        ->inline(false)
+                        ->helperText(__("Off: only replies and emails from a matter's parties are kept from this mailbox. On: every other email too (except the office's own) goes to Unfiled emails, to file on a matter or set aside.")),
 
                     TextEntry::make('graph_status')
                         ->hiddenLabel()
@@ -202,6 +207,7 @@ class MailSenderResource extends Resource
                     ->color(fn (string $state) => $state === MailSender::MICROSOFT ? 'info' : 'gray'),
                 TextColumn::make('key')->label(__('Code')),
                 IconColumn::make('is_active')->label(__('Active'))->boolean(),
+                IconColumn::make('keep_all_inbox')->label(__('Keeps every email'))->boolean(),
             ])
             ->recordActions([
                 Action::make('test')

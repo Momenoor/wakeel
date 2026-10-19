@@ -10,7 +10,7 @@ use App\Models\MailSender;
 class MailSenders
 {
     /**
-     * @param  array<string, mixed>  $sender  username, address, name, password, host, port, encryption, signature …
+     * @param  array<string, mixed>  $sender  username, address, name, password, host, port, encryption, signature, keep_all_inbox …
      */
     public static function add(string $key, array $sender = []): MailSender
     {
@@ -26,6 +26,7 @@ class MailSenders
             'password' => $sender['password'] ?? 'secret',
             'signature' => $sender['signature'] ?? null,
             'is_active' => true,
+            'keep_all_inbox' => $sender['keep_all_inbox'] ?? false,
         ]);
     }
 }

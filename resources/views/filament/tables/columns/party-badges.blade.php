@@ -6,7 +6,8 @@
     because of the order Filament emits its own CSS, so any upstream reordering
     would have silently turned every badge grey. This uses the real component.
 
-    Expected state: a list of ['label', 'index', 'name', 'color'].
+    Expected state: a list of ['label', 'index', 'name', 'color'] — and 'alwaysLabelled' to show the label on
+    every screen (it is otherwise hidden on smaller and high-density ones, see .type-label).
 --}}
 @php
     $rows = $getState() ?? [];
@@ -16,7 +17,7 @@
     @forelse ($rows as $row)
         <div class="flex items-center gap-1.5 text-xs">
             <x-filament::badge :color="$row['color']" size="sm">
-                <span class="type-label">{{ $row['label'] }}</span> #{{ $row['index'] }}
+                <span @class(['type-label' => ! ($row['alwaysLabelled'] ?? false)])>{{ $row['label'] }}</span> #{{ $row['index'] }}
             </x-filament::badge>
             <span>{{ $row['name'] }}</span>
         </div>

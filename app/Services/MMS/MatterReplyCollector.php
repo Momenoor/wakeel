@@ -117,15 +117,13 @@ class MatterReplyCollector
             ->get()
             ->groupBy('sender_key');
 
-        // Every mailbox anything has been sent from — still set up; set to keep every email, every
-        // mailbox of the senders list (one never sent from still receives).
-        $mailboxes = array_map('strval', array_keys(SenderMailer::all()));
-        if (! self::keepsAll()) {
-            $mailboxes = array_values(array_intersect(
-                MatterEmail::query()->where('direction', MatterEmail::SENT)->distinct()->pluck('sender_key')->map(fn ($key) => (string) $key)->all(),
-                $mailboxes,
-            ));
-        }
+        // Every mailbox of the senders list that anything has been sent from, and every one set to keep every
+        // email (one never sent from still receives).
+        $sentFrom = MatterEmail::query()->where('direction', MatterEmail::SENT)->distinct()->pluck('sender_key')->map(fn ($key) => (string) $key)->all();
+        $mailboxes = array_values(array_filter(
+            array_map('strval', array_keys(SenderMailer::all())),
+            fn (string $key): bool => in_array($key, $sentFrom, true) || self::keepsAll($key),
+        ));
 
         // The mailbox read longest ago first: one a short run did not reach goes first next time, so a
         // slow mailbox never keeps the others waiting.
@@ -307,7 +305,7 @@ class MatterReplyCollector
         $kept = ['replies' => 0, 'emails' => 0, 'unfiled' => 0];
         $own = array_map(fn (array $s): string => mb_strtolower((string) ($s['address'] ?? '')), SenderMailer::all());
         $progress = ['reached' => null, 'stopped' => false];
-        $keepAll = self::keepsAll();
+        $keepAll = self::keepsAll($senderKey);
         $ignored = self::ignoredSenders();
 
         foreach ($messages as $message) {
@@ -394,12 +392,17 @@ class MatterReplyCollector
         return $kept;
     }
 
-    /** Setting: keep every email of the inbox, not only those from a matter's party (others go to Unfiled emails). */
-    public const KEEP_ALL = 'mail_keep_all_inbox';
-
-    public static function keepsAll(): bool
+    /**
+     * Whether this mailbox keeps every email, not only those from a matter's party (the others go to Unfiled
+     * emails) — each mailbox's own choice (Mail senders). With no mailbox named: whether any one does.
+     */
+    public static function keepsAll(?string $senderKey = null): bool
     {
-        return (bool) Setting::get(self::KEEP_ALL, false);
+        $senders = SenderMailer::all();
+
+        return $senderKey !== null
+            ? (bool) ($senders[$senderKey]['keep_all'] ?? false)
+            : collect($senders)->contains(fn (array $sender): bool => (bool) ($sender['keep_all'] ?? false));
     }
 
     /** Setting: addresses (or "@domain" for a whole domain) whose emails are never read. */

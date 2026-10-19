@@ -303,7 +303,7 @@ class SystemSettingsTest extends TestCase
             LettersSettings::class => ['letter_reference_format', 'letter_cc_expert_types', EmailSendFields::DEFAULT_SENDER, Branding::EMAIL_PDF, Branding::EMAIL_PDF_FONT],
             OfflineSettings::class => ['app_offline', 'offline_message', 'offline_allow_admins'],
             AnnouncementSettings::class => ['leave_request_recipients', LiveRefresh::SETTING, 'system_announcement', 'show_system_announcement'],
-            IntegrationsSettings::class => [...Integrations::KEYS, MatterReplyCollector::KEEP_ALL, MatterReplyCollector::LOOK_BACK, MatterReplyCollector::IGNORED],
+            IntegrationsSettings::class => [...Integrations::KEYS, MatterReplyCollector::LOOK_BACK, MatterReplyCollector::IGNORED],
         ];
 
         $changes = [
@@ -335,7 +335,6 @@ class SystemSettingsTest extends TestCase
         Livewire::test(IntegrationsSettings::class)
             ->fillForm([
                 Integrations::PUSHER_APP => '9', Integrations::PUSHER_KEY => 'k', Integrations::PUSHER_SECRET => 's', Integrations::PUSHER_CLUSTER => 'eu',
-                MatterReplyCollector::KEEP_ALL => true,
                 MatterReplyCollector::LOOK_BACK => 5,
                 MatterReplyCollector::IGNORED => ['@spam.test'],
             ])
@@ -344,9 +343,8 @@ class SystemSettingsTest extends TestCase
 
         $this->assertSame('s', Integrations::get(Integrations::PUSHER_SECRET));
         $this->assertNotSame('s', Setting::query()->where('key', Integrations::PUSHER_SECRET)->value('value'));
-        $this->assertTrue(MatterReplyCollector::keepsAll());
         $this->assertSame(5, MatterReplyCollector::lookBackDays());
-        $this->assertSame('mail', Setting::query()->where('key', MatterReplyCollector::KEEP_ALL)->value('group'));
+        $this->assertSame('mail', Setting::query()->where('key', MatterReplyCollector::LOOK_BACK)->value('group'));
 
         // Saved secrets don't come back to the page, and a blank one keeps the saved.
         Livewire::test(IntegrationsSettings::class)

@@ -48,7 +48,6 @@ class IntegrationsSettings extends SettingsFormPage
         return [
             // Saved secrets stay on the server (empty here).
             ...collect(Integrations::KEYS)->mapWithKeys(fn (string $key): array => [$key => in_array($key, Integrations::SECRETS, true) ? null : Integrations::get($key)])->all(),
-            MatterReplyCollector::KEEP_ALL => MatterReplyCollector::keepsAll(),
             MatterReplyCollector::LOOK_BACK => MatterReplyCollector::lookBackDays(),
             MatterReplyCollector::IGNORED => MatterReplyCollector::ignoredSenders(),
         ];
@@ -57,7 +56,6 @@ class IntegrationsSettings extends SettingsFormPage
     protected function groups(): array
     {
         return [
-            MatterReplyCollector::KEEP_ALL => 'mail',
             MatterReplyCollector::LOOK_BACK => 'mail',
             MatterReplyCollector::IGNORED => 'mail',
         ];

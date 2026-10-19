@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
  * through Microsoft Graph with the app registration in .env
  * (MICROSOFT_GRAPH_TENANT_ID / CLIENT_ID / CLIENT_SECRET) — no password.
  */
-#[Fillable('key', 'name', 'address', 'driver', 'host', 'port', 'encryption', 'username', 'password', 'signature', 'is_active')]
+#[Fillable('key', 'name', 'address', 'driver', 'host', 'port', 'encryption', 'username', 'password', 'signature', 'is_active', 'keep_all_inbox')]
 class MailSender extends Model
 {
     public const SMTP = 'smtp';
@@ -26,6 +26,7 @@ class MailSender extends Model
             'password' => 'encrypted',
             'port' => 'integer',
             'is_active' => 'boolean',
+            'keep_all_inbox' => 'boolean',
         ];
     }
 
@@ -46,6 +47,8 @@ class MailSender extends Model
             'port' => $this->port,
             'encryption' => $this->encryption === 'none' ? null : $this->encryption,
             'signature' => self::leftToRight($this->signature),
+            // Every email of this mailbox kept, not only those concerning a matter (MatterReplyCollector).
+            'keep_all' => (bool) $this->keep_all_inbox,
         ];
     }
 

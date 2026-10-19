@@ -365,7 +365,7 @@ class MatterRepliesTest extends TestCase
 
     public function test_a_cpanel_inbox_is_read_a_page_at_a_time_and_only_as_far_back_as_set(): void
     {
-        Setting::set(MatterReplyCollector::KEEP_ALL, true, 'mail');
+        MailSender::query()->update(['keep_all_inbox' => true]);
         // From a sender on the ignore list: read, then passed over — only the reading is looked at here.
         Setting::set(MatterReplyCollector::IGNORED, ['news@shop.com'], 'mail');
         $raw = fn (int $n, string $date) => "Message-ID: <m{$n}@shop.com>\r\nDate: {$date}\r\nFrom: news@shop.com\r\nTo: iflas@jpa.ae\r\nSubject: offer {$n}\r\nContent-Type: text/plain\r\n\r\nx";
@@ -434,8 +434,8 @@ class MatterRepliesTest extends TestCase
         app(MatterReplyCollector::class)->collect(null, 60);
         Http::assertNotSent(fn (Request $request) => str_contains(rawurldecode($request->url()), 'users/info@jpa.ae/mailFolders'));
 
-        // Every email: it is.
-        Setting::set(MatterReplyCollector::KEEP_ALL, true, 'mail');
+        // That mailbox set to keep every email: it is.
+        MailSender::query()->where('key', 'info')->update(['keep_all_inbox' => true]);
         app(MatterReplyCollector::class)->collect(null, 60);
         $this->assertSame('info', MatterEmail::pending()->sole()->sender_key);
         // Unread in the mailbox before: kept, so an undo can put it back.

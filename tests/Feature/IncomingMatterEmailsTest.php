@@ -748,7 +748,8 @@ class IncomingMatterEmailsTest extends TestCase
 
     public function test_set_to_keep_every_email_a_strangers_goes_to_unfiled_to_file_on_any_matter(): void
     {
-        Setting::set(MatterReplyCollector::KEEP_ALL, true, 'mail');
+        MailSender::query()->where('key', 'iflas')->update(['keep_all_inbox' => true]);
+        MailSenders::add('noreply', ['keep_all_inbox' => true]);
 
         // A stranger's; still never the office's own mailbox's, nor one with no id.
         $this->collect(
@@ -790,15 +791,46 @@ class IncomingMatterEmailsTest extends TestCase
         Livewire::test(UnfiledEmails::class)->callTableAction('file', $email, ['matter_id' => $this->second->id]);
         $this->assertSame([$this->second->id, MatterEmail::FILED], [$email->refresh()->matter_id, $email->status]);
 
-        // Switched off: a stranger's is left in the mailbox again.
-        Setting::set(MatterReplyCollector::KEEP_ALL, false, 'mail');
+        // Switched off for the mailbox: a stranger's is left in it again.
+        MailSender::query()->where('key', 'iflas')->update(['keep_all_inbox' => false]);
         $this->collect($this->email(['from' => 'someone@gmail.com', 'message_id' => '<later@gmail.com>']));
         $this->assertSame(1, MatterEmail::count());
     }
 
+    public function test_keeping_every_email_is_each_mailboxs_own_choice(): void
+    {
+        // The shared mailbox keeps everything; the other only what concerns a matter.
+        MailSender::query()->where('key', 'iflas')->update(['keep_all_inbox' => true]);
+        MailSenders::add('personal', ['address' => 'momen@jpa.ae']);
+
+        $this->assertTrue(MatterReplyCollector::keepsAll('iflas'));
+        $this->assertFalse(MatterReplyCollector::keepsAll('personal'));
+        // Any one keeping everything: the Unfiled page says so.
+        $this->assertTrue(MatterReplyCollector::keepsAll());
+
+        $collector = app(MatterReplyCollector::class);
+        $collector->handle([$this->email(['from' => 'stranger@gmail.com', 'message_id' => '<to-shared@gmail.com>'])], collect(), 'iflas');
+        $collector->handle([$this->email(['from' => 'stranger@gmail.com', 'message_id' => '<to-personal@gmail.com>', 'to' => ['momen@jpa.ae']])], collect(), 'personal');
+
+        $this->assertSame(['iflas'], MatterEmail::query()->pluck('sender_key')->all());
+    }
+
+    public function test_where_the_one_switch_was_on_every_mailbox_starts_on(): void
+    {
+        MailSenders::add('second');
+        MailSender::query()->update(['keep_all_inbox' => false]);
+        Setting::set('mail_keep_all_inbox', true, 'mail');
+        $migration = require database_path('migrations/2020_01_01_000175_keep_all_inbox_per_sender.php');
+
+        $migration->down();
+        $migration->up();
+
+        $this->assertSame([true, true], MailSender::query()->orderBy('key')->pluck('keep_all_inbox')->all());
+    }
+
     public function test_a_sender_on_the_ignore_list_is_never_read_again(): void
     {
-        Setting::set(MatterReplyCollector::KEEP_ALL, true, 'mail');
+        MailSender::query()->where('key', 'iflas')->update(['keep_all_inbox' => true]);
         $marked = 0;
         $read = function () use (&$marked): void {
             $marked++;
