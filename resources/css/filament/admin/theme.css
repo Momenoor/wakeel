@@ -487,3 +487,20 @@ html {
     max-width: 100%;
     overflow-x: auto;
 }
+
+/*
+ * Loading spinners keep spinning when the device asks for less motion (iPhone's
+ * Reduce Motion, Android's Remove animations, some battery savers). Filament
+ * spins its indicator only without that setting, and a reset stops every
+ * animation with it — on such phones the icon stood still and the page looked
+ * stuck. A spinner says "something is happening", so it turns, a little slower.
+ */
+@media (prefers-reduced-motion: reduce) {
+    .fi-loading-indicator,
+    .animate-spin {
+        animation-name: spin !important;
+        animation-duration: 1.5s !important;
+        animation-timing-function: linear !important;
+        animation-iteration-count: infinite !important;
+    }
+}
