@@ -3,7 +3,6 @@
 namespace App\Filament\Mms\Resources\CalendarEvents\Schemas;
 
 use App\Filament\Mms\Actions\Calendar\CalendarMatterActions;
-use App\Filament\Support\RichEditorDirection;
 use App\Filament\Support\SameDayMeetings;
 use App\Models\CalendarEvent;
 use App\Models\Matter;
@@ -149,7 +148,9 @@ class CalendarEventForm
 
                     RichEditor::make('description')
                         ->label(__('Description'))
-                        ->extraInputAttributes(['dir' => 'auto'], merge: true)->tap(RichEditorDirection::apply(...))
+                        // Filament's own plain editor: a few lines, a link or a list.
+                        ->toolbarButtons([['bold', 'italic', 'underline', 'strike', 'link'], ['bulletList', 'orderedList'], ['alignStart', 'alignCenter', 'alignEnd'], ['undo', 'redo']])
+                        ->extraInputAttributes(['dir' => 'auto'], merge: true)
                         ->columnSpanFull(),
 
                     // These act when the event is made — not on editing it.

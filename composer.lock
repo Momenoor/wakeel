@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "4fbe19ab6adc88c19ef19736ed058c47",
+    "content-hash": "1be0f95fe77b31546a17f9d90d8d4123",
     "packages": [
         {
             "name": "alizharb/filament-activity-log",
@@ -12245,16 +12245,16 @@
         },
         {
             "name": "symfony/process",
-            "version": "v8.1.7",
+            "version": "v8.1.9",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/process.git",
-                "reference": "10823b09358e690df4ff943e24e8492bb1019fc3"
+                "reference": "59a682fd049b2d4d37c444f5ac21b7d01b8c7189"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/process/zipball/10823b09358e690df4ff943e24e8492bb1019fc3",
-                "reference": "10823b09358e690df4ff943e24e8492bb1019fc3",
+                "url": "https://api.github.com/repos/symfony/process/zipball/59a682fd049b2d4d37c444f5ac21b7d01b8c7189",
+                "reference": "59a682fd049b2d4d37c444f5ac21b7d01b8c7189",
                 "shasum": ""
             },
             "require": {
@@ -12286,7 +12286,7 @@
             "description": "Executes commands in sub-processes",
             "homepage": "https://symfony.com",
             "support": {
-                "source": "https://github.com/symfony/process/tree/v8.1.7"
+                "source": "https://github.com/symfony/process/tree/v8.1.9"
             },
             "funding": [
                 {
@@ -12306,7 +12306,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-09-02T12:40:29+00:00"
+            "time": "2026-10-08T16:57:43+00:00"
         },
         {
             "name": "symfony/routing",
@@ -13013,6 +13013,65 @@
             "time": "2025-12-02T11:56:42+00:00"
         },
         {
+            "name": "tinymce/tinymce",
+            "version": "8.10.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/tinymce/tinymce-dist.git",
+                "reference": "99bc848f4eb53902cc210ea5f8a191abaeeeb716"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/tinymce/tinymce-dist/zipball/99bc848f4eb53902cc210ea5f8a191abaeeeb716",
+                "reference": "99bc848f4eb53902cc210ea5f8a191abaeeeb716",
+                "shasum": ""
+            },
+            "type": "component",
+            "extra": {
+                "component": {
+                    "files": [
+                        "tinymce.min.js",
+                        "plugins/*/plugin.min.js",
+                        "themes/*/theme.min.js",
+                        "models/*/model.min.js",
+                        "skins/**",
+                        "icons/*/icons.min.js"
+                    ],
+                    "scripts": [
+                        "tinymce.js",
+                        "plugins/*/plugin.js",
+                        "themes/*/theme.js",
+                        "models/*/model.js",
+                        "icons/*/icons.js"
+                    ]
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "SEE LICENSE IN license.md"
+            ],
+            "description": "Web based JavaScript HTML WYSIWYG editor control.",
+            "homepage": "https://www.tiny.cloud/",
+            "keywords": [
+                "contenteditable",
+                "editing",
+                "html",
+                "javascript",
+                "rich editor",
+                "rich text",
+                "rich text editor",
+                "richtext",
+                "rte",
+                "text",
+                "tinymce",
+                "wysiwyg"
+            ],
+            "support": {
+                "source": "https://github.com/tinymce/tinymce-dist/tree/8.10.0"
+            },
+            "time": "2026-10-14T01:52:10+00:00"
+        },
+        {
             "name": "tomatophp/console-helpers",
             "version": "v1.1.0",
             "source": {
@@ -13150,16 +13209,16 @@
         },
         {
             "name": "ueberdosis/tiptap-php",
-            "version": "2.2.0",
+            "version": "2.2.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/ueberdosis/tiptap-php.git",
-                "reference": "5a2e8155c5b09c9ad4efd480550270a6924865b9"
+                "reference": "242a7a150c1233a01622e050152699382fb20bea"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ueberdosis/tiptap-php/zipball/5a2e8155c5b09c9ad4efd480550270a6924865b9",
-                "reference": "5a2e8155c5b09c9ad4efd480550270a6924865b9",
+                "url": "https://api.github.com/repos/ueberdosis/tiptap-php/zipball/242a7a150c1233a01622e050152699382fb20bea",
+                "reference": "242a7a150c1233a01622e050152699382fb20bea",
                 "shasum": ""
             },
             "require": {
@@ -13199,7 +13258,7 @@
             ],
             "support": {
                 "issues": "https://github.com/ueberdosis/tiptap-php/issues",
-                "source": "https://github.com/ueberdosis/tiptap-php/tree/2.2.0"
+                "source": "https://github.com/ueberdosis/tiptap-php/tree/2.2.1"
             },
             "funding": [
                 {
@@ -13215,7 +13274,71 @@
                     "type": "open_collective"
                 }
             ],
-            "time": "2026-08-31T07:00:09+00:00"
+            "time": "2026-10-19T10:48:00+00:00"
+        },
+        {
+            "name": "visualbuilder/filament-tinyeditor",
+            "version": "6.0.1",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/visualbuilder/filament-tinyeditor.git",
+                "reference": "d3042408cac642c839ef1dce18604bf9a8af9d38"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/visualbuilder/filament-tinyeditor/zipball/d3042408cac642c839ef1dce18604bf9a8af9d38",
+                "reference": "d3042408cac642c839ef1dce18604bf9a8af9d38",
+                "shasum": ""
+            },
+            "require": {
+                "filament/filament": "^5.0",
+                "php": "^8.2",
+                "spatie/laravel-package-tools": "^1.16",
+                "tinymce/tinymce": "^8.0"
+            },
+            "require-dev": {
+                "laravel/pint": "^1.13",
+                "pestphp/pest": "^4.0",
+                "pestphp/pest-plugin-laravel": "^4.0",
+                "phpunit/phpunit": "^12.0"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "Visualbuilder\\FilamentTinyEditor\\TinyeditorServiceProvider"
+                    ]
+                },
+                "branch-alias": {
+                    "6.x-dev": "6.0.x-dev"
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Visualbuilder\\FilamentTinyEditor\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Amid Esfahani",
+                    "email": "amid.esfahani@gmail.com"
+                }
+            ],
+            "description": "Filament TinyMce Editor v6",
+            "keywords": [
+                "filament",
+                "laravel",
+                "tinyeditor",
+                "tinymce"
+            ],
+            "support": {
+                "source": "https://github.com/visualbuilder/filament-tinyeditor/tree/6.0.1"
+            },
+            "time": "2026-09-28T02:10:59+00:00"
         },
         {
             "name": "vlucas/phpdotenv",

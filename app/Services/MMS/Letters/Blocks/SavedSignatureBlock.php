@@ -2,19 +2,18 @@
 
 namespace App\Services\MMS\Letters\Blocks;
 
-use App\Models\SignatureLayout;
 use App\Services\MMS\Letters\SignatureLayouts;
-use Filament\Actions\Action;
-use Filament\Forms\Components\RichEditor\RichContentCustomBlock;
-use Filament\Forms\Components\Select;
 
 /**
  * A saved signature block (Communication → Templates → Signature blocks), dropped into
- * a letter from the editor's blocks menu. Designed once, used in any
- * template; editing it changes every template using it, while letters
- * already issued keep it as it was (SignatureLayouts::freeze()).
+ * a letter from the editor's signature blocks menu (resources/js/rich-text-field.js).
+ * Designed once, used in any template; editing it changes every template using it,
+ * while letters already issued keep it as it was (SignatureLayouts::freeze()).
+ *
+ * Kept in the text as <div data-type="customBlock" data-id="saved_signature"
+ * data-config="{layout_id, snapshot?}"></div>.
  */
-class SavedSignatureBlock extends RichContentCustomBlock
+class SavedSignatureBlock
 {
     public const ID = 'saved_signature';
 
@@ -28,30 +27,9 @@ class SavedSignatureBlock extends RichContentCustomBlock
         return __('Saved signature block');
     }
 
-    public static function configureEditorAction(Action $action): Action
-    {
-        return $action
-            ->modalDescription(__('Signature blocks are designed under Communication → Templates → Signature blocks.'))
-            ->fillForm(fn (array $arguments): array => ['layout_id' => $arguments['config']['layout_id'] ?? SignatureLayout::query()->value('id')])
-            ->schema([
-                Select::make('layout_id')
-                    ->label(__('Signature block'))
-                    ->options(fn () => SignatureLayout::query()->orderBy('name')->pluck('name', 'id'))
-                    ->required(),
-            ]);
-    }
-
     /**
-     * @param  array<string, mixed>  $config
-     */
-    public static function getPreviewLabel(array $config): string
-    {
-        $name = SignatureLayout::find($config['layout_id'] ?? null)?->name;
-
-        return $name ? self::getLabel().': '.$name : self::getLabel();
-    }
-
-    /**
+     * The block as the signature block designer draws it.
+     *
      * @param  array<string, mixed>  $config
      */
     public static function toPreviewHtml(array $config): string

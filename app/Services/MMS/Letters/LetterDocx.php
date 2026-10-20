@@ -6,22 +6,18 @@ use App\Models\Letterhead;
 use App\Models\Setting;
 use App\Services\MMS\BulkMailPlaceholders;
 use App\Support\Branding;
-use DOMDocument;
+use App\Support\RichHtml;
 use PhpOffice\PhpWord\Element\AbstractContainer;
 use PhpOffice\PhpWord\Element\Header;
 use PhpOffice\PhpWord\Element\Section;
-use PhpOffice\PhpWord\Element\Text;
 use PhpOffice\PhpWord\Element\TextBox;
 use PhpOffice\PhpWord\Element\TextRun;
 use PhpOffice\PhpWord\IOFactory;
 use PhpOffice\PhpWord\PhpWord;
 use PhpOffice\PhpWord\Settings;
 use PhpOffice\PhpWord\Shared\Converter;
-use PhpOffice\PhpWord\Shared\Html;
-use PhpOffice\PhpWord\Style\Font;
 use PhpOffice\PhpWord\Style\Frame;
 use PhpOffice\PhpWord\Style\Image;
-use PhpOffice\PhpWord\Style\Paragraph;
 
 /**
  * The letter as an editable Word document, laid out like the PDF: the
@@ -49,19 +45,20 @@ class LetterDocx
         // set under Fonts, not per template.
         $word->setDefaultFontName(self::wordFont());
         $word->setDefaultFontSize(12);
+        // Each paragraph says its own direction (WordHtml) — a default one
+        // can't be undone for a left-to-right paragraph in an Arabic letter.
         $word->setDefaultParagraphStyle([
-            'bidi' => $rtl,
             'alignment' => 'both',
             'spaceAfter' => Converter::pointToTwip(6),
         ]);
 
         // Headings as in the PDF — the document's font, black, bold, 18,
-        // 16 and 14 pt — not Word's own Heading styles (their font, size and
+        // 16, 14 and 12 pt — not Word's own Heading styles (their font, size and
         // colour), which a heading otherwise falls back to.
-        foreach ([1 => 18, 2 => 16, 3 => 14] as $level => $size) {
+        foreach ([1 => 18, 2 => 16, 3 => 14, 4 => 12] as $level => $size) {
             $word->addTitleStyle($level,
                 ['name' => self::wordFont(), 'size' => $size, 'bold' => true, 'color' => '000000'],
-                ['bidi' => $rtl, 'spaceBefore' => 0, 'spaceAfter' => Converter::pointToTwip(6), 'keepNext' => true],
+                ['spaceBefore' => 0, 'spaceAfter' => Converter::pointToTwip(6), 'keepNext' => true],
             );
         }
         $word->getDocInfo()->setTitle($this->composer->subject());
@@ -116,11 +113,12 @@ class LetterDocx
             }
         }
 
-        $this->addBody($section, $this->wordHtml());
+        // The text between the letterhead's side margins.
+        $page = $landscape ? Letterhead::PAGE_HEIGHT : Letterhead::PAGE_WIDTH;
+        $contentWidth = Converter::cmToTwip(max(60.0, $page - (float) $letterhead->margin_left - (float) $letterhead->margin_right) / 10);
+        $body = new WordHtml($word, $rtl, $contentWidth);
 
-        if ($rtl) {
-            $this->rightToLeft($section);
-        }
+        $this->addBody($section, RichHtml::localImages($this->composer->bodyHtml()), $body);
 
         if (! is_dir(dirname($path))) {
             mkdir(dirname($path), 0755, true);
@@ -136,6 +134,7 @@ class LetterDocx
             IOFactory::createWriter($word, 'Word2007')->save($path);
         } finally {
             Settings::setOutputEscapingEnabled($escaping);
+            $body->forget();
         }
 
         return $path;
@@ -150,26 +149,17 @@ class LetterDocx
     }
 
     /**
-     * The letter's text, its saved signature blocks (SignatureLayouts) laid
-     * out natively: Word can float a picture and text boxes, which HTML
-     * can't tell PHPWord.
+     * The letter's text (WordHtml), its saved signature blocks (SignatureLayouts)
+     * laid out natively: Word can float a picture and text boxes, which HTML
+     * can't tell it.
      */
-    private function addBody(Section $section, string $html): void
+    private function addBody(Section $section, string $html, WordHtml $body): void
     {
         foreach (SignatureLayouts::split($html) as $part) {
             if (is_array($part)) {
                 $this->signatureBlock($section, $part);
             } elseif (trim($part) !== '') {
-                // A horizontal rule as a line Word shows: PHPWord's own is
-                // 1/8 pt — too thin to see.
-                foreach (preg_split('~<hr\b[^>]*/?>(?:</hr>)?~i', $part) ?: [] as $i => $piece) {
-                    if ($i > 0) {
-                        $section->addText('', ['size' => 2], ['borderBottomSize' => 8, 'borderBottomColor' => '6B7280', 'borderBottomStyle' => 'single', 'spaceBefore' => 120, 'spaceAfter' => 120]);
-                    }
-                    if (trim($piece) !== '') {
-                        Html::addHtml($section, $piece, false, false);
-                    }
-                }
+                $body->add($section, $part);
             }
         }
     }
@@ -261,77 +251,6 @@ class LetterDocx
         (function () use ($box): void {
             $this->elements[] = $box;
         })->call($paragraph);
-    }
-
-    /**
-     * PHPWord's HTML reader knows <b>/<i> and lists, not every rich-editor
-     * tag; the few it doesn't are mapped to ones it does.
-     */
-    private function wordHtml(): string
-    {
-        $html = str_replace(
-            ['<strong>', '</strong>', '<em>', '</em>', ' dir="ltr"', '<bdo>', '</bdo>'],
-            ['<b>', '</b>', '<i>', '</i>', '', '<span>', '</span>'],
-            $this->composer->bodyHtml(),
-        );
-
-        if ($this->composer->isArabic()) {
-            // Each date, time, link or email becomes its own <span> — its own
-            // run in Word — so rightToLeft() can leave it left to right. Only
-            // the text between tags, never attributes or tag names.
-            $html = preg_replace_callback(
-                '/>([^<]+)</u',
-                fn ($m) => '>'.self::ltrRuns($m[1]).'<',
-                $html,
-            );
-        }
-
-        return self::xhtml($html);
-    }
-
-    /**
-     * A piece of text with each Latin run in its own <span>. Read as text
-     * first: an entity (&nbsp;, &amp;) is a character, not letters to wrap.
-     */
-    private static function ltrRuns(string $html): string
-    {
-        $text = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $pieces = preg_split(self::LTR_TOKEN, $text, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [$text];
-
-        // Split on the runs: text, run, text, run…
-        return collect($pieces)
-            ->map(fn (string $piece, int $i): string => $i % 2 === 1
-                ? '<span>'.htmlspecialchars($piece, ENT_NOQUOTES | ENT_XML1, 'UTF-8').'</span>'
-                : htmlspecialchars($piece, ENT_NOQUOTES | ENT_XML1, 'UTF-8'))
-            ->implode('');
-    }
-
-    /**
-     * PHPWord reads the HTML as XML: the editor's <hr>, <br> and &nbsp;
-     * aren't, and stop it ("Opening and ending tag mismatch: hr"). Read as
-     * HTML and written back as XML, every tag is closed and every entity a
-     * character.
-     */
-    private static function xhtml(string $html): string
-    {
-        $dom = new DOMDocument;
-        $errors = libxml_use_internal_errors(true);
-
-        try {
-            $dom->loadHTML('<html><head><meta charset="UTF-8"></head><body>'.$html.'</body></html>');
-        } finally {
-            libxml_clear_errors();
-            libxml_use_internal_errors($errors);
-        }
-
-        $body = $dom->getElementsByTagName('body')->item(0);
-        $xhtml = '';
-
-        foreach ($body?->childNodes ?? [] as $node) {
-            $xhtml .= $dom->saveXML($node);
-        }
-
-        return $xhtml;
     }
 
     /**
@@ -510,35 +429,5 @@ class LetterDocx
             'right' => $rtl ? 'start' : 'end',
             default => 'start',
         };
-    }
-
-    /**
-     * Every paragraph of the letter text right-to-left, and every run with
-     * Arabic in it marked RTL — runs without (dates, links, emails; see
-     * wordHtml()) stay left to right, or Word reverses them.
-     */
-    private function rightToLeft(AbstractContainer $container): void
-    {
-        foreach ($container->getElements() as $element) {
-            if (method_exists($element, 'getParagraphStyle')) {
-                $style = $element->getParagraphStyle();
-                if ($style instanceof Paragraph) {
-                    $style->setBidi(true);
-                }
-            }
-
-            if ($element instanceof Text && preg_match('/\p{Arabic}/u', (string) $element->getText())) {
-                $font = $element->getFontStyle();
-                if ($font instanceof Font) {
-                    $font->setRTL(true);
-                } elseif (! is_string($font)) {
-                    $element->setFontStyle(['rtl' => true]);
-                }
-            }
-
-            if ($element instanceof AbstractContainer) {
-                $this->rightToLeft($element);
-            }
-        }
     }
 }

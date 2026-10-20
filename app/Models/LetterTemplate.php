@@ -3,10 +3,6 @@
 namespace App\Models;
 
 use App\Enums\LetterTemplateCategories;
-use App\Filament\Mms\Forms\Components\RichEditor\RichContentCustomBlocks\HeroBlock;
-use Filament\Forms\Components\RichEditor\MentionProvider;
-use Filament\Forms\Components\RichEditor\Models\Concerns\InteractsWithRichContent;
-use Filament\Forms\Components\RichEditor\Models\Contracts\HasRichContent;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -21,10 +17,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * select | items (a numbered list ticked from the item library's group).
  */
 #[Fillable('name', 'slug', 'subject', 'body', 'placeholders', 'locale', 'is_active', 'is_default', 'category', 'letterhead_id', 'inputs', 'minutes_opening', 'minutes_closing', 'email_template_id', 'minutes_attendees', 'recipients_layout', 'recipients_format', 'letter_font_id', 'arabic_font_id')]
-class LetterTemplate extends Model implements HasRichContent
+class LetterTemplate extends Model
 {
-    use InteractsWithRichContent;
-
     public const INPUT_TYPES = ['text', 'textarea', 'date', 'time', 'url', 'number', 'select', 'items'];
 
     public function casts(): array
@@ -170,25 +164,5 @@ class LetterTemplate extends Model implements HasRichContent
     public function scopeMinutesFor(Builder $query, Matter $matter): void
     {
         $query->forMatter($matter)->where('category', LetterTemplateCategories::MINUTES->value);
-    }
-
-    public function getFilamentRichContentField(): string
-    {
-        return 'body';
-    }
-
-    public function setUpRichContent()
-    {
-        $this->registerRichContent($this->getFilamentRichContentField())
-            ->mentions([
-                MentionProvider::make('@')
-                    ->getSearchResultsUsing(fn ($query) => User::where('name', 'like', "%{$query}%")->pluck('name', 'id'))
-                    ->getLabelsUsing(fn ($ids) => User::whereIn('id', $ids)->pluck('display_name', 'id'))
-                    ->url(fn ($record) => route('filament.mms.resources.users.view', $record)),
-            ])
-            ->customBlocks([
-                HeroBlock::class,
-            ])
-            ->toHtml();
     }
 }

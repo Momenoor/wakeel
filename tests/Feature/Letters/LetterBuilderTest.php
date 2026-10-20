@@ -34,6 +34,7 @@ use App\Services\MMS\Letters\LetterDocx;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterPdf;
 use App\Services\MMS\SentFolder;
+use App\Support\EditorHtml;
 use App\Support\EmailGrouping;
 use App\Support\InterfaceFont;
 use Filament\Facades\Filament;
@@ -47,6 +48,7 @@ use Livewire\Livewire;
 use Mockery;
 use ReflectionMethod;
 use Spatie\Permission\Models\Role;
+use Tests\Support\MailSenders;
 use Tests\TestCase;
 use ZipArchive;
 
@@ -338,8 +340,8 @@ class LetterBuilderTest extends TestCase
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
             ->mountTableAction('editLetter', $letter)
-            // The wording as issued, placeholders and all, to change.
-            ->assertTableActionDataSet(['body' => $letter->body])
+            // The wording as issued, placeholders and all, to change — as the editor reads it.
+            ->assertTableActionDataSet(['body' => EditorHtml::fromTiptap($letter->body, true)])
             ->setTableActionData([
                 'body' => '<p>{{recipients}}</p><p>نص معدّل للدعوى رقم <span data-type="mergeTag" data-id="matter.number">matter.number</span>.</p>',
             ])
@@ -391,10 +393,10 @@ class LetterBuilderTest extends TestCase
 
     public function test_a_written_letter_is_issued_then_sent_from_its_send_screen_and_both_are_progress(): void
     {
-        \Tests\Support\MailSenders::add('iflas', ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
+        MailSenders::add('iflas', ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
         config([
             'mail.mailers.smtp.transport' => 'array',
-            ]);
+        ]);
         $this->withoutDefer();
         $this->app->instance(SentFolder::class, Mockery::spy(SentFolder::class));
         $sent = [];
@@ -607,32 +609,30 @@ class LetterBuilderTest extends TestCase
 
     public function test_the_templates_placeholder_menu_follows_its_fields(): void
     {
+        // As the editor's data element writes a placeholder (its quotes escaped).
+        $tag = fn (string $key): string => trim((string) json_encode(['key' => $key], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT), '{}');
+
         $page = Livewire::test(CreateLetterTemplate::class)
-            ->assertSeeHtml('data-id="matter.experts"')
-            ->assertDontSeeHtml('data-id="input.amount"')
-            // The signature block is in the blocks menu.
+            ->assertSeeHtml($tag('matter.experts'))
+            ->assertDontSeeHtml($tag('input.amount'))
+            // The signature block is in the signature blocks menu.
             ->assertSee(SignatureBlock::getLabel());
 
         $page->fillForm(['inputs' => [['label' => 'Amount', 'key' => 'amount', 'type' => 'text'], ['label' => 'Due', 'key' => 'due', 'type' => 'date']]])
-            ->assertSeeHtml('data-id="input.amount"')
-            ->assertSeeHtml('data-id="input.due.day"');
+            ->assertSeeHtml($tag('input.amount'))
+            ->assertSeeHtml($tag('input.due.day'));
 
         $page->fillForm(['inputs' => [['label' => 'Due', 'key' => 'due', 'type' => 'date']]])
-            ->assertDontSeeHtml('data-id="input.amount"')
-            ->assertSeeHtml('data-id="input.due"');
+            ->assertDontSeeHtml($tag('input.amount'))
+            ->assertSeeHtml($tag('input.due'));
     }
 
     public function test_the_align_buttons_follow_the_letters_direction(): void
     {
-        // Left and right buttons, each setting start or end by the way the
-        // text runs when clicked — and Justify.
+        // Left, centre, right and justify — the sides of the page, whatever
+        // way the text runs — and the direction of a paragraph.
         $html = Livewire::test(CreateLetterTemplate::class)->html();
-        $this->assertStringContainsString('aria-label="Align left"', $html);
-        $this->assertStringContainsString('aria-label="Align right"', $html);
-        $this->assertStringContainsString("getComputedStyle(\$getEditor().view.dom).direction === 'rtl' : false) ? 'start' : 'end'", $html);
-        $this->assertStringContainsString('aria-label="Align justify"', $html);
-        // Filament's start/end buttons are gone.
-        $this->assertStringNotContainsString('aria-label="Align start"', $html);
+        $this->assertStringContainsString('alignleft aligncenter alignright alignjustify ltr rtl', $html);
 
         // And it prints as right: mPDF has no start or end.
         $this->template->update(['body' => '<p style="text-align: start">يمين</p><p style="text-align: end;">يسار</p><p style="text-align: center">وسط</p>']);

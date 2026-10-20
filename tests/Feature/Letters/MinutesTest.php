@@ -23,6 +23,7 @@ use App\Services\MMS\Letters\LetterDocx;
 use App\Services\MMS\Letters\LetterPdf;
 use App\Services\MMS\Letters\MinutesSender;
 use App\Services\MMS\Letters\MinutesService;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\Select;
 use Filament\Schemas\Components\Wizard;
@@ -106,6 +107,33 @@ class MinutesTest extends TestCase
         $this->assertSame([1, 2], MatterMinutes::query()->orderBy('number')->pluck('number')->all());
     }
 
+    public function test_minutes_with_a_meeting_link_have_a_join_button(): void
+    {
+        $make = fn (int $number, array $extra = []) => MatterMinutes::create([
+            'matter_id' => $this->matter->id,
+            'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => $number,
+            'meeting_at' => '2026-09-30 16:00:00',
+            'status' => MatterMinutes::DRAFT,
+            ...$extra,
+        ]);
+
+        $own = $make(1, ['meeting_link' => 'https://teams.microsoft.com/l/meetup-join/own']);
+        $event = CalendarEvent::create(['matter_id' => $this->matter->id, 'title' => 'جلسة', 'type' => 'single', 'start_datetime' => '2026-09-30 16:00:00', 'online_meeting_url' => 'https://teams.microsoft.com/l/meetup-join/event']);
+        $fromEvent = $make(2, ['calendar_event_id' => $event->id]);
+        $none = $make(3);
+        // Not a web address: no button.
+        $odd = $make(4, ['meeting_link' => 'javascript:alert(1)']);
+
+        $this->minutesPage()
+            ->assertActionVisible(TestAction::make('join')->table($own))
+            ->assertActionHasUrl(TestAction::make('join')->table($own), 'https://teams.microsoft.com/l/meetup-join/own')
+            ->assertActionShouldOpenUrlInNewTab(TestAction::make('join')->table($own))
+            ->assertActionHasUrl(TestAction::make('join')->table($fromEvent), 'https://teams.microsoft.com/l/meetup-join/event')
+            ->assertActionHidden(TestAction::make('join')->table($none))
+            ->assertActionHidden(TestAction::make('join')->table($odd));
+    }
+
     public function test_the_meeting_is_recorded_and_the_minutes_read_as_the_office_writes_them(): void
     {
         $minutes = MatterMinutes::create([
@@ -148,7 +176,7 @@ class MinutesTest extends TestCase
         // Under their capacity, each on a line.
         $this->assertStringContainsString('<p><strong>المدعي:</strong></p><p>السيد/ المهاد لخدمات صيانة السفن – رقم الهوية: <bdo dir="ltr">784-1998-6110217-8</bdo></p>', $html);
         $this->assertStringContainsString('<p><strong>وكيل المدعي:</strong></p><p>الأستاذ/ محمد عبد المقصود – رقم الهوية: <bdo dir="ltr">784-1987-8792411-1</bdo> – رقم الهاتف: <bdo dir="ltr">0501132801</bdo></p>', $html);
-        $this->assertStringContainsString('<p><strong>س عن طبيعة العلاقة بين الطرفين؟</strong></p><p><strong>ج</strong> علاقة توريد عمالة.</p><p>عقب الحاضر بأن الرسالة مختلقة.</p>', $html);
+        $this->assertStringContainsString('<p><strong>س عن طبيعة العلاقة بين الطرفين؟</strong></p><p><strong>ج:</strong> علاقة توريد عمالة.</p><p>عقب الحاضر بأن الرسالة مختلقة.</p>', $html);
         $this->assertStringContainsString('ينتهي يوم الاثنين الموافق 05/10/2026', $html);
         $this->assertStringStartsWith('%PDF', (new LetterPdf(MinutesService::composer($minutes->fresh())))->render());
 
@@ -181,7 +209,7 @@ class MinutesTest extends TestCase
 
         $feed = $this->getJson(route('minutes.live.feed', $minutes))->assertOk();
         $this->assertNotSame($before, $feed->json('version'));
-        $this->assertStringContainsString('<strong>ج</strong> علاقة توريد عمالة.', $feed->json('html'));
+        $this->assertStringContainsString('<strong>ج:</strong> علاقة توريد عمالة.', $feed->json('html'));
         $this->assertStringNotContainsString('<img', $feed->json('html'));
         $this->assertFalse($feed->json('final'));
 

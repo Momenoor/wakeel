@@ -5,10 +5,11 @@ namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 use App\Filament\Concerns\GuardsSentDeletion;
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Concerns\RefreshesMatterPage;
+use App\Filament\Forms\Components\RichText;
 use App\Filament\Mms\Resources\Matters\Pages\RecordMinutes;
 use App\Filament\Support\EmailSendFields;
 use App\Filament\Support\EntryTable;
-use App\Filament\Support\RichEditorDirection;
+use App\Filament\Support\RegenerateFromTemplate;
 use App\Models\Attachment;
 use App\Models\CalendarEvent;
 use App\Models\EmailTemplate;
@@ -32,7 +33,6 @@ use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
-use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
@@ -94,6 +94,8 @@ class MinutesRelationManager extends RelationManager
     {
         return $table
             ->recordTitleAttribute('number')
+            // Each one's meeting with the rows: its Join button reads the link.
+            ->modifyQueryUsing(fn ($query) => $query->with('event'))
             ->defaultSort('number', 'desc')
             ->columns([
                 TextColumn::make('number')->label(__('No.'))->formatStateUsing(fn ($state) => '('.$state.')')->weight('bold')->sortable(),
@@ -117,6 +119,13 @@ class MinutesRelationManager extends RelationManager
             ])
             ->headerActions([$this->newAction()])
             ->recordActions([
+                // Into the meeting, from its minutes: the meeting's own link (Teams), when it has one.
+                Action::make('join')
+                    ->label(__('Join the meeting'))
+                    ->icon('heroicon-o-video-camera')
+                    ->color('success')
+                    ->visible(fn (MatterMinutes $record): bool => $record->joinUrl() !== null)
+                    ->url(fn (MatterMinutes $record): ?string => $record->joinUrl(), shouldOpenInNewTab: true),
                 $this->recordAction(),
                 Action::make('live')
                     ->label(__('Live view'))
@@ -138,6 +147,9 @@ class MinutesRelationManager extends RelationManager
                     $this->signaturesAction(),
                     $this->finaliseAction(),
                     $this->reopenAction(),
+                    // A super admin's: the template's current wording, the minutes' data kept.
+                    RegenerateFromTemplate::action(),
+                    RegenerateFromTemplate::undoAction(),
                     $this->deleteAction(),
                 ]),
             ]);
@@ -420,12 +432,12 @@ class MinutesRelationManager extends RelationManager
                                 $set('body', $template?->body ?? MinutesSender::defaultBody($arabic));
                             }),
                         TextInput::make('subject')->label(__('Subject'))->required()->maxLength(255),
-                        RichEditor::make('body')
+                        RichText::make('body')
                             ->label(__('Email'))
                             ->helperText(__(':placeholder greets each by name; the minutes PDF is attached.', ['placeholder' => '{{recipient.name}}']))
-                            ->toolbarButtons([['bold', 'italic', 'underline', 'link'], ['bulletList', 'orderedList'], ['undo', 'redo']])
-                            ->tap(RichEditorDirection::apply(...))
-                            ->extraInputAttributes(['dir' => MinutesService::composer($record)->isArabic() ? 'rtl' : 'ltr']),
+                            ->email()
+                            ->placeholders(['recipient.name' => __('Recipient name (separate emails)'), ...Honorific::catalog()])
+                            ->contentDirection(MinutesService::composer($record)->isArabic() ? 'rtl' : 'ltr'),
                         // Files of this send's own, beside the minutes.
                         EmailSendFields::attachments('minutes-attachments', __('Sent by email with the minutes, for this send only.')),
                         EmailSendFields::oneDriveFiles($record->matter),

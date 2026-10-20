@@ -20,6 +20,7 @@ use Microsoft\Graph\Generated\Models\ODataErrors\ODataError;
 use ReflectionProperty;
 use RuntimeException;
 use Spatie\Permission\Models\Role;
+use Tests\Support\MailSenders;
 use Tests\TestCase;
 
 class MailSenderTest extends TestCase
@@ -54,7 +55,7 @@ class MailSenderTest extends TestCase
 
     public function test_active_senders_are_listed_and_senders_are_kept_in_the_database_only(): void
     {
-        \Tests\Support\MailSenders::add('iflas', ['name' => 'Iflas', 'address' => 'iflas@jpaemirates.com']);
+        MailSenders::add('iflas', ['name' => 'Iflas', 'address' => 'iflas@jpaemirates.com']);
         $this->microsoft('noreply', 'noreply@jpaemirates.com');
         MailSender::create(['key' => 'old', 'name' => 'Old', 'address' => 'old@x.com', 'driver' => MailSender::MICROSOFT, 'is_active' => false]);
 
@@ -187,7 +188,7 @@ class MailSenderTest extends TestCase
         // What is stored stays as written.
         $this->assertSame('<p>رضا درويش</p><p>Best Regards</p>', $plain->fresh()->signature);
         $this->assertStringContainsString('<div dir="ltr"', SenderMailer::sender('a')['signature']);
-        // For the previews and the editor: images stay inline.
+        // For the previews: images stay inline.
         $this->assertStringContainsString('.wk-mail img', MailSender::previewCss());
         $this->assertStringContainsString('display: inline-block', MailSender::previewCss());
     }

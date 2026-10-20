@@ -6,6 +6,8 @@ use App\Models\LetterFont;
 use App\Models\Letterhead;
 use App\Services\MMS\BulkMailPlaceholders;
 use App\Support\Branding;
+use App\Support\EditorFonts;
+use App\Support\RichHtml;
 use Mpdf\Config\ConfigVariables;
 use Mpdf\Config\FontVariables;
 use Mpdf\HTMLParserMode;
@@ -36,7 +38,11 @@ class LetterPdf
         $default = $latin?->pdfKey() ?? self::FONT;
         $arabicKey = $arabic?->pdfKey() ?? ($latin?->coversArabic() ? $latin->pdfKey() : self::FONT);
 
-        $own = collect([$latin, $arabic])->filter()->keyBy(fn (LetterFont $f) => $f->pdfKey());
+        // Every uploaded font, besides: a word set in one of them in the
+        // editor is drawn in it.
+        $own = collect([$latin, $arabic])->filter()
+            ->merge(rescue(fn () => LetterFont::query()->get()->filter(fn (LetterFont $f) => isset($f->pdfFiles()['R'])), collect(), report: false))
+            ->keyBy(fn (LetterFont $f) => $f->pdfKey());
         $files = $own->flatMap(fn (LetterFont $f) => array_values($f->pdfFiles()))->all();
 
         $tempDir = storage_path('app/mpdf-tmp');
@@ -70,10 +76,41 @@ class LetterPdf
                 ],
             ] + $own->map(fn (LetterFont $f) => [...array_map('basename', $f->pdfFiles()), 'useOTL' => 0xFF])->all(),
             'default_font' => $default,
+            'fonttrans' => self::fontNames($default, $own->all()),
             'autoScriptToLang' => true,
             'autoLangToFont' => $arabicKey !== $default,
             'languageToFont' => new ArabicInBoutros($arabicKey),
         ]);
+    }
+
+    /**
+     * The fonts the editor offers, by the names mPDF looks them up by (lower
+     * case, no spaces): the standard font and each uploaded one as
+     * themselves; Word's own fonts — which the server does not have — in the
+     * letter's font, so a line set in Calibri is not drawn in some other
+     * font the PDF engine picks.
+     *
+     * @param  array<string, LetterFont>  $uploaded  by mPDF key
+     * @return array<string, string>
+     */
+    private static function fontNames(string $default, array $uploaded): array
+    {
+        $key = fn (string $name): string => strtolower(str_replace(' ', '', $name));
+
+        $names = (new FontVariables)->getDefaults()['fonttrans'];
+
+        foreach (['Arial', 'Calibri', 'Cambria', 'Georgia', 'Simplified Arabic', 'Tahoma', 'Times New Roman', 'Traditional Arabic', 'Verdana', 'Wakeel Letter'] as $font) {
+            $names[$key($font)] = $default;
+        }
+
+        $names[$key('Courier New')] = 'dejavusansmono';
+        $names[$key(EditorFonts::STANDARD)] = self::FONT;
+
+        foreach ($uploaded as $pdfKey => $font) {
+            $names[$key(str_replace(["'", '"', '\\', '<', '>', ';', '=', ','], '', (string) $font->name))] = $pdfKey;
+        }
+
+        return $names;
     }
 
     /**
@@ -228,6 +265,7 @@ class LetterPdf
 
         return 'data:'.$mime.';base64,'.base64_encode((string) file_get_contents($path));
     }
+
     /**
      * The letter, its saved signature blocks placed exactly as designed:
      * mPDF can't position inside flowing text, so the text is written up
@@ -240,6 +278,9 @@ class LetterPdf
 
         foreach (SignatureLayouts::split($html) as $part) {
             if (is_string($part)) {
+                // The editor's page breaks as mPDF's, and pictures added in
+                // the editor read from the disk rather than over the web.
+                $part = RichHtml::localImages(str_replace(RichHtml::PAGE_BREAK, '<pagebreak />', $part));
                 $mpdf->WriteHTML($part, $first ? HTMLParserMode::DEFAULT_MODE : HTMLParserMode::HTML_BODY);
                 $first = false;
 

@@ -29,10 +29,10 @@ class InterfaceFont
     private const FALLBACK = "'Boutros MBC Dinkum', Tahoma, sans-serif";
 
     /** Arabic letters, their presentation forms and the Arabic supplement. */
-    private const ARABIC_RANGE = 'U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF';
+    public const ARABIC_RANGE = 'U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF';
 
     /** Everything else. */
-    private const LATIN_RANGE = 'U+0000-05FF, U+0700-074F, U+0780-089F, U+0900-FB4F, U+FE00-FE6F, U+FF00-FFFF';
+    public const LATIN_RANGE = 'U+0000-05FF, U+0700-074F, U+0780-089F, U+0900-FB4F, U+FE00-FE6F, U+FF00-FFFF';
 
     private const CSS_WEIGHTS = [
         'regular' => ['normal', 400],
@@ -103,8 +103,8 @@ class InterfaceFont
 
         // An English font alone covers whatever it has (Calibri has the
         // Arabic letters too); with an Arabic font, each keeps to its own.
-        $faces = ($latin ? self::faces($latin, $arabic ? self::LATIN_RANGE : null) : '')
-            .($arabic ? self::faces($arabic, self::ARABIC_RANGE) : '');
+        $faces = ($latin ? self::faces($latin, self::FAMILY, $arabic ? self::LATIN_RANGE : null) : '')
+            .($arabic ? self::faces($arabic, self::FAMILY, self::ARABIC_RANGE) : '');
 
         // Filament reads its font from --font-family; the regular weight
         // also stands in for the medium and semibold the panels use.
@@ -114,14 +114,18 @@ class InterfaceFont
             .'</style>';
     }
 
-    private static function faces(LetterFont $font, ?string $range): string
+    /**
+     * A font's @font-face rules under the family name given — its own files,
+     * or the copy installed on the computer — for the letters in $range.
+     */
+    public static function faces(LetterFont $font, string $family, ?string $range = null): string
     {
         $name = str_replace(["'", '\\', '<', '>'], '', $font->name);
         $version = $font->updated_at?->timestamp ?? 0;
 
         return collect(self::CSS_WEIGHTS)
             ->filter(fn ($style, string $weight) => filled(($font->files ?? [])[$weight] ?? null))
-            ->map(fn (array $style, string $weight) => "@font-face { font-family: '".self::FAMILY."'; font-style: {$style[0]}; font-weight: {$style[1]}; font-display: swap; "
+            ->map(fn (array $style, string $weight) => "@font-face { font-family: '".str_replace(["'", '\\', '<', '>'], '', $family)."'; font-style: {$style[0]}; font-weight: {$style[1]}; font-display: swap; "
                 ."src: local('{$name}".($weight === 'regular' ? '' : ' '.str_replace('_', ' ', ucwords($weight, '_')))."'), "
                 ."url('".route('letter-fonts.file', ['font' => $font, 'weight' => $weight, 'v' => $version])."') format('truetype');"
                 .($range ? " unicode-range: {$range};" : '').' }')

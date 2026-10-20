@@ -3,20 +3,16 @@
 namespace App\Filament\Mms\Resources\LetterTemplates\Schemas;
 
 use App\Enums\LetterTemplateCategories;
+use App\Filament\Forms\Components\RichText;
 use App\Filament\Mms\Resources\Matters\Schemas\MinutesRecordForm;
-use App\Filament\Support\LiveMergeTags;
-use App\Filament\Support\RichEditorDirection;
 use App\Models\EmailTemplate;
 use App\Models\Letterhead;
 use App\Models\LetterItem;
-use App\Services\MMS\Letters\Blocks\SavedSignatureBlock;
-use App\Services\MMS\Letters\Blocks\SignatureBlock;
 use App\Services\MMS\Letters\LetterComposer;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Repeater;
-use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
@@ -66,22 +62,29 @@ class LetterTemplateForm
                             ->options(['ar' => __('Arabic'), 'en' => __('English')])
                             ->default('ar')
                             ->helperText(__('Arabic letters are laid out right to left.'))
+                            // The editor turns with it.
+                            ->live()
                             ->required(),
                         Select::make('letterhead_id')
                             ->label(__('Letterhead'))
                             ->relationship('letterhead', 'name')
                             ->placeholder(__('The default letterhead'))
+                            // The editor's page is as wide as its text.
+                            ->live()
                             ->preload(),
                         Select::make('letter_font_id')
                             ->label(__('English font'))
                             ->relationship('font', 'name')
                             ->placeholder(__('The standard font'))
                             ->helperText(__('For the PDF. Fonts are added under Communication → Templates → Fonts; Word documents use the font set there.'))
+                            // The editor writes in it too.
+                            ->live()
                             ->preload(),
                         Select::make('arabic_font_id')
                             ->label(__('Arabic font'))
                             ->relationship('arabicFont', 'name')
                             ->placeholder(__('As the English font, if it has Arabic letters; otherwise the standard one'))
+                            ->live()
                             ->preload(),
                         Select::make('recipients_layout')
                             ->label(__('Recipients layout'))
@@ -284,25 +287,18 @@ class LetterTemplateForm
                 Section::make(__('Letter'))
                     ->columnSpanFull()
                     ->schema([
-                        // The placeholder menu is redrawn as fields are added,
-                        // renamed or removed above.
-                        LiveMergeTags::wrap(
-                            RichEditor::make('body')
-                                ->label(__('Letter'))->hiddenLabel()
-                                ->required()
-                                ->toolbarButtons([
-                                    ['bold', 'italic', 'underline', 'textColor', 'highlight'],
-                                    ['h2', 'h3', 'bulletList', 'orderedList', 'horizontalRule', 'table'],
-                                    ['alignStart', 'alignCenter', 'alignEnd', 'alignJustify'],
-                                    ['mergeTags', 'customBlocks'],
-                                    ['undo', 'redo'],
-                                ])
-                                ->mergeTags(fn (Get $get) => LetterComposer::catalog(null, $get('inputs') ?? []))
-                                ->customBlocks([SavedSignatureBlock::class, SignatureBlock::class])
-                                ->tap(RichEditorDirection::apply(...))
-                                ->extraInputAttributes(fn (Get $get) => ['dir' => $get('locale') === 'en' ? 'ltr' : 'rtl', 'style' => 'min-height: 30rem;']),
-                            fn (Get $get) => LetterComposer::catalog(null, $get('inputs') ?? []),
-                        ),
+                        // Laid out as the letter's page, in its fonts and
+                        // direction; the placeholder menu follows the fields
+                        // added, renamed or removed above.
+                        RichText::make('body')
+                            ->label(__('Letter'))->hiddenLabel()
+                            ->required()
+                            ->document()
+                            ->placeholders(fn (Get $get) => LetterComposer::catalog(null, $get('inputs') ?? []))
+                            ->signatureBlocks()
+                            ->contentDirection(fn (Get $get) => $get('locale') === 'en' ? 'ltr' : 'rtl')
+                            ->letterFonts(fn (Get $get) => [$get('letter_font_id'), $get('arabic_font_id')])
+                            ->letterhead(fn (Get $get) => $get('letterhead_id')),
 
                         TextEntry::make('placeholder_help')
                             ->hiddenLabel()

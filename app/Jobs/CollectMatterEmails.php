@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Enums\NotificationType;
 use App\Models\Matter;
 use App\Models\User;
 use App\Services\MMS\MatterReplyCollector;
@@ -68,6 +69,8 @@ class CollectMatterEmails implements ShouldQueue
         return Notification::make()
             ->title(trans_choice('No new replies.|:count new reply kept.|:count new replies kept.', $result['replies'], ['count' => $result['replies']]))
             ->body(array_filter($points) !== [] ? MatterReplyCollector::bullets($points) : null)
-            ->status($warn ? 'warning' : 'success');
+            ->status($warn ? 'warning' : 'success')
+            // About emails: in the bell's Emails tab.
+            ->viewData([NotificationType::DATA_KEY => NotificationType::MATTER_EMAIL_RECEIVED->value]);
     }
 }

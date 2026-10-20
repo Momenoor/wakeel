@@ -112,6 +112,16 @@ enum NotificationType: string
         return in_array($channel, $this->defaults(), true);
     }
 
+    /**
+     * Those about emails — the bell's Emails tab (App\Livewire\TabbedDatabaseNotifications).
+     *
+     * @return list<self>
+     */
+    public static function aboutEmails(): array
+    {
+        return [self::MATTER_REPLY_RECEIVED, self::MATTER_EMAIL_RECEIVED, self::MATTER_EMAIL_UNFILED];
+    }
+
     public function supports(NotificationChannel $channel): bool
     {
         return in_array($channel, $this->channels(), true);

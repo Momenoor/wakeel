@@ -3,17 +3,16 @@
 namespace App\Filament\Mms\Resources\BulkMailCampaigns\Schema;
 
 use App\Enums\BulkMailCampaignStatus;
+use App\Filament\Forms\Components\RichText;
 use App\Filament\Support\EmailSendFields;
-use App\Filament\Support\LiveMergeTags;
-use App\Filament\Support\RichEditorDirection;
 use App\Models\BulkMailCampaign;
+use App\Models\MailSender;
 use App\Models\Matter;
 use App\Services\MMS\BulkMailPlaceholders;
 use App\Services\MMS\SenderMailer;
 use App\Support\CompanyContact;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
-use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
@@ -40,17 +39,15 @@ class BulkMailCampaignSchema
                         ->hint(__('bulk_mail.hints.subject')),
                     // The placeholder menu: the recipient's fields, the keys
                     // defined below, the imported columns and, with a matter
-                    // chosen, its details — redrawn as any of them change.
-                    LiveMergeTags::wrap(
-                        RichEditor::make('body')
-                            ->label(__('bulk_mail.fields.body'))
-                            ->required()
-                            ->hint(__('bulk_mail.hints.body'))
-                            ->mergeTags(fn ($get, ?BulkMailCampaign $record) => self::mergeTags($get, $record))
-                            ->extraInputAttributes(['dir' => 'auto'], merge: true)->tap(RichEditorDirection::apply(...))
-                            ->live(),
-                        fn ($get, ?BulkMailCampaign $record) => self::mergeTags($get, $record),
-                    )->columnSpanFull(),
+                    // chosen, its details — following them as they change.
+                    RichText::make('body')
+                        ->label(__('bulk_mail.fields.body'))
+                        ->required()
+                        ->hint(__('bulk_mail.hints.body'))
+                        ->email()
+                        ->placeholders(fn ($get, ?BulkMailCampaign $record) => self::mergeTags($get, $record))
+                        ->contentDirection('auto')
+                        ->columnSpanFull(),
 
                     Select::make('from_sender_key')
                         ->label(__('bulk_mail.fields.from_sender'))
@@ -62,7 +59,7 @@ class BulkMailCampaignSchema
 
                     TextEntry::make('sender_signature')
                         ->label(__('bulk_mail.fields.signature_preview'))
-                        ->state(fn ($get) => new HtmlString(\App\Models\MailSender::previewCss().'<div class="wk-mail">'.(string) (SenderMailer::all()[$get('from_sender_key')]['signature'] ?? '').'</div>'))
+                        ->state(fn ($get) => new HtmlString(MailSender::previewCss().'<div class="wk-mail">'.(string) (SenderMailer::all()[$get('from_sender_key')]['signature'] ?? '').'</div>'))
                         ->visible(fn ($get) => filled($get('from_sender_key'))),
                 ])->columns(2),
 

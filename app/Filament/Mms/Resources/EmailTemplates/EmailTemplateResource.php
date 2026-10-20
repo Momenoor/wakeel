@@ -3,9 +3,9 @@
 namespace App\Filament\Mms\Resources\EmailTemplates;
 
 use App\Filament\Concerns\HasModuleGate;
+use App\Filament\Forms\Components\RichText;
 use App\Filament\Mms\Clusters\Templates;
 use App\Filament\Mms\Resources\EmailTemplates\Pages\ManageEmailTemplates;
-use App\Filament\Support\RichEditorDirection;
 use App\Models\EmailTemplate;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterMailer;
@@ -15,7 +15,6 @@ use BackedEnum;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ReplicateAction;
-use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
@@ -114,20 +113,13 @@ class EmailTemplateResource extends Resource
                 ->splitKeys(['Tab', ' ', ',', 'Enter'])
                 ->nestedRecursiveRules(['email'])
                 ->columnSpanFull(),
-            RichEditor::make('body')
+            RichText::make('body')
                 ->label(__('Email'))
                 ->default(fn () => LetterMailer::defaultCoverNote(true))
                 ->required()
-                ->toolbarButtons([
-                    ['bold', 'italic', 'underline', 'link'],
-                    ['bulletList', 'orderedList'],
-                    ['alignStart', 'alignCenter', 'alignEnd'],
-                    ['mergeTags'],
-                    ['undo', 'redo'],
-                ])
-                ->mergeTags(fn () => static::placeholders())
-                ->tap(RichEditorDirection::apply(...))
-                ->extraInputAttributes(fn (Get $get) => ['dir' => $get('locale') === 'en' ? 'ltr' : 'rtl'])
+                ->email()
+                ->placeholders(fn () => static::placeholders())
+                ->contentDirection(fn (Get $get) => $get('locale') === 'en' ? 'ltr' : 'rtl')
                 ->columnSpanFull(),
             Toggle::make('is_default')->label(__('Default')),
             Toggle::make('is_active')->label(__('Active'))->default(true),

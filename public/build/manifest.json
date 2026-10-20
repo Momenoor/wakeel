@@ -84,7 +84,7 @@
     "src": "node_modules/pdfjs-dist/wasm/qcms_bg.wasm"
   },
   "resources/css/app.css": {
-    "file": "assets/app-BRLtk4l7.css",
+    "file": "assets/app-CQETqeH3.css",
     "src": "resources/css/app.css",
     "isEntry": true,
     "name": "app",
@@ -93,7 +93,7 @@
     ]
   },
   "resources/css/filament/admin/theme.css": {
-    "file": "assets/theme-CzMIwHlK.css",
+    "file": "assets/theme-CbbexDVD.css",
     "src": "resources/css/filament/admin/theme.css",
     "isEntry": true,
     "name": "theme",
@@ -102,7 +102,7 @@
     ]
   },
   "resources/css/print.css": {
-    "file": "assets/print-DLhk__a-.css",
+    "file": "assets/print-B7NJKLxY.css",
     "src": "resources/css/print.css",
     "isEntry": true,
     "name": "print",
@@ -159,6 +159,12 @@
       "_is-pdf-rCPWVA7f.js",
       "_pdf-lib-CGrX5hqQ.js"
     ]
+  },
+  "resources/js/rich-text-field.js": {
+    "file": "assets/rich-text-field-CMnqyJGj.js",
+    "name": "rich-text-field",
+    "src": "resources/js/rich-text-field.js",
+    "isEntry": true
   },
   "resources/js/signature-pad-field.js": {
     "file": "assets/signature-pad-field-BjNwMCJD.js",

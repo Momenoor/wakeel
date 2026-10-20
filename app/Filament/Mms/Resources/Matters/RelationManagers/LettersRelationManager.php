@@ -6,9 +6,10 @@ use App\Enums\LetterTemplateCategories;
 use App\Filament\Concerns\GuardsSentDeletion;
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Concerns\RefreshesMatterPage;
+use App\Filament\Forms\Components\RichText;
 use App\Filament\Support\EmailSendFields;
 use App\Filament\Support\OverlapConfirmation;
-use App\Filament\Support\RichEditorDirection;
+use App\Filament\Support\RegenerateFromTemplate;
 use App\Filament\Support\SameDayMeetings;
 use App\Models\CalendarEvent;
 use App\Models\EmailTemplate;
@@ -20,8 +21,6 @@ use App\Models\Matter;
 use App\Models\MatterLetter;
 use App\Models\MatterMinutes;
 use App\Models\Party;
-use App\Services\MMS\Letters\Blocks\SavedSignatureBlock;
-use App\Services\MMS\Letters\Blocks\SignatureBlock;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterMailer;
@@ -40,7 +39,6 @@ use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Repeater;
-use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
@@ -129,6 +127,9 @@ class LettersRelationManager extends RelationManager
                 $this->emailAction(),
                 ActionGroup::make([
                     $this->editAction(),
+                    // A super admin's: the template's current wording, the letter's data kept.
+                    RegenerateFromTemplate::action(),
+                    RegenerateFromTemplate::undoAction(),
                     $this->deleteAction(),
                 ]),
             ]);
@@ -229,16 +230,10 @@ class LettersRelationManager extends RelationManager
                             ->required()
                             ->maxLength(255)
                             ->live(onBlur: true),
-                        RichEditor::make('body')
+                        RichText::make('body')
                             ->label(__('Email'))
-                            ->toolbarButtons([
-                                ['bold', 'italic', 'underline', 'link'],
-                                ['bulletList', 'orderedList'],
-                                ['alignStart', 'alignCenter', 'alignEnd'],
-                                ['undo', 'redo'],
-                            ])
-                            ->tap(RichEditorDirection::apply(...))
-                            ->extraInputAttributes(['dir' => LetterIssuer::composerFor($record)->isArabic() ? 'rtl' : 'ltr'])
+                            ->email()
+                            ->contentDirection(LetterIssuer::composerFor($record)->isArabic() ? 'rtl' : 'ltr')
                             ->live(onBlur: true)
                             ->visible(fn (Get $get) => $get('mode') === LetterMailer::ATTACHMENT),
                         Placeholder::make('as_body')
@@ -527,7 +522,12 @@ class LettersRelationManager extends RelationManager
                     ->description(__('Changes here are for this letter only — the template stays as it is.'))
                     ->collapsible()
                     ->schema([
-                        self::bodyEditor(fn () => LetterComposer::catalog($record->template, $record->template?->inputs), fn () => LetterIssuer::composerFor($record)->isArabic()),
+                        self::bodyEditor(
+                            fn () => LetterComposer::catalog($record->template, $record->template?->inputs),
+                            fn () => LetterIssuer::composerFor($record)->isArabic(),
+                            fn () => [$record->template?->letter_font_id, $record->template?->arabic_font_id],
+                            fn (Get $get) => $get('letterhead_id') ?: $record->letterhead_id,
+                        ),
                     ]),
             ])
             ->action(function (MatterLetter $record, array $data): void {
@@ -717,24 +717,21 @@ class LettersRelationManager extends RelationManager
      * the same {{placeholders}} menu.
      *
      * @param  Closure(): array<string, string>  $mergeTags
-     * @param  Closure(): bool  $arabic
+     * @param  Closure  $arabic  whether it is Arabic (it may take Get)
+     * @param  Closure|null  $fonts  [English font id, Arabic font id]
+     * @param  Closure|null  $letterhead  the id of the letterhead whose page it is laid out on
      */
-    private static function bodyEditor(Closure $mergeTags, Closure $arabic): RichEditor
+    private static function bodyEditor(Closure $mergeTags, Closure $arabic, ?Closure $fonts = null, ?Closure $letterhead = null): RichText
     {
-        return RichEditor::make('body')
+        return RichText::make('body')
             ->hiddenLabel()
             ->required()
-            ->toolbarButtons([
-                ['bold', 'italic', 'underline', 'textColor', 'highlight'],
-                ['h2', 'h3', 'bulletList', 'orderedList', 'horizontalRule', 'table'],
-                ['alignStart', 'alignCenter', 'alignEnd', 'alignJustify'],
-                ['mergeTags', 'customBlocks'],
-                ['undo', 'redo'],
-            ])
-            ->mergeTags($mergeTags)
-            ->customBlocks([SavedSignatureBlock::class, SignatureBlock::class])
-            ->tap(RichEditorDirection::apply(...))
-            ->extraInputAttributes(fn () => ['dir' => $arabic() ? 'rtl' : 'ltr', 'style' => 'min-height: 24rem;']);
+            ->document()
+            ->placeholders($mergeTags)
+            ->signatureBlocks()
+            ->contentDirection(fn (RichText $component): string => $component->evaluate($arabic) ? 'rtl' : 'ltr')
+            ->letterFonts($fonts)
+            ->letterhead($letterhead);
     }
 
     /**
@@ -791,7 +788,7 @@ class LettersRelationManager extends RelationManager
                 Section::make(__('The letter'))
                     ->description(__('{{recipients}} places the addressees and {{signature}} the signature; the menu has the matter\'s other details.'))
                     ->schema([
-                        self::bodyEditor(fn () => LetterComposer::catalog(), fn (): bool => true),
+                        self::bodyEditor(fn () => LetterComposer::catalog(), fn (Get $get): bool => $get('locale') !== 'en', letterhead: fn (Get $get) => $get('letterhead_id')),
                     ]),
                 ...$this->meetingFields(null, ownDateAndTime: true),
             ])

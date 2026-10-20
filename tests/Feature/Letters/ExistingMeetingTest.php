@@ -111,6 +111,8 @@ class ExistingMeetingTest extends TestCase
 
     public function test_the_meetings_of_a_day_are_listed_under_a_new_one(): void
     {
+        // Its dates are fixed: the clock too, or the day it names becomes today (and then the past) and the test changes.
+        $this->travelTo('2026-10-01 09:00:00');
         $this->event(['start_datetime' => '2026-10-20 10:00:00', 'end_datetime' => '2026-10-20 11:00:00']);
         $this->event(['title' => 'في يوم آخر', 'start_datetime' => '2026-10-22 09:00:00', 'end_datetime' => '2026-10-22 10:00:00']);
 

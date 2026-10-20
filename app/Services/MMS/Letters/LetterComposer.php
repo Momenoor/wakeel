@@ -834,7 +834,7 @@ class LetterComposer
             ->filter(fn ($item) => is_array($item) && filled($item['text'] ?? null))
             ->map(fn (array $item): string => ($item['type'] ?? 'question') === 'comment'
                 ? '<p>'.$text($item['text']).'</p>'
-                : '<p><strong>'.$q.' '.$text($item['text']).'</strong></p><p><strong>'.$a.'</strong> '.$text($item['answer'] ?? '').'</p>')
+                : '<p><strong>'.$q.' '.$text($item['text']).'</strong></p><p><strong>'.$a.':</strong> '.$text($item['answer'] ?? '').'</p>')
             ->implode('');
     }
 

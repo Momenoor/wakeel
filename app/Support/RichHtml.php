@@ -2,6 +2,10 @@
 
 namespace App\Support;
 
+use DOMDocument;
+use DOMElement;
+use Illuminate\Support\Facades\Storage;
+
 /**
  * The rich editor's HTML made ready for what reads it outside a browser —
  * mPDF, Word's HTML import, Outlook: the editor's start/end alignment as
@@ -13,9 +17,244 @@ namespace App\Support;
  */
 class RichHtml
 {
+    /** TinyMCE's page break, as it keeps it (the PDF and Word turn it into a new page). */
+    public const PAGE_BREAK = '<!-- pagebreak -->';
+
     public static function forOutput(string $html, bool $rtl): string
     {
-        return self::cellAlignment(TextDirection::physicalAlignment(self::columnWidths(self::colours(self::emptyLines($html))), $rtl));
+        return self::cellAlignment(self::tables(TextDirection::physicalAlignment(self::columnWidths(self::colours(self::emptyLines($html))), $rtl)));
+    }
+
+    /**
+     * TinyMCE's tables as every reader draws them alike. The editor puts the
+     * borders on the table (border="1", a width and colour in its style) and
+     * the column widths and row heights on <col> and <tr>; mPDF, Word and
+     * Outlook read them from the cells. Each cell is given what it has not
+     * set itself: the table's border, its column's width (its columns' sum
+     * when it spans several), its row's height. Old tables — no border, no
+     * <col> — are left as they were.
+     */
+    public static function tables(string $html): string
+    {
+        if (! preg_match('/<table\b[^>]*\sborder=|<col\b|<tr\b[^>]*height/i', $html)) {
+            return $html;
+        }
+
+        $dom = new DOMDocument;
+        $errors = libxml_use_internal_errors(true);
+
+        try {
+            $dom->loadHTML('<?xml encoding="UTF-8"><html><body><div id="wk-root">'.$html.'</div></body></html>', LIBXML_HTML_NODEFDTD | LIBXML_NONET);
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($errors);
+        }
+
+        $root = $dom->getElementById('wk-root');
+        if (! $root) {
+            return $html;
+        }
+
+        foreach (iterator_to_array($root->getElementsByTagName('table')) as $table) {
+            self::table($table);
+        }
+
+        $out = '';
+        foreach ($root->childNodes as $node) {
+            $out .= $dom->saveHTML($node);
+        }
+
+        return $out;
+    }
+
+    private static function table(DOMElement $table): void
+    {
+        $style = self::style($table->getAttribute('style'));
+        $attribute = $table->hasAttribute('border') ? (float) $table->getAttribute('border') : null;
+
+        // The table's border: its style's, or border="n" (n px).
+        $width = $style['border-width'] ?? (preg_match('/^([\d.]+(?:px|pt)?)\b/', $style['border'] ?? '', $m) ? $m[1] : null);
+        $width ??= $attribute !== null ? ($attribute > 0 ? $attribute.'px' : '0') : null;
+        $none = ($width !== null && (float) $width == 0) || in_array($style['border-style'] ?? '', ['none', 'hidden'], true);
+        $colour = $style['border-color'] ?? (preg_match('/(#[0-9a-f]{3,6}|rgb\([^)]*\))/i', $style['border'] ?? '', $c) ? $c[1] : null);
+
+        // Its columns' widths, in order (a <col span="2"> counts twice).
+        $columns = [];
+        foreach (self::children($table, 'colgroup') as $group) {
+            foreach (self::children($group, 'col') as $col) {
+                $colWidth = self::style($col->getAttribute('style'))['width'] ?? ($col->getAttribute('width') ?: null);
+                for ($i = 0; $i < max(1, (int) $col->getAttribute('span')); $i++) {
+                    $columns[] = $colWidth;
+                }
+            }
+        }
+
+        // The cells on the grid, spans counted: where each one starts.
+        $taken = [];
+        $r = 0;
+        foreach (self::rows($table) as $row) {
+            $rowHeight = self::style($row->getAttribute('style'))['height'] ?? ($row->getAttribute('height') ?: null);
+            $c = 0;
+
+            foreach (self::children($row, 'td', 'th') as $cell) {
+                while (isset($taken[$r][$c])) {
+                    $c++;
+                }
+
+                $span = max(1, (int) $cell->getAttribute('colspan'));
+                $rows = max(1, (int) $cell->getAttribute('rowspan'));
+                for ($y = 0; $y < $rows; $y++) {
+                    for ($x = 0; $x < $span; $x++) {
+                        $taken[$r + $y][$c + $x] = true;
+                    }
+                }
+
+                $own = self::style($cell->getAttribute('style'));
+                $add = [];
+
+                if ($width !== null && ! self::hasBorder($own)) {
+                    $add[] = $none ? 'border: none' : 'border: '.(is_numeric($width) ? $width.'px' : $width).' solid '.($colour ?? '#9ca3af');
+                } elseif ($colour !== null && ! isset($own['border-color']) && ! isset($own['border'])) {
+                    $add[] = 'border-color: '.$colour;
+                }
+
+                if (! isset($own['width']) && ! $cell->hasAttribute('width')) {
+                    $sum = self::sum(array_slice($columns, $c, $span));
+                    if ($sum !== null) {
+                        $add[] = 'width: '.$sum;
+                    }
+                }
+
+                if ($rowHeight !== null && ! isset($own['height']) && ! $cell->hasAttribute('height') && $rows === 1) {
+                    $add[] = 'height: '.$rowHeight;
+                }
+
+                if ($add !== []) {
+                    $current = rtrim(trim($cell->getAttribute('style')), ';');
+                    $cell->setAttribute('style', ($current !== '' ? $current.'; ' : '').implode('; ', $add));
+                }
+
+                $c += $span;
+            }
+
+            $r++;
+        }
+    }
+
+    /**
+     * A cell says something of its own borders.
+     *
+     * @param  array<string, string>  $style
+     */
+    private static function hasBorder(array $style): bool
+    {
+        foreach (['border', 'border-width', 'border-style', 'border-top', 'border-right', 'border-bottom', 'border-left'] as $property) {
+            if (isset($style[$property])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Widths added up when they are all in one unit (%, px, pt…); null otherwise.
+     *
+     * @param  list<?string>  $widths
+     */
+    private static function sum(array $widths): ?string
+    {
+        if ($widths === [] || in_array(null, $widths, true)) {
+            return null;
+        }
+
+        $units = array_unique(array_map(fn (string $w): string => preg_replace('/^[\d.]+/', '', trim($w)) ?: 'px', $widths));
+
+        if (count($units) !== 1) {
+            return null;
+        }
+
+        $total = array_sum(array_map(fn (string $w): float => (float) $w, $widths));
+
+        return round($total, 4).$units[0];
+    }
+
+    /**
+     * A style attribute as property => value.
+     *
+     * @return array<string, string>
+     */
+    public static function style(string $style): array
+    {
+        $properties = [];
+
+        foreach (explode(';', $style) as $declaration) {
+            if (str_contains($declaration, ':')) {
+                [$property, $value] = explode(':', $declaration, 2);
+                $properties[strtolower(trim($property))] = trim($value);
+            }
+        }
+
+        return $properties;
+    }
+
+    /**
+     * @return list<DOMElement>
+     */
+    private static function children(DOMElement $parent, string ...$names): array
+    {
+        return array_values(array_filter(iterator_to_array($parent->childNodes), fn ($node) => $node instanceof DOMElement && in_array(strtolower($node->nodeName), $names, true)));
+    }
+
+    /**
+     * A table's own rows — in its head, body and foot — not a nested table's.
+     *
+     * @return list<DOMElement>
+     */
+    private static function rows(DOMElement $table): array
+    {
+        $rows = self::children($table, 'tr');
+
+        foreach (self::children($table, 'thead', 'tbody', 'tfoot') as $section) {
+            array_push($rows, ...self::children($section, 'tr'));
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Pictures added in the editor are kept with the public files and
+     * written into the text by their address; the PDF and Word read them
+     * straight from the disk instead.
+     */
+    public static function localImages(string $html): string
+    {
+        if (! str_contains($html, '<img')) {
+            return $html;
+        }
+
+        $prefixes = array_values(array_unique(array_filter([
+            rtrim((string) rescue(fn () => Storage::disk('public')->url(''), '', report: false), '/').'/',
+            rtrim(url('storage'), '/').'/',
+            '/storage/',
+        ])));
+
+        return preg_replace_callback('/(<img\b[^>]*?\ssrc=")([^"]+)(")/i', function (array $m) use ($prefixes): string {
+            $src = html_entity_decode($m[2], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+            foreach ($prefixes as $prefix) {
+                if (str_starts_with($src, $prefix)) {
+                    $relative = rawurldecode(substr($src, strlen($prefix)));
+                    $path = rescue(fn () => Storage::disk('public')->path($relative), null, report: false);
+
+                    if (! str_contains($relative, '..') && $path && is_file($path)) {
+                        return $m[1].e($path).$m[3];
+                    }
+                }
+            }
+
+            return $m[0];
+        }, $html) ?? $html;
     }
 
     /**
@@ -128,6 +367,7 @@ class RichHtml
             $html,
         ) ?? $html;
     }
+
     /**
      * An oklch() colour ("0.577 0.245 27.325", lightness as a number or a
      * percentage, an opacity after "/" ignored) as #rrggbb; null when it

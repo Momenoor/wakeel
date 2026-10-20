@@ -73,6 +73,14 @@ class MatterMinutes extends Model
 
     /** Sent to the attendees to sign, and what came back. */
     /** Sent to anyone — by email or WhatsApp — at least once. */
+    /** Where the meeting is joined: the link kept on the minutes, else its calendar meeting's (Teams). */
+    public function joinUrl(): ?string
+    {
+        $url = $this->meeting_link ?: $this->event?->online_meeting_url;
+
+        return filled($url) && preg_match('~^https?://~i', (string) $url) === 1 ? (string) $url : null;
+    }
+
     public function wasSent(): bool
     {
         return $this->deliveries()->whereNotNull('sent_at')->exists();

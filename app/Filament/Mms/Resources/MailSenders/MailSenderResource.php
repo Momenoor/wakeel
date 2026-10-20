@@ -3,9 +3,9 @@
 namespace App\Filament\Mms\Resources\MailSenders;
 
 use App\Filament\Concerns\HasModuleGate;
+use App\Filament\Forms\Components\RichText;
 use App\Filament\Mms\Resources\MailSenders\Pages\ManageMailSenders;
 use App\Filament\Shared\Clusters\Settings;
-use App\Filament\Support\RichEditorDirection;
 use App\Models\MailSender;
 use App\Services\MMS\MailboxDetector;
 use App\Services\MMS\SenderMailer;
@@ -14,9 +14,7 @@ use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Hidden;
-use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
-use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -32,7 +30,6 @@ use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 
 /**
@@ -187,9 +184,8 @@ class MailSenderResource extends Resource
                 ->collapsed()
                 ->columnSpanFull()
                 ->schema([
-                    // Its logos side by side stay so in the editor too.
-                    Placeholder::make('signature_css')->hiddenLabel()->content(new HtmlString(MailSender::previewCss())),
-                    RichEditor::make('signature')->hiddenLabel()->extraAttributes(['class' => 'wk-signature'], merge: true)->extraInputAttributes(['dir' => 'ltr'], merge: true)->tap(RichEditorDirection::apply(...)),
+                    // Its logos side by side, as in the email (the editor shows pictures in the line).
+                    RichText::make('signature')->hiddenLabel()->email()->contentDirection('ltr'),
                 ]),
         ]);
     }

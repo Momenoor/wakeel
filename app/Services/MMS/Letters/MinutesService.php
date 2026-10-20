@@ -480,26 +480,35 @@ class MinutesService
 
             self::rememberContactDetails($minutes);
 
-            $pdf = (new LetterPdf(self::composer($minutes->fresh())))->render();
-            $path = 'attachments/minutes/'.$minutes->matter_id.'/'.$minutes->number.'-'.Str::random(6).'.pdf';
-            Storage::disk('public')->put($path, $pdf);
-
-            $minutes->attachment?->delete();
-
-            $attachment = $minutes->matter->attachments()->create([
-                'user_id' => $userId,
-                'type' => 'minutes',
-                'path' => $path,
-                'name' => self::fileName($minutes).'.pdf',
-                'size' => strlen($pdf),
-                'extension' => 'pdf',
-            ]);
-
-            $minutes->update(['attachment_id' => $attachment->getKey()]);
+            self::storePdf($minutes->fresh(), $userId);
             MatterProgressRecorder::meetingHeld($minutes, $userId);
 
             return $minutes->fresh();
         });
+    }
+
+    /**
+     * Finalised minutes' PDF, made and kept with the matter's attachments in place of the one before (when
+     * finalised, and again when made again from their template — DocumentRegenerator).
+     */
+    public static function storePdf(MatterMinutes $minutes, ?int $userId = null): void
+    {
+        $pdf = (new LetterPdf(self::composer($minutes)))->render();
+        $path = 'attachments/minutes/'.$minutes->matter_id.'/'.$minutes->number.'-'.Str::random(6).'.pdf';
+        Storage::disk('public')->put($path, $pdf);
+
+        $minutes->attachment?->delete();
+
+        $attachment = $minutes->matter->attachments()->create([
+            'user_id' => $userId,
+            'type' => 'minutes',
+            'path' => $path,
+            'name' => self::fileName($minutes).'.pdf',
+            'size' => strlen($pdf),
+            'extension' => 'pdf',
+        ]);
+
+        $minutes->update(['attachment_id' => $attachment->getKey()]);
     }
 
     /**

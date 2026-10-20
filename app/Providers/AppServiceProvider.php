@@ -25,7 +25,6 @@ use Carbon\Translator as CarbonTranslator;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Infolists\Components\TextEntry;
-use Filament\Support\Assets\Js;
 use Filament\Support\Enums\Width;
 use Filament\Support\Facades\FilamentAsset;
 use Filament\Support\Facades\FilamentView;
@@ -112,13 +111,11 @@ class AppServiceProvider extends ServiceProvider
             fn (): string => auth()->check() ? view('filament.partials.notification-sound')->render() : '',
         );
 
-        // The rich editors' font size (App\Filament\Support\EditorFontSize),
-        // loaded only where an editor is.
-        FilamentAsset::register([
-            Js::make('rich-content-plugins/font-size', resource_path('js/filament/rich-content-plugins/font-size.js'))->loadedOnRequest(),
-            Js::make('rich-content-plugins/cell-background', resource_path('js/filament/rich-content-plugins/cell-background.js'))->loadedOnRequest(),
-            Js::make('rich-content-plugins/table-format', resource_path('js/filament/rich-content-plugins/table-format.js'))->loadedOnRequest(),
-        ]);
+        // TinyMCE (App\Filament\Forms\Components\RichText) is self-hosted
+        // and loaded only on a page with an editor (resources/js/rich-text-field.js).
+        // The package it comes with would put TinyMCE from a CDN, its own
+        // editor script and its styles on every page: they are taken off.
+        self::withoutTinyEditorAssets();
 
         // The font that draws the Dirham sign, on every panel page.
         FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): string => (string) Currency::fontLink());
@@ -141,34 +138,6 @@ class AppServiceProvider extends ServiceProvider
 
         // The theme's corners, spacing and sidebar (its colours: App\Http\Middleware\ApplyTheme).
         FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): string => app(ThemeManager::class)->css());
-
-        // The rich editors' placeholders (merge tags) stay inside the editor.
-        // Filament keeps each on one line, so a long name — an Arabic label,
-        // "رابط اجتماع Teams (عند إنشائه مع الخطاب)" — ran past its narrow side
-        // panel and out of the frame, and forty of them made the panel
-        // taller than the editor. They wrap, and the list scrolls. Beside
-        // the text (a wide editor), the panel runs the editor's full height —
-        // no taller, no shorter — and the list scrolls within it.
-        FilamentView::registerRenderHook(
-            PanelsRenderHook::HEAD_END,
-            fn (): string => '<style>'
-                .'.fi-fo-rich-editor-panels { min-width: 0; }'
-                .'.fi-fo-rich-editor-merge-tags-list { max-height: 24rem; overflow-y: auto; overscroll-behavior: contain; }'
-                .'@container (min-width: 42rem) {'
-                .'.fi-fo-rich-editor .fi-fo-rich-editor-panels { position: relative; flex-shrink: 0; }'
-                .'.fi-fo-rich-editor .fi-fo-rich-editor-panels > .fi-fo-rich-editor-panel { position: absolute; inset: 0; display: flex; flex-direction: column; }'
-                .'.fi-fo-rich-editor .fi-fo-rich-editor-panels > .fi-fo-rich-editor-panel > :not(.fi-fo-rich-editor-panel-header) { flex: 1 1 0; min-height: 0; max-height: none; overflow-y: auto; overscroll-behavior: contain; align-content: flex-start; }'
-                .'}'
-                .'.fi-fo-rich-editor-merge-tag-btn { max-width: 100%; }'
-                .'.fi-fo-rich-editor span[data-type=mergeTag] { white-space: normal; overflow-wrap: anywhere; max-width: 100%; }'
-                // The text written in an editor at 12 pt — not the interface's
-                // size, which each user can change — and a placeholder at the
-                // size of the text around it, until a size is picked for it.
-                .'.fi-fo-rich-editor .fi-fo-rich-editor-content .fi-prose, .fi-fo-rich-editor .tiptap.ProseMirror { font-size: 12pt; line-height: 1.6; }'
-                .'.fi-fo-rich-editor .tiptap.ProseMirror h1 { font-size: 18pt; } .fi-fo-rich-editor .tiptap.ProseMirror h2 { font-size: 16pt; } .fi-fo-rich-editor .tiptap.ProseMirror h3 { font-size: 14pt; }'
-                .'.fi-fo-rich-editor .tiptap.ProseMirror span[data-type=mergeTag] { font-size: inherit; }'
-                .'</style>',
-        );
 
         // On a phone, typing in a field smaller than 16px makes the iPhone
         // zoom the whole page in (and leave it zoomed): the chat box, the
@@ -309,5 +278,24 @@ class AppServiceProvider extends ServiceProvider
                 }
             }, "notifications-updated-{$userId}");
         });
+    }
+
+    /**
+     * The visualbuilder/filament-tinyeditor package's assets off every page:
+     * TinyMCE from a CDN, the language packs from another, its editor script
+     * and its styles. App\Filament\Forms\Components\RichText brings its own,
+     * self-hosted, where an editor is.
+     */
+    private static function withoutTinyEditorAssets(): void
+    {
+        $package = 'visualbuilder/filament-tinyeditor';
+
+        (function () use ($package): void {
+            foreach (['scripts', 'styles', 'alpineComponents'] as $assets) {
+                if (property_exists($this, $assets)) {
+                    unset($this->{$assets}[$package]);
+                }
+            }
+        })->call(FilamentAsset::getFacadeRoot());
     }
 }

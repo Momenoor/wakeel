@@ -10,11 +10,12 @@ export default defineConfig({
                 'resources/js/app.js',
                 'resources/css/filament/admin/theme.css',
                 'resources/css/print.css',
-                // Loaded by Alpine (x-load) only where they are used: the Sign PDF and Split PDF pages and the
-                // SignaturePad field.
+                // Loaded by Alpine (x-load) only where they are used: the Sign PDF and Split PDF pages, the
+                // SignaturePad field and the RichText field (TinyMCE itself: public/vendor/tinymce).
                 'resources/js/pdf-signer.js',
                 'resources/js/pdf-splitter.js',
                 'resources/js/signature-pad-field.js',
+                'resources/js/rich-text-field.js',
             ],
             refresh: true,
         }),

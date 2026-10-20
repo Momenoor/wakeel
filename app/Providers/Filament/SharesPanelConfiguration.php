@@ -27,6 +27,7 @@ use App\Http\Middleware\RedirectToInstaller;
 use App\Http\Middleware\TrackCurrentSystem;
 use App\Http\Middleware\TrackPerformance;
 use App\Http\Middleware\TrackUserLastSeen;
+use App\Livewire\TabbedDatabaseNotifications;
 use App\Support\Branding;
 use App\Support\Live;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
@@ -138,7 +139,8 @@ trait SharesPanelConfiguration
             // The users plugin fixes some labels at boot, in whatever language
             // was active then; re-translated when drawn instead.
             ->bootUsing(fn () => TranslateUsersPluginLabels::apply())
-            ->databaseNotifications()
+            // In two tabs: everything, and what is about emails.
+            ->databaseNotifications(livewireComponent: TabbedDatabaseNotifications::class)
             // With Pusher, new notifications arrive live (NotificationsUpdated),
             // so polling is only a slow safety net.
             ->databaseNotificationsPolling(fn (): ?string => Live::viaPusher() ? null : '10s')

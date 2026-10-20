@@ -18,6 +18,7 @@ use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
+use Tests\Support\MailSenders;
 use Tests\TestCase;
 
 class BulkMailPlaceholdersTest extends TestCase
@@ -28,7 +29,7 @@ class BulkMailPlaceholdersTest extends TestCase
     {
         parent::setUp();
 
-        \Tests\Support\MailSenders::add('test', [
+        MailSenders::add('test', [
             'username' => 'sender@example.com', 'address' => 'sender@example.com', 'name' => 'Test Sender',
             'password' => 'secret', 'host' => 'mail.example.com', 'port' => 587, 'encryption' => 'tls',
         ]);
@@ -218,33 +219,38 @@ class BulkMailPlaceholdersTest extends TestCase
         ));
         Filament::setCurrentPanel('admin');
 
-        $page = Livewire::test(CreateBulkMailCampaign::class)
-            ->assertSeeHtml('data-id="name"')
-            ->assertDontSeeHtml('data-id="claim_amount"')
-            ->assertDontSeeHtml('data-id="matter.court"');
-        $key = fn (string $html): string => preg_match('/wire:key="(merge-tags-body-[0-9a-f]+)"/', $html, $m) ? $m[1] : '';
-        $before = $key($page->html());
+        // As the editor's data element writes a placeholder (its quotes escaped).
+        $tag = fn (string $key): string => trim((string) json_encode(['key' => $key], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT), '{}');
 
-        // A key defined, and a matter chosen: both in the menu, which is
-        // drawn again (a new key) to show them.
+        $page = Livewire::test(CreateBulkMailCampaign::class)
+            ->assertSeeHtml($tag('name'))
+            ->assertDontSeeHtml($tag('claim_amount'))
+            ->assertDontSeeHtml($tag('matter.court'));
+
+        // A key defined, and a matter chosen: both in the menu, read by the
+        // editor each time it opens — no need to draw it again.
         $page->fillForm(['placeholders' => ['claim_amount'], 'matter_id' => $this->matter()->id])
-            ->assertSeeHtml('data-id="claim_amount"')
-            ->assertSeeHtml('data-id="matter.court"')
-            ->assertSeeHtml('data-id="matter.custom.Trustee Name"');
-        $this->assertNotSame($before, $key($page->html()));
+            ->assertSeeHtml($tag('claim_amount'))
+            ->assertSeeHtml($tag('matter.court'))
+            ->assertSeeHtml($tag('matter.custom.Trustee Name'));
 
         // Removed again: gone from the menu.
-        $page->fillForm(['placeholders' => []])->assertDontSeeHtml('data-id="claim_amount"');
+        $page->fillForm(['placeholders' => []])->assertDontSeeHtml($tag('claim_amount'));
     }
 
     public function test_placeholders_inserted_from_the_menu_are_filled(): void
     {
+        $matter = $this->matter();
         $campaign = $this->campaign(
-            $this->matter(),
+            $matter,
             'Notice',
             '<p>Dear <span data-type="mergeTag" data-id="name">Recipient name</span>, matter <span data-type="mergeTag" data-id="matter.reference">Matter number/year</span>.</p>',
         );
 
+        $this->assertStringContainsString('Dear Emirates Trading LLC, matter 125/2025.', $campaign->renderBody($this->recipient($campaign)));
+
+        // As TinyMCE keeps them: typed {{key}}.
+        $campaign = $this->campaign($matter, 'Notice', '<p>Dear {{name}}, matter {{matter.reference}}.</p>');
         $this->assertStringContainsString('Dear Emirates Trading LLC, matter 125/2025.', $campaign->renderBody($this->recipient($campaign)));
     }
 
@@ -257,12 +263,10 @@ class BulkMailPlaceholdersTest extends TestCase
 
         $html = Livewire::test(CreateBulkMailCampaign::class)->html();
 
-        $this->assertStringContainsString('aria-label="Align left"', $html);
-        $this->assertStringContainsString('aria-label="Align right"', $html);
-        $this->assertStringContainsString('aria-label="Align justify"', $html);
-        $this->assertStringNotContainsString('aria-label="Align start"', $html);
+        // The sides of the page, and each paragraph's direction.
+        $this->assertStringContainsString('alignleft aligncenter alignright alignjustify ltr rtl', $html);
         // No language of its own: Arabic typed in the English interface runs right to left.
-        $this->assertStringContainsString('dir="auto"', $html);
+        $this->assertStringContainsString('unicode-bidi: plaintext', $html);
     }
 
     public function test_the_alignment_goes_out_as_left_and_right(): void
