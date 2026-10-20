@@ -5,11 +5,11 @@ namespace App\Services\MMS\Letters;
 use App\Enums\LetterTemplateCategories;
 use App\Models\LetterTemplate;
 use Illuminate\Support\Str;
-use PhpOffice\PhpWord\IOFactory;
 
 /**
- * Makes a letter template from a Word file: its text and tables become the
- * template's HTML, and the {{placeholders}} typed in it stay as they are.
+ * Makes a letter template from a Word file: its text, tables, lists and
+ * pictures become the template's HTML as the editor (TinyMCE) writes it, and
+ * the {{placeholders}} typed in it stay as they are.
  * Every {{input.KEY}} found becomes a text field in the template's form, to
  * be refined (type, label, required) in the editor afterwards.
  */
@@ -35,23 +35,14 @@ class WordTemplateImporter
     }
 
     /**
-     * The Word file's content as HTML (the part between <body> and </body>),
-     * its tables evened out so the rich editor has nothing to pad.
+     * The Word file's content as the rich editor writes HTML (WordToEditorHtml), its tables evened out so
+     * the editor has nothing to pad.
      */
     public function html(string $path): string
     {
-        $word = IOFactory::load($path, 'Word2007');
-        $writer = IOFactory::createWriter($word, 'HTML');
+        $html = app(WordToEditorHtml::class)->fromFile($path);
 
-        ob_start();
-        $writer->save('php://output');
-        $html = (string) ob_get_clean();
-
-        if (preg_match('~<body[^>]*>(.*)</body>~is', $html, $m)) {
-            $html = $m[1];
-        }
-
-        return RaggedTables::even($this->mendPlaceholders(trim($html)));
+        return RaggedTables::even($this->mendPlaceholders($html));
     }
 
     /**

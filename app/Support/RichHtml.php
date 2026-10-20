@@ -22,7 +22,145 @@ class RichHtml
 
     public static function forOutput(string $html, bool $rtl): string
     {
-        return self::cellAlignment(self::tables(TextDirection::physicalAlignment(self::columnWidths(self::colours(self::emptyLines($html))), $rtl)));
+        return self::cellAlignment(self::tables(self::layout(TextDirection::physicalAlignment(self::columnWidths(self::colours(self::emptyLines($html))), $rtl), $rtl)));
+    }
+
+    /**
+     * What a browser lays out and mPDF, Word and Outlook do not. A box whose items sit in a row
+     * (display: flex) — "Claimant … المدعي" — as a borderless table of one row, its items the cells: the
+     * first at its start and the last at its end as space-between sets them, all at the start or the end
+     * or the centre as the others do. And a span shown as a block (display: block) — an English line
+     * under its Arabic — on a line of its own.
+     */
+    public static function layout(string $html, bool $rtl): string
+    {
+        if (! preg_match('/display\s*:\s*(?:inline-)?(?:flex|block)/i', $html)) {
+            return $html;
+        }
+
+        [$dom, $root] = self::dom($html);
+        if (! $root) {
+            return $html;
+        }
+
+        $styled = fn (array $displays): array => array_values(array_filter(
+            iterator_to_array($root->getElementsByTagName('*')),
+            fn (DOMElement $element): bool => in_array(strtolower(self::style($element->getAttribute('style'))['display'] ?? ''), $displays, true),
+        ));
+
+        // Innermost first: a row inside a row is a table inside its cell.
+        foreach (array_reverse($styled(['flex', 'inline-flex'])) as $box) {
+            self::flexAsTable($dom, $box, $rtl);
+        }
+
+        foreach ($styled(['block']) as $element) {
+            if (in_array(strtolower($element->nodeName), ['span', 'strong', 'b', 'em', 'i', 'small', 'a', 'font', 'u'], true)) {
+                self::onItsOwnLine($dom, $element);
+            }
+        }
+
+        return self::html($root, $dom);
+    }
+
+    private static function flexAsTable(DOMDocument $dom, DOMElement $box, bool $rtl): void
+    {
+        $style = self::style($box->getAttribute('style'));
+        $direction = strtolower($style['direction'] ?? '') ?: ($box->getAttribute('dir') ?: ($rtl ? 'rtl' : 'ltr'));
+        [$start, $end] = $direction === 'rtl' ? ['right', 'left'] : ['left', 'right'];
+
+        // Its items: its elements, and any words between them.
+        $items = [];
+        foreach (iterator_to_array($box->childNodes) as $node) {
+            if ($node instanceof DOMElement) {
+                $items[] = $node;
+            } elseif (trim($node->textContent ?? '') !== '') {
+                $span = $dom->createElement('span');
+                $span->appendChild($node->cloneNode(true));
+                $items[] = $span;
+            }
+        }
+
+        $justify = strtolower($style['justify-content'] ?? 'flex-start');
+        $last = count($items) - 1;
+        $align = fn (int $i): string => match (true) {
+            $justify === 'center' => 'center',
+            in_array($justify, ['flex-end', 'end', 'right'], true) => $end,
+            in_array($justify, ['space-between', 'space-around', 'space-evenly'], true) && $last > 0 => match ($i) {
+                0 => $start,
+                $last => $end,
+                default => 'center',
+            },
+            default => $start,
+        };
+        $vertical = match (strtolower($style['align-items'] ?? '')) {
+            'center' => 'middle',
+            'flex-end', 'end' => 'bottom',
+            default => 'top',
+        };
+
+        $table = $dom->createElement('table');
+        $table->setAttribute('dir', $direction);
+        $table->setAttribute('style', 'width: 100%; border-collapse: collapse; border: none;');
+        $row = $dom->createElement('tr');
+        $table->appendChild($dom->createElement('tbody'))->appendChild($row);
+
+        foreach ($items as $i => $item) {
+            $cell = $dom->createElement('td');
+            $cell->setAttribute('data-bw', '0');
+            $cell->setAttribute('style', 'border: none; padding: 0; text-align: '.$align($i).'; vertical-align: '.$vertical.';');
+            $cell->appendChild($item);
+            $row->appendChild($cell);
+        }
+
+        $box->parentNode?->replaceChild($table, $box);
+    }
+
+    /** A span shown as a block: a line break before and after it where there is something there. */
+    private static function onItsOwnLine(DOMDocument $dom, DOMElement $element): void
+    {
+        $style = self::style($element->getAttribute('style'));
+        unset($style['display']);
+        $element->setAttribute('style', implode('; ', array_map(fn (string $property, string $value): string => $property.': '.$value, array_keys($style), $style)));
+
+        $content = fn (?\DOMNode $node): bool => $node !== null && ($node instanceof DOMElement ? strtolower($node->nodeName) !== 'br' : trim($node->textContent ?? '') !== '');
+
+        if ($content($element->previousSibling)) {
+            $element->parentNode?->insertBefore($dom->createElement('br'), $element);
+        }
+        if ($content($element->nextSibling)) {
+            $element->parentNode?->insertBefore($dom->createElement('br'), $element->nextSibling);
+        }
+    }
+
+    /**
+     * The HTML as a document to work on, inside a root of its own.
+     *
+     * @return array{0: DOMDocument, 1: ?DOMElement}
+     */
+    private static function dom(string $html): array
+    {
+        $dom = new DOMDocument;
+        $errors = libxml_use_internal_errors(true);
+
+        try {
+            $dom->loadHTML('<?xml encoding="UTF-8"><html><body><div id="wk-root">'.$html.'</div></body></html>', LIBXML_HTML_NODEFDTD | LIBXML_NONET);
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($errors);
+        }
+
+        return [$dom, $dom->getElementById('wk-root')];
+    }
+
+    /** The root's content as HTML again. */
+    private static function html(DOMElement $root, DOMDocument $dom): string
+    {
+        $out = '';
+        foreach ($root->childNodes as $node) {
+            $out .= $dom->saveHTML($node);
+        }
+
+        return $out;
     }
 
     /**
@@ -36,21 +174,11 @@ class RichHtml
      */
     public static function tables(string $html): string
     {
-        if (! preg_match('/<table\b[^>]*\sborder=|<col\b|<tr\b[^>]*height/i', $html)) {
+        if (! preg_match('/<table\b[^>]*\sborder=|<table\b[^>]*style="[^"]*\bborder\s*:\s*(?:none|0)|<col\b|<tr\b[^>]*height/i', $html)) {
             return $html;
         }
 
-        $dom = new DOMDocument;
-        $errors = libxml_use_internal_errors(true);
-
-        try {
-            $dom->loadHTML('<?xml encoding="UTF-8"><html><body><div id="wk-root">'.$html.'</div></body></html>', LIBXML_HTML_NODEFDTD | LIBXML_NONET);
-        } finally {
-            libxml_clear_errors();
-            libxml_use_internal_errors($errors);
-        }
-
-        $root = $dom->getElementById('wk-root');
+        [$dom, $root] = self::dom($html);
         if (! $root) {
             return $html;
         }
@@ -59,12 +187,7 @@ class RichHtml
             self::table($table);
         }
 
-        $out = '';
-        foreach ($root->childNodes as $node) {
-            $out .= $dom->saveHTML($node);
-        }
-
-        return $out;
+        return self::html($root, $dom);
     }
 
     private static function table(DOMElement $table): void
@@ -75,7 +198,8 @@ class RichHtml
         // The table's border: its style's, or border="n" (n px).
         $width = $style['border-width'] ?? (preg_match('/^([\d.]+(?:px|pt)?)\b/', $style['border'] ?? '', $m) ? $m[1] : null);
         $width ??= $attribute !== null ? ($attribute > 0 ? $attribute.'px' : '0') : null;
-        $none = ($width !== null && (float) $width == 0) || in_array($style['border-style'] ?? '', ['none', 'hidden'], true);
+        $none = ($width !== null && (float) $width == 0) || in_array($style['border-style'] ?? '', ['none', 'hidden'], true)
+            || in_array(strtolower(trim($style['border'] ?? '')), ['none', 'hidden', '0'], true);
         $colour = $style['border-color'] ?? (preg_match('/(#[0-9a-f]{3,6}|rgb\([^)]*\))/i', $style['border'] ?? '', $c) ? $c[1] : null);
 
         // Its columns' widths, in order (a <col span="2"> counts twice).
@@ -112,8 +236,16 @@ class RichHtml
                 $own = self::style($cell->getAttribute('style'));
                 $add = [];
 
-                if ($width !== null && ! self::hasBorder($own)) {
+                if (($width !== null || $none) && ! self::hasBorder($own)) {
                     $add[] = $none ? 'border: none' : 'border: '.(is_numeric($width) ? $width.'px' : $width).' solid '.($colour ?? '#9ca3af');
+                } elseif ($none && ! isset($own['border'])) {
+                    // A table with no border whose cell draws only some of its own (a line under it): the
+                    // other sides none — a browser draws nothing there, mPDF its default line.
+                    foreach (['top', 'right', 'bottom', 'left'] as $side) {
+                        if (! isset($own['border-'.$side])) {
+                            $add[] = 'border-'.$side.': none';
+                        }
+                    }
                 } elseif ($colour !== null && ! isset($own['border-color']) && ! isset($own['border'])) {
                     $add[] = 'border-color: '.$colour;
                 }

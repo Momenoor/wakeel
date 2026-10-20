@@ -384,10 +384,23 @@ class LetterPdf
             .$header('letterFirst', ['first', 'all'])
             .$header('letterRest', ['rest', 'all'])
             .($flowHtml !== '' ? '<htmlpagefooter name="letterAfterText">'.$flowHtml.'</htmlpagefooter>' : '')
-            .$this->composer->bodyHtml()
+            .($this->realBold() ? $this->composer->bodyHtml() : self::outlinedBold($this->composer->bodyHtml()))
             // The last page's, straight after its last line.
             .($flowHtml !== '' ? '<div style="margin-top: 4mm;">'.$flowHtml.'</div>' : '')
             .'</body></html>';
+    }
+
+    /**
+     * Text made bold by its own style (a cell's font-weight: bold), drawn with the outline the stylesheet
+     * gives <strong> — the font has one weight, so mPDF had nothing bolder to draw it in.
+     */
+    private static function outlinedBold(string $html): string
+    {
+        return preg_replace_callback(
+            '/\sstyle="([^"]*\bfont-weight\s*:\s*(?:bold|bolder|[6-9]00)\b[^"]*)"/i',
+            fn (array $m): string => ' style="'.rtrim(trim($m[1]), ';').'; text-outline-width: 0.12mm; text-outline-color: #111827;"',
+            $html,
+        ) ?? $html;
     }
 
     /**

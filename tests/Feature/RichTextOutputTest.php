@@ -241,4 +241,26 @@ class RichTextOutputTest extends TestCase
         $this->assertStringContainsString('<td><p>c</p></td>', $html);
         $this->assertSame('<p>no table</p>', RichHtml::columnWidths('<p>no table</p>'));
     }
+
+    public function test_a_design_made_in_a_browser_reads_the_same_in_the_pdf_word_and_email(): void
+    {
+        // Two labels at either end of a cell (display: flex): a borderless row, the first at its start, the last at its end.
+        $flex = RichHtml::forOutput('<table style="width: 100%; border: none;"><tr><td style="border-bottom: 1px solid #85744E;"><span style="display: flex; justify-content: space-between; align-items: center; direction: ltr;"><span>Claimant</span><span dir="rtl">المدعي</span></span></td></tr></table>', true);
+        $this->assertStringContainsString('<table dir="ltr" style="width: 100%; border-collapse: collapse; border: none;">', $flex);
+        $this->assertMatchesRegularExpression('~text-align: left; vertical-align: middle;"><span>Claimant</span></td>~', $flex);
+        $this->assertMatchesRegularExpression('~text-align: right; vertical-align: middle;"><span dir="rtl">المدعي</span></td>~', $flex);
+        $this->assertStringNotContainsString('display: flex', $flex);
+
+        // A table with no border: a cell drawing only the line under it draws nothing on its other sides.
+        $this->assertStringContainsString('border-bottom: 1px solid #85744E; border-top: none; border-right: none; border-left: none', $flex);
+
+        // An English line under its Arabic (display: block): on a line of its own.
+        $this->assertSame(
+            '<p><strong>البرنامج الزمني <br><span style="font-size: 11pt">Timetable</span></strong></p>',
+            RichHtml::forOutput('<p><strong>البرنامج الزمني <span style="display: block; font-size: 11pt;">Timetable</span></strong></p>', true),
+        );
+
+        // A table that never said (an old one): as it was.
+        $this->assertSame('<table><tr><td>a</td></tr></table>', RichHtml::forOutput('<table><tr><td>a</td></tr></table>', false));
+    }
 }
