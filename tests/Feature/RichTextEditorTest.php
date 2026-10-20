@@ -97,6 +97,11 @@ class RichTextEditorTest extends TestCase
         $this->assertStringContainsString('div[data-type|data-id|data-config', $config['extended_valid_elements']);
         $this->assertSame(1, preg_match('/'.$config['noneditable_regexp'].'/', '<p>{{matter.number}}</p>'));
         $this->assertSame(0, preg_match('/'.$config['noneditable_regexp'].'/', '<a href="mailto:{{matter.email}}">'));
+        // A condition too, its > as the page's HTML writes it.
+        $condition = '{{if minutes.attendees.count &gt; 1 ? الحاضرين : الحاضر}}';
+        $this->assertSame(1, preg_match('/'.$config['noneditable_regexp'].'/u', '<p>عن '.$condition.' و</p>', $match));
+        $this->assertSame($condition, $match[0]);
+        $this->assertSame(0, preg_match('/'.$config['noneditable_regexp'].'/', '<p>{{a <b>b</b>}}</p>'));
         $this->assertSame(SignatureBlock::ID, $config['wakeel']['blocks']['signature']);
         $this->assertSame(SavedSignatureBlock::ID, $config['wakeel']['blocks']['saved']);
         // The letter's page and fonts.

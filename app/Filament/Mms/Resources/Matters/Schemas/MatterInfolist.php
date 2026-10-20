@@ -116,11 +116,13 @@ class MatterInfolist
             ->columns(1)
             ->components([
                 static::summarySection(),
+                // The open tab in the address (?tab=fees, ?tab=letters …), by a fixed key — the same in Arabic and English,
+                // so a link opens the same tab for anyone.
                 Tabs::make('matter')
                     ->persistTabInQueryString('tab')
                     ->columnSpanFull()
                     ->tabs([
-                        Tab::make(__('Overview'))
+                        Tab::make(__('Overview'))->key('overview', isInheritable: false)
                             ->icon('heroicon-o-document-text')
                             ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_OVERVIEW_TAB))
                             ->columns(2)
@@ -136,7 +138,7 @@ class MatterInfolist
                                 ]),
                             ]),
                         // Each step so far — letters, meetings, emails, reports …
-                        Tab::make(__('Progress'))
+                        Tab::make(__('Progress'))->key('progress', isInheritable: false)
                             ->icon('heroicon-o-queue-list')
                             ->visible(fn ($record): bool => ScreenPermissions::can(ScreenPermissions::MATTER_PROGRESS_TAB)
                                 && ProgressRelationManager::canViewForRecord($record, ViewMatter::class))
@@ -146,19 +148,19 @@ class MatterInfolist
                                     'pageClass' => ViewMatter::class,
                                 ])->key('matter-progress'),
                             ]),
-                        Tab::make(__('Sessions & Events'))
+                        Tab::make(__('Sessions & Events'))->key('sessions', isInheritable: false)
                             ->icon('heroicon-o-calendar-days')
                             ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_SESSIONS_TAB))
                             ->badge(fn ($record) => $record ? ($record->linkedCalendarEvents()->where('start_datetime', '>=', now()->startOfDay())->count() ?: null) : null)
                             ->schema([static::eventsSection()]),
-                        Tab::make(__('Fees & Incentive'))
+                        Tab::make(__('Fees & Incentive'))->key('fees', isInheritable: false)
                             ->icon('heroicon-o-banknotes')
                             ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_FEES_TAB))
                             ->schema([
                                 static::feesSection(),
                                 static::incentiveSection(),
                             ]),
-                        Tab::make(__('Requests & Notes'))
+                        Tab::make(__('Requests & Notes'))->key('requests', isInheritable: false)
                             ->icon('heroicon-o-chat-bubble-left-right')
                             ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_REQUESTS_TAB))
                             ->badge(fn ($record) => $record ? ($record->requests()->where('status', RequestStatus::PENDING->value)->count() ?: null) : null)
@@ -169,7 +171,7 @@ class MatterInfolist
                                 static::requestsSection(),
                                 static::notesSection(),
                             ]),
-                        Tab::make(__('Files'))
+                        Tab::make(__('Files'))->key('files', isInheritable: false)
                             ->icon('heroicon-o-paper-clip')
                             ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_FILES_TAB))
                             ->columns(['default' => 1, 'lg' => 2])
@@ -180,7 +182,7 @@ class MatterInfolist
                         // The letters table, in its own tab rather than below
                         // the page — the same relation manager, with its
                         // Issue letter action.
-                        Tab::make(__('Letters'))
+                        Tab::make(__('Letters'))->key('letters', isInheritable: false)
                             ->icon('heroicon-o-envelope')
                             ->visible(fn ($record): bool => ScreenPermissions::can(ScreenPermissions::MATTER_LETTERS_TAB)
                                 && LettersRelationManager::canViewForRecord($record, ViewMatter::class)
@@ -195,7 +197,7 @@ class MatterInfolist
                             ]),
                         // Meeting minutes (محاضر): prepared, filled in at the
                         // meeting, finalised.
-                        Tab::make(__('Meeting minutes'))
+                        Tab::make(__('Meeting minutes'))->key('minutes', isInheritable: false)
                             ->icon('heroicon-o-clipboard-document-list')
                             ->visible(fn ($record): bool => ScreenPermissions::can(ScreenPermissions::MATTER_MINUTES_TAB)
                                 && MinutesRelationManager::canViewForRecord($record, ViewMatter::class)
@@ -208,7 +210,7 @@ class MatterInfolist
                                 ])->key('matter-minutes'),
                             ]),
                         // Its bulk mail campaigns — to creditors, parties …
-                        Tab::make(__('Bulk mail'))
+                        Tab::make(__('Bulk mail'))->key('bulk-mail', isInheritable: false)
                             ->icon('heroicon-o-megaphone')
                             ->visible(fn ($record): bool => ScreenPermissions::can(ScreenPermissions::MATTER_BULK_MAIL_TAB)
                                 && BulkMailRelationManager::canViewForRecord($record, ViewMatter::class))
@@ -220,7 +222,7 @@ class MatterInfolist
                                 ])->key('matter-bulk-mail'),
                             ]),
                         // Its email log: sent from it, and came in from its parties.
-                        Tab::make(__('Emails'))
+                        Tab::make(__('Emails'))->key('emails', isInheritable: false)
                             ->icon('heroicon-o-inbox')
                             ->visible(fn ($record): bool => ScreenPermissions::can(ScreenPermissions::MATTER_EMAILS_TAB)
                                 && EmailsRelationManager::canViewForRecord($record, ViewMatter::class))

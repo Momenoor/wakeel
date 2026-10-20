@@ -9,6 +9,7 @@ use App\Models\EmailTemplate;
 use App\Models\Letterhead;
 use App\Models\LetterItem;
 use App\Services\MMS\Letters\LetterComposer;
+use App\Support\EditorFonts;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
@@ -279,7 +280,9 @@ class LetterTemplateForm
                         Placeholder::make('attendees_preview')
                             ->label(__('Preview'))
                             ->columnSpanFull()
-                            ->content(fn (Get $get) => new HtmlString('<div dir="'.($get('locale') === 'en' ? 'ltr' : 'rtl').'" style="font-size: .9rem;">'
+                            // In the letter's fonts, as the minutes are written.
+                            ->content(fn (Get $get) => new HtmlString('<style>'.EditorFonts::make([$get('letter_font_id'), $get('arabic_font_id')])->letterCss('.wk-attendees-preview').'</style>'
+                                .'<div class="wk-attendees-preview" dir="'.($get('locale') === 'en' ? 'ltr' : 'rtl').'" style="font-size: .9rem;">'
                                 .LetterComposer::attendeesHtml(self::sampleAttendees($get('locale') !== 'en'), (array) ($get('minutes_attendees') ?? []), $get('locale') !== 'en')
                                 .'</div>')),
                     ]),
@@ -297,8 +300,7 @@ class LetterTemplateForm
                             ->placeholders(fn (Get $get) => LetterComposer::catalog(null, $get('inputs') ?? []))
                             ->signatureBlocks()
                             ->contentDirection(fn (Get $get) => $get('locale') === 'en' ? 'ltr' : 'rtl')
-                            ->letterFonts(fn (Get $get) => [$get('letter_font_id'), $get('arabic_font_id')])
-                            ->letterhead(fn (Get $get) => $get('letterhead_id')),
+                            ->letterFonts(fn (Get $get) => [$get('letter_font_id'), $get('arabic_font_id')]),
 
                         TextEntry::make('placeholder_help')
                             ->hiddenLabel()

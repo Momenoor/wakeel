@@ -526,7 +526,6 @@ class LettersRelationManager extends RelationManager
                             fn () => LetterComposer::catalog($record->template, $record->template?->inputs),
                             fn () => LetterIssuer::composerFor($record)->isArabic(),
                             fn () => [$record->template?->letter_font_id, $record->template?->arabic_font_id],
-                            fn (Get $get) => $get('letterhead_id') ?: $record->letterhead_id,
                         ),
                     ]),
             ])
@@ -719,9 +718,8 @@ class LettersRelationManager extends RelationManager
      * @param  Closure(): array<string, string>  $mergeTags
      * @param  Closure  $arabic  whether it is Arabic (it may take Get)
      * @param  Closure|null  $fonts  [English font id, Arabic font id]
-     * @param  Closure|null  $letterhead  the id of the letterhead whose page it is laid out on
      */
-    private static function bodyEditor(Closure $mergeTags, Closure $arabic, ?Closure $fonts = null, ?Closure $letterhead = null): RichText
+    private static function bodyEditor(Closure $mergeTags, Closure $arabic, ?Closure $fonts = null): RichText
     {
         return RichText::make('body')
             ->hiddenLabel()
@@ -730,8 +728,7 @@ class LettersRelationManager extends RelationManager
             ->placeholders($mergeTags)
             ->signatureBlocks()
             ->contentDirection(fn (RichText $component): string => $component->evaluate($arabic) ? 'rtl' : 'ltr')
-            ->letterFonts($fonts)
-            ->letterhead($letterhead);
+            ->letterFonts($fonts);
     }
 
     /**
@@ -788,7 +785,7 @@ class LettersRelationManager extends RelationManager
                 Section::make(__('The letter'))
                     ->description(__('{{recipients}} places the addressees and {{signature}} the signature; the menu has the matter\'s other details.'))
                     ->schema([
-                        self::bodyEditor(fn () => LetterComposer::catalog(), fn (Get $get): bool => $get('locale') !== 'en', letterhead: fn (Get $get) => $get('letterhead_id')),
+                        self::bodyEditor(fn () => LetterComposer::catalog(), fn (Get $get): bool => $get('locale') !== 'en'),
                     ]),
                 ...$this->meetingFields(null, ownDateAndTime: true),
             ])

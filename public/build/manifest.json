@@ -93,7 +93,7 @@
     ]
   },
   "resources/css/filament/admin/theme.css": {
-    "file": "assets/theme-CbbexDVD.css",
+    "file": "assets/theme-DfMnE6DI.css",
     "src": "resources/css/filament/admin/theme.css",
     "isEntry": true,
     "name": "theme",
@@ -161,7 +161,7 @@
     ]
   },
   "resources/js/rich-text-field.js": {
-    "file": "assets/rich-text-field-CMnqyJGj.js",
+    "file": "assets/rich-text-field-DxYk_lj3.js",
     "name": "rich-text-field",
     "src": "resources/js/rich-text-field.js",
     "isEntry": true

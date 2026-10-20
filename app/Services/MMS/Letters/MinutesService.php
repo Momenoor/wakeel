@@ -8,6 +8,7 @@ use App\Models\MatterMinutes;
 use App\Models\MatterParty;
 use App\Models\Party;
 use App\Services\MMS\MatterProgressRecorder;
+use App\Support\EditorFonts;
 use App\Support\FileName;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -130,6 +131,8 @@ class MinutesService
     public static function liveHtml(MatterMinutes $minutes): string
     {
         $html = preg_replace('/<img\b(?![^>]*\bsrc="data:)[^>]*>/i', '', self::composer($minutes, true)->bodyHtml()) ?? '';
+        // Each line in the font it was set in; one the screen lacks in the letter's, as the PDF.
+        $html = EditorFonts::withLetterFallback($html);
 
         // Sizes as written (pt) relative to the text's 12 pt — so they keep
         // their proportions on the screen and grow with its A+ / A−.

@@ -2,7 +2,6 @@
 
 namespace App\Filament\Forms\Components;
 
-use App\Models\Letterhead;
 use App\Models\SignatureLayout;
 use App\Services\MMS\BulkMailService;
 use App\Services\MMS\Letters\Blocks\SavedSignatureBlock;
@@ -23,7 +22,6 @@ use Visualbuilder\FilamentTinyEditor\TinyEditor;
  *       ->signatureBlocks()                       // the signature blocks menu (letters)
  *       ->contentDirection(fn (Get $get) => 'rtl')
  *       ->letterFonts(fn (Get $get) => [$latinFontId, $arabicFontId])
- *       ->letterhead(fn (Get $get) => $get('letterhead_id'))   // the page's width, as the PDF's
  *
  * Placeholders are kept as typed {{key}} text (shown as one piece in the
  * editor), signature blocks as <div data-type="customBlock" …> — what the
@@ -48,8 +46,6 @@ class RichText extends TinyEditor
     protected string|Closure|null $contentDirection = null;
 
     protected array|Closure|null $letterFonts = null;
-
-    protected int|Closure|null $letterheadId = null;
 
     protected function setUp(): void
     {
@@ -168,14 +164,6 @@ class RichText extends TinyEditor
         return $this;
     }
 
-    /** The letterhead whose page the text is laid out on (its width); none: the default one. */
-    public function letterhead(int|Closure|null $letterheadId): static
-    {
-        $this->letterheadId = $letterheadId;
-
-        return $this;
-    }
-
     /**
      * The TinyMCE toolbar: Word's for a document, an email's subset otherwise —
      * the align buttons in the order they sit in the interface's direction.
@@ -249,10 +237,10 @@ class RichText extends TinyEditor
             'convert_urls' => true,
             'indent_use_margin' => true,
 
-            // Placeholders are one piece — not inside a tag (a link's address),
-            // nor one with < or > in it ({{if count > 1 ? …}}), left as text —
-            // and signature blocks keep their data.
-            'noneditable_regexp' => '\{\{[^{}<>&]+\}\}(?![^<]*>)',
+            // Placeholders are one piece — a condition too ({{if count > 1 ? …}},
+            // its > written &gt;), not one inside a tag (a link's address) — and
+            // signature blocks keep their data.
+            'noneditable_regexp' => '\{\{(?:[^{}<>&]|&(?:gt|lt|amp|quot|#39|nbsp);)+\}\}(?![^<]*>)',
             'extended_valid_elements' => 'div[data-type|data-id|data-config|data-label|contenteditable|class|style|dir|align|title|id]',
             'invalid_elements' => 'script,iframe,object,embed,form,input,button,select,textarea,style,link,meta,base,frame,frameset,applet',
 
@@ -302,7 +290,7 @@ class RichText extends TinyEditor
             'images_file_types' => 'jpeg,jpg,png,gif,webp,bmp',
 
             'content_css' => 'default',
-            'content_style' => ($document ? $fonts->documentCss($this->paperWidth()) : $fonts->emailCss())
+            'content_style' => ($document ? $fonts->documentCss() : $fonts->emailCss())
                 .($this->getContentDirection() === 'auto' ? ' p, li, h1, h2, h3, h4, td, th, blockquote, pre { unicode-bidi: plaintext; text-align: start; }' : ''),
 
             'wakeel' => [
@@ -327,16 +315,6 @@ class RichText extends TinyEditor
         return ['placeholders' => $this->getPlaceholders()];
     }
 
-    /** The width the letter's text runs in, in mm: the page less the letterhead's side margins. */
-    private function paperWidth(): float
-    {
-        $id = $this->evaluate($this->letterheadId);
-        $letterhead = (filled($id) ? Letterhead::find($id) : null) ?? Letterhead::default() ?? Letterhead::fallback();
-        $page = $letterhead->orientation === 'landscape' ? Letterhead::PAGE_HEIGHT : Letterhead::PAGE_WIDTH;
-
-        return max(60.0, $page - (float) $letterhead->margin_left - (float) $letterhead->margin_right);
-    }
-
     /**
      * The editor's own words, in the interface's language.
      *
@@ -345,7 +323,7 @@ class RichText extends TinyEditor
     private static function labels(): array
     {
         return collect([
-            'Placeholders', 'No placeholders', 'Signature blocks', 'Saved signature block', 'Signature and stamp',
+            'Placeholders', 'No placeholders', 'Edit placeholder', 'Placeholder', 'Signature blocks', 'Saved signature block', 'Signature and stamp',
             'Signature block', 'Signature', 'Stamp', 'Right', 'Centre', 'Left', 'Block', 'Edit', 'Remove', 'Name',
             'This name', 'No name', 'Position', 'Title above the name', 'The matter\'s expert', 'Type the name to sign with.',
             'The expert\'s name and title, the signature and the stamp, as they sign off the letter.',

@@ -4394,5 +4394,7 @@
     "These minutes have no template to make them again from.": "لا يوجد قالب لهذا المحضر لإعادة إنشائه منه.",
     "This letter has no template to make it again from.": "لا يوجد قالب لهذا الخطاب لإعادة إنشائه منه.",
     "Undo regeneration": "التراجع عن إعادة الإنشاء",
-    "Use the template's letterhead too": "استخدام ترويسة القالب أيضاً"
+    "Use the template's letterhead too": "استخدام ترويسة القالب أيضاً",
+    "Edit placeholder": "تعديل المتغير",
+    "Placeholder": "المتغير"
 }

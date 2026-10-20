@@ -553,3 +553,17 @@ html {
         flex-shrink: 0;
     }
 }
+
+/*
+ * A wizard with Save beside Next (WizardWithSave, Record the meeting): Previous at the start, Save and
+ * Next (or Save and close, on the last step) together at the end. Save comes first in the footer; the
+ * last two are Next and the last step's button.
+ */
+.fi-sc-wizard-footer > .wk-wizard-save {
+    order: 1;
+    margin-inline-start: auto;
+}
+
+.fi-sc-wizard-footer:has(> .wk-wizard-save) > :nth-last-child(-n + 2) {
+    order: 2;
+}

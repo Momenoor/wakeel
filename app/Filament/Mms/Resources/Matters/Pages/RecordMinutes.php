@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Resources\Matters\Pages;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager;
 use App\Filament\Mms\Resources\Matters\Schemas\MinutesRecordForm;
+use App\Filament\Schemas\Components\WizardWithSave;
 use App\Models\Matter;
 use App\Models\MatterMinutes;
 use App\Services\MMS\Letters\MinutesService;
@@ -14,7 +15,6 @@ use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
 use Filament\Schemas\Components\EmbeddedSchema;
 use Filament\Schemas\Components\View;
-use Filament\Schemas\Components\Wizard;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\HtmlString;
@@ -88,7 +88,8 @@ class RecordMinutes extends Page
             ->components([
                 // Saved as it's typed, for the live view the attendees watch.
                 View::make('filament.mms.minutes.live-bar')->viewData(['url' => route('minutes.live', $minutes)]),
-                Wizard::make(MinutesRecordForm::steps($minutes))
+                // Save beside Next: what's typed kept without going on.
+                WizardWithSave::make(MinutesRecordForm::steps($minutes))
                     ->skippable()
                     ->persistStepInQueryString()
                     ->submitAction(new HtmlString(Blade::render(
@@ -106,6 +107,13 @@ class RecordMinutes extends Page
     protected function getHeaderActions(): array
     {
         return [
+            // Into the meeting being recorded: its own link (Teams), when it has one.
+            Action::make('join')
+                ->label(__('Join the meeting'))
+                ->icon('heroicon-o-video-camera')
+                ->color('success')
+                ->visible(fn (): bool => $this->minutes()->joinUrl() !== null)
+                ->url(fn (): ?string => $this->minutes()->joinUrl(), shouldOpenInNewTab: true),
             Action::make('save')
                 ->label(__('Save'))
                 ->icon('heroicon-o-check')

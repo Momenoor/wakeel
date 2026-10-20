@@ -132,6 +132,17 @@ class MinutesTest extends TestCase
             ->assertActionHasUrl(TestAction::make('join')->table($fromEvent), 'https://teams.microsoft.com/l/meetup-join/event')
             ->assertActionHidden(TestAction::make('join')->table($none))
             ->assertActionHidden(TestAction::make('join')->table($odd));
+
+        // On Record the meeting and the live view too.
+        $this->recordPage($own)
+            ->assertActionVisible('join')
+            ->assertActionHasUrl('join', 'https://teams.microsoft.com/l/meetup-join/own')
+            ->assertActionShouldOpenUrlInNewTab('join');
+        $this->recordPage($none)->assertActionHidden('join');
+        $this->get(route('minutes.live', $fromEvent))->assertOk()
+            ->assertSee('https://teams.microsoft.com/l/meetup-join/event')
+            ->assertSee(__('Join the meeting'));
+        $this->get(route('minutes.live', $none))->assertOk()->assertDontSee(__('Join the meeting'));
     }
 
     public function test_the_meeting_is_recorded_and_the_minutes_read_as_the_office_writes_them(): void
@@ -218,6 +229,11 @@ class MinutesTest extends TestCase
         $minutes->template->update(['body' => '<p><span data-font-size="18pt" style="font-size: 18pt">كبير</span> عادي</p>']);
         $this->assertStringContainsString('style="font-size: 1.5em">كبير</span>', MinutesService::liveHtml($minutes->fresh()));
         $this->assertStringNotContainsString('font-size: 18pt', MinutesService::liveHtml($minutes->fresh()));
+        // Each line in its own font; where the screen lacks it, the letter's.
+        $minutes->template->update(['body' => '<p style="font-family: \'times new roman\', times, serif;">نص</p><p style="font-family: Outfit;">Text</p>']);
+        $live = MinutesService::liveHtml($minutes->fresh());
+        $this->assertStringContainsString("font-family: 'times new roman', times, 'Wakeel Letter', 'Boutros MBC Dinkum', Tahoma, sans-serif", $live);
+        $this->assertStringContainsString("font-family: Outfit, 'Wakeel Letter'", $live);
         $minutes->template->update(['body' => $body]);
 
         $this->get(route('minutes.live', $minutes))->assertOk()
@@ -330,6 +346,21 @@ class MinutesTest extends TestCase
 
         // Standard: grouped, ID and phone only when known.
         $this->assertSame('<p><strong>المدعي:</strong></p><p>السيد/ أحمد علي – رقم الهوية: <bdo dir="ltr">784-1</bdo></p><p><strong>المدعى عليها:</strong></p><p>شركة المثال – رقم الهاتف: <bdo dir="ltr">050</bdo></p>', $html([]));
+
+        // A party and whoever stands for it together, though their agent was added last.
+        $parties = [
+            ['present' => true, 'name' => 'أحمد علي', 'capacity' => 'المدعي', 'party_id' => 1],
+            ['present' => true, 'name' => 'شركة المثال', 'capacity' => 'المدعى عليها', 'party_id' => 2],
+            ['present' => true, 'name' => 'خالد', 'capacity' => 'الخبير'],
+            ['present' => true, 'name' => 'سالم', 'capacity' => 'وكيلاً عن المدعي', 'party_id' => 3, 'represents' => 1],
+            ['present' => true, 'name' => 'منى', 'capacity' => 'مفوضاً عن المدعى عليها', 'party_id' => 4, 'represents' => 2],
+        ];
+        $this->assertSame(
+            '<p><strong>المدعي:</strong></p><p>1 أحمد علي</p><p><strong>وكيلاً عن المدعي:</strong></p><p>2 سالم</p>'
+            .'<p><strong>المدعى عليها:</strong></p><p>3 شركة المثال</p><p><strong>مفوضاً عن المدعى عليها:</strong></p><p>4 منى</p>'
+            .'<p><strong>الخبير:</strong></p><p>5 خالد</p>',
+            LetterComposer::attendeesHtml($parties, ['line' => '{{attendee.number}} {{attendee.name}}'], true),
+        );
 
         // Its own wording and heading.
         $this->assertSame(
@@ -738,7 +769,10 @@ class MinutesTest extends TestCase
             ->assertActionHasLabel('save', __('Save'))
             ->assertSee(__('Attendees and opening'))
             ->assertSee(__('Questions and answers'))
-            ->assertSee(__('Other items and closing'));
+            ->assertSee(__('Other items and closing'))
+            // Save beside Next, on every step.
+            ->assertSeeHtml('<div class="wk-wizard-save">')
+            ->assertSeeHtml('wire:click="save"');
 
         // Each item in its step.
         $wizard = collect($page->instance()->form->getFlatComponents(withHidden: true))->first(fn ($c) => $c instanceof Wizard);

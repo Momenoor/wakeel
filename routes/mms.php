@@ -22,6 +22,7 @@ use App\Services\MMS\Letters\LetterDocx;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterPdf;
 use App\Services\MMS\Letters\MinutesService;
+use App\Support\EditorFonts;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\HeaderUtils;
@@ -96,6 +97,10 @@ Route::middleware('auth')->group(function () {
             'channel' => 'minutes.'.$minutes->getKey(),
             'layout' => MinutesService::liveLayout($minutes),
             'rtl' => (($minutes->template?->locale) ?: 'ar') !== 'en',
+            // Into the meeting from the live view too.
+            'join' => $minutes->joinUrl(),
+            // Written in the template's fonts, as the PDF.
+            'fonts' => EditorFonts::make([$minutes->template?->letter_font_id, $minutes->template?->arabic_font_id])->letterCss('.text'),
         ]);
     })->name('minutes.live');
 

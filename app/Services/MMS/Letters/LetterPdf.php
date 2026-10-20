@@ -99,7 +99,7 @@ class LetterPdf
 
         $names = (new FontVariables)->getDefaults()['fonttrans'];
 
-        foreach (['Arial', 'Calibri', 'Cambria', 'Georgia', 'Simplified Arabic', 'Tahoma', 'Times New Roman', 'Traditional Arabic', 'Verdana', 'Wakeel Letter'] as $font) {
+        foreach (EditorFonts::IN_LETTER_FONT as $font) {
             $names[$key($font)] = $default;
         }
 

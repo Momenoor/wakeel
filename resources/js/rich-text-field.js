@@ -28,6 +28,7 @@ function loadTinyMce(baseUrl) {
 }
 
 const escapeHtml = (text) => String(text ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const decode = (html) => new DOMParser().parseFromString(`<!doctype html><body>${html}`, 'text/html').body.textContent;
 
 function parseConfig(value) {
     try {
@@ -176,6 +177,24 @@ function registerPlugin(tinymce) {
 
         const insertTag = (key) => editor.insertContent(escapeHtml(`{{${key}}}`));
 
+        // A placeholder is one piece; double-clicked, what it says is changed (a condition's wording).
+        const editTag = (node) => editor.windowManager.open({
+            title: t('Edit placeholder'),
+            body: { type: 'panel', items: [{ type: 'input', name: 'text', label: t('Placeholder') }] },
+            initialData: { text: decode(node.getAttribute('data-mce-content') || '') },
+            buttons: [
+                { type: 'cancel', text: 'Cancel' },
+                { type: 'submit', text: 'Save', primary: true },
+            ],
+            onSubmit: (api) => {
+                const text = api.getData().text.trim();
+                editor.selection.select(node);
+                // Emptied: taken out.
+                editor.insertContent(text === '' ? '' : escapeHtml(text));
+                api.close();
+            },
+        });
+
         editor.ui.registry.addMenuButton('wkplaceholders', {
             text: '{ }',
             tooltip: t('Placeholders'),
@@ -239,6 +258,15 @@ function registerPlugin(tinymce) {
         // Shown as one piece that is not typed in, with what it is written on it; stored exactly as
         // the letter's PDF and Word expect it (App\Services\MMS\Letters\SignatureLayouts).
         editor.on('PreInit', () => {
+            // A placeholder shows what it is written as: TinyMCE writes it from the page's HTML, so a
+            // condition's > showed as &gt;.
+            editor.parser.addAttributeFilter('data-mce-content', (nodes) => nodes.forEach((node) => {
+                const text = node.attr('data-mce-content') || '';
+                if (text.includes('&') && node.firstChild && node.firstChild.type === 3) {
+                    node.firstChild.value = decode(text);
+                }
+            }));
+
             editor.parser.addAttributeFilter('data-type', (nodes) => nodes.forEach((node) => {
                 if (node.attr('data-type') !== 'customBlock') {
                     return;
@@ -426,6 +454,9 @@ function registerPlugin(tinymce) {
         editor.on('dblclick', (event) => {
             const node = event.target?.closest?.(BLOCK);
             node && edit(node);
+
+            const tag = event.target?.closest?.('span[data-mce-content]');
+            tag && editTag(tag);
         });
     });
 }

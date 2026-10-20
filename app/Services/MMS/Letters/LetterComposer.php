@@ -639,7 +639,8 @@ class LetterComposer
 
     /**
      * Who attended, under their capacity ("وكيل المتنازعة:"), each on a line:
-     * "الأستاذ/ … – رقم الهوية: … – رقم الهاتف: …".
+     * "الأستاذ/ … – رقم الهوية: … – رقم الهاتف: …" — grouped, each party
+     * followed by whoever stands for it.
      *
      * @param  list<array<string, mixed>>  $attendees
      */
@@ -664,12 +665,24 @@ class LetterComposer
             return '<ol>'.$present->map(fn (array $a, int $i) => '<li>'.$line($a, $i + 1).'</li>')->implode('').'</ol>';
         }
 
-        // Grouped: each capacity's heading, its attendees under it.
+        // Grouped: by party — the party, then whoever stands for it — each capacity's heading over its
+        // attendees. Someone of no party (an expert, an interpreter) by their capacity alone.
         $number = 0;
+        $capacity = fn (array $a): string => trim((string) ($a['capacity'] ?? ''));
+        $party = fn (array $a): string => match (true) {
+            filled($a['represents'] ?? null) => 'party:'.(int) $a['represents'],
+            filled($a['party_id'] ?? null) => 'party:'.(int) $a['party_id'],
+            default => 'capacity:'.$capacity($a),
+        };
 
         return $present
-            ->groupBy(fn (array $a) => trim((string) ($a['capacity'] ?? '')))
-            ->map(function ($group, string $capacity) use ($settings, $line, &$number): string {
+            ->groupBy($party)
+            ->flatMap(fn ($members) => $members->sortBy(fn (array $a): int => filled($a['represents'] ?? null) ? 1 : 0)
+                ->groupBy($capacity)
+                ->map(fn ($group, $heading) => [(string) $heading, $group])
+                ->values())
+            ->map(function (array $section) use ($settings, $line, &$number): string {
+                [$capacity, $group] = $section;
                 $heading = $capacity !== '' ? self::attendeeText($settings['heading'], ['capacity' => $capacity], 0) : '';
 
                 return ($heading !== '' ? '<p><strong>'.$heading.'</strong></p>' : '')

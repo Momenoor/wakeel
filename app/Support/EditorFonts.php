@@ -21,7 +21,10 @@ class EditorFonts
     /** The family the letter's two fonts are joined under in the editor (the PDF and Word read it as the letter's own font). */
     public const LETTER = 'Wakeel Letter';
 
-    private const LETTER_STACK = "'Wakeel Letter', 'Boutros MBC Dinkum', Tahoma, sans-serif";
+    public const LETTER_STACK = "'Wakeel Letter', 'Boutros MBC Dinkum', Tahoma, sans-serif";
+
+    /** Word's fonts, which the server does not have: text set in one is written in the letter's font (LetterPdf, the live view). */
+    public const IN_LETTER_FONT = ['Arial', 'Calibri', 'Cambria', 'Georgia', 'Simplified Arabic', 'Tahoma', 'Times New Roman', 'Traditional Arabic', 'Verdana', self::LETTER];
 
     /** Fonts every Word user has, offered too (the PDF uses them where it has them). */
     private const WORD_FONTS = [
@@ -80,18 +83,18 @@ class EditorFonts
     }
 
     /**
-     * The page of a letter: its width (the letterhead's text width, in mm),
-     * the letter's fonts and size, its paragraphs, lists, headings and
+     * The page of a letter, filling the field: the letter's fonts and size, its paragraphs, lists, headings and
      * tables as the PDF draws them, placeholders and signature blocks marked.
      */
-    public function documentCss(float $widthMm): string
+    public function documentCss(): string
     {
         $family = self::LETTER_STACK;
 
         return $this->faces()
-            .' html { background: #e5e7eb; }'
-            .' body { box-sizing: content-box; background: #fff; color: #111827; max-width: '.round($widthMm, 1).'mm; margin: 16px auto; padding: 12mm 14mm; min-height: 70vh;'
-            .' box-shadow: 0 1px 4px rgba(0, 0, 0, .18); font-family: '.$family.'; font-size: 12pt; line-height: 1.55; text-align: justify; }'
+            // The page fills the field, white to its edges.
+            .' html { background: #fff; }'
+            .' body { box-sizing: border-box; background: #fff; color: #111827; margin: 0; padding: 16px 24px;'
+            .' font-family: '.$family.'; font-size: 12pt; line-height: 1.55; text-align: justify; }'
             .' p { margin: 0 0 6pt 0; }'
             .' ol, ul { margin: 0 0 6pt 0; padding-inline-start: 18pt; } li { margin-bottom: 3pt; }'
             .' h1 { font-size: 18pt; } h2 { font-size: 16pt; } h3 { font-size: 14pt; } h4 { font-size: 12pt; }'
@@ -99,6 +102,31 @@ class EditorFonts
             .' table { border-collapse: collapse; } td, th { padding: 4pt; }'
             .' table[border]:not([border="0"]) > * > tr > td, table[border]:not([border="0"]) > * > tr > th { border: 1px solid #9ca3af; }'
             .self::markedCss();
+    }
+
+    /**
+     * The letter's fonts on a page outside the editor (the live view, the attendees' preview): every font's
+     *
+     * @font-face, and the selector written in the letter's own.
+     */
+    public function letterCss(string $selector): string
+    {
+        return $this->faces().' '.$selector.' { font-family: '.self::LETTER_STACK.'; }';
+    }
+
+    /**
+     * Text in the font it was set in, where the screen has it (or it was uploaded); where not — Calibri on
+     * a phone — in the letter's font, as the PDF falls back, not in whatever the browser picks.
+     */
+    public static function withLetterFallback(string $html): string
+    {
+        $generic = ['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui'];
+
+        return preg_replace_callback('/font-family:\s*([^;"]+)/i', function (array $m) use ($generic): string {
+            $families = array_filter(array_map('trim', explode(',', $m[1])), fn (string $family): bool => $family !== '' && ! in_array(strtolower($family), $generic, true));
+
+            return 'font-family: '.implode(', ', [...$families, self::LETTER_STACK]);
+        }, $html) ?? $html;
     }
 
     /** An email: the mail's own plain look. */
@@ -114,7 +142,7 @@ class EditorFonts
     /** Placeholders (shown as one piece) and signature blocks (a labelled box). */
     private static function markedCss(): string
     {
-        return ' span[data-mce-content] { background: #eef2ff; color: #3730a3; border-radius: 3px; padding: 0 2px; white-space: normal; }'
+        return ' span[data-mce-content] { background: #eef2ff; color: #3730a3; border-radius: 3px; padding: 0 2px; white-space: normal; unicode-bidi: isolate; direction: ltr; cursor: default; }'
             .' div[data-type="customBlock"] { box-sizing: border-box; margin: 6pt 0; padding: 10px 14px; border: 1px dashed #9ca3af; border-radius: 6px;'
             .' background: #f9fafb; color: #4b5563; font-size: 10pt; line-height: 1.4; cursor: default; user-select: none; text-align: start; }'
             .' div[data-type="customBlock"]::before { content: attr(data-label); }'

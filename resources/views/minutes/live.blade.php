@@ -2,8 +2,8 @@
     The live view of a meeting's minutes — the window the expert shares in
     the meeting (Teams), so the attendees see the minutes as they're
     written. Updated every two seconds from what "Record the meeting"
-    saves; the paragraph that changed is shown briefly and, with "Follow"
-    on, scrolled to.
+    saves; where it is being written is shown briefly and, with "Follow"
+    on, scrolled to. The meeting is joined from its bar.
 
     The minutes are shown on their pages, as the PDF has them: the
     letterhead's background and placed elements ($layout — LetterPdf::liveLayout),
@@ -38,6 +38,7 @@
         /* The text, as in the PDF: 12 pt, line spacing 1.55, justified. */
         .text { position: absolute; overflow: hidden; font-size: 12pt; line-height: 1.55; text-align: justify; }
         .text p { margin: 0 0 6pt; }
+        {!! $fonts !!}
         .text ol, .text ul { margin: 0 0 6pt; padding-inline-start: 18pt; }
         .text li { margin-bottom: 3pt; }
         .text h1, .text h2, .text h3 { line-height: 1.4; }
@@ -60,6 +61,9 @@
         <button type="button" onclick="resize(-2)" aria-label="{{ __('Smaller text') }}">A−</button>
         <button type="button" onclick="resize(2)" aria-label="{{ __('Larger text') }}">A+</button>
         <label><input type="checkbox" id="follow" checked> {{ __('Follow') }}</label>
+        @if ($join)
+            <a href="{{ $join }}" target="_blank" rel="noopener" style="background: #16a34a; color: #fff; border-radius: .4rem; padding: .3rem .7rem; text-decoration: none; font-weight: 600;">{{ __('Join the meeting') }}</a>
+        @endif
     </div>
 
     <div id="pages"></div>
@@ -180,15 +184,21 @@
             });
         }
 
-        // The paragraph that changed: the first one, from the end, that differs.
+        // Where it is being written: the first block that differs from before. (From the end, a question added
+        // in the middle moved everything after it and the view jumped to the end.) Text taken out: the block
+        // now where it was.
         function changed(before, after) {
-            for (let i = after.length - 1; i >= 0; i--) {
-                if (! before[i] || before[i].innerHTML !== after[i].innerHTML) { return after[i]; }
-            }
-            return null;
+            const same = (a, b) => a && b && a.innerHTML === b.innerHTML;
+            let start = 0;
+            while (start < after.length && same(before[start], after[start])) { start++; }
+            if (start === after.length && after.length === before.length) { return null; }
+            return after[Math.min(start, after.length - 1)] ?? null;
         }
 
-        const paragraphs = () => Array.from(pagesEl.querySelectorAll('.text p, .text li, .text h1, .text h2, .text h3'));
+        // Paragraphs, list items, headings — and a table's cells written straight in (the attendees, a form).
+        const paragraphs = () => Array.from(pagesEl.querySelectorAll('.text p, .text li, .text h1, .text h2, .text h3, .text h4'))
+            .concat(Array.from(pagesEl.querySelectorAll('.text td, .text th')).filter((cell) => ! cell.querySelector('p, li')))
+            .sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1);
 
         async function refresh() {
             try {
