@@ -3,11 +3,11 @@
 namespace App\Filament\Mms\Resources\SignatureLayouts;
 
 use App\Filament\Concerns\HasModuleGate;
-use App\Filament\Mms\Clusters\Templates;
 use App\Filament\Mms\Resources\SignatureLayouts\Pages\CreateSignatureLayout;
 use App\Filament\Mms\Resources\SignatureLayouts\Pages\DesignSignatureLayout;
 use App\Filament\Mms\Resources\SignatureLayouts\Pages\EditSignatureLayout;
 use App\Filament\Mms\Resources\SignatureLayouts\Pages\ListSignatureLayouts;
+use App\Filament\Shared\Clusters\Settings;
 use App\Models\SignatureLayout;
 use App\Services\MMS\Letters\SignatureLayouts;
 use BackedEnum;
@@ -38,9 +38,15 @@ class SignatureLayoutResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedPencilSquare;
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 34;
 
-    protected static ?string $cluster = Templates::class;
+    // Settings → Templates.
+    protected static ?string $cluster = Settings::class;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('Templates');
+    }
 
     public static function moduleGateKey(): string
     {

@@ -76,7 +76,7 @@ class SplitPdfTest extends TestCase
 
             // Anyone else's drive: not there for this app's questions in these tests.
             if (! str_starts_with($url, 'https://graph.microsoft.com/v1.0'.rawurldecode($drive).'/')) {
-                return Http::response(['error' => ['message' => 'Not found']], 404);
+                return Http::response(['error' => ['code' => 'ResourceNotFound', 'message' => 'User not found']], 404);
             }
 
             if (str_contains($url, '/search(q=')) {
@@ -88,11 +88,11 @@ class SplitPdfTest extends TestCase
             }
 
             if (preg_match('#/items/([^/?]+)/children#', $url, $m)) {
-                return isset($items[$m[1]]) ? Http::response($items[$m[1]]) : Http::response(['error' => ['message' => 'Item not found']], 404);
+                return isset($items[$m[1]]) ? Http::response($items[$m[1]]) : Http::response(['error' => ['code' => 'itemNotFound', 'message' => 'Item not found']], 404);
             }
 
             if (preg_match('#/items/([^/?]+)$#', $url, $m)) {
-                return isset($files[$m[1]]) ? Http::response($files[$m[1]]) : Http::response(['error' => ['message' => 'Item not found']], 404);
+                return isset($files[$m[1]]) ? Http::response($files[$m[1]]) : Http::response(['error' => ['code' => 'itemNotFound', 'message' => 'Item not found']], 404);
             }
 
             return Http::response(['error' => ['message' => 'Unexpected']], 500);
@@ -176,8 +176,10 @@ class SplitPdfTest extends TestCase
 
         // Their login email stands in when their profile has no Microsoft account.
         $this->actingAs($withoutOneDrive = $this->userWith(oneDrive: null));
-        Livewire::test(SplitPdf::class)->instance()->oneDriveFolder();
+        $none = Livewire::test(SplitPdf::class)->instance()->oneDriveFolder();
         $this->assertStringContainsString('/users/'.rawurlencode($withoutOneDrive->email).'/drive/', (string) end($this->asked));
+        // That account has no OneDrive: told so, not logged as a fault.
+        $this->assertSame(__('Your account has no OneDrive yet. Open OneDrive once with it (office.com), then try again.'), $none['error']);
 
         config(['mail.mailers.microsoft-graph' => [], 'services.outlook' => []]);
         $this->assertSame(['items' => [], 'error' => __('OneDrive is not set up in this system yet.')], Livewire::test(SplitPdf::class)->instance()->oneDriveFolder());

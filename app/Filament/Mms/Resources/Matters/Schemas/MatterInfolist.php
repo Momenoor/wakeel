@@ -36,6 +36,7 @@ use App\Services\MMS\Calendar\EventMatterLinker;
 use App\Services\MMS\IncentiveCalculatorService;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\OneDriveFolderLinker;
+use App\Services\MMS\Requests\RequestHistory;
 use App\Support\Currency;
 use App\Support\ScreenPermissions;
 use Closure;
@@ -562,7 +563,12 @@ class MatterInfolist
                 RepeatableEntry::make('requests')
                     ->hiddenLabel()
                     // Newest first, however they were loaded.
-                    ->state(fn (Matter $record) => $record->requests->sortByDesc('id')->values())
+                    ->state(function (Matter $record) {
+                        // Their histories read together, not one by one as each is drawn.
+                        RequestHistory::preload($record->requests);
+
+                        return $record->requests->sortByDesc('id')->values();
+                    })
                     ->columns(4)
                     ->columnSpanFull()
                     ->schema([

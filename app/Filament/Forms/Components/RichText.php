@@ -327,8 +327,8 @@ class RichText extends TinyEditor
             'Signature block', 'Signature', 'Stamp', 'Right', 'Centre', 'Left', 'Block', 'Edit', 'Remove', 'Name',
             'This name', 'No name', 'Position', 'Title above the name', 'The matter\'s expert', 'Type the name to sign with.',
             'The expert\'s name and title, the signature and the stamp, as they sign off the letter.',
-            'Signature blocks are designed under Communication → Templates → Signature blocks.',
-            'No saved signature blocks yet. They are designed under Communication → Templates → Signature blocks.',
+            'Signature blocks are designed under Settings → Templates → Signature blocks.',
+            'No saved signature blocks yet. They are designed under Settings → Templates → Signature blocks.',
         ])->mapWithKeys(fn (string $key): array => [$key => __($key)])->all();
     }
 }

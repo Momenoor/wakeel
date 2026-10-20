@@ -5,6 +5,7 @@ namespace App\Services\MMS\Requests;
 use App\Enums\RequestStatus;
 use App\Models\MatterRequest;
 use App\Models\User;
+use ArrayObject;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -38,16 +39,43 @@ class RequestHistory
      */
     public static function for(MatterRequest $request): array
     {
-        $rows = DB::table('activity_log')
-            ->where('subject_type', $request->getMorphClass())
-            ->where('subject_id', $request->getKey())
-            ->whereIn('event', ['created', 'updated'])
-            ->orderBy('id')
-            ->get(['event', 'causer_id', 'properties', 'attribute_changes', 'created_at']);
+        // Read once a request (the page asks again as it draws), and again once the request has changed.
+        self::preload(collect([$request]));
 
-        $steps = $rows->isEmpty() ? self::fromRequest($request) : self::fromLog($rows, $request);
-        $names = User::query()->whereIn('id', collect($steps)->pluck('by')->filter()->unique())->get()->keyBy('id');
+        return self::known()[self::key($request)];
+    }
 
+    /**
+     * Many requests' histories read in one go — a matter's — so each asks no more of the database.
+     *
+     * @param  Collection<int, MatterRequest>  $requests
+     */
+    public static function preload(Collection $requests): void
+    {
+        $missing = $requests->reject(fn (MatterRequest $request): bool => isset(self::known()[self::key($request)]));
+        if ($missing->isEmpty()) {
+            return;
+        }
+
+        $rows = self::rows($missing);
+        $steps = $missing->mapWithKeys(fn (MatterRequest $request): array => [self::key($request) => ($found = $rows->get($request->getKey(), collect()))->isEmpty()
+            ? self::fromRequest($request)
+            : self::fromLog($found, $request)]);
+        // Whoever took each step, all of them in one read.
+        $names = User::query()->whereIn('id', $steps->flatten(1)->pluck('by')->filter()->unique()->values())->get()->keyBy('id');
+
+        foreach ($steps as $key => $list) {
+            self::known()[$key] = self::named($list, $names);
+        }
+    }
+
+    /**
+     * @param  list<array{step: string, at: ?Carbon, by: ?int, comment: ?string}>  $steps
+     * @param  Collection<int, User>  $names
+     * @return list<array{step: string, label: string, color: string, icon: string, at: ?Carbon, by: ?string, comment: ?string}>
+     */
+    private static function named(array $steps, Collection $names): array
+    {
         return collect($steps)->map(fn (array $step): array => [
             ...$step,
             'label' => self::label($step['step']),
@@ -55,6 +83,41 @@ class RequestHistory
             'icon' => self::icon($step['step']),
             'by' => $step['by'] ? ($names->get($step['by'])?->display_name ?? $names->get($step['by'])?->name) : null,
         ])->all();
+    }
+
+    /**
+     * Their logged creation and changes, by request id, oldest first.
+     *
+     * @param  Collection<int, MatterRequest>  $requests
+     * @return Collection<int, Collection<int, object>>
+     */
+    private static function rows(Collection $requests): Collection
+    {
+        return DB::table('activity_log')
+            ->where('subject_type', (new MatterRequest)->getMorphClass())
+            ->whereIn('subject_id', $requests->map->getKey()->all())
+            ->whereIn('event', ['created', 'updated'])
+            ->orderBy('id')
+            ->get(['subject_id', 'event', 'causer_id', 'properties', 'attribute_changes', 'created_at'])
+            ->groupBy('subject_id');
+    }
+
+    /** The histories read in this request (kept with the app, so each request starts afresh). */
+    private static function known(): ArrayObject
+    {
+        $key = self::class.'.known';
+
+        if (! app()->bound($key)) {
+            app()->instance($key, new ArrayObject);
+        }
+
+        return app($key);
+    }
+
+    /** A request as it is now: read again once it changed. */
+    private static function key(MatterRequest $request): string
+    {
+        return $request->getKey().'|'.$request->updated_at?->format('U.u').'|'.$request->status?->value;
     }
 
     /**

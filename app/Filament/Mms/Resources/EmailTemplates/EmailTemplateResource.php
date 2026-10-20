@@ -4,8 +4,8 @@ namespace App\Filament\Mms\Resources\EmailTemplates;
 
 use App\Filament\Concerns\HasModuleGate;
 use App\Filament\Forms\Components\RichText;
-use App\Filament\Mms\Clusters\Templates;
 use App\Filament\Mms\Resources\EmailTemplates\Pages\ManageEmailTemplates;
+use App\Filament\Shared\Clusters\Settings;
 use App\Models\EmailTemplate;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterMailer;
@@ -42,9 +42,15 @@ class EmailTemplateResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedEnvelope;
 
-    protected static ?int $navigationSort = 6;
+    protected static ?int $navigationSort = 36;
 
-    protected static ?string $cluster = Templates::class;
+    // Settings → Templates.
+    protected static ?string $cluster = Settings::class;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('Templates');
+    }
 
     public static function moduleGateKey(): string
     {

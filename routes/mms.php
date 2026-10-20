@@ -34,6 +34,11 @@ Route::get('/mail/unsubscribe/{token}', function ($token) {
     return __('You have been successfully unsubscribed.');
 })->name('bulk-mail.unsubscribe');
 
+// The templates moved under Settings: an old link (a bookmark, a notification) still finds its page.
+Route::get('/mms/templates/{path?}', fn (?string $path = null) => redirect('/mms/settings/'.$path.(request()->getQueryString() ? '?'.request()->getQueryString() : ''), 301))
+    ->where('path', '.*')
+    ->name('templates.moved');
+
 Route::middleware('auth')->group(function () {
     Route::get('bulk-mail/preview/{campaign}/{recipient}', [BulkMailController::class, '__invoke'])
         ->name('bulk-mail.preview');

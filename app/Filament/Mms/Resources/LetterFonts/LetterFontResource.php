@@ -3,8 +3,8 @@
 namespace App\Filament\Mms\Resources\LetterFonts;
 
 use App\Filament\Concerns\HasModuleGate;
-use App\Filament\Mms\Clusters\Templates;
 use App\Filament\Mms\Resources\LetterFonts\Pages\ManageLetterFonts;
+use App\Filament\Shared\Clusters\Settings;
 use App\Models\LetterFont;
 use App\Models\Setting;
 use App\Services\MMS\Letters\LetterDocx;
@@ -36,9 +36,15 @@ class LetterFontResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedLanguage;
 
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 35;
 
-    protected static ?string $cluster = Templates::class;
+    // Settings → Templates.
+    protected static ?string $cluster = Settings::class;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('Templates');
+    }
 
     public static function moduleGateKey(): string
     {

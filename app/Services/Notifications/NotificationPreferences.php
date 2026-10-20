@@ -8,6 +8,7 @@ use App\Models\NotificationPreference;
 use App\Models\RoleNotificationDefault;
 use App\Models\User;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Role;
 
 /**
@@ -115,22 +116,27 @@ class NotificationPreferences
      */
     public function saveUser(User $user, array $choices): void
     {
+        $keep = [];
+
         foreach (NotificationType::cases() as $type) {
             foreach ($type->channels() as $channel) {
                 $on = $choices[$type->value][$channel->value] ?? null;
                 $base = $this->base($user, $type, $channel);
-                $where = ['user_id' => $user->getKey(), 'type' => $type->value, 'channel' => $channel->value];
 
                 // Not offered, or mandatory: no choice to keep. As the roles give it: none either.
                 if ($on === null || in_array($base, [self::LOCKED, self::HIDDEN], true) || $on === ($base === self::ON)) {
-                    NotificationPreference::query()->where($where)->delete();
-
                     continue;
                 }
 
-                NotificationPreference::query()->updateOrCreate($where, ['enabled' => (bool) $on]);
+                $keep[] = ['user_id' => $user->getKey(), 'type' => $type->value, 'channel' => $channel->value, 'enabled' => (bool) $on, 'created_at' => now(), 'updated_at' => now()];
             }
         }
+
+        // All of them at once (a query a cell was some forty).
+        DB::transaction(function () use ($user, $keep): void {
+            NotificationPreference::query()->where('user_id', $user->getKey())->delete();
+            NotificationPreference::query()->insert($keep);
+        });
 
         unset($this->userChoices[$user->getKey()]);
     }
@@ -142,20 +148,25 @@ class NotificationPreferences
      */
     public function saveRole(Role $role, array $states): void
     {
+        $keep = [];
+
         foreach (NotificationType::cases() as $type) {
             foreach ($type->channels() as $channel) {
                 $state = $states[$type->value][$channel->value] ?? null;
-                $where = ['role_id' => $role->getKey(), 'type' => $type->value, 'channel' => $channel->value];
 
                 if (! in_array($state, [self::ON, self::OFF, self::LOCKED, self::HIDDEN], true) || $state === ($type->isOnByDefault($channel) ? self::ON : self::OFF)) {
-                    RoleNotificationDefault::query()->where($where)->delete();
-
                     continue;
                 }
 
-                RoleNotificationDefault::query()->updateOrCreate($where, ['state' => $state]);
+                $keep[] = ['role_id' => $role->getKey(), 'type' => $type->value, 'channel' => $channel->value, 'state' => $state, 'created_at' => now(), 'updated_at' => now()];
             }
         }
+
+        // All of them at once (a query a cell was some forty).
+        DB::transaction(function () use ($role, $keep): void {
+            RoleNotificationDefault::query()->where('role_id', $role->getKey())->delete();
+            RoleNotificationDefault::query()->insert($keep);
+        });
 
         $this->roleStates = null;
     }

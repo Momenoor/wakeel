@@ -3,11 +3,11 @@
 namespace App\Filament\Mms\Resources\Letterheads;
 
 use App\Filament\Concerns\HasModuleGate;
-use App\Filament\Mms\Clusters\Templates;
 use App\Filament\Mms\Resources\Letterheads\Pages\CreateLetterhead;
 use App\Filament\Mms\Resources\Letterheads\Pages\DesignLetterhead;
 use App\Filament\Mms\Resources\Letterheads\Pages\EditLetterhead;
 use App\Filament\Mms\Resources\Letterheads\Pages\ListLetterheads;
+use App\Filament\Shared\Clusters\Settings;
 use App\Models\Letterhead;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -40,9 +40,15 @@ class LetterheadResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedNewspaper;
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 33;
 
-    protected static ?string $cluster = Templates::class;
+    // Settings → Templates.
+    protected static ?string $cluster = Settings::class;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('Templates');
+    }
 
     public static function moduleGateKey(): string
     {

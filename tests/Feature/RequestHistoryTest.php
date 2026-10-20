@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\RequestStatus;
 use App\Enums\RequestType;
 use App\Filament\Mms\Resources\MatterRequests\Pages\ViewMatterRequest;
+use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Models\Matter;
 use App\Models\MatterRequest;
 use App\Models\User;
@@ -84,6 +85,23 @@ class RequestHistoryTest extends TestCase
             ->assertSee('Changes requested')
             ->assertSee('Fix the dates')
             ->assertSee('Resubmitted');
+    }
+
+    public function test_a_matters_requests_read_their_history_together_once(): void
+    {
+        $matter = Matter::factory()->create();
+        $this->actingAs($this->assistant);
+        foreach (range(1, 4) as $i) {
+            $request = MatterRequest::create(['matter_id' => $matter->id, 'request_by' => $this->assistant->id, 'type' => RequestType::CHANGE_DIFFICULTY,
+                'status' => RequestStatus::PENDING, 'comment' => 'Request '.$i, 'extra' => ['new_difficulty' => 'hard']]);
+            $request->update(['status' => RequestStatus::REJECTED, 'approved_by' => $this->reviewer->id, 'approved_at' => now(), 'approved_comment' => 'No '.$i]);
+        }
+
+        DB::enableQueryLog();
+        $this->get(ViewMatter::getUrl(['record' => $matter, 'tab' => 'requests']))->assertOk()->assertSee('No 4');
+        $reads = collect(DB::getQueryLog())->filter(fn (array $query): bool => preg_match('/from ["`]?activity_log/', $query['query']) === 1);
+
+        $this->assertCount(1, $reads);
     }
 
     public function test_without_a_log_it_is_told_from_the_request(): void

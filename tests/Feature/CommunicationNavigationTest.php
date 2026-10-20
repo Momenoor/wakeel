@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Filament\Mms\Clusters\Templates;
 use App\Filament\Mms\Pages\Chat;
 use App\Filament\Mms\Resources\BulkMailCampaigns\BulkMailCampaignResource;
 use App\Filament\Mms\Resources\EmailTemplates\EmailTemplateResource;
@@ -17,10 +16,10 @@ use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
- * The Communication menu: the daily tools first, then one Templates entry
- * whose own menu lists each part next to what it's built from — letter
- * templates with their items and letterheads and signature blocks, then
- * the covering emails.
+ * The Communication menu: the daily tools — Chat and bulk mail. The templates
+ * are under Settings, in a Templates group listing each part next to what
+ * it's built from — letter templates with their items and letterheads and
+ * signature blocks, then the covering emails.
  */
 class CommunicationNavigationTest extends TestCase
 {
@@ -43,10 +42,10 @@ class CommunicationNavigationTest extends TestCase
         $this->assertInOrder($html, [
             Chat::getUrl(),
             BulkMailCampaignResource::getUrl(),
-            Templates::getUrl(),
         ]);
 
-        // The templates themselves are only in the Templates menu.
+        // The templates are under Settings, not in the sidebar.
+        $this->assertStringNotContainsString('href="'.LetterTemplateResource::getUrl().'"', $html);
         $this->assertStringNotContainsString('href="'.LetterItemResource::getUrl().'"', $html);
     }
 

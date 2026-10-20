@@ -3281,7 +3281,7 @@
     "Design signature block": "تصميم كتلة التوقيع",
     "Name & size": "الاسم والمقاس",
     "Saved signature block": "كتلة توقيع محفوظة",
-    "Signature blocks are designed under Communication → Templates → Signature blocks.": "تُصمَّم كتل التوقيع من المراسلات ← القوالب ← كتل التوقيع.",
+    "Signature blocks are designed under Settings → Templates → Signature blocks.": "تُصمَّم كتل التوقيع من الإعدادات ← القوالب ← كتل التوقيع.",
     "This signature block no longer exists.": "كتلة التوقيع هذه لم تعد موجودة.",
     "Drag to place. Images may overlap the text and each other: lower in the list is drawn on top, and text is always over the images. The dashed frame is the block; anything outside it is cut off.": "اسحب العناصر لوضعها. يمكن للصور أن تتداخل مع النص ومع بعضها: الأدنى في القائمة يظهر فوق غيره، والنص دائماً فوق الصور. الإطار المتقطع هو حدود الكتلة، وما يخرج عنه لا يظهر.",
     "Signature and stamp from": "التوقيع والختم من",
@@ -3508,7 +3508,7 @@
     "The system's standard font": "خط النظام المعتاد",
     "English font": "الخط الإنجليزي",
     "Arabic font": "الخط العربي",
-    "For the PDF. Fonts are added under Communication → Templates → Fonts; Word documents use the font set there.": "لملف PDF. تُضاف الخطوط من المراسلات ← القوالب ← الخطوط، ومستندات Word تستخدم الخط المحدد هناك.",
+    "For the PDF. Fonts are added under Settings → Templates → Fonts; Word documents use the font set there.": "لملف PDF. تُضاف الخطوط من الإعدادات ← القوالب ← الخطوط؛ وتستخدم مستندات Word الخط المحدد هناك.",
     "As the English font, if it has Arabic letters; otherwise the standard one": "كالخط الإنجليزي إن كان يدعم العربية، وإلا فالخط المعتاد",
     "This font has PostScript outlines, which the PDF cannot use. Upload its TrueType (.ttf) version.": "هذا الخط بصيغة PostScript التي لا يدعمها ملف PDF. ارفع نسخة TrueType ‏(.ttf) منه.",
     "General": "عام",
@@ -4369,7 +4369,7 @@
     "No placeholders": "لا توجد عناصر نائبة",
     "Block": "كتلة",
     "Type the name to sign with.": "اكتب الاسم الذي يُوقَّع به.",
-    "No saved signature blocks yet. They are designed under Communication → Templates → Signature blocks.": "لا توجد كتل توقيع محفوظة بعد. تُصمَّم من المراسلات ← القوالب ← كتل التوقيع.",
+    "No saved signature blocks yet. They are designed under Settings → Templates → Signature blocks.": "لا توجد كتل توقيع محفوظة بعد. تُصمَّم من الإعدادات ← القوالب ← كتل التوقيع.",
     "Paragraph": "فقرة",
     "Heading 1": "عنوان 1",
     "Heading 2": "عنوان 2",
@@ -4412,5 +4412,10 @@
     "Collection deleted: :amount on the :type fee": "حُذف تحصيل: :amount على رسوم :type",
     ":user changed the fees of matter :matter": "عدّل :user رسوم الدعوى :matter",
     ":old → :new": ":old ← :new",
-    "Request submitted": "قُدِّم الطلب"
+    "Request submitted": "قُدِّم الطلب",
+    "These minutes were deleted": "حُذف هذا المحضر",
+    "Signed out — sign in again to follow": "تم تسجيل الخروج — سجّل الدخول مجدداً للمتابعة",
+    "You can no longer follow these minutes": "لم يعد بإمكانك متابعة هذا المحضر",
+    "Your account has no OneDrive yet. Open OneDrive once with it (office.com), then try again.": "لا يوجد OneDrive لحسابك بعد. افتح OneDrive مرة واحدة بهذا الحساب (office.com) ثم حاول مجدداً.",
+    "That folder or file is not in your OneDrive.": "هذا المجلد أو الملف غير موجود في OneDrive الخاص بك."
 }

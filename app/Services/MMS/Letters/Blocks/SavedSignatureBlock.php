@@ -5,7 +5,7 @@ namespace App\Services\MMS\Letters\Blocks;
 use App\Services\MMS\Letters\SignatureLayouts;
 
 /**
- * A saved signature block (Communication → Templates → Signature blocks), dropped into
+ * A saved signature block (Settings → Templates → Signature blocks), dropped into
  * a letter from the editor's signature blocks menu (resources/js/rich-text-field.js).
  * Designed once, used in any template; editing it changes every template using it,
  * while letters already issued keep it as it was (SignatureLayouts::freeze()).

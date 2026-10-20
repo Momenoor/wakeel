@@ -312,7 +312,7 @@ function registerPlugin(tinymce) {
             const layouts = blocks().layouts || [];
 
             if (!layouts.length) {
-                editor.notificationManager.open({ text: t('No saved signature blocks yet. They are designed under Communication → Templates → Signature blocks.'), type: 'warning', timeout: 6000 });
+                editor.notificationManager.open({ text: t('No saved signature blocks yet. They are designed under Settings → Templates → Signature blocks.'), type: 'warning', timeout: 6000 });
 
                 return;
             }
@@ -322,7 +322,7 @@ function registerPlugin(tinymce) {
                 body: {
                     type: 'panel',
                     items: [
-                        { type: 'htmlpanel', html: `<p>${escapeHtml(t('Signature blocks are designed under Communication → Templates → Signature blocks.'))}</p>` },
+                        { type: 'htmlpanel', html: `<p>${escapeHtml(t('Signature blocks are designed under Settings → Templates → Signature blocks.'))}</p>` },
                         { type: 'listbox', name: 'layout_id', label: t('Signature block'), items: layouts.map((layout) => ({ value: String(layout.id), text: layout.name })) },
                     ],
                 },

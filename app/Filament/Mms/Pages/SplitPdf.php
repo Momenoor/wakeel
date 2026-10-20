@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Pages;
 
+use App\Services\MMS\OneDriveNotFound;
 use App\Services\MMS\PersonalOneDrive;
 use App\Support\ScreenPermissions;
 use BackedEnum;
@@ -153,6 +154,11 @@ class SplitPdf extends Page
 
         try {
             return ['items' => $read($drive), 'error' => null];
+        } catch (OneDriveNotFound $e) {
+            // A folder not in their OneDrive, or no OneDrive yet: theirs to know, not a fault to log.
+            return ['items' => [], 'error' => $e->isItem()
+                ? __('Your OneDrive could not be read: :error', ['error' => __('That folder or file is not in your OneDrive.')])
+                : __('Your account has no OneDrive yet. Open OneDrive once with it (office.com), then try again.')];
         } catch (Throwable $e) {
             report($e);
 

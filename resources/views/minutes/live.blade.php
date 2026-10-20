@@ -200,11 +200,24 @@
             .concat(Array.from(pagesEl.querySelectorAll('.text td, .text th')).filter((cell) => ! cell.querySelector('p, li')))
             .sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1);
 
+        // Deleted, signed out or no longer allowed: asking again will not help — the page stops and says why.
+        const ended = { 404: @js(__('These minutes were deleted')), 401: @js(__('Signed out — sign in again to follow')), 403: @js(__('You can no longer follow these minutes')) };
+        let stopped = false;
+        let final = false;
+
         async function refresh() {
+            if (stopped) { return; }
             try {
                 const response = await fetch(@js($feed), { headers: { 'Accept': 'application/json' }, credentials: 'same-origin', cache: 'no-store' });
+                if (ended[response.status]) {
+                    stopped = true;
+                    document.getElementById('dot').classList.add('off');
+                    document.getElementById('state').textContent = ended[response.status];
+                    return;
+                }
                 if (! response.ok) { throw new Error(response.status); }
                 const data = await response.json();
+                final = Boolean(data.final);
                 document.getElementById('dot').classList.remove('off');
                 document.getElementById('state').textContent = data.final ? @js(__('Final')) : @js(__('Live'));
 
@@ -231,9 +244,11 @@
         paginate(@js($html));
         // Pusher: the text is asked for when it changes; the poll is a slow safety net.
         // Without it, every two seconds.
+        // Finalised, nothing more is typed: once a minute is enough.
         let live = false;
-        const tick = () => { refresh(); setTimeout(tick, live ? 20000 : 2000); };
-        setTimeout(tick, live ? 20000 : 2000);
+        const wait = () => (live ? 20000 : (final ? 60000 : 2000));
+        const tick = () => { if (stopped) { return; } refresh(); setTimeout(tick, wait()); };
+        setTimeout(tick, wait());
 
         if (echoConfig && echoConfig.key) {
             const script = document.createElement('script');

@@ -77,7 +77,7 @@ class LetterTemplateForm
                             ->label(__('English font'))
                             ->relationship('font', 'name')
                             ->placeholder(__('The standard font'))
-                            ->helperText(__('For the PDF. Fonts are added under Communication → Templates → Fonts; Word documents use the font set there.'))
+                            ->helperText(__('For the PDF. Fonts are added under Settings → Templates → Fonts; Word documents use the font set there.'))
                             // The editor writes in it too.
                             ->live()
                             ->preload(),

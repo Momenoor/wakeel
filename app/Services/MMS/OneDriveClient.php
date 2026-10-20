@@ -396,6 +396,10 @@ class OneDriveClient
         // A clear message for the matter page and the log, not raw JSON.
         $message = $response->json('error.message') ?: $response->body();
 
+        if ($response->status() === 404) {
+            throw new OneDriveNotFound(__('OneDrive not found for this account. Check the email on the assistant\'s profile, and that they have signed in to OneDrive at least once.').' '.$message, $response->json('error.code'));
+        }
+
         throw new RuntimeException(match ($response->status()) {
             401, 403 => __('Microsoft 365 refused access (:status). Check the app registration has the Files.ReadWrite.All application permission with admin consent.', ['status' => $response->status()]).' '.$message,
             404 => __('OneDrive not found for this account. Check the email on the assistant\'s profile, and that they have signed in to OneDrive at least once.').' '.$message,

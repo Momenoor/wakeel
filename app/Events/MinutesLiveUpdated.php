@@ -10,8 +10,9 @@ use Illuminate\Foundation\Events\Dispatchable;
  * The minutes changed — typed in the meeting (the autosave), finalised or
  * reopened. The live view the attendees watch asks for the new text on it,
  * over Pusher, instead of every viewer asking every two seconds. Sent
- * right away (no queue worker to count on) and without the text: a
- * message each save, a request only from those watching.
+ * once the save has been answered (no queue worker to count on, and the
+ * one typing does not wait on Pusher) and without the text: a message
+ * each save, a request only from those watching.
  */
 class MinutesLiveUpdated implements ShouldBroadcastNow
 {
@@ -47,10 +48,13 @@ class MinutesLiveUpdated implements ShouldBroadcastNow
             return;
         }
 
-        try {
-            broadcast(new self($minutesId));
-        } catch (\Throwable $e) {
-            report($e);
-        }
+        // After the response; saved twice in one request, told once.
+        defer(function () use ($minutesId): void {
+            try {
+                broadcast(new self($minutesId));
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }, 'minutes-live-'.$minutesId);
     }
 }

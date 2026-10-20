@@ -3,7 +3,6 @@
 namespace App\Filament\Mms\Resources\LetterTemplates;
 
 use App\Filament\Concerns\HasModuleGate;
-use App\Filament\Mms\Clusters\Templates;
 use App\Filament\Mms\Resources\LetterTemplates\Pages\CreateLetterTemplate;
 use App\Filament\Mms\Resources\LetterTemplates\Pages\EditLetterTemplate;
 use App\Filament\Mms\Resources\LetterTemplates\Pages\ListLetterTemplates;
@@ -11,6 +10,7 @@ use App\Filament\Mms\Resources\LetterTemplates\Pages\ViewLetterTemplate;
 use App\Filament\Mms\Resources\LetterTemplates\Schemas\LetterTemplateForm;
 use App\Filament\Mms\Resources\LetterTemplates\Schemas\LetterTemplateInfolist;
 use App\Filament\Mms\Resources\LetterTemplates\Tables\LetterTemplatesTable;
+use App\Filament\Shared\Clusters\Settings;
 use App\Models\LetterTemplate;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -31,9 +31,15 @@ class LetterTemplateResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentDuplicate;
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 31;
 
-    protected static ?string $cluster = Templates::class;
+    // Settings → Templates.
+    protected static ?string $cluster = Settings::class;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('Templates');
+    }
 
     public static function getModelLabel(): string
     {

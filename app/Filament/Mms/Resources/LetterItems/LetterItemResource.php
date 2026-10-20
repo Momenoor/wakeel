@@ -3,8 +3,8 @@
 namespace App\Filament\Mms\Resources\LetterItems;
 
 use App\Filament\Concerns\HasModuleGate;
-use App\Filament\Mms\Clusters\Templates;
 use App\Filament\Mms\Resources\LetterItems\Pages\ManageLetterItems;
+use App\Filament\Shared\Clusters\Settings;
 use App\Models\LetterItem;
 use BackedEnum;
 use Filament\Actions\BulkActionGroup;
@@ -37,9 +37,15 @@ class LetterItemResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedListBullet;
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 32;
 
-    protected static ?string $cluster = Templates::class;
+    // Settings → Templates.
+    protected static ?string $cluster = Settings::class;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('Templates');
+    }
 
     public static function moduleGateKey(): string
     {
