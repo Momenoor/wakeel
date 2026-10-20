@@ -4398,5 +4398,18 @@
     "Edit placeholder": "تعديل المتغير",
     "Placeholder": "المتغير",
     "Grouped by party, under each capacity": "مجمّعون حسب الطرف، تحت كل صفة",
-    "{{attendee.capacity}}: each one's own capacity (a heading for the party, one for its agent). {{attendee.group}}: the capacity of the party they are or stand for (المدعي), {{attendee.party}}: its name — with these, a party and whoever stands for it come under one heading.": "{{attendee.capacity}}: صفة كل حاضر (عنوان للطرف وآخر لوكيله). {{attendee.group}}: صفة الطرف الذي هو أو يمثله (المدعي)، {{attendee.party}}: اسمه — بهما يأتي الطرف ومن يمثله تحت عنوان واحد."
+    "{{attendee.capacity}}: each one's own capacity (a heading for the party, one for its agent). {{attendee.group}}: the capacity of the party they are or stand for (المدعي), {{attendee.party}}: its name — with these, a party and whoever stands for it come under one heading.": "{{attendee.capacity}}: صفة كل حاضر (عنوان للطرف وآخر لوكيله). {{attendee.group}}: صفة الطرف الذي هو أو يمثله (المدعي)، {{attendee.party}}: اسمه — بهما يأتي الطرف ومن يمثله تحت عنوان واحد.",
+    "History": "السجل",
+    "Step": "المرحلة",
+    "Resubmitted": "أُعيد تقديمه",
+    "Reopened": "أُعيد فتحه",
+    "A fee or a collection was added, changed or deleted": "إضافة رسوم أو تحصيل أو تعديله أو حذفه",
+    "Fee added: :fee": "أُضيفت رسوم: :fee",
+    "Fee changed: :type — :changes": "عُدّلت رسوم :type — :changes",
+    "Fee deleted: :fee": "حُذفت رسوم: :fee",
+    "Collection recorded: :amount on the :type fee (:date)": "سُجّل تحصيل: :amount على رسوم :type (:date)",
+    "Collection on the :type fee changed — :changes": "عُدّل تحصيل على رسوم :type — :changes",
+    "Collection deleted: :amount on the :type fee": "حُذف تحصيل: :amount على رسوم :type",
+    ":user changed the fees of matter :matter": "عدّل :user رسوم الدعوى :matter",
+    ":old → :new": ":old ← :new"
 }

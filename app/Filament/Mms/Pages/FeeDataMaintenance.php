@@ -9,6 +9,7 @@ use App\Models\Allocation;
 use App\Models\Fee;
 use App\Models\Matter;
 use App\Models\Party;
+use App\Services\MMS\FeeChangeNotifier;
 use App\Services\MMS\FeeDataRepairService;
 use App\Support\Currency;
 use BackedEnum;
@@ -219,7 +220,8 @@ class FeeDataMaintenance extends Page
                 })
                 ->modalSubmitActionLabel(__('Align signs'))
                 ->action(function () {
-                    $r = $this->repairs()->alignAllocationSigns();
+                    // Repairs, not news: no one told of each fee.
+                    $r = FeeChangeNotifier::quietly(fn () => $this->repairs()->alignAllocationSigns());
 
                     Notification::make()
                         ->title($r['rows'] > 0 ? __('Allocation signs aligned') : __('Nothing to align'))
@@ -251,7 +253,8 @@ class FeeDataMaintenance extends Page
                 })
                 ->modalSubmitActionLabel(__('Remove duplicates'))
                 ->action(function () {
-                    $r = $this->repairs()->removeDuplicateAllocations();
+                    // Repairs, not news: no one told of each fee.
+                    $r = FeeChangeNotifier::quietly(fn () => $this->repairs()->removeDuplicateAllocations());
 
                     Notification::make()
                         ->title($r['rows'] > 0 ? __('Duplicates removed') : __('Nothing to remove'))
@@ -283,7 +286,8 @@ class FeeDataMaintenance extends Page
                 })
                 ->modalSubmitActionLabel(__('Trim over-collection'))
                 ->action(function () {
-                    $r = $this->repairs()->trimOverCollection();
+                    // Repairs, not news: no one told of each fee.
+                    $r = FeeChangeNotifier::quietly(fn () => $this->repairs()->trimOverCollection());
 
                     Notification::make()
                         ->title($r['fees'] > 0 ? __('Over-collection trimmed') : __('Nothing to trim'))
@@ -319,7 +323,8 @@ class FeeDataMaintenance extends Page
                 })
                 ->modalSubmitActionLabel(__('Settle in full'))
                 ->action(function () {
-                    $r = $this->repairs()->settleNonOwnerMatters();
+                    // Repairs, not news: no one told of each fee.
+                    $r = FeeChangeNotifier::quietly(fn () => $this->repairs()->settleNonOwnerMatters());
 
                     Notification::make()
                         ->title($r['fees'] > 0 ? __('Matters settled') : __('Nothing to settle'))

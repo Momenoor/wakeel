@@ -11,6 +11,7 @@ use App\Filament\Mms\Actions\Request\RejectRequestAction;
 use App\Filament\Mms\Actions\Request\RequestChangesAction;
 use App\Filament\Mms\Actions\Request\ResubmitRequestAction;
 use App\Filament\Mms\Resources\CalendarEvents\CalendarEventResource;
+use App\Filament\Mms\Resources\MatterRequests\Schemas\RequestHistoryEntry;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\BulkMailRelationManager;
@@ -595,6 +596,9 @@ class MatterInfolist
                             ->label(__('Reviewer Comment'))
                             ->columnSpanFull()
                             ->visible(fn ($record) => ! empty($record->approved_comment)),
+                        // Its steps, when there was more than the asking.
+                        RequestHistoryEntry::make()
+                            ->visible(fn ($record) => $record->status !== RequestStatus::PENDING || filled($record->extra['rounds'] ?? null)),
                         RepeatableEntry::make('attachments')
                             ->label(__('Attachments'))
                             ->columnSpanFull()

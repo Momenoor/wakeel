@@ -4,6 +4,7 @@ namespace App\Observers;
 
 use App\Enums\MatterCollectionStatus;
 use App\Models\Matter;
+use App\Services\MMS\FeeChangeNotifier;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterProgressRecorder;
 use App\Services\MMS\NewMatterNotification;
@@ -93,10 +94,11 @@ class MatterObserver
             fn (Matter $child) => $child->forceDelete()
         );
         $matter->matterParties()->delete();
-        $matter->fees()->each(function ($fee) {
+        // Gone with the matter: no one told of each fee.
+        FeeChangeNotifier::quietly(fn () => $matter->fees()->each(function ($fee) {
             $fee->allocations()->delete();
             $fee->delete();
-        });
+        }));
         $matter->allocations()->delete();
         $matter->notes()->delete();
 

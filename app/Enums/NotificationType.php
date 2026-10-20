@@ -39,6 +39,9 @@ enum NotificationType: string
     case CALENDAR_UNMATCHED = 'calendar.unmatched';
     case CALENDAR_REMINDER = 'calendar.reminder';
 
+    // Fees
+    case FEES_CHANGED = 'fees.changed';
+
     public function label(): string
     {
         return match ($this) {
@@ -59,6 +62,7 @@ enum NotificationType: string
             self::TODO_COMPLETED => __('A shared to-do was completed'),
             self::CALENDAR_UNMATCHED => __('Calendar events naming a matter that is not in the system'),
             self::CALENDAR_REMINDER => __('An event of my matter tomorrow, and in an hour'),
+            self::FEES_CHANGED => __('A fee or a collection was added, changed or deleted'),
         };
     }
 
@@ -72,6 +76,7 @@ enum NotificationType: string
             self::LEAVE_SUBMITTED, self::LEAVE_DECIDED => __('Leave'),
             self::CHAT_MESSAGE, self::CHAT_REACTION, self::TODO_MENTIONED, self::TODO_COMPLETED => __('Chat and to-dos'),
             self::CALENDAR_UNMATCHED, self::CALENDAR_REMINDER => __('Calendar'),
+            self::FEES_CHANGED => __('Fees'),
         };
     }
 
@@ -103,6 +108,8 @@ enum NotificationType: string
         return match ($this) {
             self::REQUEST_CREATED, self::REQUEST_DECIDED, self::REQUEST_CHANGES, self::MATTER_ASSIGNED, self::LEAVE_SUBMITTED, self::LEAVE_DECIDED => [...$bell, NotificationChannel::MAIL],
             self::CALENDAR_UNMATCHED => [NotificationChannel::MAIL],
+            // Only for the roles given it (super admins and accountants to begin with).
+            self::FEES_CHANGED => [],
             default => $bell,
         };
     }
@@ -139,6 +146,7 @@ enum NotificationType: string
             self::ONEDRIVE_FOLDER_REVIEW => ['View:OneDriveSettings'],
             self::MATTER_EMAIL_UNFILED => ['View:UnfiledEmails'],
             self::CALENDAR_UNMATCHED => ['View:UnmatchedEventReferences'],
+            self::FEES_CHANGED => ['View:MatterFeesTab'],
             default => [],
         };
 

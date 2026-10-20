@@ -8,6 +8,8 @@ use App\Enums\FeeType;
 use App\Models\Concerns\AnnouncesChanges;
 use App\Models\Concerns\HasAttachments;
 use App\Models\Contracts\AttachmentOwner;
+use App\Services\MMS\FeeChangeNotifier;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,6 +18,8 @@ use Illuminate\Support\Facades\DB;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
+// Who is to hear of it is told of a fee or a collection added, changed or deleted.
+#[ObservedBy(FeeChangeNotifier::class)]
 class Fee extends Model implements AttachmentOwner
 {
     use AnnouncesChanges;

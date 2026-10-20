@@ -94,6 +94,11 @@ class MatterRequestInfolist
                                             ->dateTimeTooltip(),
                                     ]),
                             ])->columnSpan(1),
+                        // Each step it went through: submitted, changes requested, resubmitted, decided.
+                        Section::make(__('History'))
+                            ->columnSpanFull()
+                            ->icon('heroicon-m-queue-list')
+                            ->schema([RequestHistoryEntry::make()->hiddenLabel()]),
                         Section::make(__('Attachments'))
                             ->columnSpanFull()
                             ->icon('heroicon-m-paper-clip')
