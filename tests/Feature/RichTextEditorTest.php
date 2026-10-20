@@ -102,6 +102,8 @@ class RichTextEditorTest extends TestCase
         $this->assertSame(1, preg_match('/'.$config['noneditable_regexp'].'/u', '<p>عن '.$condition.' و</p>', $match));
         $this->assertSame($condition, $match[0]);
         $this->assertSame(0, preg_match('/'.$config['noneditable_regexp'].'/', '<p>{{a <b>b</b>}}</p>'));
+        // A placeholder clicked on a right-to-left page stays where it is (TinyMCE's copy of the selection kept in place).
+        $this->assertStringContainsString('.mce-offscreen-selection { position: fixed !important;', $config['content_style']);
         $this->assertSame(SignatureBlock::ID, $config['wakeel']['blocks']['signature']);
         $this->assertSame(SavedSignatureBlock::ID, $config['wakeel']['blocks']['saved']);
         // The letter's page and fonts.

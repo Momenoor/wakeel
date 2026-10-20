@@ -93,8 +93,10 @@ class EditorFonts
         return $this->faces()
             // The page fills the field, white to its edges.
             .' html { background: #fff; }'
-            .' body { box-sizing: border-box; background: #fff; color: #111827; margin: 0; padding: 16px 24px;'
+            .' body { box-sizing: border-box; background: #fff; color: #111827; margin: 0; padding: 12mm 14mm;'
             .' font-family: '.$family.'; font-size: 12pt; line-height: 1.55; text-align: justify; }'
+            // A narrow screen keeps its width for the text.
+            .' @media (max-width: 640px) { body { padding: 16px; } }'
             .' p { margin: 0 0 6pt 0; }'
             .' ol, ul { margin: 0 0 6pt 0; padding-inline-start: 18pt; } li { margin-bottom: 3pt; }'
             .' h1 { font-size: 18pt; } h2 { font-size: 16pt; } h3 { font-size: 14pt; } h4 { font-size: 12pt; }'
@@ -143,6 +145,11 @@ class EditorFonts
     private static function markedCss(): string
     {
         return ' span[data-mce-content] { background: #eef2ff; color: #3730a3; border-radius: 3px; padding: 0 2px; white-space: normal; unicode-bidi: isolate; direction: ltr; cursor: default; }'
+            .' span[data-mce-content][data-mce-selected] { outline: 2px solid #3b82f6; }'
+            // TinyMCE keeps a copy of what is selected far to the left; on a right-to-left page that far left
+            // can be scrolled to, so clicking a placeholder threw the page there. Kept in place, unseen.
+            .' .mce-offscreen-selection { position: fixed !important; inset: 0 auto auto 0 !important; width: 1px !important; height: 1px !important;'
+            .' max-width: 1px !important; overflow: hidden !important; clip-path: inset(50%) !important; opacity: 0 !important; }'
             .' div[data-type="customBlock"] { box-sizing: border-box; margin: 6pt 0; padding: 10px 14px; border: 1px dashed #9ca3af; border-radius: 6px;'
             .' background: #f9fafb; color: #4b5563; font-size: 10pt; line-height: 1.4; cursor: default; user-select: none; text-align: start; }'
             .' div[data-type="customBlock"]::before { content: attr(data-label); }'
