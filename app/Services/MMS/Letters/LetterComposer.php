@@ -199,7 +199,7 @@ class LetterComposer
         // A meeting's minutes: its number, who attended, the questions and answers.
         $minutes = (array) ($this->inputs[self::MINUTES] ?? []);
         $values['minutes.number'] = (string) ($minutes['number'] ?? '');
-        $values['minutes.attendees'] = self::attendeesHtml((array) ($minutes['attendees'] ?? []), (array) ($this->template->minutes_attendees ?? []), $this->isArabic());
+        $values['minutes.attendees'] = self::attendeesHtml((array) ($minutes['attendees'] ?? []), (array) ($this->template->minutes_attendees ?? []), $this->isArabic(), self::attendeeParties($this->matter, $this->isArabic()));
         // How many attended — {{if minutes.attendees.count > 1 ? الحاضرين : الحاضر}}.
         $values['minutes.attendees.count'] = (string) collect($minutes['attendees'] ?? [])
             ->filter(fn ($a) => is_array($a) && ! empty($a['present']) && filled($a['name'] ?? null))
@@ -640,16 +640,18 @@ class LetterComposer
     /**
      * Who attended, under their capacity ("وكيل المتنازعة:"), each on a line:
      * "الأستاذ/ … – رقم الهوية: … – رقم الهاتف: …" — grouped, each party
-     * followed by whoever stands for it.
+     * followed by whoever stands for it, under one heading when the heading
+     * names the party ({{attendee.group}}, {{attendee.party}}).
      *
      * @param  list<array<string, mixed>>  $attendees
+     * @param  array<int, array{id: int, name: string, role: ?string}>  $parties  the matter's party each party id stands with (attendeeParties())
      */
-    public static function attendeesHtml(array $attendees, array $settings = [], bool $arabic = true): string
+    public static function attendeesHtml(array $attendees, array $settings = [], bool $arabic = true, array $parties = []): string
     {
         $settings = self::attendeeSettings($settings, $arabic);
-        $present = collect($attendees)
+        $present = self::withParty(collect($attendees)
             ->filter(fn ($a) => is_array($a) && ! empty($a['present']) && filled($a['name'] ?? null))
-            ->values();
+            ->values(), $parties);
 
         if ($present->isEmpty()) {
             return '';
@@ -665,25 +667,24 @@ class LetterComposer
             return '<ol>'.$present->map(fn (array $a, int $i) => '<li>'.$line($a, $i + 1).'</li>')->implode('').'</ol>';
         }
 
-        // Grouped: by party — the party, then whoever stands for it — each capacity's heading over its
-        // attendees. Someone of no party (an expert, an interpreter) by their capacity alone.
+        // Grouped: by party — the party, then whoever stands for it — under the heading: each capacity's,
+        // or the party's when it names the party. Someone of no party (an expert) by their capacity alone.
         $number = 0;
-        $capacity = fn (array $a): string => trim((string) ($a['capacity'] ?? ''));
-        $party = fn (array $a): string => match (true) {
-            filled($a['represents'] ?? null) => 'party:'.(int) $a['represents'],
-            filled($a['party_id'] ?? null) => 'party:'.(int) $a['party_id'],
-            default => 'capacity:'.$capacity($a),
+        // A heading with nothing filled in (":" alone) is none.
+        $heading = function (array $a) use ($settings): string {
+            $text = self::attendeeText($settings['heading'], Arr::only($a, ['capacity', 'group', 'party']), 0);
+
+            return preg_match('/[\p{L}\p{N}]/u', strip_tags($text)) === 1 ? $text : '';
         };
 
         return $present
-            ->groupBy($party)
+            ->groupBy('_group')
             ->flatMap(fn ($members) => $members->sortBy(fn (array $a): int => filled($a['represents'] ?? null) ? 1 : 0)
-                ->groupBy($capacity)
+                ->groupBy($heading)
                 ->map(fn ($group, $heading) => [(string) $heading, $group])
                 ->values())
-            ->map(function (array $section) use ($settings, $line, &$number): string {
-                [$capacity, $group] = $section;
-                $heading = $capacity !== '' ? self::attendeeText($settings['heading'], ['capacity' => $capacity], 0) : '';
+            ->map(function (array $section) use ($line, &$number): string {
+                [$heading, $group] = $section;
 
                 return ($heading !== '' ? '<p><strong>'.$heading.'</strong></p>' : '')
                     .$group->map(function (array $a) use ($line, &$number) {
@@ -691,6 +692,56 @@ class LetterComposer
                     })->implode('');
             })
             ->implode('');
+    }
+
+    /**
+     * Each attendee's party group: the party they are, or stand for — a representative's, their party's —
+     * its capacity ({{attendee.group}}, "المدعي") and name ({{attendee.party}}). Without the matter's
+     * parties, the party's as it attended.
+     *
+     * @param  Collection<int, array<string, mixed>>  $present
+     * @param  array<int, array{id: int, name: string, role: ?string}>  $parties
+     * @return Collection<int, array<string, mixed>>
+     */
+    private static function withParty(Collection $present, array $parties): Collection
+    {
+        $attended = $present->filter(fn (array $a): bool => blank($a['represents'] ?? null) && filled($a['party_id'] ?? null))
+            ->keyBy(fn (array $a): int => (int) $a['party_id']);
+
+        return $present->map(function (array $a) use ($parties, $attended): array {
+            $id = filled($a['represents'] ?? null) ? (int) $a['represents'] : (filled($a['party_id'] ?? null) ? (int) $a['party_id'] : null);
+            $top = $id !== null ? ($parties[$id] ?? null) : null;
+            $own = $id !== null ? $attended->get($top['id'] ?? $id) : null;
+
+            return [
+                ...$a,
+                '_group' => $id !== null ? 'party:'.($top['id'] ?? $id) : 'capacity:'.trim((string) ($a['capacity'] ?? '')),
+                'group' => trim((string) ($top['role'] ?? $own['capacity'] ?? ($id === null ? ($a['capacity'] ?? '') : ''))),
+                'party' => trim((string) ($top['name'] ?? $own['name'] ?? '')),
+            ];
+        });
+    }
+
+    /**
+     * The matter's party each party on it stands with, by party id: a party its own, a representative
+     * their party — its id, name and capacity. For the attendees' groups.
+     *
+     * @return array<int, array{id: int, name: string, role: ?string}>
+     */
+    public static function attendeeParties(Matter $matter, bool $arabic = true): array
+    {
+        $candidates = self::candidates($matter, $arabic);
+        $parties = [];
+
+        foreach ($candidates as $candidate) {
+            $top = $candidate['of'] !== null ? ($candidates[$candidate['of']] ?? $candidate) : $candidate;
+
+            if (filled($candidate['party_id']) && filled($top['party_id'])) {
+                $parties[(int) $candidate['party_id']] ??= ['id' => (int) $top['party_id'], 'name' => $top['name'], 'role' => $top['role']];
+            }
+        }
+
+        return $parties;
     }
 
     /** What {{minutes.attendees}} shows — the template's choices over these. */
@@ -739,6 +790,9 @@ class LetterComposer
             'attendee.title' => trim((string) ($a['title'] ?? '')),
             'attendee.name' => trim((string) ($a['name'] ?? '')),
             'attendee.capacity' => trim((string) ($a['capacity'] ?? '')),
+            // The party they are or stand for: its capacity and name.
+            'attendee.group' => trim((string) ($a['group'] ?? '')),
+            'attendee.party' => trim((string) ($a['party'] ?? '')),
             'attendee.id_number' => trim((string) ($a['id_number'] ?? '')),
             'attendee.phone' => trim((string) ($a['phone'] ?? '')),
             // المحترم / المحترمة / المحترمين, agreeing with the title.

@@ -361,6 +361,19 @@ class MinutesTest extends TestCase
             .'<p><strong>الخبير:</strong></p><p>5 خالد</p>',
             LetterComposer::attendeesHtml($parties, ['line' => '{{attendee.number}} {{attendee.name}}'], true),
         );
+        // A heading naming the party: the party and whoever stands for it under one.
+        $this->assertSame(
+            '<p><strong>المدعي (أحمد علي):</strong></p><p>أحمد علي</p><p>سالم</p>'
+            .'<p><strong>المدعى عليها (شركة المثال):</strong></p><p>شركة المثال</p><p>منى</p>'
+            .'<p><strong>الخبير:</strong></p><p>خالد</p>',
+            LetterComposer::attendeesHtml($parties, ['line' => '{{attendee.name}}', 'heading' => '{{attendee.group}}<< ({{attendee.party}})>>:'], true),
+        );
+        // With the matter's parties: its capacity and name, though only the agent attended.
+        $this->assertSame(
+            '<p><strong>الطرف المدعي – شركة الاختبار:</strong></p><p>سالم</p>',
+            LetterComposer::attendeesHtml([$parties[3]], ['line' => '{{attendee.name}}', 'heading' => '{{attendee.group}} – {{attendee.party}}:'], true,
+                [1 => ['id' => 1, 'name' => 'شركة الاختبار', 'role' => 'الطرف المدعي']]),
+        );
 
         // Its own wording and heading.
         $this->assertSame(

@@ -4396,5 +4396,7 @@
     "Undo regeneration": "التراجع عن إعادة الإنشاء",
     "Use the template's letterhead too": "استخدام ترويسة القالب أيضاً",
     "Edit placeholder": "تعديل المتغير",
-    "Placeholder": "المتغير"
+    "Placeholder": "المتغير",
+    "Grouped by party, under each capacity": "مجمّعون حسب الطرف، تحت كل صفة",
+    "{{attendee.capacity}}: each one's own capacity (a heading for the party, one for its agent). {{attendee.group}}: the capacity of the party they are or stand for (المدعي), {{attendee.party}}: its name — with these, a party and whoever stands for it come under one heading.": "{{attendee.capacity}}: صفة كل حاضر (عنوان للطرف وآخر لوكيله). {{attendee.group}}: صفة الطرف الذي هو أو يمثله (المدعي)، {{attendee.party}}: اسمه — بهما يأتي الطرف ومن يمثله تحت عنوان واحد."
 }

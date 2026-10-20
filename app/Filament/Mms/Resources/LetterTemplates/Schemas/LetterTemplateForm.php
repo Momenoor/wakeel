@@ -250,7 +250,7 @@ class LetterTemplateForm
                         Radio::make('minutes_attendees.layout')
                             ->label(__('Layout'))
                             ->options([
-                                'grouped' => __('Grouped under each capacity'),
+                                'grouped' => __('Grouped by party, under each capacity'),
                                 'list' => __('One numbered list'),
                                 'table' => __('A table'),
                             ])
@@ -259,7 +259,7 @@ class LetterTemplateForm
                         Textarea::make('minutes_attendees.line')
                             ->label(__('Each attendee'))
                             ->placeholder(fn (Get $get) => LetterComposer::attendeeSettings([], $get('locale') !== 'en')['line'])
-                            ->helperText(__('Leave empty for the standard line. Placeholders: :list. A part between << >> shows only when its placeholder is filled.', ['list' => '{{attendee.title}} {{attendee.name}} {{attendee.capacity}} {{attendee.id_number}} {{attendee.phone}} {{attendee.number}}']))
+                            ->helperText(__('Leave empty for the standard line. Placeholders: :list. A part between << >> shows only when its placeholder is filled.', ['list' => '{{attendee.title}} {{attendee.name}} {{attendee.capacity}} {{attendee.group}} {{attendee.party}} {{attendee.id_number}} {{attendee.phone}} {{attendee.number}}']))
                             ->rows(2)
                             ->live(onBlur: true)
                             ->extraInputAttributes(['dir' => 'auto'])
@@ -267,6 +267,7 @@ class LetterTemplateForm
                         TextInput::make('minutes_attendees.heading')
                             ->label(__('Capacity heading'))
                             ->placeholder('{{attendee.capacity}}:')
+                            ->helperText(__('{{attendee.capacity}}: each one\'s own capacity (a heading for the party, one for its agent). {{attendee.group}}: the capacity of the party they are or stand for (المدعي), {{attendee.party}}: its name — with these, a party and whoever stands for it come under one heading.'))
                             ->live(onBlur: true)
                             ->extraInputAttributes(['dir' => 'auto'])
                             ->visible(fn (Get $get) => ($get('minutes_attendees.layout') ?? 'grouped') === 'grouped'),
@@ -323,14 +324,14 @@ class LetterTemplateForm
     {
         return $arabic
             ? [
-                ['present' => true, 'title' => 'السيد/', 'name' => 'أحمد علي', 'capacity' => 'المدعي', 'id_number' => '784-1990-1234567-1', 'phone' => '0501234567'],
-                ['present' => true, 'title' => 'الأستاذ/', 'name' => 'محمد حسن', 'capacity' => 'وكيل المدعي', 'id_number' => '', 'phone' => '0559876543'],
-                ['present' => true, 'title' => '', 'name' => 'شركة المثال', 'capacity' => 'المدعى عليها', 'id_number' => '', 'phone' => ''],
+                ['present' => true, 'title' => 'السيد/', 'name' => 'أحمد علي', 'capacity' => 'المدعي', 'id_number' => '784-1990-1234567-1', 'phone' => '0501234567', 'party_id' => -1],
+                ['present' => true, 'title' => '', 'name' => 'شركة المثال', 'capacity' => 'المدعى عليها', 'id_number' => '', 'phone' => '', 'party_id' => -2],
+                ['present' => true, 'title' => 'الأستاذ/', 'name' => 'محمد حسن', 'capacity' => 'وكيل المدعي', 'id_number' => '', 'phone' => '0559876543', 'party_id' => -3, 'represents' => -1],
             ]
             : [
-                ['present' => true, 'title' => 'Mr.', 'name' => 'Ahmed Ali', 'capacity' => 'Plaintiff', 'id_number' => '784-1990-1234567-1', 'phone' => '0501234567'],
-                ['present' => true, 'title' => 'Mr.', 'name' => 'Mohamed Hassan', 'capacity' => 'Plaintiff\'s lawyer', 'id_number' => '', 'phone' => '0559876543'],
-                ['present' => true, 'title' => '', 'name' => 'Example LLC', 'capacity' => 'Defendant', 'id_number' => '', 'phone' => ''],
+                ['present' => true, 'title' => 'Mr.', 'name' => 'Ahmed Ali', 'capacity' => 'Plaintiff', 'id_number' => '784-1990-1234567-1', 'phone' => '0501234567', 'party_id' => -1],
+                ['present' => true, 'title' => '', 'name' => 'Example LLC', 'capacity' => 'Defendant', 'id_number' => '', 'phone' => '', 'party_id' => -2],
+                ['present' => true, 'title' => 'Mr.', 'name' => 'Mohamed Hassan', 'capacity' => 'Plaintiff\'s lawyer', 'id_number' => '', 'phone' => '0559876543', 'party_id' => -3, 'represents' => -1],
             ];
     }
 
