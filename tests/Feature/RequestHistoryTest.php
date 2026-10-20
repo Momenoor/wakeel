@@ -69,7 +69,7 @@ class RequestHistoryTest extends TestCase
 
         $this->assertSame(
             [
-                ['Submitted', 'Sara', 'First draft'],
+                ['Request submitted', 'Sara', 'First draft'],
                 ['Changes requested', 'Omar', 'Fix the dates'],
                 ['Resubmitted', 'Sara', 'Dates fixed'],
                 ['Approved', 'Omar', 'Good'],
@@ -96,7 +96,7 @@ class RequestHistoryTest extends TestCase
         DB::table('activity_log')->where('subject_type', $request->getMorphClass())->delete();
 
         $this->assertSame(
-            ['Submitted', 'Changes requested', 'Resubmitted', 'Rejected'],
+            ['Request submitted', 'Changes requested', 'Resubmitted', 'Rejected'],
             array_column(RequestHistory::for($request), 'label'),
         );
         $this->assertSame('Not needed', RequestHistory::for($request)[3]['comment']);

@@ -132,7 +132,7 @@ class RequestHistory
     public static function label(string $step): string
     {
         return match ($step) {
-            self::SUBMITTED => __('Submitted'),
+            self::SUBMITTED => __('Request submitted'),
             self::CHANGES_REQUESTED => __('Changes requested'),
             self::RESUBMITTED => __('Resubmitted'),
             self::APPROVED => __('Approved'),

@@ -21,10 +21,11 @@ class RequestHistoryEntry
         return RepeatableEntry::make($name)
             ->label(__('History'))
             ->state(fn (MatterRequest $record): array => RequestHistory::for($record))
+            // Room for the step's badge and the date on one line; the note takes the rest.
             ->table([
-                TableColumn::make(__('Step')),
-                TableColumn::make(__('By')),
-                TableColumn::make(__('Date')),
+                TableColumn::make(__('Step'))->width('11rem'),
+                TableColumn::make(__('By'))->width('11rem'),
+                TableColumn::make(__('Date'))->width('13rem'),
                 TableColumn::make(__('Note')),
             ])
             ->schema([

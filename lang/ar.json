@@ -4411,5 +4411,6 @@
     "Collection on the :type fee changed — :changes": "عُدّل تحصيل على رسوم :type — :changes",
     "Collection deleted: :amount on the :type fee": "حُذف تحصيل: :amount على رسوم :type",
     ":user changed the fees of matter :matter": "عدّل :user رسوم الدعوى :matter",
-    ":old → :new": ":old ← :new"
+    ":old → :new": ":old ← :new",
+    "Request submitted": "قُدِّم الطلب"
 }
