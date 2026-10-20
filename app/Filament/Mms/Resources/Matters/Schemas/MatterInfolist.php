@@ -561,6 +561,8 @@ class MatterInfolist
             ->schema([
                 RepeatableEntry::make('requests')
                     ->hiddenLabel()
+                    // Newest first, however they were loaded.
+                    ->state(fn (Matter $record) => $record->requests->sortByDesc('id')->values())
                     ->columns(4)
                     ->columnSpanFull()
                     ->schema([
@@ -633,6 +635,8 @@ class MatterInfolist
             ->schema([
                 RepeatableEntry::make('notes')
                     ->hiddenLabel()
+                    // Newest first: by when it was written, then by when it was added.
+                    ->state(fn (Matter $record) => $record->notes->sortBy([['datetime', 'desc'], ['id', 'desc']])->values())
                     ->columns(2)
                     ->columnSpanFull()
                     ->visible(fn ($record) => $record?->notes?->isNotEmpty())
@@ -795,6 +799,8 @@ class MatterInfolist
             ])
             ->schema([
                 RepeatableEntry::make('fees')
+                    // Newest first: by its date, then by when it was added.
+                    ->state(fn (Matter $record) => $record->fees->sortBy([['date', 'desc'], ['id', 'desc']])->values())
                     ->columns(5)
                     ->columnSpanFull()
                     ->schema([
