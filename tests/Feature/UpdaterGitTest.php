@@ -122,7 +122,19 @@ class UpdaterGitTest extends TestCase
         $this->assertMatchesRegularExpression('/\b[0-9a-f]{40}\b/', $updater->liveOutput());
 
         $this->assertTrue($updater->runNextStep(), (string) $updater->state()['log']); // maintenance
+
+        // The old code's compiled caches — Filament's naming a class the new code no longer has.
+        File::ensureDirectoryExists($this->site.'/bootstrap/cache/filament/panels');
+        File::put($this->site.'/bootstrap/cache/filament/panels/mms.php', "<?php return ['clusters' => ['App\\\\Filament\\\\Mms\\\\Clusters\\\\Templates']];");
+        File::put($this->site.'/bootstrap/cache/config.php', '<?php return [];');
+        File::put($this->site.'/bootstrap/cache/packages.php', '<?php return [];');
+
         $this->assertTrue($updater->runNextStep(), (string) $updater->state()['log']); // code
+
+        // Gone with the old code, before anything starts the application on the new one; the package list stays.
+        $this->assertDirectoryDoesNotExist($this->site.'/bootstrap/cache/filament');
+        $this->assertFileDoesNotExist($this->site.'/bootstrap/cache/config.php');
+        $this->assertFileExists($this->site.'/bootstrap/cache/packages.php');
 
         $this->assertSame("v2\n", str_replace("\r\n", "\n", File::get($this->site.'/app.txt')));
         $this->assertSame(

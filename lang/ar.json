@@ -4417,5 +4417,6 @@
     "Signed out — sign in again to follow": "تم تسجيل الخروج — سجّل الدخول مجدداً للمتابعة",
     "You can no longer follow these minutes": "لم يعد بإمكانك متابعة هذا المحضر",
     "Your account has no OneDrive yet. Open OneDrive once with it (office.com), then try again.": "لا يوجد OneDrive لحسابك بعد. افتح OneDrive مرة واحدة بهذا الحساب (office.com) ثم حاول مجدداً.",
-    "That folder or file is not in your OneDrive.": "هذا المجلد أو الملف غير موجود في OneDrive الخاص بك."
+    "That folder or file is not in your OneDrive.": "هذا المجلد أو الملف غير موجود في OneDrive الخاص بك.",
+    "Compiled caches removed: :files": "أُزيلت الذاكرة المؤقتة المجمّعة: :files"
 }

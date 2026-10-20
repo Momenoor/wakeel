@@ -346,7 +346,38 @@ class Updater
             AppUpdate::recordInstalled($version, trim($head['output']));
         }
 
-        return $output;
+        return $output.$this->forgetCompiled();
+    }
+
+    /**
+     * The caches the old code was compiled into, deleted as files — right after the new code is in. Until
+     * "Rebuild caches" they would still name the old code's classes: a page or panel since removed (the
+     * Templates cluster, gone in v3.2.9) broke every artisan command and request on its way through the
+     * update — migrations, permissions, the steps themselves — with "Class … not found". Deleted rather than
+     * cleared with artisan, which starts the application, and with it the stale cache, first.
+     */
+    private function forgetCompiled(): string
+    {
+        $cache = base_path('bootstrap/cache');
+        $gone = [];
+
+        foreach (['config.php', 'routes-v7.php', 'events.php'] as $file) {
+            if (is_file($cache.'/'.$file) && @unlink($cache.'/'.$file)) {
+                $gone[] = $file;
+            }
+        }
+
+        // Filament's components and icons, panel by panel.
+        if (is_dir($cache.'/filament')) {
+            $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($cache.'/filament', \FilesystemIterator::SKIP_DOTS), \RecursiveIteratorIterator::CHILD_FIRST);
+            foreach ($files as $file) {
+                $file->isDir() ? @rmdir($file->getPathname()) : @unlink($file->getPathname());
+            }
+            @rmdir($cache.'/filament');
+            $gone[] = 'filament/';
+        }
+
+        return $gone === [] ? '' : "\n".__('Compiled caches removed: :files', ['files' => implode(', ', $gone)])."\n";
     }
 
     /**
@@ -387,6 +418,9 @@ class Updater
 
     private function composerInstall(): string
     {
+        // Again, in case the code step was run by a version that did not yet do it (see forgetCompiled()).
+        $this->forgetCompiled();
+
         $result = $this->process(
             [...$this->composer(), 'install', '--no-dev', '--no-interaction', '--optimize-autoloader', '--no-ansi'],
             timeout: 1800,
