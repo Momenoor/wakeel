@@ -23,9 +23,9 @@ class RequestHistoryEntry
             ->state(fn (MatterRequest $record): array => RequestHistory::for($record))
             // Room for the step's badge and the date on one line; the note takes the rest.
             ->table([
-                TableColumn::make(__('Step'))->width('11rem'),
-                TableColumn::make(__('By'))->width('11rem'),
-                TableColumn::make(__('Date'))->width('13rem'),
+                TableColumn::make(__('Step'))->width('8rem'),
+                TableColumn::make(__('By'))->width('9rem'),
+                TableColumn::make(__('Date'))->width('11rem'),
                 TableColumn::make(__('Note')),
             ])
             ->schema([
