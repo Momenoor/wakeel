@@ -90,5 +90,8 @@ class NotificationTabsTest extends TestCase
     public function test_the_panels_bell_uses_it(): void
     {
         $this->assertSame(TabbedDatabaseNotifications::class, Filament::getPanel('mms')->getDatabaseNotificationsLivewireComponent());
+
+        // With the bell itself to open it, in the top bar (Filament 5.10.2 gives the panel's component its button).
+        Livewire::test(TabbedDatabaseNotifications::class)->assertSeeHtml('fi-topbar-database-notifications-btn');
     }
 }

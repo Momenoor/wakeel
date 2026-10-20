@@ -3,7 +3,7 @@
 namespace App\Livewire;
 
 use App\Enums\NotificationType;
-use Filament\Notifications\Livewire\DatabaseNotifications;
+use Filament\Livewire\DatabaseNotifications;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\Relation;
