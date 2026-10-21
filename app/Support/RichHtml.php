@@ -174,7 +174,7 @@ class RichHtml
      */
     public static function tables(string $html): string
     {
-        if (! preg_match('/<table\b[^>]*\sborder=|<table\b[^>]*style="[^"]*\bborder\s*:\s*(?:none|0)|<col\b|<tr\b[^>]*height/i', $html)) {
+        if (! preg_match('/<table\b[^>]*\sborder=|<table\b[^>]*style="[^"]*\bborder(?:-style)?\s*:[^;"]*\b(?:none|hidden)\b|<table\b[^>]*style="[^"]*\bborder(?:-width)?\s*:\s*0|<col\b|<tr\b[^>]*height/i', $html)) {
             return $html;
         }
 
@@ -198,8 +198,10 @@ class RichHtml
         // The table's border: its style's, or border="n" (n px).
         $width = $style['border-width'] ?? (preg_match('/^([\d.]+(?:px|pt)?)\b/', $style['border'] ?? '', $m) ? $m[1] : null);
         $width ??= $attribute !== null ? ($attribute > 0 ? $attribute.'px' : '0') : null;
+        // No border, however it is written: "none", "0", or as the browser writes it back after an edit,
+        // "medium none currentcolor".
         $none = ($width !== null && (float) $width == 0) || in_array($style['border-style'] ?? '', ['none', 'hidden'], true)
-            || in_array(strtolower(trim($style['border'] ?? '')), ['none', 'hidden', '0'], true);
+            || (bool) preg_match('/(?:^|\s)(?:none|hidden|0)(?:\s|$)/i', trim($style['border'] ?? ''));
         $colour = $style['border-color'] ?? (preg_match('/(#[0-9a-f]{3,6}|rgb\([^)]*\))/i', $style['border'] ?? '', $c) ? $c[1] : null);
 
         // Its columns' widths, in order (a <col span="2"> counts twice).

@@ -260,6 +260,12 @@ class RichTextOutputTest extends TestCase
             RichHtml::forOutput('<p><strong>البرنامج الزمني <span style="display: block; font-size: 11pt;">Timetable</span></strong></p>', true),
         );
 
+        // "No border" as the browser writes it back after an edit: the same.
+        $this->assertStringContainsString(
+            '<td style="padding: 6px; border: none">a</td>',
+            RichHtml::forOutput('<table style="width: 100%; border: medium none currentcolor;"><tr><td style="padding: 6px;">a</td></tr></table>', true),
+        );
+
         // A table that never said (an old one): as it was.
         $this->assertSame('<table><tr><td>a</td></tr></table>', RichHtml::forOutput('<table><tr><td>a</td></tr></table>', false));
     }
