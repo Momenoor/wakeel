@@ -137,7 +137,7 @@ class IncomingMatterEmailsTest extends TestCase
 
         // Its PDF on the matter and in OneDrive; the file it came with in OneDrive only — listed, not kept here.
         $this->assertSame([$second->files[0]['name']], $this->second->attachments()->pluck('name')->all());
-        $this->assertStringContainsString(__('Incoming email'), $second->files[0]['name']);
+        $this->assertStringContainsString(__('Incoming'), $second->files[0]['name']);
         $this->assertContains('عقد.pdf', array_column($second->files, 'name'));
         $this->assertNull(collect($second->files)->firstWhere('name', 'عقد.pdf')['path']);
         $this->assertTrue(collect($this->uploads)->contains(fn (string $url) => str_contains($url, 'عقد.pdf')));

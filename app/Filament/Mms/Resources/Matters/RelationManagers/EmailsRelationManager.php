@@ -12,6 +12,7 @@ use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterReplyCollector;
 use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Select;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
@@ -133,15 +134,17 @@ class EmailsRelationManager extends RelationManager
                     ->color('gray')
                     ->visible(fn (MatterEmail $record): bool => self::pdfUrl($record) !== null)
                     ->url(fn (MatterEmail $record): ?string => self::pdfUrl($record), shouldOpenInNewTab: true),
-                // Read from OneDrive itself what is there.
-                Action::make('checkOneDrive')
-                    ->label(__('Check OneDrive'))
-                    ->icon('heroicon-o-cloud-arrow-down')
-                    ->color('gray')
-                    ->visible(fn (MatterEmail $record): bool => $record->direction === MatterEmail::RECEIVED)
-                    ->action(fn (MatterEmail $record) => $this->checkOneDrive([$record])),
-                // Its PDF made wrongly (garbled letters): made again from the mailbox, its files in their places.
-                RegenerateEmailAction::make(fn (): bool => auth()->user()?->can('update', $this->getOwnerRecord()) ?? false),
+                // The less used, in the row's "…" menu.
+                ActionGroup::make([
+                    // Read from OneDrive itself what is there.
+                    Action::make('checkOneDrive')
+                        ->label(__('Check OneDrive'))
+                        ->icon('heroicon-o-cloud-arrow-down')
+                        ->visible(fn (MatterEmail $record): bool => $record->direction === MatterEmail::RECEIVED)
+                        ->action(fn (MatterEmail $record) => $this->checkOneDrive([$record])),
+                    // Its PDF made wrongly (garbled letters): made again from the mailbox, its files in their places.
+                    RegenerateEmailAction::make(fn (): bool => auth()->user()?->can('update', $this->getOwnerRecord()) ?? false),
+                ]),
                 // Filed on the wrong matter: to another, with its files and its step in the progress.
                 Action::make('move')
                     ->label(__('Move to another matter'))

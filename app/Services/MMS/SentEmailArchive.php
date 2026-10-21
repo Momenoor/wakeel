@@ -20,11 +20,27 @@ use Throwable;
  */
 class SentEmailArchive
 {
-    /** The party's name in an email's file name — at most this long. */
-    public const PARTY_LIMIT = 40;
+    /*
+     * Names kept short enough for Windows: a OneDrive synced to a PC is opened through a path of at most
+     * 260 characters — "C:\Users\…\OneDrive - JPA Auditing And Accounting LLC\" alone is some 60, then the
+     * assistant's folder, the matter's, its received-emails folder, and the email's own; past the limit
+     * Windows shortens each name to "2026-1~1" and OneDrive will not open the file.
+     */
 
-    /** An email's whole file name, before ".pdf" — at most this long. */
-    public const NAME_LIMIT = 120;
+    /** The party's name in an email's file name — at most this long. */
+    public const PARTY_LIMIT = 20;
+
+    /**
+     * An email's name, before ".pdf" — at most this long. Its PDF, its original (.eml) and the folder of
+     * the files it came with are all named so, the folder's files inside it: that path too must fit.
+     */
+    public const NAME_LIMIT = 50;
+
+    /** What an email is about (its subject, shortened) in its name — at most this long. */
+    public const TOPIC_LIMIT = 20;
+
+    /** A file an email came with, before its extension — at most this long. */
+    public const FILE_LIMIT = 40;
 
     public function __construct(private readonly MatterOneDriveFolders $folders) {}
 
@@ -36,11 +52,36 @@ class SentEmailArchive
      */
     public static function emailName(bool $sent, string $party, string $about, ?CarbonInterface $at = null, bool $reply = true): string
     {
-        $head = ($at ?? now())->format('Y-m-d H.i').' '.($sent ? __('Outgoing email') : ($reply ? __('Reply') : __('Incoming email')));
+        // Which way in a word (صادر, وارد, رد): the name keeps its room for whom and what.
+        $head = ($at ?? now())->format('Y-m-d H.i').' '.($sent ? __('Outgoing') : ($reply ? __('Reply') : __('Incoming')));
         $party = Str::limit(trim((string) preg_replace('/\s+/u', ' ', $party)), self::PARTY_LIMIT, '…');
-        $name = implode(' — ', array_filter([$head, $party, trim($about)], fn ($part) => $part !== ''));
+        $name = implode(' — ', array_filter([$head, $party, self::topic($about)], fn ($part) => $part !== ''));
 
         return MatterOneDriveExplorer::cleanName(Str::limit($name, self::NAME_LIMIT, '…'));
+    }
+
+    /**
+     * What an email is about, as its file name gives it: without "RE:", "FW:" or "رد:" (its name says
+     * whether it is a reply already) and without the matter's reference (the matter's folder is named for
+     * it) — "رد: إشعار بمأمورية الخبرة — JPA/2026/1010/1" is "إشعار بمأمورية الخبرة".
+     */
+    public static function topic(string $about): string
+    {
+        $about = preg_replace('/\bJPA\s*[\/\s]\s*\d{4}\s*[\/\s]\s*\d+(?:\s*[\/\s]\s*\d+)?/iu', ' ', $about) ?? $about;
+        $about = preg_replace('/^\s*(?:(?:re|fw|fwd|aw|tr|رد|إعادة توجيه|اعادة توجيه|توجيه)\s*[:：]\s*)+/iu', '', trim($about)) ?? $about;
+
+        $about = trim((string) preg_replace(['/\s+/u', '/^[\s—–\-|:]+|[\s—–\-|:]+$/u'], [' ', ''], $about));
+
+        return Str::limit($about, self::TOPIC_LIMIT, '…');
+    }
+
+    /** A file an email came with, its name kept short (FILE_LIMIT), its extension kept. */
+    public static function shortFileName(string $name): string
+    {
+        [$base, $extension] = self::splitName($name);
+        $base = rtrim(Str::limit(self::cleanBase($base), self::FILE_LIMIT, ''), " .\t");
+
+        return ($base !== '' ? $base : 'attachment').($extension !== '' ? '.'.$extension : '');
     }
 
     /**

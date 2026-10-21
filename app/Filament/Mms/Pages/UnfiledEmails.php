@@ -12,6 +12,7 @@ use App\Services\MMS\MatterReplyCollector;
 use App\Services\MMS\SenderMailer;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -243,8 +244,8 @@ class UnfiledEmails extends Page implements HasTable
                             ->send();
                     }),
 
-                // Its PDF made wrongly: made again from the mailbox, its files in their places.
-                RegenerateEmailAction::make(fn (): bool => true),
+                // Its PDF made wrongly: made again from the mailbox, its files in their places — in the row's "…" menu.
+                ActionGroup::make([RegenerateEmailAction::make(fn (): bool => true)]),
 
                 Action::make('ignore')
                     ->label(__('Ignore sender'))

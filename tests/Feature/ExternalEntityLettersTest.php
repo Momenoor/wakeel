@@ -30,6 +30,7 @@ use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Mockery;
 use Spatie\Permission\Models\Role;
+use Tests\Support\MailSenders;
 use Tests\TestCase;
 
 /**
@@ -58,7 +59,7 @@ class ExternalEntityLettersTest extends TestCase
         Storage::fake('public');
         Storage::fake('local');
         $this->withoutDefer();
-        \Tests\Support\MailSenders::add('iflas', ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
+        MailSenders::add('iflas', ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
         config([
             'mail.mailers.smtp.transport' => 'array',
             'mail.mailers.microsoft-graph' => ['transport' => 'microsoft-graph', 'tenant_id' => 'tenant', 'client_id' => 'client', 'client_secret' => 'secret'],
@@ -141,7 +142,7 @@ class ExternalEntityLettersTest extends TestCase
         $this->assertCount(1, $this->uploads());
         $this->assertStringContainsString('/items/sent-folder-id:/', $this->uploads()[0]);
         // Named in full — the reference's "/" no folder.
-        $this->assertStringContainsString('Outgoing email — القيادة العامة لشرطة دبي — JPA 2026 986 1.pdf', $this->uploads()[0]);
+        $this->assertStringContainsString('Outgoing — القيادة العامة لشرطة….pdf', $this->uploads()[0]);
     }
 
     public function test_minutes_emails_are_kept_too_and_not_in_onedrive_when_switched_off(): void
@@ -172,7 +173,7 @@ class ExternalEntityLettersTest extends TestCase
 
         $this->assertSame(0, $this->matter->attachments()->count());
         $this->assertCount(1, $this->uploads());
-        $this->assertStringContainsString('Outgoing email — منى — إخطار الأطراف.pdf', $this->uploads()[0]);
+        $this->assertStringContainsString('Outgoing — منى — إخطار الأطراف.pdf', $this->uploads()[0]);
     }
 
     public function test_an_emails_name_holds_its_party_kept_short(): void
@@ -181,13 +182,22 @@ class ExternalEntityLettersTest extends TestCase
         $long = str_repeat('شركة المهاد لخدمات صيانة السفن ', 4);
 
         $name = SentEmailArchive::emailName(true, $long, 'JPA/2026/986/1', $at);
-        $this->assertStringStartsWith('2026-10-11 05.48 Outgoing email — شركة المهاد', $name);
-        // The party at most PARTY_LIMIT, the whole at most NAME_LIMIT.
+        $this->assertStringStartsWith('2026-10-11 05.48 Outgoing — شركة المهاد', $name);
+        // The party at most PARTY_LIMIT, the whole at most NAME_LIMIT; the matter's reference left to its folder.
         $party = explode(' — ', $name)[1];
         $this->assertLessThanOrEqual(SentEmailArchive::PARTY_LIMIT + 1, mb_strlen($party));
-        $this->assertStringEndsWith('JPA 2026 986 1', $name);
+        $this->assertStringNotContainsString('986', $name);
 
         $this->assertLessThanOrEqual(SentEmailArchive::NAME_LIMIT + 1, mb_strlen(SentEmailArchive::emailName(false, 'شرطة دبي', str_repeat('موضوع طويل ', 30), $at)));
         $this->assertStringStartsWith('2026-10-11 05.48 Reply — شرطة دبي — موضوع', SentEmailArchive::emailName(false, 'شرطة دبي', 'موضوع', $at));
+        // What it is about, without "RE:" / "رد:" (it says it is a reply already) or the reference.
+        $this->assertSame('2026-10-11 05.48 Reply — شرطة دبي — إشعار بمأمورية', SentEmailArchive::emailName(false, 'شرطة دبي', 'رد: RE: إشعار بمأمورية — JPA/2026/1010/1', $at));
+    }
+
+    public function test_a_file_an_email_came_with_keeps_a_short_name_and_its_extension(): void
+    {
+        $this->assertSame(str_repeat('ب', SentEmailArchive::FILE_LIMIT).'.pdf', SentEmailArchive::shortFileName(str_repeat('ب', 90).'.pdf'));
+        $this->assertSame('كشف.xlsx', SentEmailArchive::shortFileName('كشف.xlsx'));
+        $this->assertSame('attachment.pdf', SentEmailArchive::shortFileName('???.pdf'));
     }
 }

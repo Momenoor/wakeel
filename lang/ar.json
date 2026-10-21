@@ -4427,5 +4427,7 @@
     "PDF replaced": "استُبدل ملف PDF",
     "Original (.eml) replaced": "استُبدل الأصل (.eml)",
     ":count attachment downloaded again|:count attachments downloaded again": "أُعيد تنزيل :count مرفق|أُعيد تنزيل :count مرفقات",
-    "This email is no longer in the mailbox it came to, so it cannot be made again.": "لم يعد هذا البريد موجوداً في صندوق البريد الذي وصل إليه، فلا يمكن إعادة إنشائه."
+    "This email is no longer in the mailbox it came to, so it cannot be made again.": "لم يعد هذا البريد موجوداً في صندوق البريد الذي وصل إليه، فلا يمكن إعادة إنشائه.",
+    "Outgoing": "صادر",
+    "Incoming": "وارد"
 }

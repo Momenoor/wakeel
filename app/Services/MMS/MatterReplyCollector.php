@@ -605,9 +605,11 @@ class MatterReplyCollector
 
     /**
      * A received email made again from the mailbox it came to — found there by its Message-ID: its PDF
-     * made anew, its original (.eml) and the files it came with downloaded again, each put where the old
-     * one is — the PDF kept with the matter's attachments in its place (its link the same), OneDrive's
-     * copies replaced, not renamed. For a PDF made wrongly (an email's own charset taken at its word).
+     * made anew, its original (.eml) and the files it came with downloaded again, under its name as made
+     * now (short enough for a OneDrive synced to a PC): its old copies in OneDrive — PDF, original, the
+     * folder of its files — to OneDrive's recycle bin, the new ones in their place; its PDF kept with the
+     * matter's attachments in place (its link the same), renamed. For a PDF made wrongly (an email's own
+     * charset taken at its word), or named too long.
      *
      * @return array{pdf: bool, eml: bool, attachments: int}
      */
@@ -620,9 +622,7 @@ class MatterReplyCollector
 
         [$pdf, $files, $name, $source] = $this->rendered($message, (string) $email->sender_key, $email->parent_id !== null);
 
-        // Under the name it has, so each new file takes its old one's place.
         $old = (array) ($email->files ?? []);
-        $name = filled($old[0]['name'] ?? null) ? pathinfo((string) $old[0]['name'], PATHINFO_FILENAME) : $name;
         $disk = Storage::disk('public');
         $replace = function (?string $path, string $contents) use ($disk): bool {
             if (blank($path) || ! $disk->exists($path)) {
@@ -633,7 +633,8 @@ class MatterReplyCollector
 
             return true;
         };
-        $oldPath = fn (string $fileName): ?string => collect($old)->first(fn (array $file): bool => ($file['name'] ?? null) === $fileName && filled($file['path'] ?? null))['path'] ?? null;
+        // A file it came with that was kept in the system: by the name it was kept under, long or short.
+        $oldPath = fn (string $fileName): ?string => collect($old)->first(fn (array $file): bool => in_array($file['name'] ?? null, [$fileName, SentEmailArchive::shortFileName($fileName)], true) && filled($file['path'] ?? null))['path'] ?? null;
 
         $matter = $email->matter;
         $done = ['pdf' => false, 'eml' => false, 'attachments' => 0];
@@ -652,8 +653,14 @@ class MatterReplyCollector
 
         $folder = (string) (((array) $email->onedrive)['folder'] ?? '') ?: MatterOneDriveFolders::receivedEmailsFolderFor($matter, $email->at);
 
-        // The PDF: in its place with the matter's attachments, and in OneDrive.
+        // Its old copies in OneDrive, under the name it had, to the recycle bin — the new ones go under its name now.
+        app(MatterOneDriveFolders::class)->removeEmailFiles($email, $matter);
+
+        // The PDF: in its place with the matter's attachments (renamed), and in OneDrive.
         $inSystem = $replace($old[0]['path'] ?? null, $pdf);
+        if ($inSystem) {
+            Attachment::query()->where('path', $old[0]['path'])->update(['name' => $name.'.pdf']);
+        }
         $done['pdf'] = $this->archive->keepInOneDrive($matter, $name.'.pdf', $pdf, 'application/pdf', $folder, replace: true) || $inSystem;
 
         // The original, beside it in OneDrive.
@@ -664,14 +671,19 @@ class MatterReplyCollector
         // The files it came with: OneDrive's copies replaced, those kept in the system in their place.
         $kept = [['name' => $name.'.pdf', 'path' => $old[0]['path'] ?? null]];
         foreach ($files as $file) {
-            $fileName = (string) $file['name'];
+            $path = $oldPath((string) $file['name']);
+            $fileName = SentEmailArchive::shortFileName((string) $file['name']);
             $contents = (string) $file['contents'];
-            $path = $oldPath($fileName);
 
-            $saved = $path === null && $folder !== '' && $this->archive->keepInOneDrive($matter, $fileName, $contents, (string) ($file['mime'] ?? 'application/octet-stream'), $folder.'/'.$name, replace: true);
-            if (! $saved && $path === null) {
+            // In OneDrive with the others — one OneDrive refused before (kept in the system then) too.
+            $saved = $folder !== '' && $this->archive->keepInOneDrive($matter, $fileName, $contents, (string) ($file['mime'] ?? 'application/octet-stream'), $folder.'/'.$name, replace: true);
+            if ($saved && $path !== null) {
+                // Its copy in the system is no longer needed.
+                Attachment::query()->where('path', $path)->get()->each->forceDelete();
+                $disk->delete($path);
+            } elseif (! $saved && $path === null) {
                 $path = $this->archive->keepFile($matter, $fileName, $contents, (string) ($file['mime'] ?? 'application/octet-stream'), '', auth()->id(), inOneDrive: $ignored);
-            } elseif ($path !== null) {
+            } elseif (! $saved) {
                 $replace($path, $contents);
             }
 
@@ -1008,6 +1020,8 @@ class MatterReplyCollector
      */
     private function keepAttachment(Matter $matter, string $name, string $contents, string $mime, string $subfolder, ?int $userId): array
     {
+        // Under a name short enough for a OneDrive synced to a PC (SentEmailArchive::FILE_LIMIT), kept as it is listed.
+        $name = SentEmailArchive::shortFileName($name);
         $saved = trim($subfolder) !== '' && $this->archive->keepInOneDrive($matter, $name, $contents, $mime, $subfolder);
 
         return [
