@@ -9,6 +9,12 @@
     x-data="wkBubble('todo', {
         {{-- The note's width: dragged by either side border, saved for the user when let go. --}}
         width: @js($width),
+        {{-- Its text size (A− / A+), in percent: at once here, saved for the user. --}}
+        fontSize: @js($fontSize),
+        resize(step) {
+            this.fontSize = Math.min({{ \App\Livewire\TodoNote::MAX_FONT_SIZE }}, Math.max({{ \App\Livewire\TodoNote::MIN_FONT_SIZE }}, this.fontSize + step));
+            this.$wire.saveFontSize(this.fontSize);
+        },
         resizing: null,
         startResize(e, side) {
             this.resizing = { side, x: e.clientX, w: this.width };
@@ -142,6 +148,11 @@
         <div class="flex items-center gap-2 border-b px-4 py-2.5 border-purple-300 dark:border-purple-500/30 bg-purple-200 dark:bg-[#1a0035]">
             <x-filament::icon icon="heroicon-o-clipboard-document-check" class="h-5 w-5" />
             <h2 class="flex-1 text-sm font-semibold">{{ __('To-do list') }}</h2>
+            {{-- The text smaller or larger, kept for the user. --}}
+            <div class="flex items-center gap-0.5 text-xs font-semibold" dir="ltr">
+                <button type="button" x-on:click="resize(-{{ \App\Livewire\TodoNote::FONT_STEP }})" :disabled="fontSize <= {{ \App\Livewire\TodoNote::MIN_FONT_SIZE }}" class="rounded px-1.5 py-0.5 hover:bg-purple-300 disabled:opacity-40 dark:hover:bg-purple-900" title="{{ __('Smaller text') }}" aria-label="{{ __('Smaller text') }}">A−</button>
+                <button type="button" x-on:click="resize({{ \App\Livewire\TodoNote::FONT_STEP }})" :disabled="fontSize >= {{ \App\Livewire\TodoNote::MAX_FONT_SIZE }}" class="rounded px-1.5 py-0.5 hover:bg-purple-300 disabled:opacity-40 dark:hover:bg-purple-900" title="{{ __('Larger text') }}" aria-label="{{ __('Larger text') }}">A+</button>
+            </div>
             <button type="button" wire:click="$toggle('allDone')" class="text-xs underline-offset-2 hover:underline">
                 {{ $allDone ? __('Hide done') : __('Show done') }}
             </button>
@@ -163,7 +174,7 @@
 
         @if ($isOpen)
             {{-- A new line: what, and for which day. --}}
-            <form wire:submit="add" class="flex flex-col gap-2 border-b px-4 py-3 border-purple-300 dark:border-purple-500/30">
+            <form wire:submit="add" :style="{ zoom: fontSize / 100 }" class="flex flex-col gap-2 border-b px-4 py-3 border-purple-300 dark:border-purple-500/30">
                 {{-- items-start: the suggestions open under the field, the button keeps its size. --}}
                 <div class="flex items-start gap-2">
                     <div class="relative min-w-0 flex-1" x-data="todoMentions(@js($this->people))">
@@ -193,7 +204,7 @@
                 @error('title') <p class="text-xs text-danger-600">{{ $message }}</p> @enderror
             </form>
 
-            <div class="flex-1 overflow-y-auto px-4 py-2">
+            <div :style="{ zoom: fontSize / 100 }" class="flex-1 overflow-y-auto px-4 py-2">
                 @forelse ($this->groups as $group)
                     <section wire:key="day-{{ $group['date'] }}" class="py-2">
                         <h3 @class(['mb-1 text-xs font-bold uppercase tracking-wide', 'text-danger-600 dark:text-danger-400' => $group['overdue'], 'text-purple-800 dark:text-purple-300' => ! $group['overdue']])>

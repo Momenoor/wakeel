@@ -3,6 +3,7 @@
 namespace App\Filament\Support;
 
 use App\Models\EmailTemplate;
+use App\Models\MailSender;
 use App\Models\Matter;
 use App\Models\MatterContact;
 use App\Models\MatterLetter;
@@ -10,13 +11,17 @@ use App\Models\Setting;
 use App\Services\MMS\MatterOneDriveExplorer;
 use App\Services\MMS\SenderMailer;
 use App\Support\Addresses;
+use App\Support\Branding;
 use App\Support\EmailGrouping;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
+use Filament\Infolists\Components\TextEntry;
+use Filament\Schemas\Components\Component;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 
 /**
@@ -210,5 +215,34 @@ final class EmailSendFields
         }
 
         self::$fetched = [];
+    }
+
+    /**
+     * An email's preview, as it will go: to whom, its subject and files, then the email itself as the mail
+     * program shows it, its placeholders filled. On the letters' and the minutes' send screens.
+     *
+     * @param  array{subject: string, html: string, rtl: bool}  $preview
+     * @param  list<string>  $attachments
+     * @return list<Component>
+     */
+    public static function previewEntries(string $to, string $cc, array $preview, array $attachments): array
+    {
+        return [
+            TextEntry::make('preview_to')->label(__('To'))->inlineLabel()->state($to ?: '—')->extraAttributes(['dir' => 'auto']),
+            TextEntry::make('preview_cc')->label(__('CC'))->inlineLabel()->state($cc)->extraAttributes(['dir' => 'ltr'])->visible(filled($cc)),
+            TextEntry::make('preview_subject')->label(__('Subject'))->inlineLabel()->state($preview['subject'])->extraAttributes(['dir' => 'auto']),
+            TextEntry::make('preview_attachments')->label(__('Attachments'))->inlineLabel()->state(implode(' · ', $attachments))->extraAttributes(['dir' => 'auto'])->visible($attachments !== []),
+            // The email itself, as the mail program shows it.
+            TextEntry::make('preview_body')
+                ->hiddenLabel()
+                ->state(new HtmlString(MailSender::previewCss().$preview['html']))
+                ->extraAttributes([
+                    'class' => 'wk-mail',
+                    'dir' => $preview['rtl'] ? 'rtl' : 'ltr',
+                    'style' => 'padding: 1rem; background: #ffffff; color: #111827; border: 1px solid rgb(229 231 235); border-radius: 0.5rem;'
+                        .' font-family: '.Branding::emailFontFamily().'; font-size: 15px; line-height: 1.7;'
+                        .' text-align: '.($preview['rtl'] ? 'right' : 'left').'; max-height: 28rem; overflow: auto;',
+                ]),
+        ];
     }
 }

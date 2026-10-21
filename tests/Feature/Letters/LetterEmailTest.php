@@ -404,8 +404,8 @@ class LetterEmailTest extends TestCase
         $attachment = $this->letter->matter->attachments()->sole();
         $this->assertSame('correspondence', $attachment->type);
         $this->assertSame('pdf', $attachment->extension);
-        // Named as in OneDrive: the party, the reference (its "/" no folder).
-        $this->assertStringContainsString('JPA 2026 986 1', $attachment->name);
+        // Named as in OneDrive: the party — the reference left to the matter's folder, the name kept short.
+        $this->assertStringNotContainsString('JPA', $attachment->name);
         $this->assertStringContainsString('منى أحمد', $attachment->name);
 
         $pdf = Storage::disk('public')->get($attachment->path);

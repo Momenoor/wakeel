@@ -16,7 +16,6 @@ use App\Models\EmailTemplate;
 use App\Models\Letterhead;
 use App\Models\LetterItem;
 use App\Models\LetterTemplate;
-use App\Models\MailSender;
 use App\Models\Matter;
 use App\Models\MatterLetter;
 use App\Models\MatterMinutes;
@@ -26,7 +25,6 @@ use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterMailer;
 use App\Services\MMS\Letters\LetterMeeting;
 use App\Support\Addresses;
-use App\Support\Branding;
 use App\Support\EmailGrouping;
 use App\Support\ScreenPermissions;
 use Carbon\Carbon;
@@ -45,7 +43,6 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Components\Toggle;
-use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Components\Component;
@@ -327,7 +324,7 @@ class LettersRelationManager extends RelationManager
         }
         [$to, $cc, $preview, $attachments, $mode] = $worked[$key];
 
-        return self::emailPreviewEntries($to, $cc, $preview, $attachments, $mode, $record);
+        return EmailSendFields::previewEntries($to, $cc, $preview, $attachments);
     }
 
     /**
@@ -377,34 +374,6 @@ class LettersRelationManager extends RelationManager
         ];
 
         return [$to, implode(', ', $get('cc') ?? []), $preview, $attachments, $mode];
-    }
-
-    /**
-     * The preview's entries: to whom, its subject and files, then the email itself.
-     *
-     * @param  array<string, mixed>  $preview
-     * @param  list<string>  $attachments
-     * @return list<Component>
-     */
-    private static function emailPreviewEntries(string $to, string $cc, array $preview, array $attachments, string $mode, MatterLetter $record): array
-    {
-        return [
-            TextEntry::make('preview_to')->label(__('To'))->inlineLabel()->state($to ?: '—')->extraAttributes(['dir' => 'auto']),
-            TextEntry::make('preview_cc')->label(__('CC'))->inlineLabel()->state($cc)->extraAttributes(['dir' => 'ltr'])->visible(filled($cc)),
-            TextEntry::make('preview_subject')->label(__('Subject'))->inlineLabel()->state($preview['subject'])->extraAttributes(['dir' => 'auto']),
-            TextEntry::make('preview_attachments')->label(__('Attachments'))->inlineLabel()->state(implode(' · ', $attachments))->extraAttributes(['dir' => 'auto'])->visible($attachments !== []),
-            // The email itself, as the mail program shows it.
-            TextEntry::make('preview_body')
-                ->hiddenLabel()
-                ->state(new HtmlString(MailSender::previewCss().$preview['html']))
-                ->extraAttributes([
-                    'class' => 'wk-mail',
-                    'dir' => $preview['rtl'] ? 'rtl' : 'ltr',
-                    'style' => 'padding: 1rem; background: #ffffff; color: #111827; border: 1px solid rgb(229 231 235); border-radius: 0.5rem;'
-                        .' font-family: '.Branding::emailFontFamily().'; font-size: 15px; line-height: 1.7;'
-                        .' text-align: '.($preview['rtl'] ? 'right' : 'left').'; max-height: 28rem; overflow: auto;',
-                ]),
-        ];
     }
 
     /**

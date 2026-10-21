@@ -445,13 +445,9 @@ class MinutesService
                     $party->update(['extra' => [...((array) ($party->extra ?? [])), 'id_number' => $id]]);
                 }
 
+                // Theirs only: not the main party they attended for, whose contacts (on the matter's
+                // Contacts, on the send screen) are its own — an agent's number is not the company's.
                 $party->addContact($phone, $email);
-            }
-
-            // …and the main party they stand for.
-            $main = filled($attendee['represents'] ?? null) ? Party::find($attendee['represents']) : null;
-            if ($main && ! $main->is($party)) {
-                $main->addContact($phone, $email);
             }
         }
     }

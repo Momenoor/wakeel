@@ -23,6 +23,7 @@ use App\Services\MMS\Letters\LetterDocx;
 use App\Services\MMS\Letters\LetterPdf;
 use App\Services\MMS\Letters\MinutesSender;
 use App\Services\MMS\Letters\MinutesService;
+use App\Support\EmailGrouping;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\Select;
@@ -427,8 +428,8 @@ class MinutesTest extends TestCase
 
         $company->refresh();
         $this->assertSame('784-1998-6110217-8', $company->extra['id_number']);
-        // Each the latest as it came: its own, its lawyer's (who stands for it), the one added by hand.
-        $this->assertSame(['0567778899', '+971 50 113 2801', '042223333'], $company->phone);
+        // Each the latest as it came: its own, the one added by hand as it — not its lawyer's (theirs only).
+        $this->assertSame(['0567778899', '042223333'], $company->phone);
         $this->assertSame(['0501132801'], $this->lawyer->fresh()->phone);
         $this->assertSame('784-2000-0000000-0', Party::where('name', 'زائر')->sole()->extra['id_number']);
     }
@@ -611,7 +612,7 @@ class MinutesTest extends TestCase
         $this->assertTrue($first->fresh()->attendees[2]['present']);
     }
 
-    public function test_an_attendee_is_picked_linked_to_the_party_they_stand_for_and_their_contact_kept_on_both(): void
+    public function test_an_attendee_is_picked_linked_to_the_party_they_stand_for_their_contact_kept_as_theirs(): void
     {
         $company = Party::where('name', 'المهاد لخدمات صيانة السفن')->sole();
         $employee = Party::factory()->create(['name' => 'سالم الموظف', 'phone' => ['0501111111'], 'email' => ['old@salem.ae', 'salem@company.ae']]);
@@ -648,11 +649,11 @@ class MinutesTest extends TestCase
         $saved = collect($minutes->fresh()->attendees)->firstWhere('party_id', $employee->id);
         $this->assertEquals(['represents' => $company->id, 'as' => 'authorized', 'capacity' => 'مفوضاً عن (السادة/ المهاد لخدمات صيانة السفن - المدعي)'], array_intersect_key($saved, array_flip(['represents', 'as', 'capacity'])));
 
-        // Kept on the attendee's party and on the party they stand for — as the latest.
+        // Kept on the attendee's party as the latest — not on the party they stand for, whose contacts are its own.
         $this->assertSame('0559998888', $employee->fresh()->latestPhone());
         $this->assertSame('salem.new@company.ae', $employee->fresh()->latestEmail());
-        $this->assertSame('0559998888', $company->fresh()->latestPhone());
-        $this->assertSame('salem.new@company.ae', $company->fresh()->latestEmail());
+        $this->assertNotContains('0559998888', (array) $company->fresh()->phone);
+        $this->assertNotContains('salem.new@company.ae', (array) $company->fresh()->email);
     }
 
     public function test_the_minutes_go_to_the_party_and_its_representatives_when_only_its_employee_attended(): void
@@ -700,6 +701,49 @@ class MinutesTest extends TestCase
 
         $this->assertEqualsCanonicalizing(['momen@albanna.ae', 'office@albanna.ae', 'info@almehad.ae'], collect(MinutesSender::recipients($minutes))->pluck('emails')->flatten()->all());
         $this->assertStringContainsString('مفوضاً عن (السادة/ مكتب محمد البنا للمحاماة - وكيل المدعي)', MinutesService::composer($minutes)->bodyHtml());
+    }
+
+    public function test_a_new_attendee_for_a_party_keeps_the_email_and_phone_typed_for_them(): void
+    {
+        $company = Party::where('name', 'المهاد لخدمات صيانة السفن')->sole();
+        $company->update(['email' => ['info@almehad.ae']]);
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
+        $page = $this->recordPage($minutes);
+        $attendees = array_map(fn (array $a): array => [...$a, 'present' => (int) $a['party_id'] === $company->id], array_values($page->get('data.attendees')));
+        // New, attending for the company — their email and phone theirs, not the company's.
+        $attendees[] = ['present' => true, 'title' => 'السيد/', 'name' => 'سالم الجديد', 'phone' => '0507778899', 'email' => 'salem@new.ae', 'party_id' => null, 'represents' => $company->id, 'as' => 'authorized'];
+        $page->fillForm(['attendees' => $attendees])->call('save')->assertHasNoFormErrors();
+        $this->assertNotContains('salem@new.ae', (array) Party::find($company->id)->email);
+        $this->assertSame('salem@new.ae', Party::where('name', 'سالم الجديد')->sole()->latestEmail());
+
+        $rows = collect(MinutesSender::recipients($minutes->fresh()))->keyBy('name');
+
+        // Theirs on their own line; the company its own — not theirs taken from them.
+        $this->assertSame(['salem@new.ae'], $rows['السيد/ سالم الجديد']['emails']);
+        $this->assertSame('0507778899', $rows['السيد/ سالم الجديد']['phone']);
+        $this->assertSame(['info@almehad.ae'], $rows['السادة/ المهاد لخدمات صيانة السفن']['emails']);
+        $this->assertNotSame('0507778899', $rows['السادة/ المهاد لخدمات صيانة السفن']['phone']);
+    }
+
+    public function test_the_send_screen_shows_the_email_with_its_placeholders_filled(): void
+    {
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => 7, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
+        $rows = [
+            ['name' => 'الأستاذ/ محمد عبد المقصود', 'emails' => ['lawyer@firm.ae'], 'by_email' => true, 'party_id' => $this->lawyer->id],
+            ['name' => 'السادة/ شركة أخرى', 'emails' => ['other@co.ae'], 'by_email' => true],
+        ];
+
+        $preview = MinutesSender::preview($minutes, $rows, EmailGrouping::SEPARATE, 'محضر رقم ({{minutes.number}}) — {{matter.reference}}', '<p>{{recipient.name}} {{recipient.suffix}}</p>');
+
+        // For the first one: their name, the minutes' number and the matter's reference — no placeholder left.
+        $this->assertSame('الأستاذ/ محمد عبد المقصود <lawyer@firm.ae>', $preview['to']);
+        $this->assertSame(1, $preview['others']);
+        $this->assertStringContainsString('محضر رقم (7)', $preview['subject']);
+        // {{recipient.name}} is the name without its title (that is {{recipient.title}}).
+        $this->assertStringContainsString('محمد عبد المقصود المحترم', $preview['html']);
+        $this->assertStringNotContainsString('{{', $preview['subject'].$preview['html']);
     }
 
     public function test_the_minutes_go_to_every_email_and_number_once(): void

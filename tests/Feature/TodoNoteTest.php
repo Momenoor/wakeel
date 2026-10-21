@@ -117,6 +117,23 @@ class TodoNoteTest extends TestCase
         $this->assertSame(TodoNote::MAX_WIDTH, $this->user->refresh()->ui_preferences['todo_width']);
     }
 
+    public function test_the_notes_text_size_is_set_with_a_minus_and_a_plus_and_kept_for_the_user(): void
+    {
+        Livewire::test(TodoNote::class)
+            ->assertSet('fontSize', TodoNote::FONT_SIZE)
+            ->assertSeeHtml('A+')
+            ->call('saveFontSize', 120);
+
+        $this->assertSame(120, $this->user->refresh()->ui_preferences['todo_font_size']);
+        Livewire::test(TodoNote::class, ['open' => true])->assertSet('fontSize', 120)->assertSeeHtml('fontSize: 120');
+
+        // Never too small or too large.
+        Livewire::test(TodoNote::class)->call('saveFontSize', 10);
+        $this->assertSame(TodoNote::MIN_FONT_SIZE, $this->user->refresh()->ui_preferences['todo_font_size']);
+        Livewire::test(TodoNote::class)->call('saveFontSize', 500);
+        $this->assertSame(TodoNote::MAX_FONT_SIZE, $this->user->refresh()->ui_preferences['todo_font_size']);
+    }
+
     public function test_mentioning_someone_shares_it_with_them_and_tells_them(): void
     {
         $this->user->update(['name' => 'Momen']);

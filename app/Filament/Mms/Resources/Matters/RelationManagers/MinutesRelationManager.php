@@ -431,17 +431,29 @@ class MinutesRelationManager extends RelationManager
                                 $set('subject', $template?->subject ?? MinutesSender::defaultSubject($arabic));
                                 $set('body', $template?->body ?? MinutesSender::defaultBody($arabic));
                             }),
-                        TextInput::make('subject')->label(__('Subject'))->required()->maxLength(255),
+                        TextInput::make('subject')->label(__('Subject'))->required()->maxLength(255)->live(onBlur: true),
                         RichText::make('body')
                             ->label(__('Email'))
                             ->helperText(__(':placeholder greets each by name; the minutes PDF is attached.', ['placeholder' => '{{recipient.name}}']))
                             ->email()
                             ->placeholders(['recipient.name' => __('Recipient name (separate emails)'), ...Honorific::catalog()])
-                            ->contentDirection(MinutesService::composer($record)->isArabic() ? 'rtl' : 'ltr'),
+                            ->contentDirection(MinutesService::composer($record)->isArabic() ? 'rtl' : 'ltr')
+                            ->live(onBlur: true),
                         // Files of this send's own, beside the minutes.
                         EmailSendFields::attachments('minutes-attachments', __('Sent by email with the minutes, for this send only.')),
                         EmailSendFields::oneDriveFiles($record->matter),
                     ]),
+                // The first email as it will go, its placeholders filled for whom it goes to.
+                Section::make(__('Preview'))
+                    ->collapsible()
+                    ->schema(function (Get $get) use ($record): array {
+                        $preview = MinutesSender::preview($record, array_values((array) ($get('recipients') ?? [])), (string) ($get('grouping') ?: EmailGrouping::SEPARATE), $get('subject'), is_string($get('body')) ? $get('body') : null);
+                        $to = $preview['to'] !== '' && $preview['others'] > 0
+                            ? $preview['to'].' — '.__('and a separate email to each of the other :count', ['count' => $preview['others']])
+                            : $preview['to'];
+
+                        return EmailSendFields::previewEntries($to, implode(', ', (array) ($get('cc') ?? [])), $preview, [MinutesService::fileName($record).'.pdf']);
+                    }),
                 Section::make('WhatsApp')
                     ->collapsible()
                     ->description(WhatsAppCloud::configured() ? null : __('WhatsApp is not set up (WHATSAPP_PHONE_ID and WHATSAPP_TOKEN in .env).'))

@@ -41,6 +41,17 @@ class TodoNote extends Component
 
     public const MAX_WIDTH = 720;
 
+    /** The note's text size, in percent, as the user set it with A− and A+ (their preferences). */
+    public int $fontSize = self::FONT_SIZE;
+
+    public const FONT_SIZE = 100;
+
+    public const MIN_FONT_SIZE = 80;
+
+    public const MAX_FONT_SIZE = 160;
+
+    public const FONT_STEP = 10;
+
     private const STATE = 'wakeel.todo.open';
 
     /** @param  bool  $open  opened from a notification (?todo=1) */
@@ -53,6 +64,22 @@ class TodoNote extends Component
         }
         $this->dueOn = today()->toDateString();
         $this->width = self::clampWidth((int) (auth()->user()?->ui_preferences['todo_width'] ?? self::WIDTH));
+        $this->fontSize = self::clampFontSize((int) (auth()->user()?->ui_preferences['todo_font_size'] ?? self::FONT_SIZE));
+    }
+
+    /** A− or A+: the text smaller or larger, kept for this user, on every device. */
+    public function saveFontSize(int $size): void
+    {
+        $this->fontSize = self::clampFontSize($size);
+        $user = auth()->user();
+        $user->forceFill(['ui_preferences' => [...($user->ui_preferences ?? []), 'todo_font_size' => $this->fontSize]])->save();
+
+        $this->skipRender();
+    }
+
+    public static function clampFontSize(int $size): int
+    {
+        return max(self::MIN_FONT_SIZE, min(self::MAX_FONT_SIZE, $size));
     }
 
     /** Pinned to the page as a column — or a bubble again. Open either way. */
