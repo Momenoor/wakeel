@@ -5,6 +5,7 @@ namespace App\Providers;
 use AlizHarb\ActivityLog\Support\AuditSchema;
 use App\Events\NotificationsUpdated;
 use App\Filament\Shared\Users\ImpersonateUserAction;
+use App\Http\Controllers\LogoutController;
 use App\Http\Middleware\TrackPerformance;
 use App\Models\CalendarEvent;
 use App\Models\Matter;
@@ -24,6 +25,7 @@ use Carbon\Carbon;
 use Carbon\Translator as CarbonTranslator;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
+use Filament\Auth\Http\Controllers\LogoutController as FilamentLogoutController;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Support\Enums\Width;
 use Filament\Support\Facades\FilamentAsset;
@@ -56,6 +58,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(NotificationPreferences::class);
         // The theme of the page: found once per request (App\Support\ThemeManager).
         $this->app->scoped(ThemeManager::class);
+        // Sign out: of this device only — "remember me" kept on the others (App\Http\Controllers\LogoutController).
+        $this->app->bind(FilamentLogoutController::class, LogoutController::class);
     }
 
     /**
