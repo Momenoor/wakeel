@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Mms\Pages\UnfiledEmails;
 use App\Filament\Mms\Resources\Matters\MatterResource;
+use App\Filament\Support\RegenerateEmailAction;
 use App\Models\Matter;
 use App\Models\MatterEmail;
 use App\Services\MMS\MatterOneDriveFolders;
@@ -139,6 +140,8 @@ class EmailsRelationManager extends RelationManager
                     ->color('gray')
                     ->visible(fn (MatterEmail $record): bool => $record->direction === MatterEmail::RECEIVED)
                     ->action(fn (MatterEmail $record) => $this->checkOneDrive([$record])),
+                // Its PDF made wrongly (garbled letters): made again from the mailbox, its files in their places.
+                RegenerateEmailAction::make(fn (): bool => auth()->user()?->can('update', $this->getOwnerRecord()) ?? false),
                 // Filed on the wrong matter: to another, with its files and its step in the progress.
                 Action::make('move')
                     ->label(__('Move to another matter'))

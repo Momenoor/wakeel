@@ -320,13 +320,13 @@ class OneDriveClient
 
     /**
      * Puts a file in a folder — renamed ("name 1.pdf") when one of that
-     * name is there already.
+     * name is there already, or in its place when asked to replace it.
      *
      * @return array{id: string, webUrl: string}
      */
-    public function upload(string $user, string $folderId, string $name, string $contents, string $mime = 'application/octet-stream'): array
+    public function upload(string $user, string $folderId, string $name, string $contents, string $mime = 'application/octet-stream', bool $replace = false): array
     {
-        $uri = "/users/{$this->user($user)}/drive/items/".rawurlencode($folderId).':/'.rawurlencode($name).':/content?@microsoft.graph.conflictBehavior=rename';
+        $uri = "/users/{$this->user($user)}/drive/items/".rawurlencode($folderId).':/'.rawurlencode($name).':/content?@microsoft.graph.conflictBehavior='.($replace ? 'replace' : 'rename');
         $response = Http::withToken($this->token())->acceptJson()->timeout(120)
             ->withBody($contents, $mime)
             ->put(self::GRAPH.$uri);

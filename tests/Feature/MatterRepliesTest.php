@@ -102,6 +102,11 @@ class MatterRepliesTest extends TestCase
                 return Http::response(['access_token' => 'token']);
             }
 
+            // A message looked for by its Message-ID, in every folder.
+            if (preg_match("~/messages\?.*internetMessageId eq '([^']+)'~", $url, $wanted)) {
+                return Http::response(['value' => array_values(array_filter($this->inbox, fn (array $item): bool => ($item['internetMessageId'] ?? null) === $wanted[1]))]);
+            }
+
             if (str_contains($url, '/mailFolders/Inbox/messages')) {
                 return $this->mailReadAllowed
                     ? Http::response(['value' => $this->inbox])
@@ -574,6 +579,46 @@ class MatterRepliesTest extends TestCase
         $result = app(MatterReplyCollector::class)->collect($this->matter->id);
         $this->assertSame(0, $result['replies']);
         $this->assertStringContainsString('Mail.Read', $result['errors'][0]);
+    }
+
+    public function test_an_email_is_made_again_from_its_mailbox_each_file_in_its_place(): void
+    {
+        MailSender::create(['driver' => MailSender::MICROSOFT, 'address' => 'no_reply@jpa.ae', 'name' => 'JPA', 'key' => 'noreply', 'is_active' => true]);
+        $this->sentEmail(['sender_key' => 'noreply', 'message_id' => 'graph-made-its-own@jpa.ae']);
+        $this->inbox = [[
+            'id' => 'AAMk1', 'subject' => 'RE: طلب بيانات — JPA/2026/986/1', 'internetMessageId' => '<r@police>', 'hasAttachments' => true,
+            'from' => ['emailAddress' => ['address' => 'info@dubaipolice.gov.ae', 'name' => 'شرطة دبي']],
+            'toRecipients' => [['emailAddress' => ['address' => 'no_reply@jpa.ae']]], 'receivedDateTime' => now()->toIso8601String(),
+            // As Outlook.com sends Arabic: its HTML still naming the charset it came in.
+            'body' => ['contentType' => 'html', 'content' => '<html><head><meta http-equiv="Content-Type" content="text/html; charset=windows-1256"></head><body><p>تم.</p></body></html>'],
+            'internetMessageHeaders' => [],
+        ]];
+        app(MatterReplyCollector::class)->collect($this->matter->id);
+        $email = MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->sole();
+        $pdfPath = $email->files[0]['path'];
+        Storage::disk('public')->put($pdfPath, 'the PDF made wrongly');
+        $this->uploads = [];
+
+        Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->callTableAction('regenerate', $email)
+            ->assertNotified(__('Made again'));
+
+        // The PDF made anew in its place — the same file the matter's attachments link to.
+        $email->refresh();
+        $this->assertSame($pdfPath, $email->files[0]['path']);
+        $this->assertStringStartsWith('%PDF', Storage::disk('public')->get($pdfPath));
+        $this->assertSame(1, $this->matter->attachments()->where('path', $pdfPath)->count());
+        // OneDrive's copies — the PDF, the original, the file it came with — replaced, not put beside them.
+        $this->assertCount(3, $this->uploads);
+        $this->assertTrue(collect($this->uploads)->every(fn (string $url): bool => str_contains($url, 'conflictBehavior=replace')));
+        $this->assertTrue(collect($this->uploads)->contains(fn (string $url): bool => str_contains($url, 'شهادة.pdf')));
+        $this->assertSame(['pdf' => true, 'eml' => true, 'attachments' => 1], array_intersect_key($email->onedrive, array_flip(['pdf', 'eml', 'attachments'])));
+
+        // Gone from the mailbox: said so.
+        $this->inbox = [];
+        Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->callTableAction('regenerate', $email)
+            ->assertNotified(__('The email could not be made again'));
     }
 
     public function test_a_matter_with_no_onedrive_folder_is_named_in_the_action_as_a_bullet_list(): void

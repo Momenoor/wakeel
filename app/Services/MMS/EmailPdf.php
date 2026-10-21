@@ -46,6 +46,7 @@ class EmailPdf
         ?CarbonInterface $sentAt = null,
         ?string $mailbox = null,
     ): string {
+        $html = self::withoutCharset($html);
         $font = Branding::emailPdfFont();
         $draw = fn (?LetterFont $font, bool $otl): string => self::draw($subject, $html, $sender, $toName, $to, $cc, $bcc, $attachments, $sentAt, $mailbox, $font, $otl);
 
@@ -111,6 +112,9 @@ class EmailPdf
 
         $mpdf = new Mpdf([
             'mode' => 'utf-8',
+            // Always UTF-8. mPDF would otherwise take an email's own <meta charset="windows-1256"> as the
+            // whole page's and convert it again — every Arabic letter of it garbled ("ط§ظ„").
+            'allow_charset_conversion' => false,
             'format' => 'A4',
             'margin_top' => 25,
             'margin_bottom' => 20,
@@ -171,6 +175,17 @@ class EmailPdf
      * text is Arabic, left to right when not; one that says its direction
      * keeps it. Text lying loose between the blocks is a block of its own.
      */
+    /**
+     * The email's own word on its character set taken out. Its text reaches here as UTF-8 whatever it came
+     * in (the mail library, Microsoft Graph); an Arabic email from Outlook.com still says
+     * <meta … charset=windows-1256>, and the HTML reader and mPDF both took it at its word — every Arabic
+     * letter read again as Windows Arabic ("ط§ظ„").
+     */
+    public static function withoutCharset(string $html): string
+    {
+        return preg_replace('~<meta\b[^>]*\bcharset\s*=[^>]*>~i', '', $html) ?? $html;
+    }
+
     public static function directed(string $html): string
     {
         if (trim($html) === '') {

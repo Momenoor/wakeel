@@ -119,6 +119,8 @@ class OwnerStatement
 
         $mpdf = new Mpdf([
             'mode' => 'utf-8',
+            // Always UTF-8 (see EmailPdf).
+            'allow_charset_conversion' => false,
             // Landscape, like every report when printed.
             'format' => 'A4-L',
             'margin_top' => 15,

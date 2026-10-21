@@ -950,7 +950,7 @@ class MatterOneDriveFolders
      * OneDrive (made when missing) — "a/b" for one inside another. Its
      * link; null when the matter has no folder.
      */
-    public function uploadToSubfolder(Matter $matter, string $subfolder, string $name, string $contents, string $mime): ?string
+    public function uploadToSubfolder(Matter $matter, string $subfolder, string $name, string $contents, string $mime, bool $replace = false): ?string
     {
         $folder = self::folderFor($matter);
 
@@ -962,7 +962,7 @@ class MatterOneDriveFolders
         $path = implode('/', array_map([self::class, 'clean'], OneDriveClient::segments($subfolder)));
         $target = $path !== '' ? $this->client->ensureFolder($user, $path, $folder->drive_item_id)['id'] : $folder->drive_item_id;
 
-        return $this->client->upload($user, $target, self::clean(pathinfo($name, PATHINFO_FILENAME)).'.'.pathinfo($name, PATHINFO_EXTENSION), $contents, $mime)['webUrl'];
+        return $this->client->upload($user, $target, self::clean(pathinfo($name, PATHINFO_FILENAME)).'.'.pathinfo($name, PATHINFO_EXTENSION), $contents, $mime, $replace)['webUrl'];
     }
 
     /** The test folder's name — fixed, so the test can find it to remove it. */

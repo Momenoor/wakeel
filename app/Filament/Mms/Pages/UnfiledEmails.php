@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Pages;
 
 use App\Filament\Concerns\RendersFreshContent;
 use App\Filament\Mms\Resources\Matters\MatterResource;
+use App\Filament\Support\RegenerateEmailAction;
 use App\Models\Matter;
 use App\Models\MatterEmail;
 use App\Services\MMS\Calendar\MatterReferenceMatcher;
@@ -241,6 +242,9 @@ class UnfiledEmails extends Page implements HasTable
                             ->actions([Action::make('view')->label(__('View'))->url(MatterResource::getUrl('view', ['record' => $matter]))])
                             ->send();
                     }),
+
+                // Its PDF made wrongly: made again from the mailbox, its files in their places.
+                RegenerateEmailAction::make(fn (): bool => true),
 
                 Action::make('ignore')
                     ->label(__('Ignore sender'))

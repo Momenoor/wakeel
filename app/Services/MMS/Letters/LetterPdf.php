@@ -55,6 +55,8 @@ class LetterPdf
 
         return new Mpdf([
             'mode' => 'utf-8',
+            // Always UTF-8: a charset named in pasted text is not the page's (see EmailPdf).
+            'allow_charset_conversion' => false,
             'format' => 'A4'.($letterhead->orientation === 'landscape' ? '-L' : ''),
             'margin_top' => $letterhead->margin_top,
             'margin_right' => $letterhead->margin_right,

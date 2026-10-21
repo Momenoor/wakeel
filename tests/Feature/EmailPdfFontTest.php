@@ -88,4 +88,15 @@ class EmailPdfFontTest extends TestCase
         Setting::set(Branding::EMAIL_PDF_FONT, $other->getKey(), 'mail');
         $this->assertSame("'Sakkal Majalla x', Calibri, 'Segoe UI', Tahoma, Arial, sans-serif", Branding::emailFontFamily());
     }
+
+    public function test_an_emails_own_charset_is_not_taken_at_its_word(): void
+    {
+        // Outlook.com's Arabic email, already UTF-8 here, still says windows-1256: that is taken out, so
+        // neither the HTML reader nor mPDF reads its letters again as Windows Arabic.
+        $html = '<html><head><meta http-equiv="Content-Type" content="text/html; charset=windows-1256"><meta charset="windows-1256"></head><body><p>تم.</p></body></html>';
+
+        $this->assertSame('<html><head></head><body><p>تم.</p></body></html>', EmailPdf::withoutCharset($html));
+        $this->assertStringContainsString('<p dir="rtl"', EmailPdf::directed(EmailPdf::withoutCharset($html)));
+        $this->assertStringContainsString('تم.', EmailPdf::directed(EmailPdf::withoutCharset($html)));
+    }
 }

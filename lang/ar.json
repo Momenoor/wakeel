@@ -4418,5 +4418,14 @@
     "You can no longer follow these minutes": "لم يعد بإمكانك متابعة هذا المحضر",
     "Your account has no OneDrive yet. Open OneDrive once with it (office.com), then try again.": "لا يوجد OneDrive لحسابك بعد. افتح OneDrive مرة واحدة بهذا الحساب (office.com) ثم حاول مجدداً.",
     "That folder or file is not in your OneDrive.": "هذا المجلد أو الملف غير موجود في OneDrive الخاص بك.",
-    "Compiled caches removed: :files": "أُزيلت الذاكرة المؤقتة المجمّعة: :files"
+    "Compiled caches removed: :files": "أُزيلت الذاكرة المؤقتة المجمّعة: :files",
+    "Make the PDF again": "إعادة إنشاء ملف PDF",
+    "The email is read again from the mailbox it came to: its PDF made anew, its original (.eml) and its attachments downloaded again, each put in place of the old one — in the system and in the matter's OneDrive.": "يُقرأ البريد مجدداً من صندوق البريد الذي وصل إليه: يُنشأ ملف PDF من جديد، ويُعاد تنزيل الأصل (.eml) والمرفقات، ويحلّ كلٌّ منها محل القديم — في النظام وفي OneDrive الخاص بالدعوى.",
+    "Make it again": "أعد الإنشاء",
+    "The email could not be made again": "تعذّرت إعادة إنشاء البريد",
+    "Made again": "أُعيد الإنشاء",
+    "PDF replaced": "استُبدل ملف PDF",
+    "Original (.eml) replaced": "استُبدل الأصل (.eml)",
+    ":count attachment downloaded again|:count attachments downloaded again": "أُعيد تنزيل :count مرفق|أُعيد تنزيل :count مرفقات",
+    "This email is no longer in the mailbox it came to, so it cannot be made again.": "لم يعد هذا البريد موجوداً في صندوق البريد الذي وصل إليه، فلا يمكن إعادة إنشائه."
 }

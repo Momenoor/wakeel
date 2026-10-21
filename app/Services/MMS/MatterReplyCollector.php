@@ -6,6 +6,7 @@ use App\Enums\NotificationType;
 use App\Filament\Mms\Pages\UnfiledEmails;
 use App\Filament\Mms\Resources\BulkMailCampaigns\BulkMailCampaignResource;
 use App\Filament\Mms\Resources\Matters\MatterResource;
+use App\Models\Attachment;
 use App\Models\BulkMailRecipient;
 use App\Models\Matter;
 use App\Models\MatterContact;
@@ -79,6 +80,9 @@ class MatterReplyCollector
 
     /** The original email (.eml) is kept when it is no bigger than this. */
     private const MAX_ORIGINAL_BYTES = 25 * 1024 * 1024;
+
+    /** What is asked of Microsoft 365 for each message read. */
+    private const GRAPH_FIELDS = 'id,subject,from,toRecipients,ccRecipients,receivedDateTime,internetMessageId,internetMessageHeaders,body,hasAttachments,isRead';
 
     public function __construct(
         private readonly SentFolder $mailboxes,
@@ -597,6 +601,125 @@ class MatterReplyCollector
             ->whereMessageId('<'.$id.'>')->leaveUnread()->setFetchBody(false)->get()->first();
 
         return $message !== null && $message->unsetFlag('Seen');
+    }
+
+    /**
+     * A received email made again from the mailbox it came to — found there by its Message-ID: its PDF
+     * made anew, its original (.eml) and the files it came with downloaded again, each put where the old
+     * one is — the PDF kept with the matter's attachments in its place (its link the same), OneDrive's
+     * copies replaced, not renamed. For a PDF made wrongly (an email's own charset taken at its word).
+     *
+     * @return array{pdf: bool, eml: bool, attachments: int}
+     */
+    public function regenerate(MatterEmail $email): array
+    {
+        abort_if($email->direction !== MatterEmail::RECEIVED, 422);
+
+        $message = $this->findMessage($email)
+            ?? throw new RuntimeException(__('This email is no longer in the mailbox it came to, so it cannot be made again.'));
+
+        [$pdf, $files, $name, $source] = $this->rendered($message, (string) $email->sender_key, $email->parent_id !== null);
+
+        // Under the name it has, so each new file takes its old one's place.
+        $old = (array) ($email->files ?? []);
+        $name = filled($old[0]['name'] ?? null) ? pathinfo((string) $old[0]['name'], PATHINFO_FILENAME) : $name;
+        $disk = Storage::disk('public');
+        $replace = function (?string $path, string $contents) use ($disk): bool {
+            if (blank($path) || ! $disk->exists($path)) {
+                return false;
+            }
+            $disk->put($path, $contents);
+            Attachment::query()->where('path', $path)->update(['size' => strlen($contents)]);
+
+            return true;
+        };
+        $oldPath = fn (string $fileName): ?string => collect($old)->first(fn (array $file): bool => ($file['name'] ?? null) === $fileName && filled($file['path'] ?? null))['path'] ?? null;
+
+        $matter = $email->matter;
+        $done = ['pdf' => false, 'eml' => false, 'attachments' => 0];
+
+        // Of no matter yet: its files kept in the system only.
+        if (! $matter) {
+            $done['pdf'] = $replace($old[0]['path'] ?? null, $pdf);
+            foreach ($files as $file) {
+                $done['attachments'] += $replace($oldPath((string) $file['name']), (string) $file['contents']) ? 1 : 0;
+            }
+            $eml = collect($old)->first(fn (array $file): bool => ($file['kind'] ?? null) === MatterEmail::SOURCE);
+            $done['eml'] = $source !== null && $replace($eml['path'] ?? null, $source);
+
+            return $done;
+        }
+
+        $folder = (string) (((array) $email->onedrive)['folder'] ?? '') ?: MatterOneDriveFolders::receivedEmailsFolderFor($matter, $email->at);
+
+        // The PDF: in its place with the matter's attachments, and in OneDrive.
+        $inSystem = $replace($old[0]['path'] ?? null, $pdf);
+        $done['pdf'] = $this->archive->keepInOneDrive($matter, $name.'.pdf', $pdf, 'application/pdf', $folder, replace: true) || $inSystem;
+
+        // The original, beside it in OneDrive.
+        if ($source !== null) {
+            $done['eml'] = $this->archive->keepInOneDrive($matter, $name.'.eml', $source, 'message/rfc822', $folder, replace: true);
+        }
+
+        // The files it came with: OneDrive's copies replaced, those kept in the system in their place.
+        $kept = [['name' => $name.'.pdf', 'path' => $old[0]['path'] ?? null]];
+        foreach ($files as $file) {
+            $fileName = (string) $file['name'];
+            $contents = (string) $file['contents'];
+            $path = $oldPath($fileName);
+
+            $saved = $path === null && $folder !== '' && $this->archive->keepInOneDrive($matter, $fileName, $contents, (string) ($file['mime'] ?? 'application/octet-stream'), $folder.'/'.$name, replace: true);
+            if (! $saved && $path === null) {
+                $path = $this->archive->keepFile($matter, $fileName, $contents, (string) ($file['mime'] ?? 'application/octet-stream'), '', auth()->id(), inOneDrive: $ignored);
+            } elseif ($path !== null) {
+                $replace($path, $contents);
+            }
+
+            $kept[] = ['name' => $fileName, 'path' => $saved ? null : $path];
+            $done['attachments']++;
+        }
+
+        $email->update([
+            'files' => $kept,
+            'onedrive' => [...((array) $email->onedrive), 'pdf' => $done['pdf'], 'eml' => $done['eml'], 'attachments' => $done['attachments'], 'folder' => $folder],
+        ]);
+
+        return $done;
+    }
+
+    /**
+     * A collected email, found again in the mailbox it came to by its Message-ID, read as when it was
+     * collected. Null when it is gone from there.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function findMessage(MatterEmail $email): ?array
+    {
+        $id = trim((string) $email->message_id, '<> ');
+        $sender = SenderMailer::all()[(string) $email->sender_key] ?? null;
+
+        if ($id === '' || ! is_array($sender)) {
+            return null;
+        }
+
+        if (SenderMailer::isMicrosoft($sender)) {
+            $mailbox = (string) $sender['address'];
+            $base = 'https://graph.microsoft.com/v1.0/users/'.rawurlencode($mailbox);
+            $item = Http::withToken($this->graph->getAccessToken())->timeout(30)
+                ->get($base.'/messages', ['$filter' => "internetMessageId eq '".str_replace("'", "''", '<'.$id.'>')."'", '$select' => self::GRAPH_FIELDS])
+                ->json('value.0');
+
+            return is_array($item) ? $this->graphMessage($base, $mailbox, $item) : null;
+        }
+
+        $inbox = $this->mailboxes->inbox((string) $email->sender_key, $sender);
+        $headers = $inbox->query()->whereMessageId('<'.$id.'>')->leaveUnread()->setFetchBody(false)->setFetchFlags(true)->get();
+
+        foreach ($this->imapPage($inbox, $headers, Carbon::create(1971)) as $message) {
+            return $message;
+        }
+
+        return null;
     }
 
     /**
@@ -1285,7 +1408,7 @@ class MatterReplyCollector
         $url = $base.'/mailFolders/Inbox/messages';
         $query = [
             '$filter' => 'receivedDateTime ge '.$since->copy()->utc()->format('Y-m-d\TH:i:s\Z'),
-            '$select' => 'id,subject,from,toRecipients,ccRecipients,receivedDateTime,internetMessageId,internetMessageHeaders,body,hasAttachments,isRead',
+            '$select' => self::GRAPH_FIELDS,
             '$top' => 50,
             // Oldest first: a run that stops for time goes on from the last one handled.
             '$orderby' => 'receivedDateTime asc',
@@ -1305,55 +1428,67 @@ class MatterReplyCollector
             $body = $response->json();
 
             foreach ($body['value'] ?? [] as $item) {
-                $headers = collect($item['internetMessageHeaders'] ?? [])->mapWithKeys(fn ($h) => [mb_strtolower((string) ($h['name'] ?? '')) => (string) ($h['value'] ?? '')]);
-                $graphId = (string) $item['id'];
-
-                yield [
-                    'message_id' => (string) ($item['internetMessageId'] ?? ''),
-                    'references' => preg_split('/\s+/', trim($headers->get('in-reply-to', '').' '.$headers->get('references', ''))) ?: [],
-                    'subject' => (string) ($item['subject'] ?? ''),
-                    'from' => (string) ($item['from']['emailAddress']['address'] ?? ''),
-                    'from_name' => (string) ($item['from']['emailAddress']['name'] ?? ''),
-                    'to' => array_values(array_filter(array_map(fn ($r) => $r['emailAddress']['address'] ?? null, $item['toRecipients'] ?? []))),
-                    'cc' => array_values(array_filter(array_map(fn ($r) => $r['emailAddress']['address'] ?? null, $item['ccRecipients'] ?? []))),
-                    'at' => (string) ($item['receivedDateTime'] ?? now()->toIso8601String()),
-                    'was_read' => isset($item['isRead']) ? (bool) $item['isRead'] : null,
-                    'body' => ($item['body']['contentType'] ?? 'html') === 'html' ? (string) ($item['body']['content'] ?? '') : nl2br(e((string) ($item['body']['content'] ?? ''))),
-                    // The email as it came (MIME).
-                    'raw' => function () use ($base, $graphId): string {
-                        $response = Http::withToken($this->graph->getAccessToken())->timeout(120)->get($base.'/messages/'.rawurlencode($graphId).'/$value');
-
-                        return $response->successful() ? $response->body() : '';
-                    },
-                    // Read in the mailbox too — needs the Mail.ReadWrite application permission.
-                    'mark_read' => function () use ($base, $graphId, $mailbox): void {
-                        $response = Http::withToken($this->graph->getAccessToken())->timeout(20)->patch($base.'/messages/'.rawurlencode($graphId), ['isRead' => true]);
-
-                        if ($response->status() === 403) {
-                            throw new RuntimeException(__('Microsoft 365 refused to mark emails as read in :mailbox: the app registration needs the Mail.ReadWrite application permission, with admin consent.', ['mailbox' => $mailbox]));
-                        }
-                    },
-                    'attachments' => function () use ($base, $graphId, $item): array {
-                        if (! ($item['hasAttachments'] ?? false)) {
-                            return [];
-                        }
-
-                        $response = Http::withToken($this->graph->getAccessToken())->timeout(120)->get($base.'/messages/'.rawurlencode($graphId).'/attachments');
-
-                        return collect($response->successful() ? ($response->json()['value'] ?? []) : [])
-                            ->filter(fn ($a) => isset($a['contentBytes'])
-                                && ! (($a['isInline'] ?? false) && self::isShownInText((string) ($a['contentType'] ?? ''), (string) ($a['contentId'] ?? ''), (string) ($item['body']['content'] ?? ''))))
-                            ->map(fn ($a): array => ['name' => (string) ($a['name'] ?? 'attachment'), 'contents' => (string) base64_decode($a['contentBytes']), 'mime' => (string) ($a['contentType'] ?? 'application/octet-stream')])
-                            ->values()
-                            ->all();
-                    },
-                ];
+                yield $this->graphMessage($base, $mailbox, $item);
             }
 
             // The next link carries the query itself.
             $url = $body['@odata.nextLink'] ?? null;
             $query = null;
         }
+    }
+
+    /**
+     * A Microsoft 365 message as the collector reads one: its body now; its original, files and "read"
+     * only when asked for.
+     *
+     * @param  array<string, mixed>  $item
+     * @return array<string, mixed>
+     */
+    private function graphMessage(string $base, string $mailbox, array $item): array
+    {
+        $headers = collect($item['internetMessageHeaders'] ?? [])->mapWithKeys(fn ($h) => [mb_strtolower((string) ($h['name'] ?? '')) => (string) ($h['value'] ?? '')]);
+        $graphId = (string) $item['id'];
+
+        return [
+            'message_id' => (string) ($item['internetMessageId'] ?? ''),
+            'references' => preg_split('/\s+/', trim($headers->get('in-reply-to', '').' '.$headers->get('references', ''))) ?: [],
+            'subject' => (string) ($item['subject'] ?? ''),
+            'from' => (string) ($item['from']['emailAddress']['address'] ?? ''),
+            'from_name' => (string) ($item['from']['emailAddress']['name'] ?? ''),
+            'to' => array_values(array_filter(array_map(fn ($r) => $r['emailAddress']['address'] ?? null, $item['toRecipients'] ?? []))),
+            'cc' => array_values(array_filter(array_map(fn ($r) => $r['emailAddress']['address'] ?? null, $item['ccRecipients'] ?? []))),
+            'at' => (string) ($item['receivedDateTime'] ?? now()->toIso8601String()),
+            'was_read' => isset($item['isRead']) ? (bool) $item['isRead'] : null,
+            'body' => ($item['body']['contentType'] ?? 'html') === 'html' ? (string) ($item['body']['content'] ?? '') : nl2br(e((string) ($item['body']['content'] ?? ''))),
+            // The email as it came (MIME).
+            'raw' => function () use ($base, $graphId): string {
+                $response = Http::withToken($this->graph->getAccessToken())->timeout(120)->get($base.'/messages/'.rawurlencode($graphId).'/$value');
+
+                return $response->successful() ? $response->body() : '';
+            },
+            // Read in the mailbox too — needs the Mail.ReadWrite application permission.
+            'mark_read' => function () use ($base, $graphId, $mailbox): void {
+                $response = Http::withToken($this->graph->getAccessToken())->timeout(20)->patch($base.'/messages/'.rawurlencode($graphId), ['isRead' => true]);
+
+                if ($response->status() === 403) {
+                    throw new RuntimeException(__('Microsoft 365 refused to mark emails as read in :mailbox: the app registration needs the Mail.ReadWrite application permission, with admin consent.', ['mailbox' => $mailbox]));
+                }
+            },
+            'attachments' => function () use ($base, $graphId, $item): array {
+                if (! ($item['hasAttachments'] ?? false)) {
+                    return [];
+                }
+
+                $response = Http::withToken($this->graph->getAccessToken())->timeout(120)->get($base.'/messages/'.rawurlencode($graphId).'/attachments');
+
+                return collect($response->successful() ? ($response->json()['value'] ?? []) : [])
+                    ->filter(fn ($a) => isset($a['contentBytes'])
+                        && ! (($a['isInline'] ?? false) && self::isShownInText((string) ($a['contentType'] ?? ''), (string) ($a['contentId'] ?? ''), (string) ($item['body']['content'] ?? ''))))
+                    ->map(fn ($a): array => ['name' => (string) ($a['name'] ?? 'attachment'), 'contents' => (string) base64_decode($a['contentBytes']), 'mime' => (string) ($a['contentType'] ?? 'application/octet-stream')])
+                    ->values()
+                    ->all();
+            },
+        ];
     }
 
     public static function checkedKey(string $senderKey): string
