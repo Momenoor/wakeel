@@ -166,6 +166,15 @@ class SentFolder
                 'soft_fail' => true,
                 'fallback_date' => '1970-01-01 00:00:00',
             ],
+            // Attachment names as they came: the library's clean-up takes "/" out before it has decoded
+            // the name, and "/" is a letter of an encoded one's base64 — "=?windows-1256?B?5t/H4ck…?=" came
+            // out garbled and OneDrive refused it. The name is decoded and cleaned here instead
+            // (SentMailImporter::decodeHeader(), SentEmailArchive::cleanBase()); no file is put by it.
+            'security' => [
+                'detect_spoofing' => true,
+                'detect_spoofing_exception' => false,
+                'sanitize_filenames' => false,
+            ],
             'accounts' => [
                 $senderKey => [
                     'host' => $sender['host'],

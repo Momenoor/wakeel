@@ -597,11 +597,20 @@ class MatterRepliesTest extends TestCase
         $email = MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->sole();
         $pdfPath = $email->files[0]['path'];
         Storage::disk('public')->put($pdfPath, 'the PDF made wrongly');
+        // A file it came with that OneDrive refused before, kept in the system under a name read wrongly.
+        $garbled = 'attachments/emails/'.$this->matter->id.'/garbled.pdf';
+        Storage::disk('public')->put($garbled, '%PDF-garbled');
+        $this->matter->attachments()->create(['user_id' => $this->user->id, 'type' => 'correspondence', 'path' => $garbled, 'name' => "ورّrH7q\u{0019}.pdf", 'size' => 12, 'extension' => 'pdf']);
+        $email->update(['files' => [...$email->files, ['name' => "ورّrH7q\u{0019}.pdf", 'path' => $garbled]]]);
         $this->uploads = [];
 
         Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
             ->callTableAction('regenerate', $email)
             ->assertNotified(__('Made again'));
+
+        // The wrongly named copy gone; the file in OneDrive under its name.
+        Storage::disk('public')->assertMissing($garbled);
+        $this->assertSame(0, $this->matter->attachments()->withTrashed()->where('path', $garbled)->count());
 
         // The PDF made anew in its place — the same file the matter's attachments link to.
         $email->refresh();

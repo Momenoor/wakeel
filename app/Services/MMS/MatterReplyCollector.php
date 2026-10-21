@@ -691,6 +691,16 @@ class MatterReplyCollector
             $done['attachments']++;
         }
 
+        // A file kept in the system before under a name read wrongly (none of the files has it now): gone.
+        $still = array_filter(array_column($kept, 'path'));
+        foreach (array_slice($old, 1) as $file) {
+            $path = $file['path'] ?? null;
+            if (filled($path) && ($file['kind'] ?? null) !== MatterEmail::SOURCE && ! in_array($path, $still, true)) {
+                Attachment::query()->where('path', $path)->get()->each->forceDelete();
+                $disk->delete($path);
+            }
+        }
+
         $email->update([
             'files' => $kept,
             'onedrive' => [...((array) $email->onedrive), 'pdf' => $done['pdf'], 'eml' => $done['eml'], 'attachments' => $done['attachments'], 'folder' => $folder],
