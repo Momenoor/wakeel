@@ -244,9 +244,6 @@ class UnfiledEmails extends Page implements HasTable
                             ->send();
                     }),
 
-                // Its PDF made wrongly: made again from the mailbox, its files in their places — in the row's "…" menu.
-                ActionGroup::make([RegenerateEmailAction::make(fn (): bool => true)]),
-
                 Action::make('ignore')
                     ->label(__('Ignore sender'))
                     ->icon('heroicon-o-no-symbol')
@@ -273,6 +270,9 @@ class UnfiledEmails extends Page implements HasTable
                     ->requiresConfirmation()
                     ->modalDescription(__('It is set aside and its kept PDF and files deleted; the email stays in the mailbox.'))
                     ->action(fn (MatterEmail $record) => app(MatterReplyCollector::class)->dismiss($record)),
+
+                // Its PDF made wrongly: made again from the mailbox, its files in their places — last, in the row's "…" menu.
+                ActionGroup::make([RegenerateEmailAction::make(fn (): bool => true)]),
             ])
             ->emptyStateIcon('heroicon-o-inbox')
             ->emptyStateHeading(__('No unfiled emails'))

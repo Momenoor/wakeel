@@ -2,6 +2,7 @@
 
 namespace Tests\Support;
 
+use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 
@@ -20,6 +21,12 @@ class FakeOneDrive
 
     private const ROOT = 'root';
 
+    /** Parts sent to an upload session, each as its Content-Range. */
+    public array $parts = [];
+
+    /** So many of the next parts answered "503 unavailable", as a dropped line would be. */
+    public int $failParts = 0;
+
     public function __construct()
     {
         $this->items[self::ROOT] = ['name' => '', 'parent' => null, 'folder' => true];
@@ -27,7 +34,7 @@ class FakeOneDrive
 
     public function install(): self
     {
-        Http::swap(new \Illuminate\Http\Client\Factory);
+        Http::swap(new Factory);
         Http::fake(fn (Request $request) => $this->answer($request));
 
         return $this;
@@ -128,8 +135,31 @@ class FakeOneDrive
             return Http::response(['access_token' => 'token']);
         }
 
+        // A part of a file sent in an upload session (uploadInParts()): the last one makes the file.
+        if (str_starts_with($url, 'https://upload.od/')) {
+            if ($this->failParts > 0) {
+                $this->failParts--;
+
+                return Http::response('', 503);
+            }
+
+            [$parent, $name] = explode('|', substr($url, strlen('https://upload.od/')), 2);
+            $range = $request->header('Content-Range')[0] ?? '';
+            $this->parts[] = $range;
+            preg_match('~bytes (\d+)-(\d+)/(\d+)~', $range, $r);
+
+            return (int) $r[2] + 1 === (int) $r[3]
+                ? Http::response($this->resource($this->makeFile($parent, $name)), 201)
+                : Http::response(['nextExpectedRanges' => [((int) $r[2] + 1).'-']], 202);
+        }
+
         $path = (string) preg_replace('~^https://graph\.microsoft\.com/v1\.0/users/[^/]+/drive/~', '', strtok($url, '?'));
         $method = $request->method();
+
+        // An upload session: where to send the file's parts.
+        if ($method === 'POST' && preg_match('~^items/([^/:]+):/(.+):/createUploadSession$~', $path, $m)) {
+            return Http::response(['uploadUrl' => 'https://upload.od/'.$m[1].'|'.$m[2]]);
+        }
 
         // A file put in a folder: items/{id}:/name:/content
         if ($method === 'PUT' && preg_match('~^(root|items/([^/:]+)):/(.+):/content$~', $path, $m)) {

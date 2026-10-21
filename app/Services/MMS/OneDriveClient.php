@@ -3,11 +3,13 @@
 namespace App\Services\MMS;
 
 use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Psr\Http\Message\StreamInterface;
 use RuntimeException;
+use Throwable;
 
 /**
  * Folders in a Microsoft 365 user's OneDrive, through Microsoft Graph with
@@ -326,15 +328,64 @@ class OneDriveClient
      */
     public function upload(string $user, string $folderId, string $name, string $contents, string $mime = 'application/octet-stream', bool $replace = false): array
     {
-        $uri = "/users/{$this->user($user)}/drive/items/".rawurlencode($folderId).':/'.rawurlencode($name).':/content?@microsoft.graph.conflictBehavior='.($replace ? 'replace' : 'rename');
-        $response = Http::withToken($this->token())->acceptJson()->timeout(120)
+        $conflict = $replace ? 'replace' : 'rename';
+
+        // A file of some size in parts, each tried again if the line drops: one long request from a
+        // shared host lost a 2.6 MB attachment (kept in the system instead), half its email's files
+        // then in OneDrive and half not.
+        if (strlen($contents) > self::IN_ONE_GO) {
+            return $this->uploadInParts($user, $folderId, $name, $contents, $conflict);
+        }
+
+        $uri = "/users/{$this->user($user)}/drive/items/".rawurlencode($folderId).':/'.rawurlencode($name).':/content?@microsoft.graph.conflictBehavior='.$conflict;
+        $response = retry(2, fn () => Http::withToken($this->token())->acceptJson()->timeout(120)
             ->withBody($contents, $mime)
-            ->put(self::GRAPH.$uri);
+            ->put(self::GRAPH.$uri)
+            ->throwIf(fn (Response $r): bool => $r->serverError()), 2000, fn (Throwable $e): bool => ! $e instanceof RequestException || $e->response->serverError());
 
         if (! $response->successful()) {
             throw new RuntimeException('Microsoft Graph '.$response->status().': '.($response->json('error.message') ?: $response->body()));
         }
 
+        return $this->item($response);
+    }
+
+    /** Up to this size a file goes in one request; above it, in parts (uploadInParts()). */
+    private const IN_ONE_GO = 1024 * 1024;
+
+    /** Each part of a file sent in parts — a multiple of 320 KiB, as Microsoft asks. */
+    private const PART = 4 * 320 * 1024;
+
+    /**
+     * A file sent in an upload session: part after part, each tried three times before giving up.
+     *
+     * @return array{id: string, webUrl: string}
+     */
+    private function uploadInParts(string $user, string $folderId, string $name, string $contents, string $conflict): array
+    {
+        $session = $this->request('post', "/users/{$this->user($user)}/drive/items/".rawurlencode($folderId).':/'.rawurlencode($name).':/createUploadSession', [
+            'item' => ['@microsoft.graph.conflictBehavior' => $conflict, 'name' => $name],
+        ]);
+        $url = (string) $session->json('uploadUrl');
+        $size = strlen($contents);
+
+        for ($start = 0; $start < $size; $start += self::PART) {
+            $part = substr($contents, $start, self::PART);
+            $end = $start + strlen($part) - 1;
+
+            // The session's own address: no token with it.
+            $response = retry(3, fn () => Http::timeout(120)
+                ->withHeaders(['Content-Range' => "bytes {$start}-{$end}/{$size}"])
+                ->withBody($part, 'application/octet-stream')
+                ->put($url)
+                ->throwIf(fn (Response $r): bool => $r->serverError()), 2000, fn (Throwable $e): bool => ! $e instanceof RequestException || $e->response->serverError());
+
+            if (! $response->successful()) {
+                throw new RuntimeException('Microsoft Graph '.$response->status().': '.($response->json('error.message') ?: $response->body()));
+            }
+        }
+
+        // The last part's answer is the file made.
         return $this->item($response);
     }
 
