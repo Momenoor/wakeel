@@ -4,7 +4,6 @@ namespace App\Services\MMS\Letters;
 
 use App\Enums\NotificationType;
 use App\Filament\Mms\Resources\Matters\MatterResource;
-use App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager;
 use App\Models\MinutesDelivery;
 use App\Models\User;
 use App\Models\WhatsAppTemplate;
@@ -265,10 +264,7 @@ class MinutesSignedCopies
     {
         $matterId = $delivery->minutes?->matter_id;
 
-        return $matterId ? MatterResource::getUrl('view', [
-            'record' => $matterId,
-            'relation' => array_search(MinutesRelationManager::class, MatterResource::getRelations(), true),
-        ], panel: 'mms') : null;
+        return $matterId ? MatterResource::getUrl('view', ['record' => $matterId, 'tab' => 'minutes'], panel: 'mms') : null;
     }
 
     /**

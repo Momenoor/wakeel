@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 
 use App\Filament\Concerns\HasRelationManagerPermission;
+use App\Filament\Concerns\RefreshesMatterPage;
 use App\Filament\Mms\Pages\UnfiledEmails;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Support\RegenerateEmailAction;
@@ -35,6 +36,7 @@ use Illuminate\Support\Facades\Storage;
 class EmailsRelationManager extends RelationManager
 {
     use HasRelationManagerPermission;
+    use RefreshesMatterPage;
 
     protected static string $relationship = 'emails';
 

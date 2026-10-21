@@ -54,7 +54,7 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
     /** While they are gathered: a spinner where they will be. */
     public function placeholder(): View
     {
-        return view('livewire.matter-onedrive-files-loading');
+        return view('livewire.tab-loading');
     }
 
     private function matter(): Matter

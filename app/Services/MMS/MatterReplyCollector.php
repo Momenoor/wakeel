@@ -739,10 +739,16 @@ class MatterReplyCollector
         }
 
         $inbox = $this->mailboxes->inbox((string) $email->sender_key, $sender);
-        $headers = $inbox->query()->whereMessageId('<'.$id.'>')->leaveUnread()->setFetchBody(false)->setFetchFlags(true)->get();
+        // Searched for in the days around when it came first: a whole inbox searched by its Message-ID is
+        // every message's headers read by the server (a minute on a big cPanel inbox); then everywhere.
+        $search = fn (bool $near) => $inbox->query()->whereMessageId('<'.$id.'>')
+            ->when($near, fn ($query) => $query->since($email->at->copy()->subDays(2))->before($email->at->copy()->addDays(3)))
+            ->leaveUnread()->setFetchBody(false)->setFetchFlags(true)->get();
 
-        foreach ($this->imapPage($inbox, $headers, Carbon::create(1971)) as $message) {
-            return $message;
+        foreach ($email->at ? [true, false] : [false] as $near) {
+            foreach ($this->imapPage($inbox, $search($near), Carbon::create(1971)) as $message) {
+                return $message;
+            }
         }
 
         return null;

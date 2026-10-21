@@ -13,6 +13,7 @@ use App\Models\PushSubscription;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\MMS\Calendar\UnmatchedEventReferences;
+use App\Services\MMS\MatterHistory;
 use App\Services\Notifications\NotificationPreferences;
 use App\Services\Push\WebPushSender;
 use App\Support\CachedAuditSchema;
@@ -35,16 +36,21 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Events\LocaleUpdated;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Notifications\Events\NotificationSent;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
+use Spatie\Activitylog\Actions\LogActivityAction;
 use Throwable;
 use TomatoPHP\FilamentUsers\Filament\Resources\Users\Tables\UserActions;
 
 class AppServiceProvider extends ServiceProvider
 {
+    private static bool $historyHooked = false;
+
     /**
      * Register any application services.
      */
@@ -76,6 +82,20 @@ class AppServiceProvider extends ServiceProvider
         // queries a request (bound here: the package binds its own when
         // registered, after this provider's register()).
         $this->app->singleton(AuditSchema::class, CachedAuditSchema::class);
+
+        // Each activity knows the matter it is about: the matter's History tab (MatterHistory). Not while an
+        // update has its code but not yet the column. Once a process (the callbacks are kept statically).
+        if (! self::$historyHooked) {
+            self::$historyHooked = true;
+            LogActivityAction::beforeLogging(function (Model $activity): void {
+                static $column;
+                $column ??= Schema::hasColumn($activity->getTable(), 'matter_id');
+
+                if ($column && $activity->getAttribute('matter_id') === null) {
+                    $activity->setAttribute('matter_id', MatterHistory::matterIdOf($activity->subject));
+                }
+            });
+        }
 
         // The language switcher's middleware calls App::setLocale() on every
         // request, which only changes __()/trans() — it never touches Carbon's

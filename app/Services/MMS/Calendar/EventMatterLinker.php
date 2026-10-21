@@ -4,6 +4,7 @@ namespace App\Services\MMS\Calendar;
 
 use App\Models\CalendarEvent;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Links calendar events to the matters their titles name.
@@ -19,8 +20,9 @@ class EventMatterLinker
      */
     /**
      * @param  array<string, int>|null  $matters  the matters already found for the references ("639/2025" => id)
+     * @param  list<int>|null  $linked  the matters it is linked to already, read with others' (linkedTo())
      */
-    public function link(CalendarEvent $event, ?array $matters = null): int
+    public function link(CalendarEvent $event, ?array $matters = null, ?array $linked = null): int
     {
         // Not the numbers marked as not that matter for this event.
         $refs = $event->matterReferences();
@@ -39,7 +41,8 @@ class EventMatterLinker
 
         $ids = array_values(array_unique($ids));
 
-        if ($ids === []) {
+        // Linked already to each: nothing to read or write.
+        if ($ids === [] || ($linked !== null && array_diff($ids, $linked) === [])) {
             return 0;
         }
 
@@ -65,17 +68,33 @@ class EventMatterLinker
         $links = 0;
 
         $query->select(['id', 'title', 'ignored_references', 'matter_id', 'type'])->chunkById(200, function ($chunk) use (&$events, &$links) {
-            // The matters the whole chunk names, read at once.
+            // The matters the whole chunk names, and those each is linked to, read at once.
             $matters = MatterReferenceMatcher::matterIdsFor($chunk->flatMap(fn (CalendarEvent $event): array => $event->matterReferences())->all());
+            $linked = self::linkedTo($chunk->modelKeys());
 
             foreach ($chunk as $event) {
-                $added = $this->link($event, $matters);
+                $added = $this->link($event, $matters, $linked[$event->getKey()] ?? []);
                 $links += $added;
                 $events += $added > 0 ? 1 : 0;
             }
         });
 
         return ['events' => $events, 'links' => $links];
+    }
+
+    /**
+     * The matters each event is linked to, in one read.
+     *
+     * @param  list<int>  $eventIds
+     * @return array<int, list<int>>
+     */
+    public static function linkedTo(array $eventIds): array
+    {
+        return collect($eventIds)->chunk(500)
+            ->flatMap(fn ($ids) => DB::table('calendar_event_matter')->whereIn('calendar_event_id', $ids->all())->get(['calendar_event_id', 'matter_id']))
+            ->groupBy('calendar_event_id')
+            ->map(fn ($rows): array => $rows->pluck('matter_id')->map(fn ($id): int => (int) $id)->all())
+            ->all();
     }
 
     /**

@@ -3,7 +3,6 @@
 namespace App\Filament\Mms\Resources\Matters\Pages;
 
 use App\Filament\Mms\Resources\Matters\MatterResource;
-use App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager;
 use App\Filament\Mms\Resources\Matters\Schemas\MinutesRecordForm;
 use App\Filament\Schemas\Components\WizardWithSave;
 use App\Models\Matter;
@@ -183,9 +182,7 @@ class RecordMinutes extends Page
     /** The matter, on its minutes tab. */
     private function backUrl(): string
     {
-        return MatterResource::getUrl('view', [
-            'record' => $this->getRecord(),
-            'relation' => array_search(MinutesRelationManager::class, MatterResource::getRelations(), true),
-        ]);
+        // The tab by its key in the address (MatterInfolist's tabs): the old ?relation= opened the first tab.
+        return MatterResource::getUrl('view', ['record' => $this->getRecord(), 'tab' => 'minutes']);
     }
 }

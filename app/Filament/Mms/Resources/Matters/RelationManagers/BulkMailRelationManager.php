@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 
 use App\Filament\Concerns\HasRelationManagerPermission;
+use App\Filament\Concerns\RefreshesMatterPage;
 use App\Filament\Mms\Resources\BulkMailCampaigns\BulkMailCampaignResource;
 use App\Models\BulkMailCampaign;
 use App\Support\ScreenPermissions;
@@ -19,6 +20,7 @@ use Illuminate\Database\Eloquent\Model;
 class BulkMailRelationManager extends RelationManager
 {
     use HasRelationManagerPermission;
+    use RefreshesMatterPage;
 
     protected static string $relationship = 'bulkMailCampaigns';
 

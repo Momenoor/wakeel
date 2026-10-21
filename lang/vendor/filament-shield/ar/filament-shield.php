@@ -84,6 +84,7 @@ return [
         'view_matter_bulk_mail_tab' => 'تبويب القضية: البريد الجماعي',
         'view_matter_emails_tab' => 'تبويب القضية: البريد',
         'view_matter_contacts_tab' => 'تبويب القضية: جهات الاتصال',
+        'view_matter_history_tab' => 'تبويب القضية: السجل',
         'view_matters_all_tab' => 'تبويب القضايا: الكل',
         'view_matters_in_progress_tab' => 'تبويب القضايا: قيد العمل',
         'view_matters_initial_prepared_tab' => 'تبويب القضايا: التقرير المبدئي',

@@ -850,7 +850,7 @@ class MinutesTest extends TestCase
         $this->assertSame('جواب', $minutes->fresh()->items[0]['answer']);
 
         // Save and close: back to the matter's minutes.
-        $page->call('saveAndClose')->assertRedirect(MatterResource::getUrl('view', ['record' => $this->matter, 'relation' => 1]));
+        $page->call('saveAndClose')->assertRedirect(MatterResource::getUrl('view', ['record' => $this->matter, 'tab' => 'minutes']));
 
         // Finalised: not recorded any more.
         $minutes->update(['status' => MatterMinutes::FINAL]);

@@ -10,6 +10,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
 use Throwable;
 
 /**
@@ -21,6 +23,13 @@ use Throwable;
 class MatterEmail extends Model
 {
     use AnnouncesChanges;
+    use LogsActivity;
+
+    /** Sent, received, filed or moved: on the matter's history — not what is kept of it in OneDrive. */
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()->logOnly(['matter_id', 'direction', 'subject'])->logOnlyDirty()->dontLogEmptyChanges();
+    }
 
     public const SENT = 'sent';
 

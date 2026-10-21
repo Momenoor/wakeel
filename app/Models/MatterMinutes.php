@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
 
 /**
  * A meeting's minutes (محضر) on a matter, numbered per matter: prepared
@@ -20,6 +22,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable('matter_id', 'letter_template_id', 'letterhead_id', 'calendar_event_id', 'number', 'meeting_at', 'meeting_link', 'attendees', 'items', 'inputs', 'body', 'status', 'attachment_id', 'created_by', 'finalized_at', 'opening', 'closing', 'ended_at')]
 class MatterMinutes extends Model
 {
+    use LogsActivity;
+
+    /** Its number, meeting and status: on the matter's history (created, finalised) — not what autosave writes as it is typed. */
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()->logOnly(['matter_id', 'number', 'meeting_at', 'status'])->logOnlyDirty()->dontLogEmptyChanges();
+    }
+
     protected static function booted(): void
     {
         // The live view the attendees watch refreshes on it.

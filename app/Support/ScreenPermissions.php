@@ -74,6 +74,8 @@ final class ScreenPermissions
 
     public const MATTER_CONTACTS_TAB = 'View:MatterContactsTab';
 
+    public const MATTER_HISTORY_TAB = 'View:MatterHistoryTab';
+
     // ── Matters list tabs ────────────────────────────────────────────────
     public const MATTERS_ALL_TAB = 'View:MattersAllTab';
 
@@ -174,6 +176,7 @@ final class ScreenPermissions
             self::MATTER_BULK_MAIL_TAB => $matterViewers,
             self::MATTER_EMAILS_TAB => $matterViewers,
             self::MATTER_CONTACTS_TAB => $matterViewers,
+            self::MATTER_HISTORY_TAB => $matterViewers,
 
             self::MATTERS_ALL_TAB => $matterListers,
             self::MATTERS_IN_PROGRESS_TAB => $matterListers,

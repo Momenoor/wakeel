@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
 
 /**
  * A letter issued on a matter, from a template: its reference number
@@ -17,6 +19,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable('letter_template_id', 'matter_id', 'reference', 'sequence', 'letterhead_id', 'sent_by', 'sender_key', 'subject', 'attention', 'locale', 'body', 'inputs', 'rendered_html', 'letter_date', 'status', 'sent_at')]
 class MatterLetter extends Model
 {
+    use LogsActivity;
+
+    /** Issued and sent: on the matter's history. */
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()->logOnly(['matter_id', 'subject', 'reference', 'status'])->logOnlyDirty()->dontLogEmptyChanges();
+    }
+
     public function casts(): array
     {
         return [

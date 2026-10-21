@@ -253,13 +253,15 @@ class MinutesService
         $rows = $matter->matterParties;
         $byName = $rows->pluck('party')->filter()->keyBy(fn (Party $party) => self::nameKey((string) $party->name));
         $changed = false;
+        // The attendees' own parties, read at once.
+        $known = Party::query()->whereKey(collect($minutes->attendees ?? [])->pluck('party_id')->filter()->all())->get()->keyBy('id');
 
-        $attendees = collect($minutes->attendees ?? [])->map(function ($attendee) use ($matter, &$rows, &$byName, &$changed) {
+        $attendees = collect($minutes->attendees ?? [])->map(function ($attendee) use ($matter, $known, &$rows, &$byName, &$changed) {
             if (! is_array($attendee) || blank($name = trim((string) ($attendee['name'] ?? '')))) {
                 return $attendee;
             }
 
-            $party = filled($attendee['party_id'] ?? null) ? Party::find($attendee['party_id']) : null;
+            $party = filled($attendee['party_id'] ?? null) ? $known->get((int) $attendee['party_id']) : null;
 
             if (! $party) {
                 $party = $byName->get(self::nameKey($name))
@@ -422,6 +424,10 @@ class MinutesService
         $byName = $minutes->matter?->matterParties
             ->pluck('party')->filter()
             ->keyBy(fn (Party $party) => self::nameKey((string) $party->name)) ?? collect();
+        $parties = Party::query()->whereKey([
+            ...collect($minutes->attendees ?? [])->pluck('party_id')->filter()->all(),
+            ...$byName->map->getKey()->values()->all(),
+        ])->get()->keyBy('id');
 
         foreach ($minutes->attendees ?? [] as $attendee) {
             if (! is_array($attendee)) {
@@ -435,10 +441,10 @@ class MinutesService
                 continue;
             }
 
-            // Read afresh: two lines may be the same party.
-            $party = Party::find(filled($attendee['party_id'] ?? null)
+            // One model a party, read once: two lines may be the same party, the second sees what the first wrote.
+            $party = $parties->get((int) (filled($attendee['party_id'] ?? null)
                 ? $attendee['party_id']
-                : $byName->get(self::nameKey((string) ($attendee['name'] ?? '')))?->getKey());
+                : $byName->get(self::nameKey((string) ($attendee['name'] ?? '')))?->getKey()));
 
             if ($party) {
                 if ($id !== '' && ($party->extra['id_number'] ?? null) !== $id) {

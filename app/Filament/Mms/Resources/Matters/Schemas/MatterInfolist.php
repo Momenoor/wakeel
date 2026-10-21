@@ -25,6 +25,7 @@ use App\Filament\Support\AttachmentList;
 use App\Filament\Support\EntryTable;
 use App\Filament\Support\SignPdfAction;
 use App\Livewire\MatterContacts;
+use App\Livewire\MatterHistoryTab;
 use App\Livewire\MatterOneDriveFiles;
 use App\Models\CalendarEvent;
 use App\Models\Fee;
@@ -241,6 +242,15 @@ class MatterInfolist
                             ->schema([
                                 Livewire::make(MatterContacts::class, fn ($record) => ['matter' => $record])
                                     ->key('matter-contacts')
+                                    ->lazy(),
+                            ]),
+                        // Last: everything done to it and to what is on it, who and when (each request keeps its own too).
+                        Tab::make(__('History'))->key('history', isInheritable: false)
+                            ->icon('heroicon-o-clock')
+                            ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_HISTORY_TAB))
+                            ->schema([
+                                Livewire::make(MatterHistoryTab::class, fn ($record) => ['matterId' => (int) $record->getKey()])
+                                    ->key('matter-history')
                                     ->lazy(),
                             ]),
                     ]),

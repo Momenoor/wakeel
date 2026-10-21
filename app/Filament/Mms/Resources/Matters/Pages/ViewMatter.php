@@ -42,7 +42,18 @@ class ViewMatter extends ViewRecord
      */
     protected function resolveRecord(int|string $key): Model
     {
-        return parent::resolveRecord($key)->loadMissing(['requests.attachments', 'requests.requestBy', 'fees.ownedAttachments', 'fees.allocations.ownedAttachments']);
+        return parent::resolveRecord($key)->loadMissing(self::EAGER);
+    }
+
+    private const EAGER = ['requests.attachments', 'requests.requestBy', 'fees.ownedAttachments', 'fees.allocations.ownedAttachments'];
+
+    /**
+     * And again before each render: an action's refresh() reads the fees and requests again without what
+     * they had loaded — each fee, payment and request then fetched its own files (ten a fee tab).
+     */
+    public function rendering(): void
+    {
+        $this->record->loadMissing(self::EAGER);
     }
 
     /**
@@ -58,6 +69,19 @@ class ViewMatter extends ViewRecord
         // Its sections built anew from it — their badges (the tabs' counts)
         // were built from the matter as it was.
         $this->cachedSchemas = [];
+    }
+
+    /**
+     * Something done on the page itself — a fee, a collection, a request, a note, its header's actions: its
+     * tabs that are components of their own (emails, progress, history …) drawn again as well.
+     */
+    protected function afterActionCalled(Action $action): void
+    {
+        parent::afterActionCalled($action);
+
+        if ($this->getRecord()->exists) {
+            $this->dispatch(MatterEvents::CHANGED);
+        }
     }
 
     /**

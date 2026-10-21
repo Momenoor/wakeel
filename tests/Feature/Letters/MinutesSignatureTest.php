@@ -379,7 +379,7 @@ class MinutesSignatureTest extends TestCase
         // Whoever sent the minutes is told — linked to the matter's minutes.
         $told = User::findOrFail($delivery->sent_by)->notifications()->sole();
         $this->assertSame('Signed minutes received', $told->data['title']);
-        $this->assertSame(MatterResource::getUrl('view', ['record' => $this->minutes->matter_id, 'relation' => 1], panel: 'mms'), $told->data['actions'][0]['url']);
+        $this->assertSame(MatterResource::getUrl('view', ['record' => $this->minutes->matter_id, 'tab' => 'minutes'], panel: 'mms'), $told->data['actions'][0]['url']);
 
         // Sent again by Meta: taken in once.
         $post()->assertOk();

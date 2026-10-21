@@ -34,6 +34,7 @@ class OutlookCalendarSync
     {
         $counts = ['added' => 0, 'updated' => 0, 'removed' => 0, 'linked' => 0];
         $seen = [];
+        $toLink = [];
         // Links come from here and from CalendarEventObserver (new or
         // renamed events) — counted as what the run added in total.
         $linksBefore = DB::table('calendar_event_matter')->count();
@@ -98,7 +99,14 @@ class OutlookCalendarSync
                 }
             }
 
-            $this->linker->link($local);
+            $toLink[] = $local;
+        }
+
+        // Linked to the matters they name — the matters and the links there are, read at once for all.
+        $matters = MatterReferenceMatcher::matterIdsFor(collect($toLink)->flatMap(fn (CalendarEvent $event): array => $event->matterReferences())->all());
+        $linked = EventMatterLinker::linkedTo(collect($toLink)->map->getKey()->all());
+        foreach ($toLink as $event) {
+            $this->linker->link($event, $matters, $linked[$event->getKey()] ?? []);
         }
 
         // Imported events in the window that Outlook no longer has.

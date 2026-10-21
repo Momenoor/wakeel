@@ -12,11 +12,20 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
 
 #[ObservedBy(CalendarEventObserver::class)]
 class CalendarEvent extends Model
 {
+    use LogsActivity;
     use SoftDeletes;
+
+    /** Its appointments: on the matter's history. */
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()->logOnly(['matter_id', 'title', 'start_datetime', 'location'])->logOnlyDirty()->dontLogEmptyChanges();
+    }
 
     protected $fillable = [
         'matter_id',
