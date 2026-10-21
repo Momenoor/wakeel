@@ -29,6 +29,9 @@ use Illuminate\Support\Str;
  */
 class MinutesSender
 {
+    /** Between those one email greets, each on their own line (a <br> once filled in). */
+    private const LINE = "\u{2028}";
+
     public function __construct(private readonly WhatsAppCloud $whatsapp) {}
 
     /**
@@ -79,13 +82,7 @@ class MinutesSender
             $emails = Addresses::emails(collect($group['rows'])->flatMap(fn (array $r) => $r['emails'])->all());
             $greeting = $personal($group);
 
-            $email = new LetterEmail(
-                BulkMailPlaceholders::apply((string) ($subject ?: self::defaultSubject($arabic)), array_map('strip_tags', $greeting)),
-                BulkMailPlaceholders::apply((string) ($body ?: self::defaultBody($arabic)), $greeting, escape: true),
-                $arabic,
-                [],
-                $files,
-            );
+            $email = self::letterEmail($subject, $body, $greeting, $arabic, $files);
             // …and whom these recipients brought into the matter.
             $theirs = MatterContact::copiedFor($minutes->matter_id, $emails, collect($group['rows'])->pluck('party_id')->filter()->all(), $contactsCc);
             $copied = Addresses::without(Addresses::emails([...$cc, ...$theirs]), $emails);
@@ -222,13 +219,7 @@ class MinutesSender
         $groups = self::emailGroups(self::emailLines(array_values(array_filter($recipients, 'is_array'))), $grouping, $arabic);
         $first = $groups[0] ?? ['name' => '', 'capacity' => '', 'rows' => []];
         $greeting = [...$composer->values(), ...self::recipientValues($first, $arabic)];
-        $email = new LetterEmail(
-            BulkMailPlaceholders::apply((string) ($subject ?: self::defaultSubject($arabic)), array_map('strip_tags', $greeting)),
-            BulkMailPlaceholders::apply((string) ($body ?: self::defaultBody($arabic)), $greeting, escape: true),
-            $arabic,
-            [],
-            [],
-        );
+        $email = self::letterEmail($subject, $body, $greeting, $arabic, []);
 
         $html = $email->letterHtml;
         foreach ($email->images as $token => $path) {
@@ -326,9 +317,27 @@ class MinutesSender
     }
 
     /**
+     * The email, its placeholders filled: those greeted, each on a line ({{recipient.salutation}} of
+     * several) — one after another in the subject.
+     *
+     * @param  array<string, string>  $greeting
+     * @param  list<array<string, mixed>>  $files
+     */
+    private static function letterEmail(?string $subject, ?string $body, array $greeting, bool $arabic, array $files): LetterEmail
+    {
+        return new LetterEmail(
+            BulkMailPlaceholders::apply((string) ($subject ?: self::defaultSubject($arabic)), array_map(fn ($value) => str_replace(self::LINE, $arabic ? '، ' : '; ', strip_tags((string) $value)), $greeting)),
+            str_replace(self::LINE, '<br>', BulkMailPlaceholders::apply((string) ($body ?: self::defaultBody($arabic)), $greeting, escape: true)),
+            $arabic,
+            [],
+            $files,
+        );
+    }
+
+    /**
      * The recipient's placeholders for an email (or a WhatsApp message): named as it greets, its
      * {{recipient.role}} their capacity, and {{recipient.salutation}} each it goes to by name and
-     * capacity — "السيد/ سالم الجديد المحترم - مفوضاً عن (…)", those of one email one after another.
+     * capacity — "السيد/ سالم الجديد المحترم - مفوضاً عن (…)", those of one email each on a line.
      *
      * @param  array{name: string, capacity: string, rows: array<int, array<string, mixed>>}  $group
      * @return array<string, string>
@@ -340,7 +349,7 @@ class MinutesSender
                 .(filled($row['capacity'] ?? null) ? ' - '.trim((string) $row['capacity']) : '')))
             ->filter()
             ->unique()
-            ->implode($arabic ? '، ' : '; ');
+            ->implode(self::LINE);
 
         return [
             ...Honorific::values($group['name'], $arabic),

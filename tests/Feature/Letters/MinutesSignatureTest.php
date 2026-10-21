@@ -211,7 +211,9 @@ class MinutesSignatureTest extends TestCase
         $result = app(MinutesSender::class)->send($this->minutes, $lines, 'iflas', grouping: EmailGrouping::BY_PARTY);
         $this->assertSame([['m@law.ae', 'salem@co.ae'], ['visitor@x.ae']], [$to(0), $to(1)]);
         $this->assertSame(['الأستاذ/ محمد عبد المقصود - المدعي', 'السيد/ سالم الموظف - مفوضاً عن (المدعي)'], $named(0));
-        $this->assertStringContainsString('الأستاذ/ محمد عبد المقصود المحترم - المدعي، السيد/ سالم الموظف المحترم - مفوضاً عن (المدعي)', $this->sent[0]->getHtmlBody());
+        // Each on their own line.
+        $this->assertMatchesRegularExpression('#الأستاذ/ محمد عبد المقصود المحترم - المدعي<br\s*/?>\s*السيد/ سالم الموظف المحترم - مفوضاً عن \(المدعي\)،#u', $this->sent[0]->getHtmlBody());
+        $this->assertStringNotContainsString("\u{2028}", $this->sent[0]->getHtmlBody().$this->sent[0]->getSubject());
         // Kept for each of them.
         $this->assertSame(3, $result['sent']);
 
