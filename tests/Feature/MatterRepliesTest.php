@@ -10,6 +10,7 @@ use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager;
 use App\Filament\Mms\Resources\Matters\RelationManagers\ProgressRelationManager;
 use App\Filament\Support\EmailSendFields;
+use App\Livewire\TabbedDatabaseNotifications;
 use App\Models\BulkMailCampaign;
 use App\Models\Letterhead;
 use App\Models\LetterTemplate;
@@ -17,6 +18,7 @@ use App\Models\MailSender;
 use App\Models\Matter;
 use App\Models\MatterEmail;
 use App\Models\MatterOneDriveFolder;
+use App\Models\MatterParty;
 use App\Models\Party;
 use App\Models\Setting;
 use App\Models\User;
@@ -182,6 +184,22 @@ class MatterRepliesTest extends TestCase
         $this->assertSame(1, app(MatterReplyCollector::class)->handle([$again], collect([$sent->fresh()])));
         $told = $this->user->refresh()->notifications()->sole();
         $this->assertSame(Type::MATTER_REPLY_RECEIVED->value, $told->data['viewData'][Type::DATA_KEY]);
+    }
+
+    public function test_a_reply_filed_on_its_matter_is_told_to_the_matters_people_too_in_their_emails_tab(): void
+    {
+        $sent = $this->sentEmail();
+        $assistant = User::factory()->create();
+        MatterParty::create(['matter_id' => $this->matter->id, 'role' => 'expert', 'type' => 'assistant',
+            'party_id' => Party::factory()->assistant()->create(['user_id' => $assistant->id])->id]);
+        $admin = User::factory()->create()->assignRole(Role::firstOrCreate(['name' => 'super-admin', 'guard_name' => 'web']));
+
+        app(MatterReplyCollector::class)->handle([$this->reply(['references' => ['<abc123@jpa.ae>']])], collect([$sent]));
+
+        // The sender, the matter's assistant and the super admins: each once, about emails.
+        foreach ([$this->user, $assistant, $admin] as $user) {
+            $this->assertSame(1, TabbedDatabaseNotifications::onlyEmails($user->notifications())->count());
+        }
     }
 
     public function test_a_reply_is_kept_with_its_files_in_onedrive_and_progress_and_the_sender_told(): void

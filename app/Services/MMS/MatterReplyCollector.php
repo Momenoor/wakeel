@@ -23,6 +23,7 @@ use Carbon\CarbonInterface;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
+use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -56,6 +57,9 @@ class MatterReplyCollector
 {
     /** How far back sent emails are watched for replies. */
     private const WATCH_DAYS = 90;
+
+    /** In a bell notification about an email: which email (MatterEmail id). */
+    public const EMAIL_KEY = 'matter_email';
 
     /** Setting: how many days back a mailbox is ever read — the first time, for one matter, or after a long gap. */
     public const LOOK_BACK = 'mail_look_back_days';
@@ -877,7 +881,8 @@ class MatterReplyCollector
         MatterProgressRecorder::emailReceived($email, $userId);
         MatterContact::learn($email);
 
-        // As for an email put on its matter by itself: its people hear of it — but not who chose it.
+        // As for an email put on its matter by itself: its people hear of it — who chose it, already read.
+        $this->answered($email);
         $this->tellMatter($email, $matter, max(count($kept) - 1, 0), $this->noteUnlinked($matter, $kept), $userId);
     }
 
@@ -886,6 +891,7 @@ class MatterReplyCollector
     {
         Storage::disk('public')->delete(array_filter(array_map(fn ($file) => $file['path'] ?? null, (array) ($email->files ?? []))));
         $email->update(['status' => MatterEmail::DISMISSED, 'files' => []]);
+        $this->answered($email);
     }
 
     /**
@@ -928,6 +934,9 @@ class MatterReplyCollector
         }
 
         MatterContact::learn($email);
+
+        // The other matter's people hear of it, as of an email filed there — who moved it, already read.
+        $this->tellMatter($email, $to, max(count((array) $email->files) - 1, 0), [], $userId);
 
         return $oneDrive;
     }
@@ -1157,24 +1166,31 @@ class MatterReplyCollector
             : null;
     }
 
-    /** Whoever sent the email: told of the reply. */
+    /**
+     * Whoever sent the email: told of the reply — and, the reply kept on a matter, its people too, as of any
+     * email filed there (its expert and assistant, the super admins).
+     */
     private function tell(MatterEmail $reply, MatterEmail $answers, int $files): void
     {
-        $user = $answers->user;
-        if (! $user) {
+        $users = collect([$answers->user])->filter();
+        if ($reply->matter_id) {
+            $users = $users->merge(self::matterUsers([(int) $reply->matter_id]))->unique('id')->values();
+        }
+        if ($users->isEmpty()) {
             return;
         }
 
         try {
             Notifier::send(
                 NotificationType::MATTER_REPLY_RECEIVED,
-                [$user],
+                $users,
                 $reply->matter
                     ? __(':name replied on matter :matter', ['name' => $reply->from, 'matter' => $reply->matter->year.'/'.$reply->matter->number])
                     : __(':name replied to a bulk email', ['name' => $reply->from]),
                 trim($reply->subject.($files ? ' — '.trans_choice(':count file|:count files', $files, ['count' => $files]) : '')),
                 self::replyUrl($reply, $answers),
-                fn (Notification $notification) => $notification->success()->icon('heroicon-o-envelope-open')->iconColor('success'),
+                fn (Notification $notification) => $notification->success()->icon('heroicon-o-envelope-open')->iconColor('success')
+                    ->viewData([NotificationType::DATA_KEY => NotificationType::MATTER_REPLY_RECEIVED->value, self::EMAIL_KEY => $reply->getKey()]),
             );
         } catch (Throwable $e) {
             Log::info('Reply notification not sent: '.$e->getMessage());
@@ -1211,17 +1227,20 @@ class MatterReplyCollector
         }
     }
 
-    /** The matter's people: told of a party's email kept on it. */
     /**
+     * The matter's people: told of a party's email kept on it. Whoever filed it by hand (or moved it) has it in
+     * their bell too — its Emails tab — already read, and is sent no email or message of what they did.
+     *
      * @param  list<array{name: string, url: string}>  $downloads  when the matter has no OneDrive folder: the email's files, to download and put there by hand
-     * @param  int|null  $exceptUserId  not told: whoever filed it by hand
+     * @param  int|null  $filedBy  whoever filed or moved it by hand
      */
-    private function tellMatter(MatterEmail $email, Matter $matter, int $files, array $downloads = [], ?int $exceptUserId = null): void
+    private function tellMatter(MatterEmail $email, Matter $matter, int $files, array $downloads = [], ?int $filedBy = null): void
     {
         $notInOneDrive = $downloads !== [];
         $downloads = array_values(array_filter($downloads, fn (array $file) => filled($file['url'])));
-        $users = self::matterUsers([(int) $matter->getKey()])->reject(fn (User $user): bool => $exceptUserId !== null && $user->getKey() === $exceptUserId);
-        if ($users->isEmpty()) {
+        $filer = $filedBy !== null ? User::find($filedBy) : null;
+        $users = self::matterUsers([(int) $matter->getKey()])->reject(fn (User $user): bool => $user->getKey() === $filedBy);
+        if ($users->isEmpty() && ! $filer) {
             return;
         }
 
@@ -1232,29 +1251,41 @@ class MatterReplyCollector
             $notInOneDrive ? __('Not saved in OneDrive: this matter is not linked to a OneDrive folder, so the email and its files are kept in the system only.') : null,
         ];
         $url = MatterResource::getUrl('view', ['record' => $matter], panel: 'mms');
+        $type = NotificationType::MATTER_EMAIL_RECEIVED;
+        $title = __(':name emailed on matter :matter', ['name' => $email->from, 'matter' => $matter->year.'/'.$matter->number]);
+        $configure = fn (Notification $notification) => $notification
+            ->success()
+            ->icon('heroicon-o-inbox-arrow-down')
+            ->iconColor('success')
+            ->body(self::bullets($points))
+            ->viewData([NotificationType::DATA_KEY => $type->value, self::EMAIL_KEY => $email->getKey()])
+            ->actions([
+                Action::make('view')->label(__('View'))->url($url)->markAsRead(),
+                // No folder to find it in: the email, to download and keep by hand.
+                ...($downloads !== [] ? [Action::make('download')->label(__('Download the email'))->icon('heroicon-o-arrow-down-tray')->url($downloads[0]['url'], shouldOpenInNewTab: true)] : []),
+            ]);
 
         try {
-            Notifier::send(
-                NotificationType::MATTER_EMAIL_RECEIVED,
-                $users,
-                __(':name emailed on matter :matter', ['name' => $email->from, 'matter' => $matter->year.'/'.$matter->number]),
-                // The email and the message take it as plain lines; the bell shows the bullets.
-                collect($points)->filter()->implode("\n"),
-                $url,
-                fn (Notification $notification) => $notification
-                    ->success()
-                    ->icon('heroicon-o-inbox-arrow-down')
-                    ->iconColor('success')
-                    ->body(self::bullets($points))
-                    ->actions([
-                        Action::make('view')->label(__('View'))->url($url)->markAsRead(),
-                        // No folder to find it in: the email, to download and keep by hand.
-                        ...($downloads !== [] ? [Action::make('download')->label(__('Download the email'))->icon('heroicon-o-arrow-down-tray')->url($downloads[0]['url'], shouldOpenInNewTab: true)] : []),
-                    ]),
-            );
+            // The email and the message take it as plain lines; the bell shows the bullets.
+            Notifier::send($type, $users, $title, collect($points)->filter()->implode("\n"), $url, $configure);
+
+            if ($filer) {
+                Notifier::bell($type, collect([$filer]), $title, null, $url, $configure);
+                $filer->unreadNotifications()->where('data->viewData->'.self::EMAIL_KEY, $email->getKey())->update(['read_at' => now()]);
+            }
         } catch (Throwable $e) {
             Log::info('Email notification not sent: '.$e->getMessage());
         }
+    }
+
+    /** Filed or set aside: "which matter is it about?" answered, for everyone asked. */
+    private function answered(MatterEmail $email): void
+    {
+        DatabaseNotification::query()
+            ->whereNull('read_at')
+            ->where('data->viewData->'.NotificationType::DATA_KEY, NotificationType::MATTER_EMAIL_UNFILED->value)
+            ->where('data->viewData->'.self::EMAIL_KEY, $email->getKey())
+            ->update(['read_at' => now()]);
     }
 
     /**
@@ -1295,6 +1326,8 @@ class MatterReplyCollector
                     ->iconColor('warning')
                     // The subject, then the matters it may be about, one point each (none: a sender on no matter).
                     ->body(self::bullets($matters === [] ? [trim($email->subject)] : [trim($email->subject), new HtmlString(e(__('It may be about:')).self::bullets($matters)->toHtml())]))
+                    // Which email: read for everyone once it is filed or set aside.
+                    ->viewData([NotificationType::DATA_KEY => NotificationType::MATTER_EMAIL_UNFILED->value, self::EMAIL_KEY => $email->getKey()])
                     ->actions([
                         Action::make('choose')->label(__('Choose its matter'))->url($url)->markAsRead(),
                     ]),

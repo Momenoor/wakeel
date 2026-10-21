@@ -7,6 +7,7 @@ use App\Enums\ProgressType;
 use App\Filament\Mms\Pages\UnfiledEmails;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager;
+use App\Livewire\TabbedDatabaseNotifications;
 use App\Models\MailSender;
 use App\Models\Matter;
 use App\Models\MatterEmail;
@@ -295,21 +296,38 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertSame(NType::MATTER_EMAIL_UNFILED->value, $this->user->notifications()->get()->first(fn ($note) => str_starts_with((string) $note->data['title'], 'Which matter is this email from'))->data['viewData'][NType::DATA_KEY]);
     }
 
-    public function test_filing_by_hand_tells_the_people_of_the_matter_but_not_who_filed_it(): void
+    public function test_filing_by_hand_tells_the_people_of_the_matter_and_keeps_it_in_the_filers_emails_tab(): void
     {
         $assistant = $this->assistantOn($this->first);
         $this->collect($this->email());
         $email = MatterEmail::sole();
-        $assistant->notifications()->delete();
-        $this->user->notifications()->delete();
+        // Asked which matter it is about.
+        $this->assertSame(1, $assistant->unreadNotifications()->count());
         $otherAdmin = User::factory()->create()->assignRole('super-admin');
 
         Livewire::test(UnfiledEmails::class)->callTableAction('file', $email, ['matter_id' => $this->first->id]);
 
-        $this->assertSame(1, $assistant->notifications()->count());
-        $this->assertSame(1, $otherAdmin->notifications()->count());
-        // $this->user filed it.
-        $this->assertSame(0, $this->user->notifications()->count());
+        // The question answered, for everyone; the email on its matter told, about emails.
+        $emails = fn (User $user) => TabbedDatabaseNotifications::onlyEmails($user->notifications())
+            ->where('data->viewData->'.NType::DATA_KEY, NType::MATTER_EMAIL_RECEIVED->value);
+        $this->assertSame(1, $assistant->unreadNotifications()->count());
+        $this->assertSame(1, $emails($assistant)->whereNull('read_at')->count());
+        $this->assertSame(1, $emails($otherAdmin)->count());
+        // $this->user filed it: in their Emails tab too, already read.
+        $this->assertSame(1, $emails($this->user)->whereNotNull('read_at')->count());
+        $this->assertSame(0, $this->user->unreadNotifications()->count());
+    }
+
+    public function test_an_email_moved_to_another_matter_is_told_to_its_people(): void
+    {
+        $this->collect($this->email(['subject' => 'مستندات القضية 987/2026']));
+        $email = MatterEmail::where('matter_id', $this->second->id)->sole();
+        $assistant = $this->assistantOn($this->first);
+
+        app(MatterReplyCollector::class)->move($email, $this->first, $this->user->id);
+
+        $this->assertSame(1, TabbedDatabaseNotifications::onlyEmails($assistant->unreadNotifications())->count());
+        $this->assertSame(0, $this->user->fresh()->unreadNotifications()->where('data->viewData->'.MatterReplyCollector::EMAIL_KEY, $email->id)->count());
     }
 
     public function test_the_matter_lists_its_emails_sent_and_received_each_to_open(): void
