@@ -2,8 +2,10 @@
 
 namespace App\Mail;
 
+use App\Enums\LeaveType;
 use App\Models\LeaveRequest;
 use App\Services\MMS\LeaveBalanceService;
+use App\Services\MMS\LeaveRequestService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -30,6 +32,12 @@ class LeaveRequestSubmittedMail extends Mailable
      */
     public float $annualLeaveBalance;
 
+    /**
+     * Of the days asked for, those approving it as it stands takes off that balance (annual leave while
+     * it lasts) — shown with the balance after.
+     */
+    public float $fromBalance;
+
     public function __construct(public LeaveRequest $leaveRequest)
     {
         $this->approveUrl = URL::signedRoute(
@@ -45,6 +53,9 @@ class LeaveRequestSubmittedMail extends Mailable
         );
 
         $this->annualLeaveBalance = app(LeaveBalanceService::class)->balance((int) $leaveRequest->party_id);
+        $this->fromBalance = (float) collect(app(LeaveRequestService::class)->suggestSplit($leaveRequest))
+            ->where('leave_type', LeaveType::ANNUAL->value)
+            ->sum('day_count');
     }
 
     public function envelope(): Envelope

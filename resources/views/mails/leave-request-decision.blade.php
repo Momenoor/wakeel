@@ -127,6 +127,7 @@
                     <td>{{ __('To') }}:</td>
                     <td>{{ $leaveRequest->end_date->locale('ar')->translatedFormat('d F Y') }}</td>
                 </tr>
+                @include('mails.partials.leave-balance', ['fromBalance' => $fromBalance, 'balanceBefore' => $balanceBefore])
                 @if ($leaveRequest->approved_comment)
                     <tr>
                         <td>{{ __('Note') }}:</td>

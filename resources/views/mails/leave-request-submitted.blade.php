@@ -45,10 +45,7 @@
                     <td>{{ __('Days Requested') }}:</td>
                     <td>{{ rtrim(rtrim(number_format($leaveRequest->requestedDays(), 1), '0'), '.') }}</td>
                 </tr>
-                <tr>
-                    <td>{{ __('Vacation Balance') }}:</td>
-                    <td>{{ rtrim(rtrim(number_format($annualLeaveBalance, 1), '0'), '.') }}</td>
-                </tr>
+                @include('mails.partials.leave-balance', ['fromBalance' => $fromBalance, 'balanceBefore' => $annualLeaveBalance, 'showBalance' => true])
                 <tr>
                     <td>{{ __('Reason') }}:</td>
                     <td>{{ $leaveRequest->comment ?: '—' }}</td>

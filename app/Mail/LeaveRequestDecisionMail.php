@@ -2,7 +2,10 @@
 
 namespace App\Mail;
 
+use App\Enums\LeaveType;
 use App\Models\LeaveRequest;
+use App\Models\LeaveRequestPeriod;
+use App\Services\MMS\LeaveBalanceService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -18,7 +21,22 @@ class LeaveRequestDecisionMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public function __construct(public LeaveRequest $leaveRequest) {}
+    /** The annual days the approval took off the vacation balance — none for any other leave. */
+    public float $fromBalance = 0;
+
+    /** The balance before them. */
+    public float $balanceBefore = 0;
+
+    public function __construct(public LeaveRequest $leaveRequest)
+    {
+        if ($leaveRequest->isApproved()) {
+            $this->fromBalance = (float) $leaveRequest->periods()->get()
+                ->filter(fn (LeaveRequestPeriod $period): bool => $period->leave_type === LeaveType::ANNUAL)
+                ->sum('day_count');
+            // Taken off already: what it was, before them.
+            $this->balanceBefore = app(LeaveBalanceService::class)->balance((int) $leaveRequest->party_id) + $this->fromBalance;
+        }
+    }
 
     public function envelope(): Envelope
     {

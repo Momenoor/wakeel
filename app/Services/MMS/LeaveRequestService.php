@@ -11,8 +11,10 @@ use App\Models\LeaveRequest;
 use App\Models\LeaveRequestPeriod;
 use App\Models\PartyLeave;
 use App\Models\User;
+use App\Observers\LeaveRequestObserver;
 use App\Services\Notifications\NotificationPreferences;
 use App\Services\Notifications\Notifier;
+use App\Support\Addresses;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -140,14 +142,16 @@ class LeaveRequestService
     /**
      * The employee hears the decision however it was made (the panel or the office email's one-click
      * link), by what they chose (NotificationType::LEAVE_DECIDED): the bell — with the desktop and phone
-     * notifications — the decision email, WhatsApp. An employee with no user is not asked: the email
-     * link alone sends them the email (LeaveRequestEmailActionController).
+     * notifications — the decision email, WhatsApp. One with no user has the email. The office it was
+     * announced to is copied in on it (to them, when the employee isn't sent it).
      */
     private function tellRequester(LeaveRequest $request, bool $approved): void
     {
         $user = $request->party?->user;
 
         if (! $user) {
+            $this->mailDecision($request, Addresses::emails((array) ($request->party?->email ?? [])));
+
             return;
         }
 
@@ -176,14 +180,31 @@ class LeaveRequestService
         );
 
         // To the address the employee gave as a party, else their user's.
-        $address = filled($request->party->email) ? $request->party->email : $user->email;
+        $this->mailDecision($request, NotificationPreferences::wants($user, $type, NotificationChannel::MAIL)
+            ? Addresses::emails(filled($request->party->email) ? (array) $request->party->email : [$user->email])
+            : []);
+    }
 
-        if (filled($address) && NotificationPreferences::wants($user, $type, NotificationChannel::MAIL)) {
-            try {
-                Mail::to($address)->locale('ar')->queue(new LeaveRequestDecisionMail($request));
-            } catch (Throwable $e) {
-                report($e);
-            }
+    /**
+     * The decision email: to the employee, the office copied in — one email, each seeing who has it.
+     *
+     * @param  list<string>  $employee
+     */
+    private function mailDecision(LeaveRequest $request, array $employee): void
+    {
+        $office = Addresses::without(LeaveRequestObserver::mailed(), $employee);
+
+        if ($employee === [] && $office === []) {
+            return;
+        }
+
+        try {
+            Mail::to($employee !== [] ? $employee : $office)
+                ->cc($employee !== [] ? $office : [])
+                ->locale('ar')
+                ->queue(new LeaveRequestDecisionMail($request));
+        } catch (Throwable $e) {
+            report($e);
         }
     }
 

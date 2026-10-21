@@ -2,11 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Mail\LeaveRequestDecisionMail;
 use App\Models\LeaveRequest;
 use App\Services\MMS\LeaveRequestService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Mail;
 
 /**
  * Approve/reject a leave request from the email link itself, with no login.
@@ -46,8 +44,6 @@ class LeaveRequestEmailActionController
             __('Approved by email.'),
         );
 
-        $this->notifyRequester($leaveRequest->fresh());
-
         return view('mails.leave-request-response', [
             'type' => 'approved',
             'leaveRequest' => $leaveRequest,
@@ -67,8 +63,6 @@ class LeaveRequestEmailActionController
 
         $service->reject($leaveRequest, null, __('Rejected by email.'));
 
-        $this->notifyRequester($leaveRequest->fresh());
-
         return view('mails.leave-request-response', [
             'type' => 'rejected',
             'leaveRequest' => $leaveRequest,
@@ -82,27 +76,6 @@ class LeaveRequestEmailActionController
             'leaveRequest' => $leaveRequest,
             'action' => $action,
         ]);
-    }
-
-    /**
-     * An employee with a user hears the decision from the service, by what they chose — whoever
-     * decided; this is for one with no user, who has only the email.
-     */
-    private function notifyRequester(LeaveRequest $leaveRequest): void
-    {
-        if ($leaveRequest->party->user_id) {
-            return;
-        }
-
-        $email = $leaveRequest->party->email;
-
-        if (blank($email)) {
-            return;
-        }
-
-        Mail::to($email)
-            ->locale('ar')
-            ->queue(new LeaveRequestDecisionMail($leaveRequest));
     }
 
     private function alreadyUsed(LeaveRequest $leaveRequest)

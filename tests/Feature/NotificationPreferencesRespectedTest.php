@@ -313,11 +313,10 @@ class NotificationPreferencesRespectedTest extends TestCase
 
         $this->leaveRequest($this->employee());
 
-        // An email to each address, with the approve/reject links — the muted user's left out.
-        Mail::assertQueued(LeaveRequestSubmittedMail::class, 3);
-        foreach ([$default->email, $mailOnly->email, 'outside@firm.ae'] as $address) {
-            Mail::assertQueued(LeaveRequestSubmittedMail::class, fn ($mail) => $mail->hasTo($address) && count($mail->to) === 1 && $mail->approveUrl !== '');
-        }
+        // One email to them all, with the approve/reject links — the muted user's left out.
+        Mail::assertQueued(LeaveRequestSubmittedMail::class, 1);
+        Mail::assertQueued(LeaveRequestSubmittedMail::class, fn ($mail) => count($mail->to) === 3 && $mail->approveUrl !== ''
+            && $mail->hasTo($default->email) && $mail->hasTo($mailOnly->email) && $mail->hasTo('outside@firm.ae'));
         Mail::assertNotQueued(LeaveRequestSubmittedMail::class, fn ($mail) => $mail->hasTo($muted->email));
         $this->assertSame([Type::LEAVE_SUBMITTED->value], $this->bellTypes($default));
         $this->assertSame([], $this->bellTypes($muted));
@@ -384,19 +383,40 @@ class NotificationPreferencesRespectedTest extends TestCase
         $this->assertSame([Type::LEAVE_DECIDED->value], $this->bellTypes($employee));
     }
 
-    public function test_an_employee_with_no_user_keeps_the_email_link_behaviour(): void
+    public function test_an_employee_with_no_user_gets_the_decision_email_however_it_was_decided(): void
     {
         $service = app(LeaveRequestService::class);
         $party = $this->employee();
 
-        // Decided in the panel: no email, as before.
+        // Decided in the panel: the email to the party's address.
         $request = $this->leaveRequest($party);
         $service->reject($request, User::factory()->create(), 'No.');
-        Mail::assertNothingQueued();
-
-        // Decided by the link: the email to the party's address.
-        $this->post(URL::signedRoute('leave-request.email-action.reject', ['leaveRequest' => $this->leaveRequest($party)->id]))->assertOk();
         Mail::assertQueued(LeaveRequestDecisionMail::class, 1);
+
+        // Decided by the link: the same, once.
+        $this->post(URL::signedRoute('leave-request.email-action.reject', ['leaveRequest' => $this->leaveRequest($party)->id]))->assertOk();
+        Mail::assertQueued(LeaveRequestDecisionMail::class, 2);
+    }
+
+    public function test_the_decision_email_goes_to_the_employee_the_office_copied_in(): void
+    {
+        $employee = $this->user('Employee');
+        $muted = $this->user('Muted');
+        $this->choose($muted, Type::LEAVE_SUBMITTED, ['mail' => false]);
+        Setting::set('leave_request_recipients', ['hr@office.ae', 'boss@office.ae', $muted->email]);
+        $service = app(LeaveRequestService::class);
+
+        $service->approve($request = $this->leaveRequest($this->employee($employee)), User::factory()->create(), $service->suggestSplit($request));
+
+        // One email: the employee its To, the office — as each chose — its CC.
+        Mail::assertQueued(LeaveRequestDecisionMail::class, 1);
+        Mail::assertQueued(LeaveRequestDecisionMail::class, fn ($mail) => count($mail->to) === 1 && $mail->hasTo('employee@example.com')
+            && count($mail->cc) === 2 && $mail->hasCc('hr@office.ae') && $mail->hasCc('boss@office.ae'));
+
+        // The employee not told by email (as they chose): the office still is, to them.
+        $this->choose($employee, Type::LEAVE_DECIDED, ['mail' => false]);
+        $service->reject($this->leaveRequest($this->employee($employee)), User::factory()->create(), 'No.');
+        Mail::assertQueued(LeaveRequestDecisionMail::class, fn ($mail) => $mail->hasTo('hr@office.ae') && $mail->hasTo('boss@office.ae') && ! $mail->hasTo('employee@example.com') && $mail->cc === []);
     }
 
     // --- The calendar -----------------------------------------------------------------------

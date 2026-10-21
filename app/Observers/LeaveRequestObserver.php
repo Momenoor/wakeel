@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 
 /**
- * A new leave request is announced by email the moment it is filed — the
+ * A new leave request is announced by one email to them all the moment it is filed — the
  * office reviews and decides from the inbox, via the one-click approve/reject
  * links the mail carries, rather than needing to be in the panel at all.
  * The same people are told in the system too (bell, desktop, phone): those
@@ -35,16 +35,11 @@ class LeaveRequestObserver
         $type = NotificationType::LEAVE_SUBMITTED;
         $users = User::whereIn('email', $recipients)->get();
 
-        // The mail, one to each address: to those who are users, as they chose; an address that is
-        // no user's (typed in System Settings) always.
-        foreach ($recipients as $address) {
-            $owners = $users->filter(fn (User $user): bool => strcasecmp((string) $user->email, $address) === 0);
+        // The mail, one to them all — each sees who else has it.
+        $addresses = self::mailed();
 
-            if ($owners->isNotEmpty() && NotificationPreferences::wanting($type, $owners, NotificationChannel::MAIL)->isEmpty()) {
-                continue;
-            }
-
-            Mail::to($address)
+        if ($addresses !== []) {
+            Mail::to($addresses)
                 ->locale('ar')
                 ->queue(new LeaveRequestSubmittedMail($leaveRequest));
         }
@@ -64,6 +59,25 @@ class LeaveRequestObserver
                 : null,
             only: [NotificationChannel::BELL, NotificationChannel::WHATSAPP],
         );
+    }
+
+    /**
+     * Of recipients(), those the office's leave emails go to — the new request, and the decision copied
+     * to them: those who are users, as they chose; an address that is no user's (typed in System
+     * Settings) always.
+     *
+     * @return list<string>
+     */
+    public static function mailed(): array
+    {
+        $recipients = self::recipients();
+        $users = User::whereIn('email', $recipients)->get();
+
+        return array_values(array_filter($recipients, function (string $address) use ($users): bool {
+            $owners = $users->filter(fn (User $user): bool => strcasecmp((string) $user->email, $address) === 0);
+
+            return $owners->isEmpty() || NotificationPreferences::wanting(NotificationType::LEAVE_SUBMITTED, $owners, NotificationChannel::MAIL)->isNotEmpty();
+        }));
     }
 
     /**

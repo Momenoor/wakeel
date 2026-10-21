@@ -68,15 +68,13 @@ class LeaveRequestEmailActionTest extends TestCase
 
         $request = $this->request($this->employee());
 
-        // One mail to each address (each user's own choice applies to theirs), none copied to the others.
-        Mail::assertQueued(LeaveRequestSubmittedMail::class, 4);
-
-        foreach (['redha@jpaemirates.com', 'expert@jpaemirates.com', 'momen.noor@jpaemirates.com', 'info@jpaemirates.com'] as $address) {
-            Mail::assertQueued(
-                LeaveRequestSubmittedMail::class,
-                fn (LeaveRequestSubmittedMail $mail): bool => $mail->leaveRequest->is($request) && $mail->hasTo($address) && count($mail->to) === 1 && $mail->cc === [],
-            );
-        }
+        // One mail to them all (each user's own choice applies to theirs).
+        Mail::assertQueued(LeaveRequestSubmittedMail::class, 1);
+        Mail::assertQueued(
+            LeaveRequestSubmittedMail::class,
+            fn (LeaveRequestSubmittedMail $mail): bool => $mail->leaveRequest->is($request) && count($mail->to) === 4 && $mail->cc === []
+                && collect(['redha@jpaemirates.com', 'expert@jpaemirates.com', 'momen.noor@jpaemirates.com', 'info@jpaemirates.com'])->every(fn (string $address): bool => $mail->hasTo($address)),
+        );
     }
 
     public function test_the_submitted_mail_carries_the_employees_annual_leave_balance(): void
@@ -93,6 +91,35 @@ class LeaveRequestEmailActionTest extends TestCase
             LeaveRequestSubmittedMail::class,
             fn (LeaveRequestSubmittedMail $mail): bool => $mail->annualLeaveBalance === $expected,
         );
+    }
+
+    public function test_annual_leave_shows_the_balance_before_and_after_it_in_both_emails(): void
+    {
+        Mail::fake();
+        $party = $this->employee();
+        $request = $this->request($party);
+        $days = $request->requestedDays();
+        $after = rtrim(rtrim(number_format(12.5 - $days, 1), '0'), '.');
+
+        // Asked for: the days off the balance, the balance before and after.
+        $submitted = Mail::queued(LeaveRequestSubmittedMail::class)->first();
+        $this->assertSame((float) $days, $submitted->fromBalance);
+        $html = $submitted->render();
+        $this->assertStringContainsString('الرصيد قبل الإجازة', $html);
+        $this->assertMatchesRegularExpression('#'.preg_quote('الرصيد بعد الإجازة', '#').':</td>\s*<td>'.preg_quote($after, '#').'</td>#u', $html);
+
+        // Approved: the same, as taken.
+        $this->post(URL::signedRoute('leave-request.email-action.approve', ['leaveRequest' => $request->id]))->assertOk();
+        $decision = Mail::queued(LeaveRequestDecisionMail::class)->first();
+        $this->assertSame(12.5, $decision->balanceBefore);
+        $this->assertMatchesRegularExpression('#'.preg_quote('الرصيد بعد الإجازة', '#').':</td>\s*<td>'.preg_quote($after, '#').'</td>#u', $decision->render());
+
+        // Leave not from the balance: no before and after — its balance as it stands when asked for.
+        $sick = $this->request($party, LeaveType::SICK_FULL);
+        $mail = Mail::queued(LeaveRequestSubmittedMail::class)->first(fn (LeaveRequestSubmittedMail $mail): bool => $mail->leaveRequest->is($sick));
+        $this->assertSame(0.0, $mail->fromBalance);
+        $this->assertStringNotContainsString('الرصيد بعد الإجازة', $mail->render());
+        $this->assertStringContainsString('رصيد الإجازات', $mail->render());
     }
 
     public function test_visiting_the_signed_link_only_shows_a_confirmation_and_decides_nothing(): void
