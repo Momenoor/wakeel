@@ -746,7 +746,7 @@ class MinutesTest extends TestCase
         $this->assertStringNotContainsString('{{', $preview['subject'].$preview['html']);
     }
 
-    public function test_the_minutes_go_to_every_email_and_number_once(): void
+    public function test_a_party_and_its_lawyer_each_keep_their_own_contact_though_they_share_one(): void
     {
         $company = Party::where('name', 'المهاد لخدمات صيانة السفن')->sole();
         $company->update(['email' => ['old@almehad.ae', 'Shared@Office.ae'], 'phone' => ['0501234567']]);
@@ -759,12 +759,14 @@ class MinutesTest extends TestCase
 
         $rows = MinutesSender::recipients($minutes);
 
-        // All the company's emails, its latest first; the lawyer's shared one isn't repeated, nor the same number.
+        // All the company's emails, its latest first; the lawyer's all theirs — the shared inbox and number on both.
         $this->assertSame(['Shared@Office.ae', 'old@almehad.ae'], $rows[0]['emails']);
-        $this->assertSame(['lawyer@firm.ae'], $rows[1]['emails']);
+        $this->assertSame(['lawyer@firm.ae', 'shared@office.ae'], $rows[1]['emails']);
         $this->assertSame('0501234567', $rows[0]['phone']);
-        $this->assertNull($rows[1]['phone']);
-        $this->assertFalse($rows[1]['by_whatsapp']);
+        $this->assertSame('+971 50 123 4567', $rows[1]['phone']);
+        $this->assertTrue($rows[1]['by_whatsapp']);
+        // Each with their capacity: whom the lawyer stands for.
+        $this->assertStringContainsString('وكيلاً عن', (string) $rows[1]['capacity']);
     }
 
     public function test_an_attendee_cannot_represent_themselves(): void

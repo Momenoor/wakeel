@@ -127,7 +127,7 @@ class MinutesSignatureTest extends TestCase
             // The attendees present, with their email and WhatsApp.
             ->assertSet('mountedActions.0.data.whatsapp_template_id', WhatsAppTemplate::default(WhatsAppTemplate::MINUTES_SIGNATURE)->id)
             ->assertSet('mountedActions.0.data.recipients', fn (array $rows) => array_values($rows) == [[
-                'name' => 'الأستاذ/ محمد عبد المقصود', 'party_id' => $this->minutes->attendees[0]['party_id'],
+                'name' => 'الأستاذ/ محمد عبد المقصود', 'capacity' => null, 'party_id' => $this->minutes->attendees[0]['party_id'],
                 'emails' => ['m@law.ae'], 'phone' => '0501132801', 'by_email' => true, 'by_whatsapp' => true,
                 // The party it goes with: its own.
                 'group' => $this->minutes->attendees[0]['party_id'],
@@ -193,20 +193,25 @@ class MinutesSignatureTest extends TestCase
     {
         $company = Party::where('name', 'محمد عبد المقصود')->sole();
         $lines = [
-            ['name' => 'الأستاذ/ محمد عبد المقصود', 'party_id' => $company->id, 'group' => $company->id, 'emails' => ['m@law.ae'], 'by_email' => true],
-            ['name' => 'السيد/ سالم الموظف', 'group' => $company->id, 'emails' => ['salem@co.ae'], 'by_email' => true],
+            ['name' => 'الأستاذ/ محمد عبد المقصود', 'capacity' => 'المدعي', 'party_id' => $company->id, 'group' => $company->id, 'emails' => ['m@law.ae'], 'by_email' => true],
+            ['name' => 'السيد/ سالم الموظف', 'capacity' => 'مفوضاً عن (المدعي)', 'group' => $company->id, 'emails' => ['salem@co.ae'], 'by_email' => true],
             ['name' => 'السيد/ زائر', 'emails' => ['visitor@x.ae'], 'by_email' => true],
         ];
         $to = fn (int $i): array => array_map(fn ($a) => $a->getAddress(), $this->sent[$i]->getTo());
+        $named = fn (int $i): array => array_map(fn ($a) => $a->getName(), $this->sent[$i]->getTo());
 
         app(MinutesSender::class)->send($this->minutes, $lines, 'iflas', grouping: EmailGrouping::SEPARATE);
         $this->assertSame([['m@law.ae'], ['salem@co.ae'], ['visitor@x.ae']], [$to(0), $to(1), $to(2)]);
+        // Each addressed by name and capacity — on the To and in the greeting.
+        $this->assertSame(['السيد/ سالم الموظف - مفوضاً عن (المدعي)'], $named(1));
+        $this->assertStringContainsString('السيد/ سالم الموظف المحترم - مفوضاً عن (المدعي)،', $this->sent[1]->getHtmlBody());
 
-        // By party: the company with who attended for it — greeted as the company.
+        // By party: the company with who attended for it — each greeted, by name and capacity.
         $this->sent = [];
         $result = app(MinutesSender::class)->send($this->minutes, $lines, 'iflas', grouping: EmailGrouping::BY_PARTY);
         $this->assertSame([['m@law.ae', 'salem@co.ae'], ['visitor@x.ae']], [$to(0), $to(1)]);
-        $this->assertStringContainsString('محمد عبد المقصود', $this->sent[0]->getHtmlBody());
+        $this->assertSame(['الأستاذ/ محمد عبد المقصود - المدعي', 'السيد/ سالم الموظف - مفوضاً عن (المدعي)'], $named(0));
+        $this->assertStringContainsString('الأستاذ/ محمد عبد المقصود المحترم - المدعي، السيد/ سالم الموظف المحترم - مفوضاً عن (المدعي)', $this->sent[0]->getHtmlBody());
         // Kept for each of them.
         $this->assertSame(3, $result['sent']);
 
@@ -214,7 +219,29 @@ class MinutesSignatureTest extends TestCase
         app(MinutesSender::class)->send($this->minutes, $lines, 'iflas', grouping: EmailGrouping::ALL);
         $this->assertCount(1, $this->sent);
         $this->assertSame(['m@law.ae', 'salem@co.ae', 'visitor@x.ae'], $to(0));
-        $this->assertStringContainsString('أطراف الدعوى', $this->sent[0]->getHtmlBody());
+        $this->assertStringContainsString('السيد/ زائر المحترم', $this->sent[0]->getHtmlBody());
+    }
+
+    public function test_a_party_and_whoever_stands_for_it_sharing_an_inbox_each_get_their_own_email(): void
+    {
+        $lines = [
+            ['name' => 'السادة/ شركة المهاد', 'capacity' => 'المدعى عليها', 'emails' => ['office@almehad.ae'], 'by_email' => true],
+            ['name' => 'السيد/ سالم الجديد', 'capacity' => 'مفوضاً عن (السادة/ شركة المهاد - المدعى عليها)', 'emails' => ['office@almehad.ae'], 'by_email' => true],
+        ];
+
+        app(MinutesSender::class)->send($this->minutes, $lines, 'iflas', grouping: EmailGrouping::SEPARATE);
+
+        // The one inbox, an email to each — addressed and greeted as them.
+        $this->assertCount(2, $this->sent);
+        $this->assertSame('السادة/ شركة المهاد - المدعى عليها', $this->sent[0]->getTo()[0]->getName());
+        $this->assertSame('السيد/ سالم الجديد - مفوضاً عن (السادة/ شركة المهاد - المدعى عليها)', $this->sent[1]->getTo()[0]->getName());
+        $this->assertStringContainsString('السيد/ سالم الجديد المحترم', $this->sent[1]->getHtmlBody());
+
+        // Sent together: the inbox once, under both.
+        $this->sent = [];
+        app(MinutesSender::class)->send($this->minutes, $lines, 'iflas', grouping: EmailGrouping::ALL);
+        $this->assertCount(1, $this->sent[0]->getTo());
+        $this->assertSame('السادة/ شركة المهاد - المدعى عليها / السيد/ سالم الجديد - مفوضاً عن (السادة/ شركة المهاد - المدعى عليها)', $this->sent[0]->getTo()[0]->getName());
     }
 
     public function test_the_email_templates_own_cc_is_added_to_the_minutes(): void

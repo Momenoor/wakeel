@@ -398,10 +398,12 @@ class MinutesRelationManager extends RelationManager
                 Repeater::make('recipients')
                     ->label(__('Attendees'))
                     ->addActionLabel(__('Add recipient'))
-                    ->columns(12)
+                    ->columns(16)
                     ->schema([
                         TextInput::make('name')->label(__('Name'))->required()->columnSpan(3),
-                        TagsInput::make('emails')->label(__('Emails'))->nestedRecursiveRules(['email'])->columnSpan(3),
+                        // Beside their name on the email's To and in its greeting ({{recipient.salutation}}).
+                        TextInput::make('capacity')->label(__('Capacity'))->columnSpan(3),
+                        TagsInput::make('emails')->label(__('Emails'))->nestedRecursiveRules(['email'])->columnSpan(4),
                         TextInput::make('phone')->label('WhatsApp')->tel()->columnSpan(2),
                         Toggle::make('by_email')->label(__('By email'))->inline(false)->columnSpan(2),
                         Toggle::make('by_whatsapp')->label(__('By WhatsApp'))->inline(false)->columnSpan(2),
@@ -436,7 +438,7 @@ class MinutesRelationManager extends RelationManager
                             ->label(__('Email'))
                             ->helperText(__(':placeholder greets each by name; the minutes PDF is attached.', ['placeholder' => '{{recipient.name}}']))
                             ->email()
-                            ->placeholders(['recipient.name' => __('Recipient name (separate emails)'), ...Honorific::catalog()])
+                            ->placeholders(['recipient.name' => __('Recipient name (separate emails)'), ...Honorific::catalog(), 'recipient.role' => __('Recipient capacity (separate emails)')])
                             ->contentDirection(MinutesService::composer($record)->isArabic() ? 'rtl' : 'ltr')
                             ->live(onBlur: true),
                         // Files of this send's own, beside the minutes.

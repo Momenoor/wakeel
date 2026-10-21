@@ -65,30 +65,19 @@ class MinutesSender
         ];
         $mediaId = null;
         $arabic = $composer->isArabic();
-        $personal = fn (string $name): array => [...$values, ...Honorific::values($name, $arabic)];
-        // Each inbox and WhatsApp number once, however many recipients share it.
-        $emailed = [];
+        $personal = fn (array $group): array => [...$values, ...self::recipientValues($group, $arabic)];
+        // A WhatsApp number once to the same person (each to whom it is theirs, though shared).
         $messaged = [];
         // Who it reached (by line), and how, for the matter's progress.
         $reachedRows = [];
         $methods = [];
         $recipients = array_values(array_filter($recipients, 'is_array'));
 
-        // By email: each line's addresses not yet on an earlier one…
-        $byEmail = [];
-        foreach ($recipients as $i => $recipient) {
-            $emails = Addresses::without(Addresses::emails([...(array) ($recipient['emails'] ?? []), $recipient['email'] ?? null]), $emailed);
-
-            if (! empty($recipient['by_email']) && $emails !== [] && $senderKey) {
-                $emailed = [...$emailed, ...$emails];
-                $byEmail[$i] = [...$recipient, 'emails' => $emails];
-            }
-        }
-
-        // …in one email each, by party, or all together.
+        // By email: in one email each, by party, or all together.
+        $byEmail = $senderKey ? self::emailLines($recipients) : [];
         foreach (self::emailGroups($byEmail, EmailGrouping::from($grouping), $arabic) as $group) {
             $emails = Addresses::emails(collect($group['rows'])->flatMap(fn (array $r) => $r['emails'])->all());
-            $greeting = $personal($group['name']);
+            $greeting = $personal($group);
 
             $email = new LetterEmail(
                 BulkMailPlaceholders::apply((string) ($subject ?: self::defaultSubject($arabic)), array_map('strip_tags', $greeting)),
@@ -102,8 +91,8 @@ class MinutesSender
             $copied = Addresses::without(Addresses::emails([...$cc, ...$theirs]), $emails);
 
             $record = null;
-            $sent = $this->attempt($minutes, array_values($group['rows']), MinutesDelivery::EMAIL, Str::limit(implode(', ', $emails), 250, ''), $userId, $result, function () use ($senderKey, $email, $emails, $copied, $minutes, $userId, &$record) {
-                $message = SenderMailer::using(SenderMailer::sender($senderKey), fn () => Mail::to($emails)->cc($copied)->send($email));
+            $sent = $this->attempt($minutes, array_values($group['rows']), MinutesDelivery::EMAIL, Str::limit(implode(', ', $emails), 250, ''), $userId, $result, function () use ($senderKey, $email, $emails, $group, $copied, $minutes, $userId, &$record) {
+                $message = SenderMailer::using(SenderMailer::sender($senderKey), fn () => Mail::to(self::addressed($group['rows']))->cc($copied)->send($email));
                 // Remembered, for its replies.
                 $record = MatterEmail::recordSent($minutes->matter_id, $minutes, $senderKey, $message?->getMessageId(), $email->emailSubject, [...$emails, ...$copied], $userId);
 
@@ -128,9 +117,10 @@ class MinutesSender
         foreach ($recipients as $i => $recipient) {
             $phone = WhatsAppService::formatWhatsAppNumber($recipient['phone'] ?? null);
 
-            if (! empty($recipient['by_whatsapp']) && $template && $phone && ! in_array($phone, $messaged, true)) {
-                $messaged[] = $phone;
-                $greeting = $personal(trim((string) ($recipient['name'] ?? '')));
+            $once = $phone.'|'.mb_strtolower(trim((string) ($recipient['name'] ?? '')));
+            if (! empty($recipient['by_whatsapp']) && $template && $phone && ! in_array($once, $messaged, true)) {
+                $messaged[] = $once;
+                $greeting = $personal(self::emailGroups([$i => $recipient], EmailGrouping::SEPARATE, $arabic)[0]);
 
                 $sent = $this->attempt($minutes, [$recipient], MinutesDelivery::WHATSAPP, $phone, $userId, $result, function () use ($template, $phone, $greeting, $pdf, $fileName, &$mediaId) {
                     if ($template->header === 'document' && $mediaId === null) {
@@ -229,20 +219,9 @@ class MinutesSender
         $composer = MinutesService::composer($minutes);
         $arabic = $composer->isArabic();
 
-        // The lines it goes to by email, each inbox once — as send() takes them.
-        $emailed = [];
-        $byEmail = [];
-        foreach (array_values(array_filter($recipients, 'is_array')) as $i => $recipient) {
-            $emails = Addresses::without(Addresses::emails([...(array) ($recipient['emails'] ?? []), $recipient['email'] ?? null]), $emailed);
-            if (! empty($recipient['by_email']) && $emails !== []) {
-                $emailed = [...$emailed, ...$emails];
-                $byEmail[$i] = [...$recipient, 'emails' => $emails];
-            }
-        }
-
-        $groups = self::emailGroups($byEmail, $grouping, $arabic);
-        $first = $groups[0] ?? ['name' => '', 'rows' => []];
-        $greeting = [...$composer->values(), ...Honorific::values((string) $first['name'], $arabic)];
+        $groups = self::emailGroups(self::emailLines(array_values(array_filter($recipients, 'is_array'))), $grouping, $arabic);
+        $first = $groups[0] ?? ['name' => '', 'capacity' => '', 'rows' => []];
+        $greeting = [...$composer->values(), ...self::recipientValues($first, $arabic)];
         $email = new LetterEmail(
             BulkMailPlaceholders::apply((string) ($subject ?: self::defaultSubject($arabic)), array_map('strip_tags', $greeting)),
             BulkMailPlaceholders::apply((string) ($body ?: self::defaultBody($arabic)), $greeting, escape: true),
@@ -256,7 +235,7 @@ class MinutesSender
             $html = str_replace($token, 'data:'.(mime_content_type($path) ?: 'image/png').';base64,'.base64_encode((string) file_get_contents($path)), $html);
         }
 
-        $to = collect($first['rows'])->map(fn (array $row): string => trim(trim((string) ($row['name'] ?? '')).' <'.implode(', ', $row['emails']).'>'))->implode(' · ');
+        $to = collect(self::addressed($first['rows']))->map(fn (array $a): string => trim($a['name'].' <'.$a['email'].'>'))->implode(' · ');
 
         return ['to' => $to, 'others' => max(count($groups) - 1, 0), 'subject' => $email->emailSubject, 'html' => $html, 'rtl' => $email->rtl];
     }
@@ -264,17 +243,20 @@ class MinutesSender
     public static function emailGroups(array $rows, string $grouping, bool $arabic): array
     {
         $name = fn (array $row): string => trim((string) ($row['name'] ?? ''));
+        $capacity = fn (array $row): string => trim((string) ($row['capacity'] ?? ''));
 
         if ($rows === []) {
             return [];
         }
 
         if ($grouping === EmailGrouping::ALL) {
-            return [['name' => count($rows) === 1 ? $name(reset($rows)) : ($arabic ? 'السادة/ أطراف الدعوى' : 'All parties'), 'rows' => $rows]];
+            return [count($rows) === 1
+                ? ['name' => $name(reset($rows)), 'capacity' => $capacity(reset($rows)), 'rows' => $rows]
+                : ['name' => $arabic ? 'السادة/ أطراف الدعوى' : 'All parties', 'capacity' => '', 'rows' => $rows]];
         }
 
         if ($grouping === EmailGrouping::SEPARATE) {
-            return array_values(array_map(fn (array $row, int $i): array => ['name' => $name($row), 'rows' => [$i => $row]], $rows, array_keys($rows)));
+            return array_values(array_map(fn (array $row, int $i): array => ['name' => $name($row), 'capacity' => $capacity($row), 'rows' => [$i => $row]], $rows, array_keys($rows)));
         }
 
         $groups = [];
@@ -283,12 +265,88 @@ class MinutesSender
             $groups[$key][$i] = $row;
         }
 
-        return array_values(array_map(function (array $group) use ($name): array {
+        return array_values(array_map(function (array $group) use ($name, $capacity): array {
             // Greeted as the party, when it's among them; else the first.
             $party = collect($group)->first(fn (array $row) => filled($row['group'] ?? null) && (int) ($row['party_id'] ?? 0) === (int) $row['group']);
 
-            return ['name' => $name($party ?? reset($group)), 'rows' => $group];
+            return ['name' => $name($party ?? reset($group)), 'capacity' => $capacity($party ?? reset($group)), 'rows' => $group];
         }, $groups));
+    }
+
+    /**
+     * The lines to email, by their place in the list, each with its addresses: every line its own, though
+     * it shares an inbox with another (a party and whoever stands for it) — the same person listed twice
+     * once.
+     *
+     * @param  list<array<string, mixed>>  $recipients
+     * @return array<int, array<string, mixed>>
+     */
+    private static function emailLines(array $recipients): array
+    {
+        $seen = [];
+        $lines = [];
+
+        foreach ($recipients as $i => $recipient) {
+            $who = mb_strtolower(trim((string) ($recipient['name'] ?? '')));
+            $emails = Addresses::without(Addresses::emails([...(array) ($recipient['emails'] ?? []), $recipient['email'] ?? null]), $seen[$who] ?? []);
+
+            if (! empty($recipient['by_email']) && $emails !== []) {
+                $seen[$who] = [...$seen[$who] ?? [], ...$emails];
+                $lines[$i] = [...$recipient, 'emails' => $emails];
+            }
+        }
+
+        return $lines;
+    }
+
+    /**
+     * Whom an email is to, as its To shows them: each inbox once, under the name and capacity of whoever
+     * it is theirs ("السيد/ سالم الجديد - مفوضاً عن (…)"), those sharing it together.
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return list<array{email: string, name: string}>
+     */
+    private static function addressed(array $rows): array
+    {
+        $to = [];
+
+        foreach ($rows as $row) {
+            $who = trim(trim((string) ($row['name'] ?? '')).(filled($row['capacity'] ?? null) ? ' - '.trim((string) $row['capacity']) : ''));
+
+            foreach ((array) ($row['emails'] ?? []) as $email) {
+                $key = mb_strtolower($email);
+                $to[$key] ??= ['email' => $email, 'names' => []];
+                if ($who !== '' && ! in_array($who, $to[$key]['names'], true)) {
+                    $to[$key]['names'][] = $who;
+                }
+            }
+        }
+
+        return array_values(array_map(fn (array $a): array => ['email' => $a['email'], 'name' => implode(' / ', $a['names'])], $to));
+    }
+
+    /**
+     * The recipient's placeholders for an email (or a WhatsApp message): named as it greets, its
+     * {{recipient.role}} their capacity, and {{recipient.salutation}} each it goes to by name and
+     * capacity — "السيد/ سالم الجديد المحترم - مفوضاً عن (…)", those of one email one after another.
+     *
+     * @param  array{name: string, capacity: string, rows: array<int, array<string, mixed>>}  $group
+     * @return array<string, string>
+     */
+    private static function recipientValues(array $group, bool $arabic): array
+    {
+        $salutations = collect($group['rows'])
+            ->map(fn (array $row): string => trim(trim((string) ($row['name'] ?? '')) === '' ? '' : Honorific::salutation((string) $row['name'], $arabic)
+                .(filled($row['capacity'] ?? null) ? ' - '.trim((string) $row['capacity']) : '')))
+            ->filter()
+            ->unique()
+            ->implode($arabic ? '، ' : '; ');
+
+        return [
+            ...Honorific::values($group['name'], $arabic),
+            'recipient.role' => $group['capacity'],
+            'recipient.salutation' => $salutations !== '' ? $salutations : Honorific::salutation($group['name'], $arabic),
+        ];
     }
 
     /**
@@ -308,11 +366,10 @@ class MinutesSender
      * Who to send to: the attendees marked present — and, for every main
      * party someone attended for (itself, its lawyer, an agent or an
      * employee), that party and all its representatives too, present or
-     * not. Each with all their emails (the one typed at the meeting first)
-     * and their phone (typed, else their party's latest) — an inbox or a
-     * number on an earlier line isn't repeated.
+     * not. Each with their capacity, all their emails (the one typed at the
+     * meeting first) and their phone (typed, else their party's latest).
      *
-     * @return list<array{name: string, party_id: ?int, email: ?string, phone: ?string, by_email: bool, by_whatsapp: bool}>
+     * @return list<array{name: string, capacity: ?string, party_id: ?int, emails: list<string>, phone: ?string, by_email: bool, by_whatsapp: bool}>
      */
     public static function recipients(MatterMinutes $minutes): array
     {
@@ -348,59 +405,34 @@ class MinutesSender
             ->map(fn (array $c): array => [
                 'title' => MinutesService::isCompany((string) $c['name']) ? ($arabic ? 'السادة/' : 'Messrs.') : ($arabic ? 'الأستاذ/' : 'Mr.'),
                 'name' => $c['name'],
+                'capacity' => $c['role'] ?? null,
                 'party_id' => $c['party_id'],
             ]);
 
         $rows = $present->concat($absent->values());
         $parties = Party::query()->whereIn('id', $rows->pluck('party_id')->filter())->get()->keyBy('id');
 
-        // Every email of theirs (the one typed at the meeting first); an
-        // inbox or a WhatsApp number already on an earlier line isn't
-        // repeated — a party and its lawyer sharing one get it once.
-        $emailed = [];
-        $messaged = [];
-
-        // What was typed for an attendee at the meeting is theirs: the party they attended for (which
-        // keeps their contact too) does not take it from them — it is sent the party's own.
-        $ownEmail = [];
-        $ownPhone = [];
-        foreach ($rows->values() as $i => $a) {
-            foreach (Addresses::emails([$a['email'] ?? null]) as $email) {
-                $ownEmail[mb_strtolower($email)] ??= $i;
-            }
-            if (filled($a['phone'] ?? null)) {
-                $ownPhone[Addresses::phoneKey((string) $a['phone'])] ??= $i;
-            }
-        }
-
         $groupOf = fn (array $a): ?int => filled($a['represents'] ?? null)
             ? ($mainOf[(int) $a['represents']] ?? (int) $a['represents'])
             : ($mainOf[(int) ($a['party_id'] ?? 0)] ?? null);
 
+        // Each their own contact — the one typed at the meeting first, then their party's, its latest
+        // first — though a party and whoever stands for it share an inbox or a number: each line its own
+        // email, addressed to them.
         return $rows
             ->values()
-            ->map(function (array $a, int $i) use ($parties, $groupOf, $ownEmail, $ownPhone, &$emailed, &$messaged): array {
+            ->map(function (array $a) use ($minutes, $parties, $groupOf): array {
                 $party = filled($a['party_id'] ?? null) ? $parties->get($a['party_id']) : null;
-                $emails = Addresses::without(array_values(array_filter(
-                    Addresses::emails([$a['email'] ?? null, ...array_reverse(Addresses::emails($party?->email ?? []))]),
-                    fn (string $email): bool => ($ownEmail[mb_strtolower($email)] ?? $i) === $i,
-                )), $emailed);
-                $emailed = [...$emailed, ...$emails];
-
-                // The number typed for them, else the party's latest that is no one else's here.
+                $emails = Addresses::emails([$a['email'] ?? null, ...array_reverse(Addresses::emails($party?->email ?? []))]);
                 $phone = collect([$a['phone'] ?? null, ...array_reverse((array) ($party?->phone ?? []))])
-                    ->filter(fn ($number): bool => filled($number) && ($ownPhone[Addresses::phoneKey((string) $number)] ?? $i) === $i)
+                    ->filter(fn ($number): bool => filled($number))
                     ->map(fn ($number): string => trim((string) $number))
                     ->first();
-                if (filled($phone) && in_array(Addresses::phoneKey($phone), $messaged, true)) {
-                    $phone = null;
-                }
-                if (filled($phone)) {
-                    $messaged[] = Addresses::phoneKey($phone);
-                }
 
                 return [
                     'name' => trim(trim((string) ($a['title'] ?? '')).' '.trim((string) $a['name'])),
+                    // As listed in the minutes: typed, else whom they stand for ("مفوضاً عن (…)").
+                    'capacity' => trim((string) ($a['capacity'] ?? '')) ?: MinutesService::capacityFor($minutes, $a['represents'] ?? null, $a['as'] ?? null),
                     'party_id' => $party?->getKey(),
                     // The main party it goes with, sent by party.
                     'group' => $groupOf($a),
