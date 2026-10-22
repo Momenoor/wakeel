@@ -32,6 +32,7 @@ class EmailPdf
      * @param  list<string>  $bcc
      * @param  list<string|array{name: string, size?: ?int}>  $attachments  names and sizes, or paths (their names shown, their sizes read)
      * @param  ?string  $mailbox  whose mail it is, in the page's header (the sender's, unless said)
+     * @param  bool  $received  an email that came in: "Inbox" at the top of each page (as Outlook prints), not "Sent"
      * @return string the PDF
      */
     public static function render(
@@ -45,10 +46,11 @@ class EmailPdf
         array $attachments = [],
         ?CarbonInterface $sentAt = null,
         ?string $mailbox = null,
+        bool $received = false,
     ): string {
         $html = self::withoutCharset($html);
         $font = Branding::emailPdfFont();
-        $draw = fn (?LetterFont $font, bool $otl): string => self::draw($subject, $html, $sender, $toName, $to, $cc, $bcc, $attachments, $sentAt, $mailbox, $font, $otl);
+        $draw = fn (?LetterFont $font, bool $otl): string => self::draw($subject, $html, $sender, $toName, $to, $cc, $bcc, $attachments, $sentAt, $mailbox, $received, $font, $otl);
 
         // A font the PDF engine can't use (a file without the tables Arabic needs, one with PostScript outlines): without them, then the standard font — the email is kept all the same.
         $attempts = $font ? [[$font, true], [$font, false], [null, false]] : [[null, false]];
@@ -77,6 +79,7 @@ class EmailPdf
         array $attachments,
         ?CarbonInterface $sentAt,
         ?string $mailbox,
+        bool $received,
         ?LetterFont $font,
         bool $otl,
     ): string {
@@ -137,14 +140,7 @@ class EmailPdf
 
         // Header (printed on every page like Outlook) — "Outlook", or the
         // office's app name (Settings → Letters & emails).
-        $mpdf->SetHTMLHeader('
-            <table dir="ltr" width="100%" style="font-size:8pt;color:#555;border-bottom:1px solid #ccc;padding-bottom:4px;">
-                <tr>
-                    <td>'.Carbon::parse($sentAt)->format('d/m/Y, H:i').'</td>
-                    <td align="right">Sent – '.htmlspecialchars($mailbox ?? ($sender['name'] ?? '')).' – '.htmlspecialchars($brand['app']).'</td>
-                </tr>
-            </table>
-        ');
+        $mpdf->SetHTMLHeader(self::header($sentAt, $received, $mailbox ?? ($sender['name'] ?? ''), $brand['app']));
 
         $mpdf->SetHTMLFooter('
             <table width="100%" style="font-size:7.5pt;color:#888;border-top:1px solid #ddd;padding-top:3px;">
@@ -167,6 +163,19 @@ class EmailPdf
 
             return $mpdf->Output('', Destination::STRING_RETURN);
         });
+    }
+
+    /** The top of each page: when, and Sent or Inbox, and whose mailbox — as Outlook prints. */
+    public static function header(CarbonInterface $at, bool $received, string $mailbox, string $app): string
+    {
+        return '
+            <table dir="ltr" width="100%" style="font-size:8pt;color:#555;border-bottom:1px solid #ccc;padding-bottom:4px;">
+                <tr>
+                    <td>'.Carbon::parse($at)->format('d/m/Y, H:i').'</td>
+                    <td align="right">'.($received ? 'Inbox' : 'Sent').' – '.htmlspecialchars($mailbox).' – '.htmlspecialchars($app).'</td>
+                </tr>
+            </table>
+        ';
     }
 
     /**

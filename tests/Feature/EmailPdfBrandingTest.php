@@ -44,6 +44,15 @@ class EmailPdfBrandingTest extends TestCase
         $this->assertStringContainsString('class="email-subject" dir="rtl"', $page);
     }
 
+    public function test_the_top_of_each_page_says_whether_it_was_sent_or_received(): void
+    {
+        $at = now()->setDate(2026, 10, 22)->setTime(9, 5);
+
+        $this->assertStringContainsString('Sent – JPA Iflas – Outlook', EmailPdf::header($at, false, 'JPA Iflas', 'Outlook'));
+        $this->assertStringContainsString('Inbox – JPA Iflas – Outlook', EmailPdf::header($at, true, 'JPA Iflas', 'Outlook'));
+        $this->assertStringContainsString('22/10/2026, 09:05', EmailPdf::header($at, true, 'JPA Iflas', 'Outlook'));
+    }
+
     public function test_as_the_office_it_carries_its_name_and_the_apps(): void
     {
         Setting::set('company_name', 'JPA Auditing & Accounting LLC', 'general');

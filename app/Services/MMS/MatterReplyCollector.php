@@ -1039,6 +1039,7 @@ class MatterReplyCollector
             $at,
             // The mailbox it came to, as Outlook prints "Mail - … ".
             (string) (SenderMailer::all()[$senderKey]['name'] ?? $senderKey),
+            received: true,
         );
 
         return [$pdf, $files, SentEmailArchive::emailName(false, self::partyName($from) ?? $fromName, (string) ($message['subject'] ?? ''), $at, $reply), self::original($message)];
