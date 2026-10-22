@@ -2,6 +2,7 @@
 
 namespace App\Filament\Shared\Pages\Schemas;
 
+use App\Jobs\CopyFilesToAzure;
 use App\Services\Attachments\CopyToAzure;
 use App\Services\MMS\CollectedEmailUndo;
 use App\Services\MMS\MatterReplyCollector;
@@ -30,7 +31,7 @@ use Throwable;
  */
 class IntegrationsSettingsForm
 {
-    /** How long "Copy the files to Azure" copies a click: well within the server's time for a request. */
+    /** How long "Copy the files to Azure" copies a press when nothing runs the queue: well within a request's time. */
     private const COPY_SECONDS = 20;
 
     /**
@@ -112,7 +113,7 @@ class IntegrationsSettingsForm
                 ]),
 
             Section::make('Azure Blob Storage')
-                ->description(__('Your storage account in Azure (Storage account → Access keys) and a private container in it, where attached files, signatures and stamps are kept instead of on this server. They still open only through Wakeel, for whoever may see them.'))
+                ->description(__('Your storage account in Azure (Storage account → Access keys) and a private container in it, where attached files, signatures and stamps, and the emails\' and minutes\' PDFs and files are kept instead of on this server. They open only through Wakeel, for whoever may see them. Logos, letterheads and fonts stay here.'))
                 ->icon(Heroicon::ServerStack)
                 ->headerActions([
                     self::testAzureAction(),
@@ -161,11 +162,14 @@ class IntegrationsSettingsForm
     }
 
     /**
-     * The files kept on this server copied to Azure, for some seconds a click (attachments:to-azure does them
-     * all). Not in the page's transaction: each row is pointed at Azure as soon as its file is copied.
+     * The files kept on this server copied to Azure: in the background, until all are (CopyFilesToAzure), told
+     * in the bell when done — or, with nothing running the queue (no cron link), for some seconds a press.
+     * Not in the page's transaction: each row is pointed at Azure as soon as its file is copied.
      */
     private static function copyToAzureAction(): Action
     {
+        $background = fn (): bool => config('queue.default') !== 'sync';
+
         return Action::make('copyToAzure')
             ->label(__('Copy the files to Azure'))
             ->icon(Heroicon::CloudArrowUp)
@@ -173,11 +177,25 @@ class IntegrationsSettingsForm
             ->visible(fn (): bool => Integrations::azureOn())
             ->requiresConfirmation()
             ->modalIcon(Heroicon::CloudArrowUp)
-            ->modalDescription(fn (): string => __('Files kept on this server: :count.', ['count' => CopyToAzure::remaining()]).' '
-                .__('Each press copies for about :seconds seconds, each file checked against its original before it opens from Azure. The originals stay on this server.', ['seconds' => self::COPY_SECONDS]))
+            ->modalDescription(fn (): string => collect([
+                CopyFilesToAzure::running() ? __('Copying in the background now.') : null,
+                __('Files kept on this server: :count.', ['count' => CopyToAzure::remaining()]),
+                $background()
+                    ? __('They are copied in the background, a few each minute, and you are told in the bell when it is done.')
+                    : __('Each press copies for about :seconds seconds (set the cron link to copy them all in the background).', ['seconds' => self::COPY_SECONDS]),
+                __('Each file is checked against its original before it opens from Azure. Attached files, signatures and stamps keep their originals here; the emails\' and minutes\' files are moved (removed here once checked).'),
+            ])->filter()->implode(' '))
             ->modalSubmitActionLabel(__('Copy'))
             ->databaseTransaction(false)
-            ->action(function (): void {
+            ->action(function () use ($background): void {
+                if ($background()) {
+                    CopyFilesToAzure::start(auth()->id())
+                        ? Notification::make()->success()->title(__('Copying in the background: you are told in the bell when it is done.'))->send()
+                        : Notification::make()->warning()->title(__('A copy to Azure is already running. Try again in a minute.'))->send();
+
+                    return;
+                }
+
                 $stats = app(CopyToAzure::class)->run(seconds: self::COPY_SECONDS);
 
                 if ($stats === null) {

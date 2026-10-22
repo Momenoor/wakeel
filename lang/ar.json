@@ -4494,7 +4494,6 @@
     "Also for the types with the same folders: :types": "تطبيق التعديل أيضاً على الأنواع ذات المجلدات نفسها: :types",
     "The top of their OneDrive": "أعلى OneDrive الخاص به",
     "The office's": "توقيع المكتب",
-    "Your storage account in Azure (Storage account → Access keys) and a private container in it, where attached files, signatures and stamps are kept instead of on this server. They still open only through Wakeel, for whoever may see them.": "حساب التخزين الخاص بكم في Azure (Storage account ← Access keys) وحاوية خاصة فيه، تُحفظ فيها الملفات المرفقة والتواقيع والأختام بدلاً من هذا الخادم. وتبقى لا تُفتح إلا من خلال وكيل، لمن يحق له الاطلاع عليها.",
     "Storage account name": "اسم حساب التخزين",
     "Access key": "مفتاح الوصول",
     "Container": "الحاوية",
@@ -4509,6 +4508,13 @@
     "Still on this server: :count — copy again.": "ما زال على هذا الخادم: :count — انسخ مرة أخرى.",
     "Not found on this server (left as they are): :count.": "غير موجودة على هذا الخادم (تُركت كما هي): :count.",
     "Not copied: :errors": "لم يُنسخ: :errors",
-    "Each press copies for about :seconds seconds, each file checked against its original before it opens from Azure. The originals stay on this server.": "كل ضغطة تنسخ لمدة :seconds ثانية تقريباً، ويُطابَق كل ملف مع أصله قبل أن يُفتح من Azure. وتبقى الأصول على هذا الخادم.",
-    "A copy to Azure is already running. Try again in a minute.": "النسخ إلى Azure جارٍ بالفعل. حاول مرة أخرى بعد دقيقة."
+    "A copy to Azure is already running. Try again in a minute.": "النسخ إلى Azure جارٍ بالفعل. حاول مرة أخرى بعد دقيقة.",
+    "Your storage account in Azure (Storage account → Access keys) and a private container in it, where attached files, signatures and stamps, and the emails' and minutes' PDFs and files are kept instead of on this server. They open only through Wakeel, for whoever may see them. Logos, letterheads and fonts stay here.": "حساب التخزين الخاص بكم في Azure (Storage account ← Access keys) وحاوية خاصة فيه، تُحفظ فيها الملفات المرفقة والتواقيع والأختام، وملفات الرسائل والمحاضر وPDF الخاصة بها، بدلاً من هذا الخادم. ولا تُفتح إلا من خلال وكيل، لمن يحق له الاطلاع عليها. أما الشعارات والترويسات والخطوط فتبقى هنا.",
+    "Copying in the background now.": "النسخ جارٍ في الخلفية الآن.",
+    "They are copied in the background, a few each minute, and you are told in the bell when it is done.": "تُنسخ في الخلفية، بضعة ملفات كل دقيقة، وتصلك رسالة في الإشعارات عند الانتهاء.",
+    "Each press copies for about :seconds seconds (set the cron link to copy them all in the background).": "كل ضغطة تنسخ لمدة :seconds ثانية تقريباً (اضبط رابط cron لنسخها كلها في الخلفية).",
+    "Each file is checked against its original before it opens from Azure. Attached files, signatures and stamps keep their originals here; the emails' and minutes' files are moved (removed here once checked).": "يُطابَق كل ملف مع أصله قبل أن يُفتح من Azure. الملفات المرفقة والتواقيع والأختام تبقى أصولها هنا؛ أما ملفات الرسائل والمحاضر فتُنقل (تُحذف من هنا بعد مطابقتها).",
+    "Copying in the background: you are told in the bell when it is done.": "النسخ جارٍ في الخلفية: تصلك رسالة في الإشعارات عند الانتهاء.",
+    "Still on this server: :count (not found here, or not copied).": "ما زال على هذا الخادم: :count (غير موجود هنا، أو لم يُنسخ).",
+    "Nothing is left on this server to copy.": "لم يبقَ على هذا الخادم شيء للنسخ."
 }

@@ -4,16 +4,21 @@ namespace Tests\Feature;
 
 use App\Enums\SignatureStampKind;
 use App\Filament\Shared\Pages\IntegrationsSettings;
+use App\Jobs\CopyFilesToAzure;
 use App\Models\Attachment;
 use App\Models\Matter;
+use App\Models\MatterEmail;
 use App\Models\Setting;
 use App\Models\SignatureStamp;
 use App\Models\User;
 use App\Services\Attachments\CopyToAzure;
+use App\Services\MMS\SentEmailArchive;
+use App\Support\Documents;
 use App\Support\Integrations;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
@@ -45,6 +50,7 @@ class AzureStorageTest extends TestCase
         ]);
         Integrations::apply();
         Storage::fake(Integrations::AZURE_DISK);
+        Storage::fake(Integrations::AZURE_PUBLIC_DISK);
     }
 
     public function test_set_on_the_integrations_page_it_keeps_new_files_once_chosen(): void
@@ -96,7 +102,7 @@ class AzureStorageTest extends TestCase
 
         // New files go there; those before stay where they are until copied.
         $this->connect();
-        $this->assertSame(4, CopyToAzure::remaining());
+        $this->assertSame(5, CopyToAzure::remaining());
 
         $this->artisan('attachments:to-azure')->assertExitCode(1);
 
@@ -108,12 +114,47 @@ class AzureStorageTest extends TestCase
         $this->assertSame('attachments', $missing->fresh()->disk);
         $this->assertSame('attachments', $changed->fresh()->disk);
         $this->assertFalse(Storage::disk('azure')->exists('matter/2026/1/b.pdf'));
-        // On the public disk: for attachments:move first.
-        $this->assertSame('public', $public->fresh()->disk);
+        // A document of the public disk: moved — there, and no longer here.
+        $this->assertSame([Integrations::AZURE_PUBLIC_DISK, '%PDF-c'], [$public->fresh()->disk, $public->fresh()->storage()->get('old/c.pdf')]);
+        $this->assertFalse(Storage::disk('public')->exists('old/c.pdf'));
         $this->assertSame(2, CopyToAzure::remaining());
 
         // Opened from Azure.
         $this->get(route('attachment.download', $here))->assertOk();
+    }
+
+    public function test_the_emails_and_minutes_files_go_to_azure_and_open_at_their_address_for_who_may_see_them(): void
+    {
+        Storage::fake('public');
+        $matter = Matter::factory()->create();
+        // Before: kept here, its row on the public disk; an unfiled email's file, here too.
+        $before = app(SentEmailArchive::class)->keepFile($matter, 'رد.pdf', '%PDF-before', 'application/pdf', '', auth()->id());
+        Storage::disk('public')->put('email-unfiled/1/x.pdf', '%PDF-unfiled');
+        MatterEmail::create(['direction' => MatterEmail::RECEIVED, 'status' => MatterEmail::PENDING, 'sender_key' => 'iflas', 'subject' => 's', 'from' => 'a@b.ae', 'at' => now(), 'files' => [['name' => 'x.pdf', 'path' => 'email-unfiled/1/x.pdf']]]);
+        $this->assertSame('public', Attachment::where('path', $before)->value('disk'));
+
+        // New files in Azure: a new one is kept there, its row says so.
+        $this->connect();
+        $after = app(SentEmailArchive::class)->keepFile($matter, 'رد 2.pdf', '%PDF-after', 'application/pdf', '', auth()->id());
+        $this->assertSame([Integrations::AZURE_PUBLIC_DISK, '%PDF-after'], [Attachment::where('path', $after)->value('disk'), Storage::disk('azure-public')->get($after)]);
+        $this->assertFalse(Storage::disk('public')->exists($after));
+        $this->assertSame('%PDF-before', Documents::storage($before)->get($before));
+
+        // Those before, moved.
+        $this->assertSame(2, CopyToAzure::remaining());
+        $this->artisan('attachments:to-azure')->assertExitCode(0);
+        $this->assertSame(Integrations::AZURE_PUBLIC_DISK, Attachment::where('path', $before)->value('disk'));
+        $this->assertSame(['%PDF-before', '%PDF-unfiled'], [Documents::storage($before)->get($before), Documents::storage('email-unfiled/1/x.pdf')->get('email-unfiled/1/x.pdf')]);
+        $this->assertFalse(Storage::disk('public')->exists($before));
+        $this->assertSame(0, CopyToAzure::remaining());
+
+        // At their old address, through Wakeel: for who may see them.
+        $this->get('/storage/'.$before)->assertOk();
+        $this->get('/storage/email-unfiled/1/x.pdf')->assertOk();
+        $this->get('/storage/email-unfiled/1/none.pdf')->assertNotFound();
+        $this->actingAs(User::factory()->create());
+        $this->get('/storage/'.$before)->assertForbidden();
+        $this->get('/storage/email-unfiled/1/x.pdf')->assertForbidden();
     }
 
     public function test_asked_to_it_deletes_each_original_once_copied(): void
@@ -128,6 +169,30 @@ class AzureStorageTest extends TestCase
         $this->assertSame('azure', $here->fresh()->disk);
         $this->assertFalse(Storage::disk('attachments')->exists('matter/2026/1/a.pdf'));
         $this->assertSame('attachments', config('attachments.disk'));
+    }
+
+    public function test_one_press_copies_them_all_in_the_background_and_tells_who_started_it(): void
+    {
+        Storage::fake('attachments');
+        $matter = Matter::factory()->create();
+        foreach (['a', 'b', 'c'] as $name) {
+            Storage::disk('attachments')->put("matter/2026/1/{$name}.pdf", "%PDF-{$name}");
+            Attachment::create(['matter_id' => $matter->id, 'user_id' => auth()->id(), 'name' => "{$name}.pdf", 'path' => "matter/2026/1/{$name}.pdf", 'disk' => 'attachments', 'size' => '1', 'extension' => 'pdf']);
+        }
+        $this->connect();
+
+        // Its turns: all copied, then whoever started it told.
+        (new CopyFilesToAzure(auth()->id()))->handle(app(CopyToAzure::class));
+
+        $this->assertSame(3, Attachment::where('disk', Integrations::AZURE_DISK)->count());
+        $this->assertFalse(CopyFilesToAzure::running());
+        $this->assertSame(1, auth()->user()->notifications()->count());
+
+        // Started once; pressed again meanwhile, not twice.
+        Queue::fake();
+        $this->assertTrue(CopyFilesToAzure::start(auth()->id()));
+        $this->assertFalse(CopyFilesToAzure::start(auth()->id()));
+        Queue::assertPushed(CopyFilesToAzure::class, 1);
     }
 
     public function test_one_copy_at_a_time(): void

@@ -13,11 +13,11 @@ use App\Services\MMS\MatterPeople;
 use App\Services\Notifications\Notifier;
 use App\Services\WhatsAppCloud;
 use App\Services\WhatsAppService;
+use App\Support\Documents;
 use App\Support\Honorific;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
@@ -87,12 +87,13 @@ class MinutesSignedCopies
         $copies = count($delivery->signed_attachments ?? []);
         $name = MinutesService::fileName($minutes).' — '.__('signed by :name', ['name' => $delivery->name]).($copies ? ' ('.($copies + 1).')' : '').'.'.$extension;
         $path = 'attachments/minutes/'.$minutes->matter_id.'/signed/'.$minutes->number.'-'.Str::random(8).'.'.$extension;
-        Storage::disk('public')->put($path, $file['data']);
+        $disk = Documents::put($path, $file['data']);
 
         $attachment = $minutes->matter->attachments()->create([
             'user_id' => $delivery->sent_by,
             'type' => 'minutes_signed',
             'path' => $path,
+            'disk' => $disk,
             'name' => $name,
             'size' => strlen($file['data']),
             'extension' => $extension,

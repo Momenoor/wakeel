@@ -268,6 +268,28 @@ class MatterEmail extends Model
     }
 
     /** "<abc@host>" and "abc@host" alike. */
+    /**
+     * Every path the emails list (files), read a few at a time: those kept in the system for them.
+     *
+     * @return array<string, true>
+     */
+    public static function keptPaths(): array
+    {
+        $paths = [];
+
+        static::query()->toBase()->select(['id', 'files'])->whereNotNull('files')->orderBy('id')->chunkById(500, function ($emails) use (&$paths): void {
+            foreach ($emails as $email) {
+                foreach ((array) json_decode((string) $email->files, true) as $file) {
+                    if (is_array($file) && filled($file['path'] ?? null)) {
+                        $paths[(string) $file['path']] = true;
+                    }
+                }
+            }
+        });
+
+        return $paths;
+    }
+
     public static function messageId(?string $id): ?string
     {
         $id = trim((string) $id, " <>\t\r\n");

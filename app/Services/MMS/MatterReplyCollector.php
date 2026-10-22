@@ -16,6 +16,7 @@ use App\Models\Party;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\Notifications\Notifier;
+use App\Support\Documents;
 use App\Support\Tolerant;
 use Carbon\CarbonInterface;
 use Closure;
@@ -27,7 +28,6 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
 use RuntimeException;
 use Throwable;
@@ -666,9 +666,8 @@ class MatterReplyCollector
         [$pdf, $files, $name, $source] = $this->rendered($message, (string) $email->sender_key, $email->parent_id !== null);
 
         $old = (array) ($email->files ?? []);
-        $disk = Storage::disk('public');
-        $replace = function (?string $path, string $contents) use ($disk): bool {
-            if (blank($path) || ! $disk->exists($path)) {
+        $replace = function (?string $path, string $contents): bool {
+            if (! $disk = Documents::storage($path)) {
                 return false;
             }
             $disk->put($path, $contents);
@@ -723,7 +722,7 @@ class MatterReplyCollector
             if ($saved && $path !== null) {
                 // Its copy in the system is no longer needed.
                 Attachment::query()->where('path', $path)->get()->each->forceDelete();
-                $disk->delete($path);
+                Documents::delete($path);
             } elseif (! $saved && $path === null) {
                 $path = $this->archive->keepFile($matter, $fileName, $contents, (string) ($file['mime'] ?? 'application/octet-stream'), '', auth()->id(), inOneDrive: $ignored);
             } elseif (! $saved) {
@@ -740,7 +739,7 @@ class MatterReplyCollector
             $path = $file['path'] ?? null;
             if (filled($path) && ($file['kind'] ?? null) !== MatterEmail::SOURCE && ! in_array($path, $still, true)) {
                 Attachment::query()->where('path', $path)->get()->each->forceDelete();
-                $disk->delete($path);
+                Documents::delete($path);
             }
         }
 
@@ -873,7 +872,6 @@ class MatterReplyCollector
      */
     public function file(MatterEmail $email, Matter $matter, ?int $userId = null): void
     {
-        $disk = Storage::disk('public');
         $stored = (array) ($email->files ?? []);
         $pdf = $stored[0] ?? null;
         $kept = [];
@@ -881,7 +879,7 @@ class MatterReplyCollector
 
         foreach ($stored as $i => $file) {
             $path = (string) ($file['path'] ?? '');
-            if ($path === '' || ! $disk->exists($path)) {
+            if (! $disk = Documents::storage($path)) {
                 continue;
             }
 
@@ -934,7 +932,7 @@ class MatterReplyCollector
     /** A held email that is no matter's: set aside, its files gone. */
     public function dismiss(MatterEmail $email): void
     {
-        Storage::disk('public')->delete(array_filter(array_map(fn ($file) => $file['path'] ?? null, (array) ($email->files ?? []))));
+        Documents::delete(array_values(array_filter(array_map(fn ($file) => $file['path'] ?? null, (array) ($email->files ?? [])))));
         $email->update(['status' => MatterEmail::DISMISSED, 'files' => []]);
         $this->answered($email);
     }
@@ -962,8 +960,8 @@ class MatterReplyCollector
 
         // Its PDF not in OneDrive (or not found there): saved in the other matter's folder from the system.
         $pdf = (string) ($email->files[0]['path'] ?? '');
-        if (! $oneDrive['pdf'] && $pdf !== '' && Storage::disk('public')->exists($pdf)) {
-            $oneDrive['pdf'] = $this->archive->keepInOneDrive($to, (string) $email->files[0]['name'], (string) Storage::disk('public')->get($pdf), 'application/pdf', $oneDrive['folder']);
+        if (! $oneDrive['pdf'] && $disk = Documents::storage($pdf)) {
+            $oneDrive['pdf'] = $this->archive->keepInOneDrive($to, (string) $email->files[0]['name'], (string) $disk->get($pdf), 'application/pdf', $oneDrive['folder']);
         }
 
         $email->update([

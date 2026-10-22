@@ -53,6 +53,9 @@ class Integrations
     /** The storage Azure is, once set (config/filesystems.php has no such disk until then). */
     public const AZURE_DISK = 'azure';
 
+    /** The system's documents that were on the public disk (App\Support\Documents): in the same container, under public/. */
+    public const AZURE_PUBLIC_DISK = 'azure-public';
+
     public const KEYS = [
         self::MS_TENANT, self::MS_CLIENT, self::MS_SECRET, self::MS_CALENDAR,
         self::PUSHER_APP, self::PUSHER_KEY, self::PUSHER_SECRET, self::PUSHER_CLUSTER,
@@ -189,7 +192,7 @@ class Integrations
         if (! in_array('', $azure, true)) {
             [$account, $key, $container] = $azure;
 
-            config(['filesystems.disks.'.self::AZURE_DISK => [
+            $disk = [
                 'driver' => 'azure-storage-blob',
                 'credential' => 'shared_key',
                 'account_name' => $account,
@@ -197,7 +200,12 @@ class Integrations
                 'container' => $container,
                 // Private: a file is only ever opened through Wakeel, after its checks.
                 'visibility' => 'private',
-            ]]);
+            ];
+
+            config([
+                'filesystems.disks.'.self::AZURE_DISK => $disk,
+                'filesystems.disks.'.self::AZURE_PUBLIC_DISK => [...$disk, 'prefix' => 'public'],
+            ]);
 
             // New attached files there; each one before keeps the storage it was saved in (Attachment::$disk).
             if (self::get(self::AZURE_ATTACHMENTS) === '1') {
@@ -209,6 +217,12 @@ class Integrations
     public static function azureOn(): bool
     {
         return is_array(config('filesystems.disks.'.self::AZURE_DISK));
+    }
+
+    /** Whether new files are kept in Azure ("Keep new files in Azure"). */
+    public static function newFilesInAzure(): bool
+    {
+        return config('attachments.disk') === self::AZURE_DISK;
     }
 
     public static function microsoftOn(): bool

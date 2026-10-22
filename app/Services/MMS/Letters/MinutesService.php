@@ -8,12 +8,12 @@ use App\Models\MatterMinutes;
 use App\Models\MatterParty;
 use App\Models\Party;
 use App\Services\MMS\MatterProgressRecorder;
+use App\Support\Documents;
 use App\Support\EditorFonts;
 use App\Support\FileName;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
@@ -500,7 +500,7 @@ class MinutesService
     {
         $pdf = (new LetterPdf(self::composer($minutes)))->render();
         $path = 'attachments/minutes/'.$minutes->matter_id.'/'.$minutes->number.'-'.Str::random(6).'.pdf';
-        Storage::disk('public')->put($path, $pdf);
+        $disk = Documents::put($path, $pdf);
 
         $minutes->attachment?->delete();
 
@@ -508,6 +508,7 @@ class MinutesService
             'user_id' => $userId,
             'type' => 'minutes',
             'path' => $path,
+            'disk' => $disk,
             'name' => self::fileName($minutes).'.pdf',
             'size' => strlen($pdf),
             'extension' => 'pdf',

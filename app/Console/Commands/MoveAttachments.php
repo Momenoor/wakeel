@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\MatterEmail;
 use App\Services\Attachments\FileCopy;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Filesystem\Filesystem;
@@ -42,8 +43,8 @@ class MoveAttachments extends Command
 
     protected $description = 'Move the files attached before the private disk existed from the public disk to the private one';
 
-    /** @var array<string, true>|null the paths the emails of the matters list (kept public for them) */
-    private ?array $emailPaths = null;
+    /** @var array<string, true> the paths the emails of the matters list (kept public for them) */
+    private array $emailPaths = [];
 
     public function handle(): int
     {
@@ -61,6 +62,7 @@ class MoveAttachments extends Command
         $public = Storage::disk('public');
         $private = Storage::disk($disk);
 
+        $this->emailPaths = MatterEmail::keptPaths();
         $stats = ['moved' => 0, 'bytes' => 0, 'missing' => 0, 'email' => 0, 'failed' => 0, 'left' => 0];
         $failures = [];
 
@@ -80,7 +82,7 @@ class MoveAttachments extends Command
                     continue;
                 }
 
-                if ($this->listedByAnEmail($path)) {
+                if (isset($this->emailPaths[$path])) {
                     $stats['email']++;
 
                     continue;
@@ -174,29 +176,6 @@ class MoveAttachments extends Command
         $year = $row->created_at ? substr((string) $row->created_at, 0, 4) : now()->format('Y');
 
         return $owner.'/'.$year.'/'.$id.'/'.Str::uuid().($extension !== '' ? '.'.$extension : '');
-    }
-
-    /**
-     * Whether an email lists this file (matter_emails.files): the email reads it from the public disk, so it
-     * stays there. The paths are read once, a few at a time.
-     */
-    private function listedByAnEmail(string $path): bool
-    {
-        if ($this->emailPaths === null) {
-            $this->emailPaths = [];
-
-            DB::table('matter_emails')->select(['id', 'files'])->whereNotNull('files')->orderBy('id')->chunkById(500, function ($emails): void {
-                foreach ($emails as $email) {
-                    foreach ((array) json_decode((string) $email->files, true) as $file) {
-                        if (is_array($file) && filled($file['path'] ?? null)) {
-                            $this->emailPaths[(string) $file['path']] = true;
-                        }
-                    }
-                }
-            });
-        }
-
-        return isset($this->emailPaths[$path]);
     }
 
     private function size(int $bytes): string

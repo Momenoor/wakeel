@@ -5,9 +5,9 @@ namespace App\Services\MMS;
 use App\Mail\LetterEmail;
 use App\Models\Matter;
 use App\Models\MatterEmail;
+use App\Support\Documents;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -180,12 +180,13 @@ class SentEmailArchive
         if ($asAttachment) {
             try {
                 $path = 'attachments/emails/'.$matter->getKey().'/'.now()->format('Ymd-His').'-'.Str::random(6).($extension !== '' ? '.'.$extension : '');
-                Storage::disk('public')->put($path, $contents);
+                $disk = Documents::put($path, $contents);
 
                 $matter->attachments()->create([
                     'user_id' => $userId ?? auth()->id(),
                     'type' => 'correspondence',
                     'path' => $path,
+                    'disk' => $disk,
                     'name' => $name,
                     'size' => strlen($contents),
                     'extension' => $extension,
@@ -234,7 +235,7 @@ class SentEmailArchive
     {
         [$base, $extension] = self::splitName($name);
         $path = trim($folder, '/').'/'.self::cleanBase($base).($extension !== '' ? '.'.$extension : '');
-        Storage::disk('public')->put($path, $contents);
+        Documents::put($path, $contents);
 
         return $path;
     }

@@ -11,6 +11,7 @@ use App\Models\Matter;
 use App\Models\MatterEmail;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterReplyCollector;
+use App\Support\Documents;
 use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -25,7 +26,6 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * A matter's email log: what was sent from it (letters, minutes, bulk mail)
@@ -239,7 +239,7 @@ class EmailsRelationManager extends RelationManager
     {
         $path = $email->files[0]['path'] ?? null;
 
-        return filled($path) && Storage::disk('public')->exists($path) ? MatterEmail::fileUrl($path) : null;
+        return Documents::linkable($path) ? MatterEmail::fileUrl($path) : null;
     }
 
     /**
@@ -305,7 +305,7 @@ class EmailsRelationManager extends RelationManager
     private static function fileLinks(MatterEmail $email): array
     {
         return collect((array) $email->files)
-            ->filter(fn ($file): bool => filled($file['path'] ?? null) && Storage::disk('public')->exists($file['path']))
+            ->filter(fn ($file): bool => Documents::linkable($file['path'] ?? null))
             ->map(fn (array $file): array => ['name' => (string) $file['name'], 'url' => MatterEmail::fileUrl($file['path']), 'kind' => $file['kind'] ?? null])
             ->values()
             ->all();

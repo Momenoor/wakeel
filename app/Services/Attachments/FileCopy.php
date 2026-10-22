@@ -8,8 +8,11 @@ use Throwable;
 
 /**
  * One file copied from one storage to another — streamed, so a big one costs no memory — and checked: the
- * copy is the original (its size and sha256), and the original is the one recorded when a checksum is given.
- * A copy that fails or differs is deleted; the original is never touched.
+ * copy is the original, and the original is the one recorded when a checksum is given. A copy that fails or
+ * differs is deleted; the original is never touched.
+ *
+ * The copy is checked by the MD5 its storage keeps of it (Azure does, for a file sent in one go — one short
+ * request), else by reading it back (its size and sha256).
  */
 class FileCopy
 {
@@ -18,7 +21,7 @@ class FileCopy
      */
     public static function copy(Filesystem $from, string $path, Filesystem $to, string $target, ?string $recorded = null): array
     {
-        $checksum = self::checksum($from, $path);
+        ['sha256' => $checksum, 'md5' => $md5] = self::hashes($from, $path);
 
         if (filled($recorded) && ! hash_equals((string) $recorded, $checksum)) {
             throw new RuntimeException('the file is not the one that was recorded (checksum differs)');
@@ -37,8 +40,16 @@ class FileCopy
 
         try {
             throw_if($written === false, RuntimeException::class, 'the copy could not be written');
-            throw_unless($to->exists($target) && (int) $to->size($target) === $size, RuntimeException::class, 'the copy is not the size of the original');
-            throw_unless(hash_equals($checksum, self::checksum($to, $target)), RuntimeException::class, 'the copy differs from the original');
+
+            $kept = method_exists($to, 'checksum') ? $to->checksum($target) : false;
+
+            if (is_string($kept) && $kept !== '') {
+                // Azure gives the 16 bytes, a disk here their hex.
+                throw_unless(hash_equals($md5, strlen($kept) === 16 ? bin2hex($kept) : strtolower($kept)), RuntimeException::class, 'the copy differs from the original');
+            } else {
+                throw_unless($to->exists($target) && (int) $to->size($target) === $size, RuntimeException::class, 'the copy is not the size of the original');
+                throw_unless(hash_equals($checksum, self::hashes($to, $target)['sha256']), RuntimeException::class, 'the copy differs from the original');
+            }
         } catch (Throwable $e) {
             $to->delete($target);
 
@@ -48,15 +59,26 @@ class FileCopy
         return ['size' => $size, 'checksum' => $checksum];
     }
 
-    /** Its sha256, read as a stream. */
-    public static function checksum(Filesystem $disk, string $path): string
+    /**
+     * Its sha256 and MD5, in one reading.
+     *
+     * @return array{sha256: string, md5: string}
+     */
+    private static function hashes(Filesystem $disk, string $path): array
     {
         $stream = self::stream($disk, $path);
-        $hash = hash_init('sha256');
-        hash_update_stream($hash, $stream);
+        $sha256 = hash_init('sha256');
+        $md5 = hash_init('md5');
+
+        while (! feof($stream)) {
+            $chunk = (string) fread($stream, 1024 * 1024);
+            hash_update($sha256, $chunk);
+            hash_update($md5, $chunk);
+        }
+
         fclose($stream);
 
-        return hash_final($hash);
+        return ['sha256' => hash_final($sha256), 'md5' => hash_final($md5)];
     }
 
     /** @return resource */

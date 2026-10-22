@@ -7,10 +7,10 @@ use App\Models\MatterContact;
 use App\Models\MatterEmail;
 use App\Models\MatterProgress;
 use App\Models\Setting;
+use App\Support\Documents;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 /**
@@ -94,7 +94,7 @@ class CollectedEmailUndo
         // Its files in the system, and the matter's attachments they are.
         $paths = array_values(array_filter(array_map(fn ($file) => $file['path'] ?? null, (array) ($email->files ?? []))));
         if ($paths !== []) {
-            Storage::disk('public')->delete($paths);
+            Documents::delete($paths);
             Attachment::query()->whereIn('path', $paths)->delete();
         }
 
