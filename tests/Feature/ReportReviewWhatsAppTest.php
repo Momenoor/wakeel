@@ -116,6 +116,13 @@ class ReportReviewWhatsAppTest extends TestCase
         ]);
     }
 
+    /** Approve, then its closing button (no comment). */
+    private function approve(ReportReviewDelivery $delivery): void
+    {
+        $this->press($delivery, 'approve');
+        $this->press($delivery, 'done');
+    }
+
     /** What was sent to WhatsApp as messages, in order. */
     private function messages(): array
     {
@@ -229,9 +236,16 @@ class ReportReviewWhatsAppTest extends TestCase
         $mine = $this->deliveryOf($this->reviewer);
         $theirs = $this->deliveryOf($this->other);
 
+        // Approve: a comment if they like, then Approve / Cancel.
         $this->assertTrue($this->press($mine, 'approve'));
+        $this->assertSame([RequestStatus::PENDING, 'approve'], [$this->request->refresh()->status, $mine->refresh()->awaiting]);
+        $buttons = collect($this->messages())->last()['interactive']['action']['buttons'];
+        $this->assertSame([__('Approve'), __('Cancel')], array_column(array_column($buttons, 'reply'), 'title'));
+        // None given: approved as it is.
+        $this->press($mine, 'done');
 
         $this->request->refresh();
+        $this->assertNull($this->request->approved_comment);
         $this->assertSame([RequestStatus::APPROVED, $this->reviewer->id], [$this->request->status, $this->request->approved_by]);
         $this->assertNotNull($this->matter->refresh()->initial_report_at);
         $this->assertSame('approved', $mine->refresh()->decision);
@@ -242,6 +256,24 @@ class ReportReviewWhatsAppTest extends TestCase
         $this->assertSame(__('This request has already been decided.'), collect($this->messages())->last()['text']['body'] ?? '');
         // Nobody left signed in by the webhook.
         $this->assertNull(Auth::user());
+    }
+
+    public function test_an_approval_keeps_its_comment_and_files(): void
+    {
+        app(ReportReviewWhatsApp::class)->send($this->request);
+        $mine = $this->deliveryOf($this->reviewer);
+        $reviews = app(ReportReviewWhatsApp::class);
+
+        $this->press($mine, 'approve');
+        $this->assertTrue($reviews->receive(['type' => 'text', 'from' => $mine->phone, 'id' => 'a1', 'text' => ['body' => 'Good work']]));
+        $this->assertTrue($reviews->receive(['type' => 'image', 'from' => $mine->phone, 'id' => 'a2', 'image' => ['id' => 'media-9', 'mime_type' => 'image/jpeg', 'caption' => 'one note here']]));
+        $this->press($mine, 'done');
+
+        $this->request->refresh();
+        $this->assertSame([RequestStatus::APPROVED, "Good work\none note here"], [$this->request->status, $this->request->approved_comment]);
+        $this->assertSame(1, $this->request->attachments()->where('source', 'whatsapp')->count());
+        // The assistant told, with it.
+        $this->assertStringContainsString('Good work', json_encode($this->assistant->notifications()->sole()->data, JSON_UNESCAPED_UNICODE));
     }
 
     public function test_a_button_from_another_number_or_a_repeated_message_does_nothing(): void
@@ -335,7 +367,7 @@ class ReportReviewWhatsAppTest extends TestCase
         $this->assertContains('media-1', array_map(fn (array $message) => $message['template']['components'][0]['parameters'][0]['document']['id'] ?? null, $this->messages()));
 
         // Decided on the second round.
-        $this->press($this->deliveryOf($this->reviewer), 'approve');
+        $this->approve($this->deliveryOf($this->reviewer));
         $this->assertSame(RequestStatus::APPROVED, $this->request->refresh()->status);
 
         // Deleted: the matter's count goes back by the review and the changes asked.
@@ -353,7 +385,7 @@ class ReportReviewWhatsAppTest extends TestCase
         $reviews = app(ReportReviewWhatsApp::class);
 
         // Approve one, whichever order: each button is its own request's.
-        $this->press($b, 'approve');
+        $this->approve($b);
         $this->assertSame([RequestStatus::PENDING, RequestStatus::APPROVED], [$this->request->refresh()->status, $second->refresh()->status]);
 
         // Reject begun on A, then on the other: A's is cancelled and said — the text goes to the latest only.
@@ -393,7 +425,7 @@ class ReportReviewWhatsAppTest extends TestCase
         $this->assertSame(__('This report was sent again after changes: please use the latest message.'), explode("\n", collect($this->messages())->last()['text']['body'], 2)[1]);
 
         // The new message's button decides.
-        $this->press($this->deliveryOf($this->reviewer), 'approve');
+        $this->approve($this->deliveryOf($this->reviewer));
         $this->assertSame(RequestStatus::APPROVED, $this->request->refresh()->status);
     }
 
@@ -410,7 +442,7 @@ class ReportReviewWhatsAppTest extends TestCase
         $this->assertSame(RequestStatus::PENDING, $this->request->refresh()->status);
 
         $this->call('POST', '/webhooks/whatsapp', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_X_HUB_SIGNATURE_256' => 'sha256='.hash_hmac('sha256', $body, 'secret')], $body)->assertOk();
-        $this->assertSame(RequestStatus::APPROVED, $this->request->refresh()->status);
+        $this->assertSame('approve', $mine->refresh()->awaiting);
     }
 
     public function test_a_confirm_report_is_reviewed_the_same_way(): void
@@ -418,7 +450,7 @@ class ReportReviewWhatsAppTest extends TestCase
         $request = $this->makeRequest(RequestType::CONFIRM_REPORT);
         app(ReportReviewWhatsApp::class)->send($request);
 
-        $this->press($this->deliveryOf($this->reviewer, $request), 'approve');
+        $this->approve($this->deliveryOf($this->reviewer, $request));
 
         $this->assertSame(RequestStatus::APPROVED, $request->refresh()->status);
         $this->assertNotNull($this->matter->refresh()->final_report_memo_date);

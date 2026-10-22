@@ -328,7 +328,9 @@ abstract class BaseRequestService
         $this->onActionNotify(
             NotificationType::REQUEST_DECIDED,
             __('Request Approved'),
-            __('Your request has been approved.')
+            filled($this->request->approved_comment)
+                ? __('Your request has been approved. Comment: :comment', ['comment' => $this->request->approved_comment])
+                : __('Your request has been approved.')
         );
     }
 

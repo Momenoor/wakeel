@@ -27,8 +27,8 @@ use Throwable;
  *
  * When an assistant sends a Review Report or Confirm Report request, each of their reviewers (set on
  * the assistant, Parties) is sent the report on WhatsApp, with three buttons: Approve, Reject, Needs
- * changes. Approve is the decision at once. Reject and Needs changes ask for the details — text,
- * pictures or files, as many messages as they like — and a "Send decision" button closes them. The
+ * changes. Each asks for its comment — text, pictures or files, as many messages as they like, none
+ * needed to approve — and a button closes it ("Approve", or "Send decision"). The
  * decision lands on the request on the system as if made there by the reviewer (status, comment,
  * files, who and when), and the assistant is told.
  *
@@ -173,7 +173,7 @@ class ReportReviewWhatsApp
 
     /**
      * One incoming WhatsApp message (as the webhook gives it). True when it was part of a report
-     * review — a button pressed, or the text or files of a rejection being sent.
+     * review — a button pressed, or the text or files of a decision's comment being sent.
      *
      * @param  array<string, mixed>  $message
      */
@@ -233,8 +233,7 @@ class ReportReviewWhatsApp
         }
 
         match ($action) {
-            'approve' => $this->decide($delivery, 'approved'),
-            'reject', 'changes' => $this->ask($delivery, $action),
+            'approve', 'reject', 'changes' => $this->ask($delivery, $action),
             'done' => $this->finish($delivery),
             'cancel' => $this->cancel($delivery),
         };
@@ -242,7 +241,7 @@ class ReportReviewWhatsApp
         return true;
     }
 
-    /** The text or file of a rejection being sent. */
+    /** The text or file of a decision's comment being sent. */
     private function collect(string $from, array $message): bool
     {
         // Pictures sent together reach the server as separate calls, at the same moment: each one reads
@@ -292,7 +291,7 @@ class ReportReviewWhatsApp
         return true;
     }
 
-    /** Reject or Needs changes pressed: what is wrong — text, pictures or files — then "Send decision". */
+    /** A decision pressed: its comment — text, pictures or files (what is wrong; to approve, if they like) — then its button. */
     private function ask(ReportReviewDelivery $delivery, string $action): void
     {
         // What they send next is for this request: one begun before is cancelled (and said), never mixed in.
@@ -304,7 +303,9 @@ class ReportReviewWhatsApp
 
         $delivery->update(['awaiting' => $action, 'pending_texts' => [], 'pending_files' => []]);
 
-        $this->buttons($delivery, $this->about($delivery).__('Send what has to change — text, pictures or files, in as many messages as you like — then press "Send decision".'));
+        $this->buttons($delivery, $this->about($delivery).($action === 'approve'
+            ? __('Press "Approve" to approve it as it is — or first send a comment (text, pictures or files, in as many messages as you like), then press "Approve".')
+            : __('Send what has to change — text, pictures or files, in as many messages as you like — then press "Send decision".')));
     }
 
     /** "Request #12 — matter 123/2026" first, so a reviewer with several to decide knows which one a message is about. */
@@ -321,13 +322,18 @@ class ReportReviewWhatsApp
             return;
         }
 
-        if (blank($delivery->pending_texts) && blank($delivery->pending_files)) {
+        // Approved with no comment; a rejection says what is wrong.
+        if ($delivery->awaiting !== 'approve' && blank($delivery->pending_texts) && blank($delivery->pending_files)) {
             $this->buttons($delivery, $this->about($delivery).__('Nothing received yet — send the text, pictures or files first, then press "Send decision".'));
 
             return;
         }
 
-        $this->decide($delivery, $delivery->awaiting === 'reject' ? 'rejected' : 'needs_changes');
+        $this->decide($delivery, match ($delivery->awaiting) {
+            'approve' => 'approved',
+            'reject' => 'rejected',
+            default => 'needs_changes',
+        });
     }
 
     private function cancel(ReportReviewDelivery $delivery): void
@@ -390,7 +396,7 @@ class ReportReviewWhatsApp
     private function buttons(ReportReviewDelivery $delivery, string $text): void
     {
         $this->quietly($delivery, fn () => $this->whatsapp->sendButtons($delivery->phone, $text, [
-            self::payload($delivery, 'done') => __('Send decision'),
+            self::payload($delivery, 'done') => $delivery->awaiting === 'approve' ? __('Approve') : __('Send decision'),
             self::payload($delivery, 'cancel') => __('Cancel'),
         ]));
     }

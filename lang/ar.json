@@ -4663,5 +4663,7 @@
     "Court registrations": "القيد لدى المحاكم",
     "Registration number": "رقم القيد",
     "Expiry date": "تاريخ الانتهاء",
-    "registration number at the court": "رقم القيد لدى المحكمة"
+    "registration number at the court": "رقم القيد لدى المحكمة",
+    "Press \"Approve\" to approve it as it is — or first send a comment (text, pictures or files, in as many messages as you like), then press \"Approve\".": "اضغط «اعتماد» لاعتماده كما هو — أو أرسل أولًا تعليقًا (نصًا أو صورًا أو ملفات، في أي عدد من الرسائل) ثم اضغط «اعتماد».",
+    "Your request has been approved. Comment: :comment": "تم اعتماد طلبك. التعليق: :comment"
 }
