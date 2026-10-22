@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Pages;
 use App\Filament\Concerns\RendersFreshContent;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Support\RegenerateEmailAction;
+use App\Jobs\EmailJob;
 use App\Jobs\FileUnfiledEmail;
 use App\Models\Matter;
 use App\Models\MatterEmail;
@@ -210,9 +211,8 @@ class UnfiledEmails extends Page implements HasTable
                     ->label(__('Subject'))
                     ->searchable()
                     ->weight('bold')
-                    ->description(fn (MatterEmail $record): ?string => FileUnfiledEmail::isFiling((int) $record->getKey())
-                        ? __('Being filed…')
-                        : (($n = count($record->attachmentFiles())) ? trans_choice(':count file|:count files', $n, ['count' => $n]) : null))
+                    ->description(fn (MatterEmail $record): ?string => EmailJob::note($record))
+
                     ->wrap(),
                 TextColumn::make('candidates')
                     ->label(__('May be about'))
@@ -254,25 +254,13 @@ class UnfiledEmails extends Page implements HasTable
                             || (self::inOwnMailbox($record) && in_array((int) $matter->getKey(), array_map('intval', (array) $record->candidates), true)), 403);
 
                         // In the background (its files go to the matter and its OneDrive): told in the bell when done.
-                        if (! FileUnfiledEmail::start($record, $matter, auth()->id())) {
-                            Notification::make()->warning()->title(__('This email is already being filed.'))->send();
-
-                            return;
-                        }
-
-                        // Done at once when nothing runs the queue in the background.
-                        $record->refresh()->status === MatterEmail::FILED
-                            ? Notification::make()
-                                ->success()
-                                ->title(__('Filed on matter :matter.', ['matter' => $matter->year.'/'.$matter->number]))
-                                ->actions([Action::make('view')->label(__('View'))->url(MatterResource::getUrl('view', ['record' => $matter]))])
-                                ->send()
-                            : Notification::make()
-                                ->success()
-                                ->title(__('Being filed on matter :matter: you are told in the bell when it is done.', ['matter' => $matter->year.'/'.$matter->number]))
-                                ->send();
+                        match ((new FileUnfiledEmail((int) $record->getKey(), (int) $matter->getKey(), auth()->id()))->start()) {
+                            EmailJob::BUSY => Notification::make()->warning()->title(__('Something is already being done to this email. Try again in a minute.'))->send(),
+                            EmailJob::QUEUED => Notification::make()->success()->title(__('Being filed on matter :matter: you are told in the bell when it is done.', ['matter' => $matter->year.'/'.$matter->number]))->send(),
+                            default => null,
+                        };
                     })
-                    ->hidden(fn (MatterEmail $record): bool => FileUnfiledEmail::isFiling((int) $record->getKey())),
+                    ->hidden(fn (MatterEmail $record): bool => EmailJob::busy((int) $record->getKey()) !== null),
 
                 Action::make('ignore')
                     ->label(__('Ignore sender'))
@@ -322,15 +310,15 @@ class UnfiledEmails extends Page implements HasTable
     }
 
     /**
-     * Each matter as it is picked anywhere (MatterSearch::label): its number, court, type and parties, its
-     * degree, nature, phase and whether it is finished — two of one number told apart.
+     * Each matter, short (MatterSearch::label): its number, its parties cut short, its degree, nature, phase
+     * and whether it is finished — two of one number told apart, in a table with much else in it.
      *
      * @param  list<int>  $ids
      * @return array<int, string>
      */
     public static function matterLabels(array $ids): array
     {
-        return $ids === [] ? [] : MatterSearch::labels($ids);
+        return $ids === [] ? [] : MatterSearch::labels($ids, short: true);
     }
 
     /**

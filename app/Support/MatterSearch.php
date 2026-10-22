@@ -7,6 +7,7 @@ use App\Models\Matter;
 use App\Models\MatterFieldDefinition;
 use App\Services\MMS\Calendar\MatterReferenceMatcher;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Str;
 
 /**
  * Finding matters to pick in a select: by "639/2025" (or any way the
@@ -68,11 +69,14 @@ class MatterSearch
      * @param  array<int|string>  $ids
      * @return array<int, string>
      */
-    public static function labels(array $ids): array
+    public static function labels(array $ids, bool $short = false): array
     {
         return Matter::query()->with(self::WITH)->whereIn('id', $ids)->get()
-            ->mapWithKeys(fn (Matter $matter) => [$matter->id => self::label($matter)])->all();
+            ->mapWithKeys(fn (Matter $matter) => [$matter->id => self::label($matter, $short)])->all();
     }
+
+    /** How long the parties of a short label may run (label($matter, short: true)). */
+    private const SHORT_PARTIES = 50;
 
     /** What a label needs, loaded with the matters. */
     private const WITH = ['court:id,name', 'type:id,name', 'mainPartiesOnly.party:id,name'];
@@ -82,18 +86,19 @@ class MatterSearch
      * the number, court, type and its first parties, then its details (details()), to tell matters apart —
      * two of one number above all.
      */
-    public static function label(Matter $matter): string
+    public static function label(Matter $matter, bool $short = false): string
     {
         $parties = $matter->relationLoaded('mainPartiesOnly')
             ? $matter->mainPartiesOnly->pluck('party.name')->filter()->take(2)->implode('، ')
             : null;
         $details = self::details($matter);
 
+        // Short, for a table with more beside it: no court or type, the parties cut to SHORT_PARTIES.
         return collect([
             trim((string) $matter->number).'/'.$matter->year,
-            $matter->court?->getAttribute('name'),
-            $matter->type?->getAttribute('name'),
-            $parties,
+            $short ? null : $matter->court?->getAttribute('name'),
+            $short ? null : $matter->type?->getAttribute('name'),
+            $short && $parties !== null ? Str::limit($parties, self::SHORT_PARTIES) : $parties,
         ])->filter()->implode(' — ').($details !== [] ? ' ('.implode(' · ', $details).')' : '');
     }
 

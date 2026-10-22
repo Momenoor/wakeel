@@ -7,6 +7,7 @@ use App\Filament\Concerns\RefreshesMatterPage;
 use App\Filament\Mms\Pages\UnfiledEmails;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Support\RegenerateEmailAction;
+use App\Jobs\EmailJob;
 use App\Models\Matter;
 use App\Models\MatterEmail;
 use App\Services\MMS\MatterOneDriveFolders;
@@ -96,8 +97,8 @@ class EmailsRelationManager extends RelationManager
                 TextColumn::make('subject')
                     ->label(__('Subject'))
                     ->weight('bold')
-                    ->description(fn (MatterEmail $record): ?string => ($n = count($record->attachmentFiles()))
-                        ? trans_choice(':count file|:count files', $n, ['count' => $n]) : null)
+                    ->description(fn (MatterEmail $record): ?string => EmailJob::note($record))
+
                     ->searchable()
                     ->wrap(),
                 // What of an email that came in is in the matter's OneDrive.

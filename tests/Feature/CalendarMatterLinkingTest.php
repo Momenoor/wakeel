@@ -7,8 +7,11 @@ use App\Filament\Mms\Resources\CalendarEvents\Pages\ListCalendarEvents;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
 use App\Models\CalendarEvent;
+use App\Models\Court;
 use App\Models\Matter;
 use App\Models\MatterFieldDefinition;
+use App\Models\MatterParty;
+use App\Models\Party;
 use App\Models\User;
 use App\Services\MMS\Calendar\EventMatterLinker;
 use App\Services\MMS\Calendar\MatterReferenceMatcher;
@@ -320,6 +323,15 @@ class CalendarMatterLinkingTest extends TestCase
         // Its phase shown (its field is), a field not shown left out.
         $this->assertStringEndsWith('('.implode(' · ', [__('Appeal'), __('Supplementary'), 'مرحلة ثانية', __('In Progress')]).')', $labels[$supplementary->id]);
         $this->assertSame(['المرحلة' => 'مرحلة ثانية'], array_intersect_key(MatterSearch::details($supplementary), [$phase->label => true]));
+
+        // Short, for a table with more beside it (unfiled emails): no court or type, the parties cut.
+        $original->update(['court_id' => Court::factory()->create(['name' => 'محاكم دبي'])->id]);
+        $party = Party::factory()->create(['name' => str_repeat('شركة طويلة الاسم جداً ', 6)]);
+        MatterParty::create(['matter_id' => $original->id, 'party_id' => $party->id, 'role' => 'party', 'type' => 'plaintiff']);
+        $short = MatterSearch::labels([$original->id], short: true)[$original->id];
+        $this->assertStringNotContainsString('محاكم دبي', $short);
+        $this->assertStringContainsString(rtrim(mb_substr($party->name, 0, 50)).'...', $short);
+        $this->assertStringContainsString('محاكم دبي', MatterSearch::labels([$original->id])[$original->id]);
     }
 
     /**

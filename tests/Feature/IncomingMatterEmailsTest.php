@@ -7,7 +7,9 @@ use App\Enums\ProgressType;
 use App\Filament\Mms\Pages\UnfiledEmails;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager;
+use App\Jobs\EmailJob;
 use App\Jobs\FileUnfiledEmail;
+use App\Jobs\RegenerateEmail;
 use App\Livewire\TabbedDatabaseNotifications;
 use App\Models\MailSender;
 use App\Models\Matter;
@@ -343,11 +345,22 @@ class IncomingMatterEmailsTest extends TestCase
         $job = Queue::pushed(FileUnfiledEmail::class)->sole();
         Queue::swap($queue);
         config(['queue.default' => 'sync']);
-        $job->handle(app(MatterReplyCollector::class));
+        $job->handle();
 
         $this->assertSame([MatterEmail::FILED, $this->first->id], [$email->fresh()->status, $email->fresh()->matter_id]);
-        $this->assertFalse(FileUnfiledEmail::isFiling($email->id));
+        $this->assertNull(EmailJob::busy($email->id));
         $this->assertSame(1, $this->user->unreadNotifications()->where('data->title', __('Filed on matter :matter.', ['matter' => $this->first->year.'/'.$this->first->number]))->count());
+
+        // Its PDF made again, in the background too: one thing at a time on an email.
+        config(['queue.default' => 'database']);
+        Queue::fake();
+        Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->first, 'pageClass' => ViewMatter::class])
+            ->callTableAction('regenerate', $email)
+            ->assertNotified(__('Being made again: you are told in the bell when it is done.'))
+            ->assertSee(__('PDF being made again…'))
+            ->assertTableActionHidden('regenerate', $email);
+        Queue::assertPushed(RegenerateEmail::class, 1);
+        $this->assertSame(EmailJob::BUSY, (new FileUnfiledEmail($email->id, $this->second->id, $this->user->id))->start());
     }
 
     public function test_every_email_that_comes_in_filed_or_waiting_is_in_the_bells_emails_tab(): void

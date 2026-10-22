@@ -4541,8 +4541,10 @@
     "Azure": "Azure",
     "This server": "هذا الخادم",
     "Kept in": "محفوظ في",
-    "This email is already being filed.": "هذه الرسالة قيد الحفظ بالفعل.",
     "Being filed on matter :matter: you are told in the bell when it is done.": "جارٍ حفظها في القضية :matter: تصلك رسالة في الإشعارات عند الانتهاء.",
     "The email was not filed.": "لم تُحفظ الرسالة.",
-    "Being filed…": "جارٍ الحفظ…"
+    "Being filed…": "جارٍ الحفظ…",
+    "Something is already being done to this email. Try again in a minute.": "هناك عملية جارية على هذه الرسالة بالفعل. حاول مرة أخرى بعد دقيقة.",
+    "Being made again: you are told in the bell when it is done.": "جارٍ إنشاؤها من جديد: تصلك رسالة في الإشعارات عند الانتهاء.",
+    "PDF being made again…": "جارٍ إنشاء ملف PDF من جديد…"
 }
