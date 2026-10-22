@@ -25,6 +25,8 @@ class EmployeeProfile extends Model
         'party_id',
         'employee_no',
         'designation',
+        'designation_id',
+        'nationality',
         'date_of_joining',
         'date_of_leaving',
         'passport_no',
@@ -51,6 +53,7 @@ class EmployeeProfile extends Model
         'eosg_paid_amount',
         'eosg_paid_at',
         'display_name',
+        'name_ar',
     ];
 
     protected $casts = [
@@ -78,6 +81,18 @@ class EmployeeProfile extends Model
 
     protected static function booted(): void
     {
+        // The designation kept as text too (its English name), for what reads it so (the list, the payroll
+        // forms); one typed (an import) becomes, or is found among, the list's.
+        static::saving(function (EmployeeProfile $profile): void {
+            if ($profile->isDirty('designation_id') && $profile->designation_id) {
+                $profile->designation = HrListItem::find($profile->designation_id)?->name_en ?? $profile->designation;
+            } elseif ($profile->isDirty('designation') && filled($profile->designation)) {
+                $profile->designation_id = HrListItem::firstOrCreate(
+                    ['kind' => HrListItem::DESIGNATION, 'name_en' => trim($profile->designation)],
+                    ['name_ar' => trim($profile->designation)],
+                )->getKey();
+            }
+        });
         // The opening leave balance is the first entry of the running
         // balance; changing it on the profile changes that entry.
         static::saved(function (EmployeeProfile $profile): void {
@@ -85,6 +100,12 @@ class EmployeeProfile extends Model
                 app(LeaveBalanceService::class)->syncOpening($profile);
             }
         });
+    }
+
+    /** @return BelongsTo<HrListItem, $this> */
+    public function designationItem(): BelongsTo
+    {
+        return $this->belongsTo(HrListItem::class, 'designation_id');
     }
 
     /**

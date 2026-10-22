@@ -31,7 +31,7 @@ class EmployeeProfileResource extends Resource
 
     public static function getGloballySearchableAttributes(): array
     {
-        return ['employee_no', 'display_name', 'party.name'];
+        return ['employee_no', 'display_name', 'name_ar', 'party.name'];
     }
 
     public static function getGlobalSearchEloquentQuery(): Builder

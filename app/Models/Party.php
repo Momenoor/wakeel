@@ -301,6 +301,18 @@ class Party extends Model
         return isset($this->role['role']) && in_array('expert', (array) $this->role['role']);
     }
 
+    /** A certified expert — registered with the courts (expertRegistrations). */
+    public function isCertifiedExpert(): bool
+    {
+        return $this->isExpert() && in_array('certified', (array) ($this->role['type'] ?? []), true);
+    }
+
+    /** A certified expert's registration number at each court. */
+    public function expertRegistrations(): HasMany
+    {
+        return $this->hasMany(ExpertRegistration::class);
+    }
+
     /** An expert of the assistant type — whose matter folders are made in their OneDrive and whose reports are reviewed. */
     public function isAssistant(): bool
     {

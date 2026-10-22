@@ -69,6 +69,7 @@ return [
             'app/Models/LeaveRequest.php',
             'app/Models/LeaveRequestPeriod.php',
             'app/Models/EmployeeRequest.php',
+            'app/Models/HrListItem.php',
             'app/Models/LeaveEntitlement.php',
             'app/Models/PartyLeave.php',
             'app/Models/PayrollRun.php',

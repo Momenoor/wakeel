@@ -5,6 +5,7 @@ namespace App\Services\MMS;
 use App\Models\BulkMailCampaign;
 use App\Models\BulkMailRecipient;
 use App\Models\ExpertiseArea;
+use App\Models\ExpertRegistration;
 use App\Models\Matter;
 use App\Models\MatterParty;
 use App\Models\Type;
@@ -74,6 +75,7 @@ class BulkMailPlaceholders
             'matter.plaintiffs.representatives' => __('Plaintiffs\' representatives'),
             'matter.defendants.representatives' => __('Defendants\' representatives'),
             'matter.experts' => __('Experts'),
+            'matter.experts.registration' => __('Experts').' — '.__('registration number at the court'),
             'matter.expertise' => __('Expertise areas'),
             'matter.assistants' => __('Assistants'),
             'matter.parties.count' => __('All parties').' — '.__('how many'),
@@ -108,6 +110,24 @@ class BulkMailPlaceholders
             ->filter()
             ->unique()
             ->implode(', ');
+    }
+
+    /**
+     * The experts' registration numbers at a court (ExpertRegistration), in their order, commas between.
+     *
+     * @param  iterable<MatterParty>  $experts
+     */
+    public static function registrations(iterable $experts, ?int $courtId): string
+    {
+        $ids = collect($experts)->pluck('party_id')->filter()->unique()->values();
+
+        if (! $courtId || $ids->isEmpty()) {
+            return '';
+        }
+
+        $numbers = ExpertRegistration::query()->where('court_id', $courtId)->whereIn('party_id', $ids)->pluck('number', 'party_id');
+
+        return $ids->map(fn ($id) => $numbers[$id] ?? null)->filter()->implode(', ');
     }
 
     /**
@@ -162,6 +182,8 @@ class BulkMailPlaceholders
             'matter.plaintiffs.representatives' => $names($representativesOf('plaintiff')),
             'matter.defendants.representatives' => $names($representativesOf('defendant')),
             'matter.experts' => $names($top->where('role', 'expert')->where('type', '!=', 'assistant')),
+            // Their registration numbers at the matter's court, in their order (one query).
+            'matter.experts.registration' => self::registrations($top->where('role', 'expert')->where('type', '!=', 'assistant'), $matter->court_id),
             // The experts' areas of expertise, each once, with commas between.
             'matter.expertise' => self::expertise($top->where('role', 'expert')->where('type', '!=', 'assistant')),
             // Assistants by their legal name (else their name).

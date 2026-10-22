@@ -2,9 +2,12 @@
 
 namespace App\Filament\Mms\Resources\EmployeeProfiles\Schemas;
 
+use App\Filament\Mms\Resources\HrListItems\Schemas\HrListItemForm;
 use App\Filament\Support\IbanField;
+use App\Models\HrListItem;
 use App\Models\Party;
 use App\Support\Currency;
+use App\Support\Nationalities;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -36,11 +39,19 @@ class EmployeeProfileForm
                             ->label(__('Employee Number'))
                             ->unique(ignoreRecord: true)
                             ->maxLength(255),
-                        TextInput::make('designation')
-                            ->label(__('Designation'))
-                            ->maxLength(255),
+                        // From the office's own lists, in Arabic and English (a letter names them in its language).
+                        HrListItemForm::select('designation_id', HrListItem::DESIGNATION, __('Designation')),
+                        Select::make('nationality')
+                            ->label(__('Nationality'))
+                            ->options(fn (): array => Nationalities::options())
+                            ->searchable(),
                         TextInput::make('display_name')
                             ->label(__('Name as WPS From'))
+                            ->maxLength(255),
+                        // For Arabic letters (an employee's certificate); English ones take the name above.
+                        TextInput::make('name_ar')
+                            ->label(__('Name in Arabic'))
+                            ->extraInputAttributes(['dir' => 'rtl'])
                             ->maxLength(255),
                         DatePicker::make('date_of_joining')
                             ->label(__('Date of Joining'))

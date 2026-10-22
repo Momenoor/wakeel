@@ -172,6 +172,14 @@ class EmployeeRequestsTest extends TestCase
         $request = EmployeeRequest::create(['party_id' => $this->party()->id, 'type' => EmployeeRequestType::CERTIFICATE, 'status' => RequestStatus::PENDING, 'letter_template_id' => $template->id, 'addressed_to' => 'Emirates NBD', 'purpose' => 'opening a bank account']);
 
         // What its placeholders hold.
+        // Their name in the letter's language: Arabic in an Arabic one, the WPS form's in an English one.
+        $this->party()->employeeProfile->update(['name_ar' => 'عمرو حسن', 'display_name' => 'AMR HASSAN']);
+        $this->assertSame(['عمرو حسن', 'عمرو حسن', 'AMR HASSAN'], array_values(array_intersect_key(EmployeePlaceholders::values($request->fresh()), array_flip(['employee.name', 'employee.name_ar', 'employee.name_en']))));
+        $template->update(['locale' => 'en']);
+        $this->assertSame('AMR HASSAN', EmployeePlaceholders::values($request->fresh())['employee.name']);
+        $template->update(['locale' => 'ar']);
+        $this->party()->employeeProfile->update(['name_ar' => null, 'display_name' => null]);
+
         $values = EmployeePlaceholders::values($request);
         $this->assertSame(['Amr Hassan', 'Expert assistant', '01/03/2021', '12,500.00', '8,000.00', 'Emirates NBD'],
             [$values['employee.name'], $values['employee.designation'], $values['employee.joining_date'], $values['employee.salary.total'], $values['employee.salary.basic'], $values['request.addressed_to']]);

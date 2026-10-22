@@ -11,6 +11,7 @@ use App\Support\CompanyContact;
 use App\Support\ScreenPermissions;
 use BackedEnum;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Infolists\Components\TextEntry;
@@ -72,8 +73,31 @@ class GeneralSettings extends SettingsFormPage
                         ->maxLength(255),
 
                     TextInput::make('company_name')
-                        ->label(__('Company / Organization Name'))
+                        ->label(__('Company / Organization Name').' '.__('(English)'))
+                        ->extraInputAttributes(['dir' => 'ltr'])
                         ->maxLength(255),
+
+                    // The office in Arabic too: a letter names it, and gives its address, in its own language
+                    // ({{company.name}}, {{company.address}}).
+                    TextInput::make(CompanyContact::NAME_AR)
+                        ->label(__('Company / Organization Name').' '.__('(Arabic)'))
+                        ->extraInputAttributes(['dir' => 'rtl'])
+                        ->maxLength(255),
+
+                    Textarea::make(CompanyContact::ADDRESS_EN)
+                        ->label(__('Company address').' '.__('(English)'))
+                        ->extraInputAttributes(['dir' => 'ltr'])
+                        ->rows(2),
+
+                    Textarea::make(CompanyContact::ADDRESS_AR)
+                        ->label(__('Company address').' '.__('(Arabic)'))
+                        ->extraInputAttributes(['dir' => 'rtl'])
+                        ->rows(2),
+
+                    TextInput::make(CompanyContact::LICENSE_NO)
+                        ->label(__('Trade licence number'))
+                        ->extraInputAttributes(['dir' => 'ltr'])
+                        ->maxLength(100),
 
                     // How to reach the office: on the privacy policy and
                     // terms, and as {{company.phone}} / {{company.whatsapp}} /

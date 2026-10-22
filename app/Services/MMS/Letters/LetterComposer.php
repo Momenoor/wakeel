@@ -162,7 +162,8 @@ class LetterComposer
     public function values(): array
     {
         $values = [
-            ...CompanyContact::values(),
+            // The office's name and address in the letter's language.
+            ...CompanyContact::values($this->isArabic()),
             ...($this->matter ? BulkMailPlaceholders::forMatter($this->matter) : []),
             'reference' => (string) $this->reference,
             'date' => $this->date->format('d/m/Y'),
@@ -996,6 +997,17 @@ class LetterComposer
 
         // What's left: text placeholders (escaped) and inline blocks.
         $text = array_diff_key($values, $blocks);
+
+        // In an Arabic letter, a code joined by dashes or a number with its "+" (an Emirates ID 784-1990-…, a
+        // licence CN-…, a phone) kept left to right as it is written: the Arabic around it turned it over.
+        if ($this->isArabic()) {
+            foreach ($text as $key => $value) {
+                if (preg_match('/\d/', $value) && preg_match('/[\w][-–][\w]|^\+/u', $value) && ! preg_match('/\p{Arabic}|</u', $value)) {
+                    $blocks[$key] = self::ltr($value);
+                    unset($text[$key]);
+                }
+            }
+        }
         $html = BulkMailPlaceholders::apply($html, $text, escape: true);
 
         return $this->physicalAlignment(BulkMailPlaceholders::apply($html, $blocks));
