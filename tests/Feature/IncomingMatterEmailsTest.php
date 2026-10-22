@@ -512,6 +512,15 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertCount(1, $held->attachmentFiles());
     }
 
+    public function test_a_file_named_without_an_extension_is_still_saved_in_onedrive(): void
+    {
+        // OneDrive refused "Scan 21-10." ("illegal characters"): the dot added before a missing extension.
+        $this->collect($this->email(['subject' => 'مستندات 987/2026', 'attachments' => [['name' => 'Scan 21-10', 'contents' => 'x', 'mime' => 'application/octet-stream']]]));
+
+        $this->assertTrue(collect($this->uploads)->contains(fn (string $url) => str_contains($url, '/Scan 21-10:/content')));
+        $this->assertFalse(collect($this->uploads)->contains(fn (string $url) => str_contains($url, '.:/content')));
+    }
+
     public function test_an_email_whose_mailbox_refuses_marking_read_is_still_kept(): void
     {
         $this->collect($this->email([

@@ -36,6 +36,12 @@ class CopyAttachmentsToAzure extends Command
             (bool) $this->option('delete-local'),
         );
 
+        if ($stats === null) {
+            $this->error('A copy to Azure is already running (here or from Settings → Integrations).');
+
+            return self::FAILURE;
+        }
+
         foreach ($stats['errors'] as $error) {
             $this->error($error);
         }

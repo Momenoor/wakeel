@@ -13,6 +13,7 @@ use App\Services\Attachments\CopyToAzure;
 use App\Support\Integrations;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
@@ -127,6 +128,20 @@ class AzureStorageTest extends TestCase
         $this->assertSame('azure', $here->fresh()->disk);
         $this->assertFalse(Storage::disk('attachments')->exists('matter/2026/1/a.pdf'));
         $this->assertSame('attachments', config('attachments.disk'));
+    }
+
+    public function test_one_copy_at_a_time(): void
+    {
+        $this->connect();
+        $running = Cache::lock('copy-to-azure', 60);
+        $running->get();
+
+        // A second press meanwhile waited on the rows the first was pointing at Azure: now it is turned back.
+        $this->assertNull(app(CopyToAzure::class)->run());
+        $this->artisan('attachments:to-azure')->assertExitCode(1);
+
+        $running->release();
+        $this->assertSame(0, app(CopyToAzure::class)->run()['copied']);
     }
 
     public function test_without_azure_there_is_nothing_to_copy_to(): void

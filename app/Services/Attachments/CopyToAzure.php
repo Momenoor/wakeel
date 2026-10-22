@@ -4,6 +4,7 @@ namespace App\Services\Attachments;
 
 use App\Support\Integrations;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -29,17 +30,40 @@ class CopyToAzure
     }
 
     /**
+     * One copy at a time (a second, started meanwhile, would wait on the rows the first is pointing at
+     * Azure): null while another runs. Each row is pointed at Azure on its own, at once — never one long
+     * transaction around the copying. Stops after $limit files or $seconds, whichever comes first.
+     *
+     * @return array{copied: int, bytes: int, missing: int, failed: int, errors: list<string>}|null
+     */
+    public function run(?int $limit = null, bool $deleteLocal = false, ?int $seconds = null): ?array
+    {
+        $lock = Cache::lock('copy-to-azure', 3600);
+
+        if (! $lock->get()) {
+            return null;
+        }
+
+        try {
+            return $this->copy($limit, $deleteLocal, $seconds !== null ? microtime(true) + $seconds : null);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /**
      * @return array{copied: int, bytes: int, missing: int, failed: int, errors: list<string>}
      */
-    public function run(?int $limit = null, bool $deleteLocal = false): array
+    private function copy(?int $limit, bool $deleteLocal, ?float $until): array
     {
         $azure = Storage::disk(Integrations::AZURE_DISK);
         $stats = ['copied' => 0, 'bytes' => 0, 'missing' => 0, 'failed' => 0, 'errors' => []];
+        $enough = fn (): bool => ($limit !== null && $stats['copied'] >= $limit) || ($until !== null && microtime(true) >= $until);
 
         foreach (self::TABLES as $table => $columns) {
-            self::pending($table)->select($columns)->chunkById(100, function ($rows) use (&$stats, $limit, $deleteLocal, $azure, $table): bool {
+            self::pending($table)->select($columns)->chunkById(100, function ($rows) use (&$stats, $enough, $deleteLocal, $azure, $table): bool {
                 foreach ($rows as $row) {
-                    if ($limit !== null && $stats['copied'] >= $limit) {
+                    if ($enough()) {
                         return false;
                     }
 
@@ -74,7 +98,7 @@ class CopyToAzure
                 return true;
             });
 
-            if ($limit !== null && $stats['copied'] >= $limit) {
+            if ($enough()) {
                 break;
             }
         }

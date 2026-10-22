@@ -4505,9 +4505,10 @@
     "Azure could not be reached": "تعذّر الوصول إلى Azure",
     "Copy the files to Azure": "نسخ الملفات إلى Azure",
     "Files kept on this server: :count.": "الملفات المحفوظة على هذا الخادم: :count.",
-    "Up to :limit are copied each time, each checked against its original before it opens from Azure. The originals stay on this server.": "يُنسخ حتى :limit ملف في كل مرة، ويُطابَق كل منها مع أصله قبل أن يُفتح من Azure. وتبقى الأصول على هذا الخادم.",
     ":count files copied to Azure.": "نُسخ :count ملف إلى Azure.",
     "Still on this server: :count — copy again.": "ما زال على هذا الخادم: :count — انسخ مرة أخرى.",
     "Not found on this server (left as they are): :count.": "غير موجودة على هذا الخادم (تُركت كما هي): :count.",
-    "Not copied: :errors": "لم يُنسخ: :errors"
+    "Not copied: :errors": "لم يُنسخ: :errors",
+    "Each press copies for about :seconds seconds, each file checked against its original before it opens from Azure. The originals stay on this server.": "كل ضغطة تنسخ لمدة :seconds ثانية تقريباً، ويُطابَق كل ملف مع أصله قبل أن يُفتح من Azure. وتبقى الأصول على هذا الخادم.",
+    "A copy to Azure is already running. Try again in a minute.": "النسخ إلى Azure جارٍ بالفعل. حاول مرة أخرى بعد دقيقة."
 }

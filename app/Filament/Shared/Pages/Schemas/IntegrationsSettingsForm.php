@@ -30,8 +30,8 @@ use Throwable;
  */
 class IntegrationsSettingsForm
 {
-    /** How many files "Copy the files to Azure" copies a click: well within a request's time. */
-    private const COPY_LIMIT = 200;
+    /** How long "Copy the files to Azure" copies a click: well within the server's time for a request. */
+    private const COPY_SECONDS = 20;
 
     /**
      * @return array<int, Section>
@@ -160,7 +160,10 @@ class IntegrationsSettingsForm
             });
     }
 
-    /** The files kept on this server copied to Azure, a few hundred a click (attachments:to-azure does them all). */
+    /**
+     * The files kept on this server copied to Azure, for some seconds a click (attachments:to-azure does them
+     * all). Not in the page's transaction: each row is pointed at Azure as soon as its file is copied.
+     */
     private static function copyToAzureAction(): Action
     {
         return Action::make('copyToAzure')
@@ -171,10 +174,18 @@ class IntegrationsSettingsForm
             ->requiresConfirmation()
             ->modalIcon(Heroicon::CloudArrowUp)
             ->modalDescription(fn (): string => __('Files kept on this server: :count.', ['count' => CopyToAzure::remaining()]).' '
-                .__('Up to :limit are copied each time, each checked against its original before it opens from Azure. The originals stay on this server.', ['limit' => self::COPY_LIMIT]))
+                .__('Each press copies for about :seconds seconds, each file checked against its original before it opens from Azure. The originals stay on this server.', ['seconds' => self::COPY_SECONDS]))
             ->modalSubmitActionLabel(__('Copy'))
+            ->databaseTransaction(false)
             ->action(function (): void {
-                $stats = app(CopyToAzure::class)->run(self::COPY_LIMIT);
+                $stats = app(CopyToAzure::class)->run(seconds: self::COPY_SECONDS);
+
+                if ($stats === null) {
+                    Notification::make()->warning()->title(__('A copy to Azure is already running. Try again in a minute.'))->send();
+
+                    return;
+                }
+
                 $left = CopyToAzure::remaining();
 
                 Notification::make()

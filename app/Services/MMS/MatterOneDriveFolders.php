@@ -962,7 +962,11 @@ class MatterOneDriveFolders
         $path = implode('/', array_map([self::class, 'clean'], OneDriveClient::segments($subfolder)));
         $target = $path !== '' ? $this->client->ensureFolder($user, $path, $folder->drive_item_id)['id'] : $folder->drive_item_id;
 
-        return $this->client->upload($user, $target, self::clean(pathinfo($name, PATHINFO_FILENAME)).'.'.pathinfo($name, PATHINFO_EXTENSION), $contents, $mime, $replace)['webUrl'];
+        // A name with no extension stays without one: "name." is refused ("illegal characters").
+        $extension = pathinfo($name, PATHINFO_EXTENSION);
+        $file = (self::clean(pathinfo($name, PATHINFO_FILENAME)) ?: 'file').($extension !== '' ? '.'.$extension : '');
+
+        return $this->client->upload($user, $target, $file, $contents, $mime, $replace)['webUrl'];
     }
 
     /** The test folder's name — fixed, so the test can find it to remove it. */

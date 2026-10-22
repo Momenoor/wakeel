@@ -39,6 +39,9 @@ class ReportReviewWhatsApp
 {
     public const TYPES = [RequestType::REVIEW_REPORT, RequestType::CONFIRM_REPORT];
 
+    /** Tries of a locked step: a deadlock (pictures sent together, each its own call) is tried again. */
+    private const ATTEMPTS = 3;
+
     public function __construct(private readonly WhatsAppCloud $whatsapp) {}
 
     public static function supports(MatterRequest $request): bool
@@ -198,7 +201,7 @@ class ReportReviewWhatsApp
     private function pressed(string $from, int $deliveryId, string $action, array $message): bool
     {
         // "Send decision" waits for the files still being taken in; two presses at once decide once.
-        return DB::transaction(fn (): bool => $this->pressedLocked($from, $deliveryId, $action, $message));
+        return DB::transaction(fn (): bool => $this->pressedLocked($from, $deliveryId, $action, $message), self::ATTEMPTS);
     }
 
     private function pressedLocked(string $from, int $deliveryId, string $action, array $message): bool
@@ -244,8 +247,9 @@ class ReportReviewWhatsApp
     {
         // Pictures sent together reach the server as separate calls, at the same moment: each one reads
         // what was collected and writes it back with its own added — without a lock the last to write
-        // wins and the others' files are lost. One at a time, then.
-        return DB::transaction(fn (): bool => $this->collectLocked($from, $message));
+        // wins and the others' files are lost. One at a time, then — and, as two arriving at once can still
+        // deadlock on the lock itself, the one MySQL turns back is tried again (ATTEMPTS).
+        return DB::transaction(fn (): bool => $this->collectLocked($from, $message), self::ATTEMPTS);
     }
 
     private function collectLocked(string $from, array $message): bool
