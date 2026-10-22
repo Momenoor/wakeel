@@ -40,16 +40,7 @@ class FileCopy
 
         try {
             throw_if($written === false, RuntimeException::class, 'the copy could not be written');
-
-            $kept = method_exists($to, 'checksum') ? $to->checksum($target) : false;
-
-            if (is_string($kept) && $kept !== '') {
-                // Azure gives the 16 bytes, a disk here their hex.
-                throw_unless(hash_equals($md5, strlen($kept) === 16 ? bin2hex($kept) : strtolower($kept)), RuntimeException::class, 'the copy differs from the original');
-            } else {
-                throw_unless($to->exists($target) && (int) $to->size($target) === $size, RuntimeException::class, 'the copy is not the size of the original');
-                throw_unless(hash_equals($checksum, self::hashes($to, $target)['sha256']), RuntimeException::class, 'the copy differs from the original');
-            }
+            self::check($to, $target, $size, $checksum, $md5);
         } catch (Throwable $e) {
             $to->delete($target);
 
@@ -57,6 +48,30 @@ class FileCopy
         }
 
         return ['size' => $size, 'checksum' => $checksum];
+    }
+
+    /** Throws unless the copy there is this file here: before the one here is removed. */
+    public static function assertSame(Filesystem $here, string $path, Filesystem $there, string $target): void
+    {
+        ['sha256' => $checksum, 'md5' => $md5] = self::hashes($here, $path);
+
+        self::check($there, $target, (int) $here->size($path), $checksum, $md5);
+    }
+
+    /** The copy is the original: by the MD5 its storage keeps, else by its size and sha256 read back. */
+    private static function check(Filesystem $to, string $target, int $size, string $checksum, string $md5): void
+    {
+        $kept = method_exists($to, 'checksum') ? $to->checksum($target) : false;
+
+        if (is_string($kept) && $kept !== '') {
+            // Azure gives the 16 bytes, a disk here their hex.
+            throw_unless(hash_equals($md5, strlen($kept) === 16 ? bin2hex($kept) : strtolower($kept)), RuntimeException::class, 'the copy differs from the original');
+
+            return;
+        }
+
+        throw_unless($to->exists($target) && (int) $to->size($target) === $size, RuntimeException::class, 'the copy is not the size of the original');
+        throw_unless(hash_equals($checksum, self::hashes($to, $target)['sha256']), RuntimeException::class, 'the copy differs from the original');
     }
 
     /**

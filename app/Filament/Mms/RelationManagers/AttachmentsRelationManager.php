@@ -8,6 +8,7 @@ use App\Filament\Support\AttachmentFields;
 use App\Filament\Support\SignPdfAction;
 use App\Models\Attachment;
 use App\Models\Contracts\AttachmentOwner;
+use App\Support\Integrations;
 use Filament\Actions\Action;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Columns\TextColumn;
@@ -96,6 +97,15 @@ class AttachmentsRelationManager extends RelationManager
                 TextColumn::make('user.name')
                     ->label(__('Uploaded by'))
                     ->placeholder('—'),
+                // Where the file is, once Azure is set: there, or still on this server.
+                TextColumn::make('disk')
+                    ->label(__('Kept in'))
+                    ->badge()
+                    ->state(fn (Attachment $record): string => $record->keptIn())
+                    ->color(fn (Attachment $record): string => $record->isInAzure() ? 'info' : 'gray')
+                    ->icon(fn (Attachment $record): string => $record->isInAzure() ? 'heroicon-o-cloud' : 'heroicon-o-server')
+                    ->visible(fn (): bool => Integrations::azureOn())
+                    ->toggleable(),
                 TextColumn::make('created_at')
                     ->label(__('Created At'))
                     ->dateTime()
@@ -123,6 +133,15 @@ class AttachmentsRelationManager extends RelationManager
                 SelectFilter::make('category')
                     ->label(__('Category'))
                     ->options(fn (): array => AttachmentCategory::options(...$this->categoriesToFilterBy())),
+                SelectFilter::make('kept_in')
+                    ->label(__('Kept in'))
+                    ->options(['azure' => __('Azure'), 'here' => __('This server')])
+                    ->query(fn (Builder $query, array $data): Builder => match ($data['value'] ?? null) {
+                        'azure' => $query->whereIn('disk', Attachment::IN_AZURE),
+                        'here' => $query->where(fn (Builder $query) => $query->whereNotIn('disk', Attachment::IN_AZURE)->orWhereNull('disk')),
+                        default => $query,
+                    })
+                    ->visible(fn (): bool => Integrations::azureOn()),
             ])
             ->defaultSort('created_at', 'desc')
             ->headerActions([

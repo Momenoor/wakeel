@@ -11,9 +11,10 @@ use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
 
 /**
- * The files kept on this server copied to Azure in the background ("Copy the files to Azure"), a little at a
- * time — each turn well within the queue worker's time (CronWebhookRunner) — then queued again, until a turn
- * copies nothing more. Whoever started it is told in their notifications what came of it.
+ * In the background, a little at a time — each turn well within the queue worker's time (CronWebhookRunner) —
+ * then queued again, until a turn does nothing more: the files kept on this server copied to Azure ("Copy the
+ * files to Azure"), or the copies left on this server of those already there removed ("Remove the copies on
+ * this server"). Whoever started it is told in their notifications what came of it.
  */
 class CopyFilesToAzure implements ShouldQueue
 {
@@ -27,17 +28,20 @@ class CopyFilesToAzure implements ShouldQueue
 
     public int $tries = 1;
 
-    /** @param  list<string>  $errors */
-    public function __construct(public ?int $userId = null, public int $copied = 0, public int $failed = 0, public array $errors = []) {}
+    /**
+     * @param  int  $copied  files copied (or copies removed) in the turns before
+     * @param  list<string>  $errors
+     */
+    public function __construct(public ?int $userId = null, public int $copied = 0, public int $failed = 0, public array $errors = [], public bool $removeLocal = false) {}
 
-    /** Started, unless it already runs (or the queue runs nothing). Whether it was. */
-    public static function start(?int $userId): bool
+    /** Started, unless it already runs. Whether it was. */
+    public static function start(?int $userId, bool $removeLocal = false): bool
     {
         if (! Cache::add(self::RUNNING, true, now()->addHours(6))) {
             return false;
         }
 
-        self::dispatch($userId);
+        self::dispatch($userId, removeLocal: $removeLocal);
 
         return true;
     }
@@ -55,23 +59,24 @@ class CopyFilesToAzure implements ShouldQueue
             return;
         }
 
-        $stats = $copy->run(seconds: self::SECONDS);
+        $stats = $this->removeLocal ? $copy->removeLocal(self::SECONDS) : $copy->run(seconds: self::SECONDS);
 
-        // Another copy (the command) is running: this one waits its turn.
+        // Another one (the command) is running: this one waits its turn.
         if ($stats === null) {
-            self::dispatch($this->userId, $this->copied, $this->failed, $this->errors)->delay(now()->addMinute());
+            self::dispatch($this->userId, $this->copied, $this->failed, $this->errors, $this->removeLocal)->delay(now()->addMinute());
 
             return;
         }
 
-        $this->copied += $stats['copied'];
+        $done = $this->removeLocal ? $stats['removed'] : $stats['copied'];
+        $this->copied += $done;
         $this->failed = $stats['failed'];
         $this->errors = array_slice($stats['errors'], 0, 5);
-        $left = CopyToAzure::remaining();
+        $left = $this->removeLocal ? count(CopyToAzure::leftHere()) : CopyToAzure::remaining();
 
-        // On while each turn copies something; what cannot be copied is left, not tried for ever.
-        if ($left > 0 && $stats['copied'] > 0) {
-            self::dispatch($this->userId, $this->copied, $this->failed, $this->errors);
+        // On while each turn does something; what cannot be done is left, not tried for ever.
+        if ($left > 0 && $done > 0) {
+            self::dispatch($this->userId, $this->copied, $this->failed, $this->errors, $this->removeLocal);
 
             return;
         }
@@ -80,10 +85,17 @@ class CopyFilesToAzure implements ShouldQueue
 
         if ($user = $this->userId ? User::find($this->userId) : null) {
             Notification::make()
-                ->title(__(':count files copied to Azure.', ['count' => $this->copied]))
+                ->title($this->removeLocal
+                    ? __(':count copies removed from this server.', ['count' => $this->copied])
+                    : __(':count files copied to Azure.', ['count' => $this->copied]))
                 ->body(collect([
-                    $left ? __('Still on this server: :count (not found here, or not copied).', ['count' => $left]) : __('Nothing is left on this server to copy.'),
-                    $this->errors ? __('Not copied: :errors', ['errors' => implode(' | ', $this->errors)]) : null,
+                    match (true) {
+                        $this->removeLocal && $left > 0 => __('Still on this server: :count (their copy in Azure is not them).', ['count' => $left]),
+                        $this->removeLocal => __('No copy of a file in Azure is left on this server.'),
+                        $left > 0 => __('Still on this server: :count (not found here, or not copied).', ['count' => $left]),
+                        default => __('Nothing is left on this server to copy.'),
+                    },
+                    $this->errors ? __('Not done: :errors', ['errors' => implode(' | ', $this->errors)]) : null,
                 ])->filter()->implode(' '))
                 ->status($left ? 'warning' : 'success')
                 ->sendToDatabase($user);

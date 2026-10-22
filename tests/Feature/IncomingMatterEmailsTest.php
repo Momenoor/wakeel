@@ -7,6 +7,7 @@ use App\Enums\ProgressType;
 use App\Filament\Mms\Pages\UnfiledEmails;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager;
+use App\Jobs\FileUnfiledEmail;
 use App\Livewire\TabbedDatabaseNotifications;
 use App\Models\MailSender;
 use App\Models\Matter;
@@ -33,6 +34,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
 use Livewire\Livewire;
@@ -318,6 +320,34 @@ class IncomingMatterEmailsTest extends TestCase
         // $this->user filed it: in their Emails tab too, already read.
         $this->assertSame(1, $emails($this->user)->whereNotNull('read_at')->count());
         $this->assertSame(0, $this->user->unreadNotifications()->count());
+    }
+
+    public function test_filing_by_hand_runs_in_the_background_once_and_tells_who_filed_it(): void
+    {
+        $this->collect($this->email());
+        $email = MatterEmail::sole();
+        config(['queue.default' => 'database']);
+        $queue = Queue::getFacadeRoot();
+        Queue::fake();
+
+        Livewire::test(UnfiledEmails::class)
+            ->callTableAction('file', $email, ['matter_id' => $this->first->id])
+            ->assertNotified(__('Being filed on matter :matter: you are told in the bell when it is done.', ['matter' => $this->first->year.'/'.$this->first->number]))
+            // Being filed: said so, and not filed twice.
+            ->assertSee(__('Being filed…'))
+            ->assertTableActionHidden('file', $email);
+        Queue::assertPushed(FileUnfiledEmail::class, 1);
+        $this->assertSame(MatterEmail::PENDING, $email->fresh()->status);
+
+        // Its turn: filed, and whoever filed it told.
+        $job = Queue::pushed(FileUnfiledEmail::class)->sole();
+        Queue::swap($queue);
+        config(['queue.default' => 'sync']);
+        $job->handle(app(MatterReplyCollector::class));
+
+        $this->assertSame([MatterEmail::FILED, $this->first->id], [$email->fresh()->status, $email->fresh()->matter_id]);
+        $this->assertFalse(FileUnfiledEmail::isFiling($email->id));
+        $this->assertSame(1, $this->user->unreadNotifications()->where('data->title', __('Filed on matter :matter.', ['matter' => $this->first->year.'/'.$this->first->number]))->count());
     }
 
     public function test_every_email_that_comes_in_filed_or_waiting_is_in_the_bells_emails_tab(): void

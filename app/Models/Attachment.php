@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\AttachmentCategory;
 use App\Observers\AttachmentObserver;
+use App\Support\Integrations;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
@@ -131,6 +132,20 @@ class Attachment extends Model
     public function storage(): Filesystem
     {
         return Storage::disk($this->disk ?: 'public');
+    }
+
+    /** The storages in Azure (Settings → Integrations): the attached files', and the documents' once on the public disk. */
+    public const IN_AZURE = [Integrations::AZURE_DISK, Integrations::AZURE_PUBLIC_DISK];
+
+    public function isInAzure(): bool
+    {
+        return in_array($this->disk, self::IN_AZURE, true);
+    }
+
+    /** Where it is kept, as a person reads it: Azure, or this server. */
+    public function keptIn(): string
+    {
+        return $this->isInAzure() ? __('Azure') : __('This server');
     }
 
     public function fileExists(): bool

@@ -4,6 +4,7 @@ namespace App\Filament\Support;
 
 use App\Enums\AttachmentCategory;
 use App\Models\Attachment;
+use App\Support\Integrations;
 use Filament\Actions\Action;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
@@ -36,7 +37,15 @@ final class AttachmentList
                     ->color('primary')
                     ->url(fn (Attachment $record): string => $record->url(inline: $record->isPreviewable()))
                     ->openUrlInNewTab()
-                    ->columnSpan(4),
+                    ->columnSpan(fn (): int => Integrations::azureOn() ? 3 : 4),
+                // Where the file is, once Azure is set.
+                TextEntry::make('disk')
+                    ->hiddenLabel()
+                    ->badge()
+                    ->state(fn (Attachment $record): string => $record->keptIn())
+                    ->color(fn (Attachment $record): string => $record->isInAzure() ? 'info' : 'gray')
+                    ->icon(fn (Attachment $record): string => $record->isInAzure() ? 'heroicon-o-cloud' : 'heroicon-o-server')
+                    ->visible(fn (): bool => Integrations::azureOn()),
                 TextEntry::make('category')
                     ->hiddenLabel()
                     ->badge()

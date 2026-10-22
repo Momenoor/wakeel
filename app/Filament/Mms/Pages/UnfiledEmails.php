@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Pages;
 use App\Filament\Concerns\RendersFreshContent;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Support\RegenerateEmailAction;
+use App\Jobs\FileUnfiledEmail;
 use App\Models\Matter;
 use App\Models\MatterEmail;
 use App\Services\MMS\Calendar\MatterReferenceMatcher;
@@ -209,13 +210,14 @@ class UnfiledEmails extends Page implements HasTable
                     ->label(__('Subject'))
                     ->searchable()
                     ->weight('bold')
-                    ->description(fn (MatterEmail $record): ?string => ($n = count($record->attachmentFiles()))
-                        ? trans_choice(':count file|:count files', $n, ['count' => $n]) : null)
+                    ->description(fn (MatterEmail $record): ?string => FileUnfiledEmail::isFiling((int) $record->getKey())
+                        ? __('Being filed…')
+                        : (($n = count($record->attachmentFiles())) ? trans_choice(':count file|:count files', $n, ['count' => $n]) : null))
                     ->wrap(),
                 TextColumn::make('candidates')
                     ->label(__('May be about'))
                     // The matters it may be about, one point each.
-                    ->state(fn (MatterEmail $record): array => array_values(self::matterLabels((array) $record->candidates)))
+                    ->state(fn (MatterEmail $record): array => array_values(array_intersect_key($this->candidateLabels(), array_flip(array_map('intval', (array) $record->candidates)))))
                     ->listWithLineBreaks()
                     ->bulleted()
                     // A sender on no matter: any matter can be chosen by its number.
@@ -251,14 +253,26 @@ class UnfiledEmails extends Page implements HasTable
                         abort_unless(auth()->user()?->can('update', $matter)
                             || (self::inOwnMailbox($record) && in_array((int) $matter->getKey(), array_map('intval', (array) $record->candidates), true)), 403);
 
-                        app(MatterReplyCollector::class)->file($record, $matter, auth()->id());
+                        // In the background (its files go to the matter and its OneDrive): told in the bell when done.
+                        if (! FileUnfiledEmail::start($record, $matter, auth()->id())) {
+                            Notification::make()->warning()->title(__('This email is already being filed.'))->send();
 
-                        Notification::make()
-                            ->success()
-                            ->title(__('Filed on matter :matter.', ['matter' => $matter->year.'/'.$matter->number]))
-                            ->actions([Action::make('view')->label(__('View'))->url(MatterResource::getUrl('view', ['record' => $matter]))])
-                            ->send();
-                    }),
+                            return;
+                        }
+
+                        // Done at once when nothing runs the queue in the background.
+                        $record->refresh()->status === MatterEmail::FILED
+                            ? Notification::make()
+                                ->success()
+                                ->title(__('Filed on matter :matter.', ['matter' => $matter->year.'/'.$matter->number]))
+                                ->actions([Action::make('view')->label(__('View'))->url(MatterResource::getUrl('view', ['record' => $matter]))])
+                                ->send()
+                            : Notification::make()
+                                ->success()
+                                ->title(__('Being filed on matter :matter: you are told in the bell when it is done.', ['matter' => $matter->year.'/'.$matter->number]))
+                                ->send();
+                    })
+                    ->hidden(fn (MatterEmail $record): bool => FileUnfiledEmail::isFiling((int) $record->getKey())),
 
                 Action::make('ignore')
                     ->label(__('Ignore sender'))
@@ -293,6 +307,18 @@ class UnfiledEmails extends Page implements HasTable
             ->emptyStateIcon('heroicon-o-inbox')
             ->emptyStateHeading(__('No unfiled emails'))
             ->emptyStateDescription(__('Emails from the parties are kept on their matter by themselves; one appears here only when its matter is not certain.'));
+    }
+
+    /**
+     * The labels of every matter the emails on the page may be about, read once for the page.
+     *
+     * @return array<int, string>
+     */
+    public function candidateLabels(): array
+    {
+        return once(fn (): array => self::matterLabels(
+            $this->getTableRecords()->flatMap(fn (MatterEmail $email): array => array_map('intval', (array) $email->candidates))->unique()->values()->all(),
+        ));
     }
 
     /**

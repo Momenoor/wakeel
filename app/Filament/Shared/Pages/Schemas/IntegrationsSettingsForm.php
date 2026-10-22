@@ -118,6 +118,7 @@ class IntegrationsSettingsForm
                 ->headerActions([
                     self::testAzureAction(),
                     self::copyToAzureAction(),
+                    self::removeLocalAction(),
                     self::turnOff('azure', [Integrations::AZURE_ACCOUNT, Integrations::AZURE_KEY, Integrations::AZURE_CONTAINER, Integrations::AZURE_ATTACHMENTS]),
                 ])
                 ->columns(2)
@@ -131,6 +132,16 @@ class IntegrationsSettingsForm
                         ->helperText(__('Those kept before stay on this server until copied ("Copy the files to Azure"); either way each opens from where it is.'))
                         ->formatStateUsing(fn ($state): bool => (bool) $state)
                         ->dehydrateStateUsing(fn ($state): string => $state ? '1' : '0')
+                        ->columnSpanFull(),
+                    // Where the files are, by kind.
+                    TextEntry::make('azure_counts')
+                        ->label(__('Where the files are'))
+                        ->visible(fn (): bool => Integrations::azureOn())
+                        ->state(fn (): array => collect(CopyToAzure::counts())
+                            ->map(fn (array $count, string $kind): string => __(':kind: :azure in Azure, :here on this server', ['kind' => $kind, 'azure' => $count['azure'], 'here' => $count['here']]))
+                            ->values()
+                            ->all())
+                        ->listWithLineBreaks()
                         ->columnSpanFull(),
                 ]),
         ];
@@ -213,6 +224,53 @@ class IntegrationsSettingsForm
                         $stats['missing'] ? __('Not found on this server (left as they are): :count.', ['count' => $stats['missing']]) : null,
                         $stats['errors'] ? __('Not copied: :errors', ['errors' => implode(' | ', array_slice($stats['errors'], 0, 5))]) : null,
                     ])->filter()->implode(' '))
+                    ->{$stats['failed'] ? 'warning' : 'success'}()
+                    ->persistent()
+                    ->send();
+            });
+    }
+
+    /**
+     * The copies left on this server of the files already in Azure removed, each once its copy there is checked
+     * to be it — in the background (CopyFilesToAzure), told in the bell when done; with nothing running the
+     * queue, for some seconds a press.
+     */
+    private static function removeLocalAction(): Action
+    {
+        return Action::make('removeLocalCopies')
+            ->label(__('Remove the copies on this server'))
+            ->icon(Heroicon::Trash)
+            ->color('danger')
+            ->link()
+            ->visible(fn (): bool => Integrations::azureOn())
+            ->requiresConfirmation()
+            ->modalDescription(fn (): string => collect([
+                CopyFilesToAzure::running() ? __('Copying in the background now.') : null,
+                __('Files in Azure whose copy is still on this server: :count.', ['count' => count(CopyToAzure::leftHere())]),
+                __('Each copy here is removed only once its copy in Azure is checked to be the same file. The files open from Azure as they do now.'),
+            ])->filter()->implode(' '))
+            ->modalSubmitActionLabel(__('Remove them'))
+            ->databaseTransaction(false)
+            ->action(function (): void {
+                if (config('queue.default') !== 'sync') {
+                    CopyFilesToAzure::start(auth()->id(), removeLocal: true)
+                        ? Notification::make()->success()->title(__('Removing in the background: you are told in the bell when it is done.'))->send()
+                        : Notification::make()->warning()->title(__('A copy to Azure is already running. Try again in a minute.'))->send();
+
+                    return;
+                }
+
+                $stats = app(CopyToAzure::class)->removeLocal(self::COPY_SECONDS);
+
+                if ($stats === null) {
+                    Notification::make()->warning()->title(__('A copy to Azure is already running. Try again in a minute.'))->send();
+
+                    return;
+                }
+
+                Notification::make()
+                    ->title(__(':count copies removed from this server.', ['count' => $stats['removed']]))
+                    ->body($stats['errors'] ? __('Not done: :errors', ['errors' => implode(' | ', array_slice($stats['errors'], 0, 5))]) : null)
                     ->{$stats['failed'] ? 'warning' : 'success'}()
                     ->persistent()
                     ->send();

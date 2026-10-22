@@ -2,15 +2,20 @@
 
 namespace Tests\Feature;
 
+use App\Enums\AttachmentCategory;
 use App\Enums\SignatureStampKind;
+use App\Filament\Mms\RelationManagers\AttachmentsRelationManager;
+use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Shared\Pages\IntegrationsSettings;
 use App\Jobs\CopyFilesToAzure;
 use App\Models\Attachment;
+use App\Models\Fee;
 use App\Models\Matter;
 use App\Models\MatterEmail;
 use App\Models\Setting;
 use App\Models\SignatureStamp;
 use App\Models\User;
+use App\Services\Attachments\AttachmentService;
 use App\Services\Attachments\CopyToAzure;
 use App\Services\MMS\SentEmailArchive;
 use App\Support\Documents;
@@ -193,6 +198,42 @@ class AzureStorageTest extends TestCase
         $this->assertTrue(CopyFilesToAzure::start(auth()->id()));
         $this->assertFalse(CopyFilesToAzure::start(auth()->id()));
         Queue::assertPushed(CopyFilesToAzure::class, 1);
+    }
+
+    public function test_the_copies_left_here_go_once_checked_and_each_file_shows_where_it_is(): void
+    {
+        Storage::fake('attachments');
+        $fee = Fee::factory()->create(['matter_id' => Matter::factory()->create()->id]);
+        $store = fn (string $name): Attachment => app(AttachmentService::class)->store($fee, '%PDF-'.$name, AttachmentCategory::TAX_INVOICE, $name.'.pdf');
+        $same = $store('same');
+        $changed = $store('changed');
+        $this->connect(newFiles: false);
+        app(CopyToAzure::class)->run();
+        // A file attached after, kept here (new files not in Azure).
+        $here = $store('here');
+        // Azure's copy of one is not the file here: that one's copy here stays.
+        Storage::disk('azure')->put($changed->path, 'not it');
+
+        $this->assertEqualsCanonicalizing([$same->path, $changed->path], CopyToAzure::leftHere());
+        $this->assertSame(['azure' => 2, 'here' => 1], CopyToAzure::counts()[__('Attached files (with emails\' and minutes\' files)')]);
+
+        // Each file says where it is.
+        Livewire::test(AttachmentsRelationManager::class, ['ownerRecord' => $fee, 'pageClass' => ViewMatter::class])
+            ->assertTableColumnStateSet('disk', __('Azure'), $same)
+            ->assertTableColumnStateSet('disk', __('This server'), $here)
+            ->filterTable('kept_in', 'here')
+            ->assertCanSeeTableRecords([$here])
+            ->assertCanNotSeeTableRecords([$same, $changed]);
+
+        // In the background, then told.
+        (new CopyFilesToAzure(auth()->id(), removeLocal: true))->handle(app(CopyToAzure::class));
+
+        $this->assertFalse(Storage::disk('attachments')->exists($same->path));
+        $this->assertTrue(Storage::disk('attachments')->exists($changed->path));
+        $this->assertTrue(Storage::disk('attachments')->exists($here->path));
+        $this->assertSame([$changed->path], CopyToAzure::leftHere());
+        $this->assertSame('%PDF-same', $same->fresh()->storage()->get($same->path));
+        $this->assertSame(1, auth()->user()->notifications()->count());
     }
 
     public function test_one_copy_at_a_time(): void
