@@ -13,6 +13,7 @@ use App\Mail\RequestActionNotificationMail;
 use App\Models\Matter;
 use App\Models\MatterRequest;
 use App\Models\User;
+use App\Services\MMS\MatterPeople;
 use App\Services\Notifications\NotificationPreferences;
 use App\Services\Notifications\Notifier;
 use App\Services\WhatsAppService;
@@ -262,11 +263,8 @@ abstract class BaseRequestService
     {
         $statusLabel = $this->request->status->getLabel();
 
-        $assistants = $this->request->matter->assistantsOnly
-            ->map(fn ($mp) => $mp->party?->user)
-            ->filter()
-            ->unique(fn (User $user) => $user->getKey())
-            ->values();
+        // The matter's assistants, and those who handle their matters with them.
+        $assistants = MatterPeople::of([(int) $this->request->matter_id], assistantsOnly: true);
 
         $this->notify($type, $title, $body, $assistants);
         $this->mailEach($type, $assistants, fn () => new RequestActionNotificationMail($this->request->matter, $this->request, $statusLabel));

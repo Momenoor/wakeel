@@ -6,6 +6,7 @@ use App\Filament\Shared\Pages\AnnouncementSettings;
 use App\Filament\Shared\Pages\GeneralSettings;
 use App\Filament\Shared\Pages\IntegrationsSettings;
 use App\Filament\Shared\Pages\LettersSettings;
+use App\Filament\Shared\Pages\MailCollectingSettings;
 use App\Filament\Shared\Pages\MailServerSettings;
 use App\Filament\Shared\Pages\OfflineSettings;
 use App\Filament\Shared\Pages\SettingsFormPage;
@@ -15,6 +16,7 @@ use App\Models\Setting;
 use App\Models\User;
 use App\Services\Installer\EnvironmentFileWriter;
 use App\Services\MMS\MatterReplyCollector;
+use App\Services\MMS\OutlookCalendarService;
 use App\Support\Branding;
 use App\Support\Integrations;
 use App\Support\LiveRefresh;
@@ -272,9 +274,14 @@ class SystemSettingsTest extends TestCase
             ->fillForm([
                 'show_system_announcement' => true,
                 'system_announcement' => 'Maintenance on Friday',
-                'leave_request_recipients' => ['hr@office.test'],
                 LiveRefresh::SETTING => 9,
             ])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        // Who gets the leave requests: with the letters and emails.
+        Livewire::test(LettersSettings::class)
+            ->fillForm(['leave_request_recipients' => ['hr@office.test']])
             ->call('save')
             ->assertHasNoFormErrors();
 
@@ -298,12 +305,13 @@ class SystemSettingsTest extends TestCase
         }
 
         $keys = [
-            GeneralSettings::class => ['app_name', 'company_name', 'company_phone', 'company_whatsapp', 'company_email', 'app_locale', 'currency_code', 'records_per_page', ...Branding::KEYS],
+            GeneralSettings::class => ['app_name', 'company_name', 'company_phone', 'company_whatsapp', 'company_email', 'app_locale', 'currency_code', 'records_per_page', ...Branding::KEYS, OutlookCalendarService::INVITES],
             MailServerSettings::class => ['mail_sender_key', 'mail_mailer', 'mail_host', 'mail_port', 'mail_username', 'mail_password', 'mail_encryption', 'mail_from_address', 'mail_from_name'],
-            LettersSettings::class => ['letter_reference_format', 'letter_cc_expert_types', EmailSendFields::DEFAULT_SENDER, Branding::EMAIL_PDF, Branding::EMAIL_PDF_FONT],
+            LettersSettings::class => ['letter_reference_format', 'letter_cc_expert_types', EmailSendFields::DEFAULT_SENDER, Branding::EMAIL_PDF, Branding::EMAIL_PDF_FONT, 'leave_request_recipients'],
             OfflineSettings::class => ['app_offline', 'offline_message', 'offline_allow_admins'],
-            AnnouncementSettings::class => ['leave_request_recipients', LiveRefresh::SETTING, 'system_announcement', 'show_system_announcement'],
-            IntegrationsSettings::class => [...Integrations::KEYS, MatterReplyCollector::LOOK_BACK, MatterReplyCollector::IGNORED],
+            AnnouncementSettings::class => [LiveRefresh::SETTING, 'system_announcement', 'show_system_announcement'],
+            IntegrationsSettings::class => Integrations::KEYS,
+            MailCollectingSettings::class => [MatterReplyCollector::LOOK_BACK, MatterReplyCollector::IGNORED],
         ];
 
         $changes = [
@@ -313,6 +321,7 @@ class SystemSettingsTest extends TestCase
             OfflineSettings::class => ['app_offline' => true, 'offline_message' => 'Changed message'],
             AnnouncementSettings::class => ['show_system_announcement' => true, 'system_announcement' => 'Changed announcement'],
             IntegrationsSettings::class => [Integrations::PUSHER_CLUSTER => 'ap2'],
+            MailCollectingSettings::class => [MatterReplyCollector::LOOK_BACK => 6],
         ];
 
         $snapshot = fn (): array => Setting::query()->pluck('value', 'key')->all();
@@ -335,14 +344,18 @@ class SystemSettingsTest extends TestCase
         Livewire::test(IntegrationsSettings::class)
             ->fillForm([
                 Integrations::PUSHER_APP => '9', Integrations::PUSHER_KEY => 'k', Integrations::PUSHER_SECRET => 's', Integrations::PUSHER_CLUSTER => 'eu',
-                MatterReplyCollector::LOOK_BACK => 5,
-                MatterReplyCollector::IGNORED => ['@spam.test'],
             ])
             ->call('save')
             ->assertHasNoFormErrors();
 
         $this->assertSame('s', Integrations::get(Integrations::PUSHER_SECRET));
         $this->assertNotSame('s', Setting::query()->where('key', Integrations::PUSHER_SECRET)->value('value'));
+
+        // How the mailboxes are read: with the mailboxes now.
+        Livewire::test(MailCollectingSettings::class)
+            ->fillForm([MatterReplyCollector::LOOK_BACK => 5, MatterReplyCollector::IGNORED => ['@spam.test']])
+            ->call('save')
+            ->assertHasNoFormErrors();
         $this->assertSame(5, MatterReplyCollector::lookBackDays());
         $this->assertSame('mail', Setting::query()->where('key', MatterReplyCollector::LOOK_BACK)->value('group'));
 

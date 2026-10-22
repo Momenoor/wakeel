@@ -320,9 +320,6 @@ class LetterMailer
      */
     private function email(LetterComposer $composer, string $mode, ?EmailTemplate $template, ?MatterLetterRecipient $recipient, array $files, ?string $subjectOverride = null, ?string $bodyOverride = null, ?string $name = null, ?array $sender = null): LetterEmail
     {
-        // The mailbox's own signature, at the end of the email — of the letter itself, or of the covering note.
-        $signature = filled($sender['signature'] ?? null) ? '<br>'.$sender['signature'] : '';
-
         $values = [
             ...$composer->values(),
             // A representative's own email: greeted by their name.
@@ -339,7 +336,7 @@ class LetterMailer
             $own = clone $composer;
             $own->withoutSignature = true;
 
-            [$html, $images] = $this->embeddable($header.SignatureLayouts::forEmail($own->bodyHtml()).$signature);
+            [$html, $images] = $this->embeddable(SenderMailer::withSignature($header.SignatureLayouts::forEmail($own->bodyHtml()), $sender));
 
             return new LetterEmail(
                 BulkMailPlaceholders::apply(filled($subjectOverride) ? $subjectOverride : self::bodySubject($values), array_map('strip_tags', $values)),
@@ -356,7 +353,7 @@ class LetterMailer
         $rtl = ($template?->locale ?? ($composer->isArabic() ? 'ar' : 'en')) !== 'en';
         $html = BulkMailPlaceholders::apply(LetterComposer::normalizeMergeTags($body), array_map('strip_tags', $values), escape: true);
         // Outlook knows no start or end: the editor's alignment as left/right.
-        [$html, $images] = $this->embeddable(RichHtml::forOutput($html, $rtl).$signature);
+        [$html, $images] = $this->embeddable(SenderMailer::withSignature(RichHtml::forOutput($html, $rtl), $sender));
 
         return new LetterEmail(
             BulkMailPlaceholders::apply($subject, array_map('strip_tags', $values)),

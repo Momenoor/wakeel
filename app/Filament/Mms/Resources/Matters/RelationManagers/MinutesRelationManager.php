@@ -449,7 +449,7 @@ class MinutesRelationManager extends RelationManager
                 Section::make(__('Preview'))
                     ->collapsible()
                     ->schema(function (Get $get) use ($record): array {
-                        $preview = MinutesSender::preview($record, array_values((array) ($get('recipients') ?? [])), (string) ($get('grouping') ?: EmailGrouping::SEPARATE), $get('subject'), is_string($get('body')) ? $get('body') : null);
+                        $preview = MinutesSender::preview($record, array_values((array) ($get('recipients') ?? [])), (string) ($get('grouping') ?: EmailGrouping::SEPARATE), $get('subject'), is_string($get('body')) ? $get('body') : null, $get('sender'));
                         $to = $preview['to'] !== '' && $preview['others'] > 0
                             ? $preview['to'].' — '.__('and a separate email to each of the other :count', ['count' => $preview['others']])
                             : $preview['to'];

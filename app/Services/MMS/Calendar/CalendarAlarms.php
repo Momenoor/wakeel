@@ -210,19 +210,31 @@ class CalendarAlarms
     private function notifyDue(): int
     {
         $sent = 0;
+        // Each told once of an event's reminder, however many of its assistants they administer.
+        $told = [];
 
         CalendarEventAlert::query()
             ->whereNull('notified_at')
             ->where('alarm_at', '<=', now())
-            ->with(['event.matter', 'user'])
-            ->each(function (CalendarEventAlert $alert) use (&$sent): void {
+            ->with(['event.matter', 'user', 'party.administrators'])
+            ->each(function (CalendarEventAlert $alert) use (&$sent, &$told): void {
                 $event = $alert->event;
+                // The person, and those who handle their matters with them.
+                $users = collect([$alert->user])->merge($alert->party?->administrators ?? [])->filter()
+                    ->reject(function ($user) use ($alert, &$told): bool {
+                        $key = $alert->calendar_event_id.'|'.$alert->minutes_before.'|'.$user->getKey();
+                        $seen = isset($told[$key]);
+                        $told[$key] = true;
+
+                        return $seen;
+                    })
+                    ->values();
 
                 // Late (the checks stopped), or the event has begun: not sent, only marked.
-                if ($event && $alert->user && $alert->alarm_at->gt(now()->subMinutes(self::LATE_MINUTES)) && $event->start_datetime->isFuture()) {
+                if ($event && $users->isNotEmpty() && $alert->alarm_at->gt(now()->subMinutes(self::LATE_MINUTES)) && $event->start_datetime->isFuture()) {
                     Notifier::send(
                         NotificationType::CALENDAR_REMINDER,
-                        [$alert->user],
+                        $users,
                         self::subject($event, $alert),
                         self::body($event),
                         CalendarEventResource::getUrl('index'),

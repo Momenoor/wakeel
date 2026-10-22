@@ -10,6 +10,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
@@ -18,89 +19,97 @@ use Filament\Support\Icons\Heroicon;
 
 class TypeForm
 {
+    /** Not saved on the type: whether its folders are given to the types of its group too (EditType). */
+    public const FOLDERS_TO_GROUP = 'folders_to_group';
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
             ->columns(2)
             ->components([
-                // Row 1: what the type is, and how its matters earn incentives.
-                Section::make(__('General Information'))
-                    ->icon(Heroicon::OutlinedInformationCircle)
-                    ->columnSpan(1)
-                    ->schema([
-                        TextInput::make('name')
-                            ->label(__('Name'))
-                            ->required(),
-                        Toggle::make('active')
-                            ->label(__('Active'))
-                            ->default(true)
-                            ->required(),
-                    ]),
-                Section::make(__('Incentive Configuration'))
-                    ->icon(Heroicon::OutlinedCalculator)
-                    ->columnSpan(1)
-                    ->schema([
-                        Select::make('incentive_config_id')
-                            ->label(__('Incentive Configuration'))
-                            ->relationship('incentiveConfig', 'name')
-                            ->searchable(),
-                        Select::make('incentive_trigger_type')
-                            ->label(__('Incentive Trigger Type'))
-                            ->options([
-                                'final_report_date' => __('Matter Final Reported'),
-                                'fees_registered_date' => __('Fee Registered'),
-                            ])
-                            ->required(),
-                        Toggle::make('allow_current_status_import')
-                            ->label(__('Allow Current Status Import'))
-                            ->helperText(__('If enabled, matters can be imported for incentives even if not final reported, as long as they have collected fees.'))
-                            ->default(false),
-                        Toggle::make('exclude_from_incentive_count')
-                            ->label(__('Exclude from Incentive Count'))
-                            ->helperText(__('If enabled, matters of this type will not be counted towards the monthly total for extra incentive percentages.'))
-                            ->default(false),
-                    ]),
-
-                // Row 2: what the sides are called, and which letters are offered.
-                Section::make(__('Party capacities'))
-                    ->description(__('What each side is called in this type\'s matters — in letters, minutes and the matter page. Leave empty for the usual names.'))
-                    ->icon(Heroicon::OutlinedUsers)
-                    ->columnSpan(1)
-                    ->schema(self::capacityFields()),
-                Section::make(__('Letter templates'))
-                    ->description(__('The letter templates offered on this type\'s matters. A template linked to no type is offered for every type; linking it to types here limits it to those.'))
-                    ->icon(Heroicon::OutlinedDocumentText)
-                    ->columnSpan(1)
-                    ->schema([
-                        Select::make('letter_templates_offered')
-                            ->label(__('Offered for this type'))
-                            ->options(fn (Get $get): array => LetterTemplate::query()->whereNotIn('id', (array) $get('letter_templates_excluded'))->orderBy('name')->pluck('name', 'id')->all())
-                            ->multiple()
-                            ->searchable()
-                            ->live()
-                            ->dehydrated(false),
-                        Select::make('letter_templates_excluded')
-                            ->label(__('Offered for every type except this one'))
-                            ->helperText(__('A template for all types except the ones it is left out for.'))
-                            ->options(fn (Get $get): array => LetterTemplate::query()->whereNotIn('id', (array) $get('letter_templates_offered'))->orderBy('name')->pluck('name', 'id')->all())
-                            ->multiple()
-                            ->searchable()
-                            ->live()
-                            ->dehydrated(false),
-                    ]),
-
-                // Row 3, across: the folders made for its matters.
-                Section::make(__('OneDrive folder structure'))
-                    ->description(__('The subfolders of this type\'s matter folders in the assistants\' OneDrive. Leave empty for the default structure (Settings → OneDrive Folders).'))
-                    ->icon(Heroicon::OutlinedFolderOpen)
-                    ->columnSpanFull()
-                    ->collapsed()
-                    ->schema([
-                        self::oneDriveStructureField(),
-                        self::receivedEmailsField(),
-                        self::sentEmailsField(),
-                        self::signedMinutesField(),
-                    ]),
+                // Two columns, each its sections one under another.
+                Grid::make(1)->columnSpan(1)->schema([
+                    // What the type is.
+                    Section::make(__('General Information'))
+                        ->icon(Heroicon::OutlinedInformationCircle)
+                        ->schema([
+                            TextInput::make('name')
+                                ->label(__('Name'))
+                                ->required(),
+                            Toggle::make('active')
+                                ->label(__('Active'))
+                                ->default(true)
+                                ->required(),
+                        ]),
+                    // What the sides are called.
+                    Section::make(__('Party capacities'))
+                        ->description(__('What each side is called in this type\'s matters — in letters, minutes and the matter page. Leave empty for the usual names.'))
+                        ->icon(Heroicon::OutlinedUsers)
+                        ->schema(self::capacityFields()),
+                    // The folders made for its matters.
+                    Section::make(__('OneDrive folder structure'))
+                        ->description(__('The subfolders of this type\'s matter folders in the assistants\' OneDrive. Leave empty for the default structure (Settings → OneDrive Folders).'))
+                        ->icon(Heroicon::OutlinedFolderOpen)
+                        ->collapsed()
+                        ->schema([
+                            self::oneDriveStructureField(),
+                            self::receivedEmailsField(),
+                            self::sentEmailsField(),
+                            self::signedMinutesField(),
+                            // Its group — the types with the same folders: changed with it, or left as they are (EditType).
+                            Toggle::make(self::FOLDERS_TO_GROUP)
+                                ->label(fn (?Type $record): string => __('Also for the types with the same folders: :types', [
+                                    'types' => $record?->folderGroupmates()->pluck('name')->implode('، '),
+                                ]))
+                                ->default(true)
+                                ->visible(fn (?Type $record): bool => (bool) $record?->folderGroupmates()->isNotEmpty()),
+                        ]),
+                ]),
+                Grid::make(1)->columnSpan(1)->schema([
+                    Section::make(__('Incentive Configuration'))
+                        ->icon(Heroicon::OutlinedCalculator)
+                        ->schema([
+                            Select::make('incentive_config_id')
+                                ->label(__('Incentive Configuration'))
+                                ->relationship('incentiveConfig', 'name')
+                                ->searchable(),
+                            Select::make('incentive_trigger_type')
+                                ->label(__('Incentive Trigger Type'))
+                                ->options([
+                                    'final_report_date' => __('Matter Final Reported'),
+                                    'fees_registered_date' => __('Fee Registered'),
+                                ])
+                                ->required(),
+                            Toggle::make('allow_current_status_import')
+                                ->label(__('Allow Current Status Import'))
+                                ->helperText(__('If enabled, matters can be imported for incentives even if not final reported, as long as they have collected fees.'))
+                                ->default(false),
+                            Toggle::make('exclude_from_incentive_count')
+                                ->label(__('Exclude from Incentive Count'))
+                                ->helperText(__('If enabled, matters of this type will not be counted towards the monthly total for extra incentive percentages.'))
+                                ->default(false),
+                        ]),
+                    Section::make(__('Letter templates'))
+                        ->description(__('The letter templates offered on this type\'s matters. A template linked to no type is offered for every type; linking it to types here limits it to those.'))
+                        ->icon(Heroicon::OutlinedDocumentText)
+                        ->schema([
+                            Select::make('letter_templates_offered')
+                                ->label(__('Offered for this type'))
+                                ->options(fn (Get $get): array => LetterTemplate::query()->whereNotIn('id', (array) $get('letter_templates_excluded'))->orderBy('name')->pluck('name', 'id')->all())
+                                ->multiple()
+                                ->searchable()
+                                ->live()
+                                ->dehydrated(false),
+                            Select::make('letter_templates_excluded')
+                                ->label(__('Offered for every type except this one'))
+                                ->helperText(__('A template for all types except the ones it is left out for.'))
+                                ->options(fn (Get $get): array => LetterTemplate::query()->whereNotIn('id', (array) $get('letter_templates_offered'))->orderBy('name')->pluck('name', 'id')->all())
+                                ->multiple()
+                                ->searchable()
+                                ->live()
+                                ->dehydrated(false),
+                        ]),
+                ]),
             ]);
     }
 

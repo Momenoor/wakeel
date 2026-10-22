@@ -11,14 +11,12 @@ use App\Models\BulkMailRecipient;
 use App\Models\Matter;
 use App\Models\MatterContact;
 use App\Models\MatterEmail;
-use App\Models\MatterParty;
 use App\Models\MatterProgress;
 use App\Models\Party;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\Notifications\Notifier;
 use App\Support\Tolerant;
-use BezhanSalleh\FilamentShield\Support\Utils;
 use Carbon\CarbonInterface;
 use Closure;
 use Filament\Actions\Action;
@@ -125,12 +123,12 @@ class MatterReplyCollector
             ->get()
             ->groupBy('sender_key');
 
-        // Every mailbox of the senders list that anything has been sent from, and every one set to keep every
-        // email (one never sent from still receives).
+        // Every mailbox read for its emails that anything has been sent from, every one set to keep every
+        // email (one never sent from still receives), and every user's own (theirs to file from).
         $sentFrom = MatterEmail::query()->where('direction', MatterEmail::SENT)->distinct()->pluck('sender_key')->map(fn ($key) => (string) $key)->all();
         $mailboxes = array_values(array_filter(
-            array_map('strval', array_keys(SenderMailer::all())),
-            fn (string $key): bool => in_array($key, $sentFrom, true) || self::keepsAll($key),
+            array_map('strval', array_keys(SenderMailer::collected())),
+            fn (string $key): bool => in_array($key, $sentFrom, true) || self::keepsAll($key) || SenderMailer::ownerOf($key) !== null,
         ));
 
         // The mailbox read longest ago first: one a short run did not reach goes first next time, so a
@@ -351,6 +349,8 @@ class MatterReplyCollector
                 }
 
                 if (MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->where('message_id', $id)->exists()) {
+                    $this->readAsKept($message, $id, $senderKey);
+
                     continue;
                 }
             }
@@ -359,7 +359,25 @@ class MatterReplyCollector
             $message['body'] = self::once($message['body'] ?? '');
             $message['attachments'] = self::once($message['attachments'] ?? []);
 
+            // One email, kept once: the same one in two of our mailboxes (an assistant's, and a shared one
+            // copied in), or read by two runs at once (the automatic one and a matter's "Check for emails")
+            // — whichever claims it first keeps it; the other finds it kept.
+            $claim = $id !== null ? Cache::lock('matter-email:'.sha1(mb_strtolower($id)), 600) : null;
             try {
+                if ($claim !== null && ! $claim->get()) {
+                    continue;
+                }
+            } catch (Throwable) {
+                $claim = null; // A cache store without locks: the check below alone.
+            }
+
+            try {
+                if ($id !== null && MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->where('message_id', $id)->exists()) {
+                    $this->readAsKept($message, $id, $senderKey);
+
+                    continue;
+                }
+
                 if ($answers = self::answers($message, $sent)) {
                     if ($matterId === null || (int) $answers->matter_id === $matterId) {
                         $this->keep($answers, $message, $id);
@@ -394,6 +412,8 @@ class MatterReplyCollector
                 // Its row, if it was made, stays without files: once abandoned long enough, the
                 // automatic run tries it again (retryAbandoned()).
                 Log::warning('Email not kept: '.$e->getMessage(), ['message' => $id]);
+            } finally {
+                $claim?->release();
             }
         }
 
@@ -565,6 +585,25 @@ class MatterReplyCollector
      *
      * @param  array<string, mixed>  $message
      */
+    /**
+     * Kept already — from another of our mailboxes it came to as well (an assistant's, a shared one copied
+     * in): read in this one too, as it is where it was kept. Only while unread here: not again each run.
+     *
+     * @param  array<string, mixed>  $message
+     */
+    private function readAsKept(array $message, string $id, ?string $senderKey): void
+    {
+        if (($message['was_read'] ?? null) !== false || $senderKey === null) {
+            return;
+        }
+
+        // Not where it was kept: there, made unread again on purpose (undone), it stays so.
+        $keptFrom = MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->where('message_id', $id)->value('sender_key');
+        if ($keptFrom !== null && $keptFrom !== $senderKey) {
+            $this->markRead($message);
+        }
+    }
+
     private function markRead(array $message): void
     {
         if (! ($message['mark_read'] ?? null) instanceof Closure) {
@@ -1204,33 +1243,15 @@ class MatterReplyCollector
     }
 
     /**
-     * The people of these matters — the users of their experts and
-     * assistants.
+     * The people of these matters — the users of their experts and assistants, the assistants'
+     * administrators — and the super admins, who hear of every email that arrives too.
      *
      * @param  list<int>  $matterIds
      * @return Collection<int, User>
      */
     private static function matterUsers(array $matterIds): Collection
     {
-        $partyIds = MatterParty::query()->whereIn('matter_id', $matterIds)->where('role', 'expert')->pluck('party_id');
-
-        $people = User::query()->whereIn('id', Party::query()->whereIn('id', $partyIds)->whereNotNull('user_id')->select('user_id'))->get();
-
-        // The super admins hear of every email that arrives too.
-        return $people->merge(self::superAdmins())->unique('id')->values();
-    }
-
-    /**
-     * @return Collection<int, User>
-     */
-    private static function superAdmins(): Collection
-    {
-        try {
-            return User::role(Utils::getSuperAdminName())->get();
-        } catch (Throwable) {
-            // No such role set up (yet).
-            return new Collection;
-        }
+        return MatterPeople::of($matterIds, superAdmins: true);
     }
 
     /**
@@ -1310,7 +1331,9 @@ class MatterReplyCollector
     private function tellUnfiled(MatterEmail $email): void
     {
         $candidates = array_map('intval', (array) $email->candidates);
-        $users = self::matterUsers($candidates);
+        // In someone's own mailbox: theirs alone to choose.
+        $owner = SenderMailer::ownerOf($email->sender_key);
+        $users = $owner !== null ? User::query()->whereKey($owner)->get() : self::matterUsers($candidates);
         if ($users->isEmpty()) {
             return;
         }

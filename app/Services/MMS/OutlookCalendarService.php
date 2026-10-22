@@ -3,6 +3,7 @@
 namespace App\Services\MMS;
 
 use App\Models\CalendarEvent;
+use App\Models\Setting;
 use App\Services\MMS\Calendar\CalendarAlarms;
 use Carbon\Carbon;
 use Illuminate\Http\Client\ConnectionException;
@@ -97,6 +98,14 @@ class OutlookCalendarService
         ];
     }
 
+    /** Setting: whether an event put on Outlook invites the matter's assistant and expert (an email to each). */
+    public const INVITES = 'calendar_invites_people';
+
+    public static function invitesPeople(): bool
+    {
+        return (bool) Setting::get(self::INVITES, true);
+    }
+
     /**
      * Puts a calendar event on Outlook and records what Outlook made of it:
      * its id, and a Teams link only for a meeting asked for and made.
@@ -112,8 +121,9 @@ class OutlookCalendarService
             'end_datetime' => $event->end_datetime,
             'location' => $event->location,
             'is_teams_meeting' => $event->is_teams_meeting,
-            // Invited: the event in the matter's assistant's and expert's own calendars (Outlook, Teams, phone).
-            'attendees' => CalendarAlarms::attendees($event),
+            // Invited: the event in the matter's assistant's and expert's own calendars (Outlook, Teams, phone) —
+            // an invitation email to each. Unless switched off (General settings): their reminders come all the same.
+            'attendees' => self::invitesPeople() ? CalendarAlarms::attendees($event) : [],
         ]);
 
         $event->update([

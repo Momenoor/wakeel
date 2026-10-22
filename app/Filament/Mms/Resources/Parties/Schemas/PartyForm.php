@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Resources\Parties\Schemas;
 
+use App\Filament\Support\AssistantSettingsFields;
 use App\Filament\Support\ContactFields;
 use App\Models\ExpertiseArea;
 use App\Models\Party;
@@ -9,9 +10,12 @@ use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
+use Illuminate\Support\HtmlString;
+use TomatoPHP\FilamentUsers\Filament\Resources\Users\UserResource;
 
 /**
  * A party, in sections: who they are, how to reach them, what they are to the office (role, expert
@@ -115,46 +119,26 @@ class PartyForm
             ]);
     }
 
-    /** An assistant's own settings: shown only for an expert of the assistant type. */
+    /**
+     * An assistant's own settings: shown only for an expert of the assistant type. With a user, they are set
+     * on the user's page (Users → Edit), with their work account — here, only for an assistant with none.
+     */
     private static function assistant(): Section
     {
         return Section::make(__('Assistant settings'))
-            ->description(__('Where this assistant\'s matter folders are made in OneDrive, and who reviews their reports.'))
+            ->description(__('Where this assistant\'s matter folders are made in OneDrive, who reviews their reports, and who handles their matters with them.'))
             ->icon('heroicon-o-cloud')
             ->columnSpanFull()
             ->columns(2)
             ->visible(fn (Get $get): bool => self::isAssistant($get))
-            ->schema([
-                // Where this assistant's matter folders are made — see
-                // Settings → OneDrive Folders.
-                TextInput::make('onedrive_email')
-                    ->label(__('OneDrive account (Microsoft 365 email)'))
-                    ->email()
-                    ->maxLength(255)
-                    ->columnSpanFull(),
-                TextInput::make('onedrive_path')
-                    ->label(__('Folder for matters in their OneDrive'))
-                    ->placeholder('Work/Matters')
-                    ->helperText(__('Leave empty to put matter folders at the top of their OneDrive.'))
-                    ->maxLength(255)
-                    ->extraInputAttributes(['dir' => 'auto']),
-                // A matter's folder is moved here once the matter is finished (its final report).
-                TextInput::make('onedrive_finished_path')
-                    ->label(__('Folder for finished matters in their OneDrive'))
-                    ->placeholder('Work/Finished matters')
-                    ->helperText(__('When a matter is finished, its folder is moved here and the matter link follows it. Leave empty to keep the folders of finished matters where they are.'))
-                    ->maxLength(255)
-                    ->extraInputAttributes(['dir' => 'auto']),
-                // Who reviews this assistant's reports: each Review Report / Confirm Report request goes to them on WhatsApp.
-                Select::make('reportReviewers')
-                    ->label(__('Report reviewers (WhatsApp)'))
-                    ->relationship('reportReviewers', 'name')
-                    ->multiple()
-                    ->preload()
-                    ->searchable()
-                    ->helperText(__('Each report this assistant sends for review goes to these users on WhatsApp, to approve, reject or ask for changes there. They need a WhatsApp number on their profile; the first to answer decides.'))
-                    ->columnSpanFull(),
-            ]);
+            ->schema(fn (?Party $record): array => $record?->user_id
+                ? [
+                    TextEntry::make('assistant_on_user')
+                        ->hiddenLabel()
+                        ->state(fn (): HtmlString => new HtmlString(e(__('Set on their user\'s page, with their Microsoft 365 account:')).' <a class="underline" href="'.e(UserResource::getUrl('edit', ['record' => $record->user_id])).'">'.e(__('Edit user')).'</a>'))
+                        ->columnSpanFull(),
+                ]
+                : AssistantSettingsFields::make(withAccount: true));
     }
 
     private static function notes(): Section

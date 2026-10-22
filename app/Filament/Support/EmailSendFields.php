@@ -53,14 +53,15 @@ final class EmailSendFields
     }
 
     /**
-     * The default mailbox: the one set for letters and mail (Settings →
-     * Letters & emails), else the system's own, else the first.
+     * The default mailbox: the user's own, else the one set for letters and mail (Settings →
+     * Letters & emails), else the system's own, else the first they may send from.
      */
     public static function defaultSender(): ?string
     {
         $options = SenderMailer::options();
+        $own = collect(array_keys($options))->first(fn (string $key): bool => SenderMailer::ownerOf($key) === auth()->id());
 
-        foreach ([Setting::get(self::DEFAULT_SENDER), Setting::get('mail_sender_key')] as $key) {
+        foreach ([$own, Setting::get(self::DEFAULT_SENDER), Setting::get('mail_sender_key')] as $key) {
             if (filled($key) && array_key_exists($key, $options)) {
                 return $key;
             }

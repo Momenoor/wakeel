@@ -8,7 +8,6 @@ use App\Support\Integrations;
 use BezhanSalleh\FilamentShield\Support\Utils;
 use Closure;
 use Filament\Actions\Action;
-use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
@@ -78,26 +77,11 @@ class IntegrationsSettingsForm
                                 ->icon(Heroicon::ArrowPath)
                                 ->action(fn (Set $set) => $set(Integrations::CRON_TOKEN, Str::random(48))),
                         ),
-                    // Whether the scheduler really runs: the automatic email check is one of its tasks.
+                    // Whether the scheduler really runs: the automatic email check is one of its tasks (how the
+                    // mailboxes are read: Settings → Communication → Collecting emails).
                     TextEntry::make('last_email_check')
                         ->label(__('Last automatic email check'))
-                        ->state(fn (): string => MatterReplyCollector::lastRunSummary())
-                        ->hintAction(self::undoCollectedAction()),
-                    TextInput::make(MatterReplyCollector::LOOK_BACK)
-                        ->label(__('Read the inboxes back (days)'))
-                        ->numeric()
-                        ->integer()
-                        ->minValue(1)
-                        ->maxValue(MatterReplyCollector::MAX_LOOK_BACK)
-                        ->required()
-                        ->helperText(__('How far back a mailbox is read the first time, for one matter, or after the checks stopped for a while. Each check still reads a little at a time — a long period is caught up over several checks, never in one long one.')),
-                    TagsInput::make(MatterReplyCollector::IGNORED)
-                        ->label(__('Never check emails from'))
-                        ->placeholder(__('Add an email address, or @domain'))
-                        // Several at once: typed with a comma, space or semicolon between, or a list pasted.
-                        ->splitKeys(['Tab', ',', ' ', ';'])
-                        ->nestedRecursiveRules(['regex:/^([^@\s]+)?@[^@\s]+\.[^@\s]+$/'])
-                        ->helperText(__('Emails from these addresses (or a whole domain written as @domain) are not read: not kept, not notified, and left unread in the mailbox. Add several at once by separating them with a comma, space or semicolon, or by pasting a list.')),
+                        ->state(fn (): string => MatterReplyCollector::lastRunSummary()),
                     TextEntry::make('cron_url')
                         ->label(__('Link for cron-job.org'))
                         ->state(function (Get $get): string {
@@ -161,7 +145,7 @@ class IntegrationsSettingsForm
      * The emails collected in the last hours undone, as if never collected — then read again from
      * the inboxes by the next check. Super admins only.
      */
-    private static function undoCollectedAction(): Action
+    public static function undoCollectedAction(): Action
     {
         return Action::make('undoCollectedEmails')
             ->label(__('Undo recent emails'))

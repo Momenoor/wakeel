@@ -11,6 +11,7 @@ use App\Filament\Mms\Resources\WhatsAppTemplates\Pages\ManageWhatsAppTemplates;
 use App\Models\Attachment;
 use App\Models\EmailTemplate;
 use App\Models\LetterTemplate;
+use App\Models\MailSender;
 use App\Models\Matter;
 use App\Models\MatterMinutes;
 use App\Models\MatterOneDriveFolder;
@@ -167,6 +168,18 @@ class MinutesSignatureTest extends TestCase
         $step = $this->minutes->matter->progress()->where('type', ProgressType::MINUTES_SENT)->sole();
         $this->assertSame(__('By email and WhatsApp').' — الأستاذ/ محمد عبد المقصود', $step->details);
         $this->assertSame('wamid.sent1', $deliveries[1]->message_id);
+    }
+
+    public function test_the_minutes_email_ends_with_the_signature_of_the_mailbox_it_goes_from(): void
+    {
+        MailSender::where('key', 'iflas')->first()->update(['signature' => '<p>مع التحية — مكتب الإفلاس</p>']);
+        $lines = [['name' => 'الأستاذ/ محمد عبد المقصود', 'emails' => ['m@law.ae'], 'by_email' => true]];
+
+        app(MinutesSender::class)->send($this->minutes, $lines, 'iflas');
+        $this->assertStringContainsString('مع التحية — مكتب الإفلاس', $this->sent[0]->getHtmlBody());
+
+        // The send screen's preview shows it too, for the mailbox chosen.
+        $this->assertStringContainsString('مع التحية — مكتب الإفلاس', MinutesSender::preview($this->minutes, $lines, EmailGrouping::SEPARATE, null, null, 'iflas')['html']);
     }
 
     public function test_the_matters_assistants_are_copied_in_on_the_minutes(): void

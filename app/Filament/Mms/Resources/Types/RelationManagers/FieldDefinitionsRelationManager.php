@@ -118,10 +118,19 @@ class FieldDefinitionsRelationManager extends RelationManager
     {
         return $table
             ->recordTitleAttribute('label')
+            // The types each field is on, read with the list.
+            ->modifyQueryUsing(fn ($query) => $query->with('types:id,name'))
             ->columns([
                 TextColumn::make('label')
                     ->label(__('Label'))
                     ->searchable(),
+                // A field is one, shared: changed here, it changes on each of these types too.
+                TextColumn::make('shared_with')
+                    ->label(__('Also on'))
+                    ->state(fn ($record): string => $record->types->reject(fn ($type) => $type->is($this->getOwnerRecord()))->pluck('name')->implode('، '))
+                    ->placeholder(__('This type only'))
+                    ->tooltip(__('The field is shared: a change to it is a change on these types too.'))
+                    ->wrap(),
                 TextColumn::make('type')
                     ->label(__('Type'))
                     ->formatStateUsing(fn ($state) => __($state))

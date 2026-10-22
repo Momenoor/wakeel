@@ -115,12 +115,7 @@ class BulkMailCampaign extends Model
         // BulkMailMessage lays it out).
         $body = RichHtml::forOutput($body, BulkMailService::containsArabic($body));
 
-        $sender = $this->sender_config;
-        if ($sender && isset($sender['signature'])) {
-            $body .= '<br><br>'.$sender['signature'];
-        }
-
-        return $body;
+        return SenderMailer::withSignature($body, $this->sender_config ?: null, '<br><br>');
     }
 
     /**

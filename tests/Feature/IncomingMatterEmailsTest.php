@@ -30,12 +30,14 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
 use Livewire\Livewire;
 use Mockery;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\Support\FakeOneDrive;
 use Tests\Support\MailSenders;
@@ -316,6 +318,81 @@ class IncomingMatterEmailsTest extends TestCase
         // $this->user filed it: in their Emails tab too, already read.
         $this->assertSame(1, $emails($this->user)->whereNotNull('read_at')->count());
         $this->assertSame(0, $this->user->unreadNotifications()->count());
+    }
+
+    public function test_every_email_that_comes_in_filed_or_waiting_is_in_the_bells_emails_tab(): void
+    {
+        $admin = User::factory()->create()->assignRole('super-admin');
+        // The assistant of both matters, seeing their own matters as an assistant does.
+        $assistant = $this->assistantOn($this->first);
+        MatterParty::create(['matter_id' => $this->second->id, 'party_id' => $assistant->party->id, 'role' => 'expert', 'type' => 'assistant']);
+        $assistant->givePermissionTo(Permission::findOrCreate('ViewOwn:Matter'));
+        (require database_path('migrations/2020_01_01_000183_assistants_told_of_unfiled_emails.php'))->up();
+        $emails = fn (User $user) => TabbedDatabaseNotifications::onlyEmails($user->notifications())->count();
+        $both = fn (int $count) => $this->assertSame([$count, $count], [$emails($admin), $emails($assistant->fresh())]);
+
+        // Filed by itself, by the matter's number.
+        $this->collect($this->email(['subject' => 'مستندات القضية 987/2026']));
+        $both(1);
+
+        // Its matter not certain (the lawyer is on both): waiting in Unfiled emails.
+        $this->collect($this->email(['subject' => 'مستندات']));
+        $both(2);
+
+        // Filed by hand, and then moved to the other matter: each told.
+        $waiting = MatterEmail::where('status', MatterEmail::PENDING)->sole();
+        Livewire::test(UnfiledEmails::class)->callTableAction('file', $waiting, ['matter_id' => $this->first->id]);
+        $both(3);
+        app(MatterReplyCollector::class)->move($waiting->fresh(), $this->second, $this->user->id);
+        $both(4);
+
+        // Nothing about emails out of the Emails tab.
+        $this->assertSame($admin->notifications()->count(), $emails($admin));
+    }
+
+    public function test_an_email_to_the_wrong_assistant_is_filed_on_its_own_matter_and_told_to_its_assistant(): void
+    {
+        $theirs = $this->assistantOn($this->second);
+        $wrong = $this->assistantOn($this->first);
+        MailSenders::add('wrong', ['username' => 'wrong@jpa.ae', 'address' => 'wrong@jpa.ae', 'name' => 'Wrong', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
+
+        // To the first matter's assistant's mailbox, about the second matter.
+        app(MatterReplyCollector::class)->handle([$this->email(['subject' => 'مستندات القضية 987/2026', 'to' => ['wrong@jpa.ae']])], collect(), 'wrong');
+
+        $this->assertSame($this->second->id, MatterEmail::where('direction', MatterEmail::RECEIVED)->sole()->matter_id);
+        $this->assertSame(1, TabbedDatabaseNotifications::onlyEmails($theirs->notifications())->count());
+        $this->assertSame(0, $wrong->notifications()->count());
+    }
+
+    public function test_one_email_in_two_of_our_mailboxes_is_kept_once(): void
+    {
+        MailSenders::add('assistant', ['username' => 'amr@jpa.ae', 'address' => 'amr@jpa.ae', 'name' => 'Amr', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
+        $email = $this->email(['subject' => 'مستندات القضية 987/2026', 'to' => ['amr@jpa.ae'], 'cc' => ['iflas@jpa.ae']]);
+
+        // To the assistant, copied to the shared mailbox — and its Message-ID written another way in one of them.
+        $this->assertSame(1, app(MatterReplyCollector::class)->handle([$email], collect(), 'assistant'));
+        $read = [];
+        $unread = function (string $box) use (&$read): array {
+            return ['was_read' => false, 'mark_read' => function () use (&$read, $box) {
+                $read[] = $box;
+            }];
+        };
+        $this->assertSame(0, app(MatterReplyCollector::class)->handle([[...$email, ...$unread('iflas'), 'message_id' => trim($email['message_id'], '<>')]], collect(), 'iflas'));
+        $this->assertSame(1, MatterEmail::where('direction', MatterEmail::RECEIVED)->count());
+        // Read in the shared mailbox too.
+        $this->assertSame(['iflas'], $read);
+        // Where it was kept, made unread again on purpose: left so.
+        app(MatterReplyCollector::class)->handle([[...$email, ...$unread('assistant')]], collect(), 'assistant');
+        $this->assertSame(['iflas'], $read);
+
+        // Another run keeping one at this moment: left to it, not kept twice.
+        $other = $this->email(['subject' => 'مستندات القضية 987/2026']);
+        $lock = Cache::lock('matter-email:'.sha1(mb_strtolower(MatterEmail::messageId($other['message_id']))), 600);
+        $lock->get();
+        $this->assertSame(0, $this->collect($other));
+        $lock->release();
+        $this->assertSame(1, $this->collect($other));
+        $this->assertSame(2, MatterEmail::where('direction', MatterEmail::RECEIVED)->count());
     }
 
     public function test_an_email_moved_to_another_matter_is_told_to_its_people(): void
@@ -766,7 +843,7 @@ class IncomingMatterEmailsTest extends TestCase
 
     public function test_set_to_keep_every_email_a_strangers_goes_to_unfiled_to_file_on_any_matter(): void
     {
-        MailSender::query()->where('key', 'iflas')->update(['keep_all_inbox' => true]);
+        MailSender::query()->where('key', 'iflas')->first()->update(['keep_all_inbox' => true]);
         MailSenders::add('noreply', ['keep_all_inbox' => true]);
 
         // A stranger's; still never the office's own mailbox's, nor one with no id.
@@ -810,7 +887,7 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertSame([$this->second->id, MatterEmail::FILED], [$email->refresh()->matter_id, $email->status]);
 
         // Switched off for the mailbox: a stranger's is left in it again.
-        MailSender::query()->where('key', 'iflas')->update(['keep_all_inbox' => false]);
+        MailSender::query()->where('key', 'iflas')->first()->update(['keep_all_inbox' => false]);
         $this->collect($this->email(['from' => 'someone@gmail.com', 'message_id' => '<later@gmail.com>']));
         $this->assertSame(1, MatterEmail::count());
     }
@@ -818,7 +895,7 @@ class IncomingMatterEmailsTest extends TestCase
     public function test_keeping_every_email_is_each_mailboxs_own_choice(): void
     {
         // The shared mailbox keeps everything; the other only what concerns a matter.
-        MailSender::query()->where('key', 'iflas')->update(['keep_all_inbox' => true]);
+        MailSender::query()->where('key', 'iflas')->first()->update(['keep_all_inbox' => true]);
         MailSenders::add('personal', ['address' => 'momen@jpa.ae']);
 
         $this->assertTrue(MatterReplyCollector::keepsAll('iflas'));
@@ -848,7 +925,7 @@ class IncomingMatterEmailsTest extends TestCase
 
     public function test_a_sender_on_the_ignore_list_is_never_read_again(): void
     {
-        MailSender::query()->where('key', 'iflas')->update(['keep_all_inbox' => true]);
+        MailSender::query()->where('key', 'iflas')->first()->update(['keep_all_inbox' => true]);
         $marked = 0;
         $read = function () use (&$marked): void {
             $marked++;

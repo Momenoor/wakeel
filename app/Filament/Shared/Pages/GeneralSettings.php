@@ -5,12 +5,14 @@ namespace App\Filament\Shared\Pages;
 use App\Filament\Schemas\BrandingSettingsSection;
 use App\Models\Setting;
 use App\Services\Installer\EnvironmentFileWriter;
+use App\Services\MMS\OutlookCalendarService;
 use App\Support\Branding;
 use App\Support\CompanyContact;
 use App\Support\ScreenPermissions;
 use BackedEnum;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Support\Icons\Heroicon;
@@ -52,6 +54,7 @@ class GeneralSettings extends SettingsFormPage
             'currency_code' => Setting::get('currency_code', 'AED'),
             'records_per_page' => Setting::get('records_per_page', 25),
             ...collect(Branding::KEYS)->mapWithKeys(fn (string $key): array => [$key => Setting::get($key)])->all(),
+            OutlookCalendarService::INVITES => OutlookCalendarService::invitesPeople(),
         ];
     }
 
@@ -139,6 +142,13 @@ class GeneralSettings extends SettingsFormPage
                 ]),
 
             BrandingSettingsSection::make(),
+            Section::make(__('Calendar'))
+                ->icon(Heroicon::CalendarDays)
+                ->schema([
+                    Toggle::make(OutlookCalendarService::INVITES)
+                        ->label(__('Invite the matter\'s assistant and expert to its events'))
+                        ->helperText(__('An event put on Outlook is added to their own calendars, with an invitation email to each. Off: no invitation is sent; their reminders (24 hours and 1 hour before) still come.')),
+                ]),
         ];
     }
 

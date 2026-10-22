@@ -10,9 +10,12 @@ use App\Filament\Support\NotificationPreferenceFields as Fields;
 use App\Models\NotificationPreference;
 use App\Models\RoleNotificationDefault;
 use App\Models\User;
+use App\Models\WhatsAppTemplate;
 use App\Services\Notifications\NotificationPreferences as Prefs;
 use Filament\Facades\Filament;
+use Filament\Support\Enums\Width;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Once;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -25,6 +28,33 @@ use Tests\TestCase;
 class NotificationPreferencesTest extends TestCase
 {
     use RefreshDatabase;
+
+    /** WhatsApp set up, with the template notifications go out with: offered as a channel. */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config(['services.whatsapp.token' => 't', 'services.whatsapp.phone_id' => '99']);
+        WhatsAppTemplate::create(['name' => 'Notification', 'purpose' => WhatsAppTemplate::NOTIFICATION, 'meta_name' => 'user_notification', 'language' => 'ar',
+            'header' => 'none', 'body' => '{{title}}', 'is_active' => true, 'is_default' => true, 'parameters' => [['name' => 'title', 'value' => '{{title}}']]]);
+    }
+
+    public function test_a_channel_that_sends_nothing_is_not_offered(): void
+    {
+        $user = $this->user();
+        WhatsAppTemplate::query()->delete();
+        Once::flush();
+
+        // No notification template: WhatsApp offered only where it has its own (a new request's).
+        $this->assertSame(Prefs::HIDDEN, $this->state($user, Type::REQUEST_DECIDED, Channel::WHATSAPP));
+        $this->assertSame(Prefs::OFF, $this->state($user, Type::REQUEST_CREATED, Channel::WHATSAPP));
+
+        // WhatsApp not set up at all: offered nowhere.
+        config(['services.whatsapp.token' => null]);
+        Once::flush();
+        $this->assertSame(Prefs::HIDDEN, $this->state($user, Type::REQUEST_CREATED, Channel::WHATSAPP));
+        $this->assertSame(Prefs::ON, $this->state($user, Type::REQUEST_DECIDED, Channel::BELL));
+    }
 
     private function user(string ...$roles): User
     {
@@ -156,7 +186,7 @@ class NotificationPreferencesTest extends TestCase
 
         // The whole width of the page, in two columns — on the normal layout, where the pinned chat and to-do list make room.
         $this->assertFalse(CustomProfile::isSimple());
-        $this->assertSame(\Filament\Support\Enums\Width::Full, (new CustomProfile)->getMaxContentWidth());
+        $this->assertSame(Width::Full, (new CustomProfile)->getMaxContentWidth());
 
         Livewire::test(CustomProfile::class)
             ->assertFormSet([$key(Type::REQUEST_DECIDED, Channel::MAIL) => true, $key(Type::REQUEST_DECIDED, Channel::BELL) => true, $key(Type::REQUEST_DECIDED, Channel::WHATSAPP) => false])

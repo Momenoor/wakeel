@@ -10,6 +10,7 @@ use App\Models\Matter;
 use App\Models\User;
 use App\Services\Notifications\Notifier;
 use App\Support\Currency;
+use App\Support\PendingBatch;
 use ArrayObject;
 use Carbon\Carbon;
 use Closure;
@@ -116,14 +117,7 @@ class FeeChangeNotifier
      */
     private static function pending(): ArrayObject
     {
-        $key = self::class.'.pending';
-
-        if (! app()->bound($key)) {
-            app()->instance($key, new ArrayObject);
-            app()->terminating(fn () => self::flush());
-        }
-
-        return app($key);
+        return PendingBatch::for(self::class, fn () => self::flush());
     }
 
     /**

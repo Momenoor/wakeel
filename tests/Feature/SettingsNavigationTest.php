@@ -17,6 +17,7 @@ use App\Filament\Shared\Pages\AnnouncementSettings;
 use App\Filament\Shared\Pages\GeneralSettings;
 use App\Filament\Shared\Pages\IntegrationsSettings;
 use App\Filament\Shared\Pages\LettersSettings;
+use App\Filament\Shared\Pages\MailCollectingSettings;
 use App\Filament\Shared\Pages\MailServerSettings;
 use App\Filament\Shared\Pages\NotificationSettings;
 use App\Filament\Shared\Pages\OfflineSettings;
@@ -134,7 +135,8 @@ class SettingsNavigationTest extends TestCase
 
         $groups = [
             'General' => [GeneralSettings::class],
-            'Communication' => [MailSenderResource::class, MailServerSettings::class, LettersSettings::class, NotificationSettings::class, AnnouncementSettings::class],
+            // The mailboxes — the list, the system's email, how they are read — with the letters.
+            'Communication' => [MailSenderResource::class, MailServerSettings::class, MailCollectingSettings::class, LettersSettings::class, NotificationSettings::class, AnnouncementSettings::class],
             'Integrations' => [IntegrationsSettings::class, OneDriveSettings::class],
             'Master Data' => [TypeResource::class, ExpertiseAreaResource::class, CourtResource::class, FinancialConfiguration::class],
             'Maintenance' => [OfflineSettings::class, FeeDataMaintenance::class, AccessControlMaintenance::class, SystemUpdates::class, Performance::class],

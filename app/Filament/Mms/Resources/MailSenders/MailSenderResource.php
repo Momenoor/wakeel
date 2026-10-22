@@ -44,7 +44,7 @@ class MailSenderResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedAtSymbol;
 
-    protected static ?int $navigationSort = 21;
+    protected static ?int $navigationSort = 20;
 
     protected static ?string $cluster = Settings::class;
 
@@ -193,9 +193,16 @@ class MailSenderResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn ($query) => $query->with('user'))
             ->columns([
                 TextColumn::make('name')->label(__('Sender name'))->weight('bold')->searchable()
                     ->description(fn (MailSender $record) => $record->address),
+                // Shared, or someone's own (set on their user's page).
+                TextColumn::make('user.name')
+                    ->label(__('Mailbox'))
+                    ->badge()
+                    ->state(fn (MailSender $record): string => $record->user ? __('Personal — :name', ['name' => $record->user->display_name ?: $record->user->name]) : __('Shared'))
+                    ->color(fn (MailSender $record): string => $record->user ? 'warning' : 'success'),
                 TextColumn::make('driver')
                     ->label(__('Hosted on'))
                     ->badge()
@@ -225,8 +232,9 @@ class MailSenderResource extends Resource
                             Notification::make()->danger()->title(__('The test email failed'))->body($e->getMessage())->persistent()->send();
                         }
                     }),
-                EditAction::make()->modalWidth('5xl'),
-                DeleteAction::make(),
+                // Someone's own: changed on their user's page (their work account), not here.
+                EditAction::make()->modalWidth('5xl')->visible(fn (MailSender $record): bool => $record->user_id === null),
+                DeleteAction::make()->visible(fn (MailSender $record): bool => $record->user_id === null),
             ]);
     }
 

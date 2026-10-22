@@ -9,11 +9,13 @@ use App\Models\User;
 use App\Models\WhatsAppTemplate;
 use App\Services\MMS\BulkMailPlaceholders;
 use App\Services\MMS\MatterOneDriveFolders;
+use App\Services\MMS\MatterPeople;
 use App\Services\Notifications\Notifier;
 use App\Services\WhatsAppCloud;
 use App\Services\WhatsAppService;
 use App\Support\Honorific;
 use Filament\Notifications\Notification;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -190,19 +192,33 @@ class MinutesSignedCopies
     }
 
     /**
+     * Whoever sent the minutes, and those who handle the matter's assistants' matters with them.
+     *
+     * @return Collection<int, User>
+     */
+    private function toTell(MinutesDelivery $delivery): Collection
+    {
+        return collect([$delivery->sent_by ? User::find($delivery->sent_by) : null])
+            ->filter()
+            ->merge($delivery->minutes?->matter_id ? MatterPeople::administrators([(int) $delivery->minutes->matter_id]) : [])
+            ->unique('id')
+            ->values();
+    }
+
+    /**
      * Whoever sent the minutes hears what was written back.
      */
     private function tellText(MinutesDelivery $delivery, int|string|null $number, ?string $reference, string $text): void
     {
-        $user = $delivery->sent_by ? User::find($delivery->sent_by) : null;
-        if (! $user) {
+        $users = $this->toTell($delivery);
+        if ($users->isEmpty()) {
             return;
         }
 
         try {
             Notifier::send(
                 NotificationType::MINUTES_REPLY,
-                [$user],
+                $users,
                 __(':name replied to minutes (:number) of :matter', ['name' => $delivery->name, 'number' => $number, 'matter' => $reference]),
                 '«'.Str::limit($text, 300).'»',
                 $this->minutesUrl($delivery),
@@ -272,15 +288,15 @@ class MinutesSignedCopies
      */
     private function tell(MinutesDelivery $delivery, int|string $number, ?string $reference): void
     {
-        $user = $delivery->sent_by ? User::find($delivery->sent_by) : null;
-        if (! $user) {
+        $users = $this->toTell($delivery);
+        if ($users->isEmpty()) {
             return;
         }
 
         try {
             Notifier::send(
                 NotificationType::MINUTES_REPLY,
-                [$user],
+                $users,
                 __('Signed minutes received'),
                 __(':name sent back minutes (:number) of :matter signed.', ['name' => $delivery->name, 'number' => $number, 'matter' => $reference]),
                 $this->minutesUrl($delivery),

@@ -94,6 +94,34 @@ class OneDriveSettings extends Page implements HasTable
         ]);
     }
 
+    /** The groups of types alike in their own folders: who is in each, and what their folders are. */
+    private static function typeGroups(): HtmlString
+    {
+        $groups = Type::folderGroups();
+        if ($groups->isEmpty()) {
+            return new HtmlString(e(__('None — every type uses the folders above.')));
+        }
+
+        $labels = [
+            'onedrive_subfolders' => __('Standard subfolders'),
+            'onedrive_received_emails' => __('Received emails folder structure'),
+            'onedrive_sent_emails' => __('Sent emails subfolder'),
+            'onedrive_signed_minutes' => __('Signed minutes subfolder'),
+        ];
+
+        return new HtmlString($groups->values()->map(function ($types, int $i) use ($labels): string {
+            $first = $types->first();
+            $folders = collect(Type::FOLDER_FIELDS)
+                ->map(fn (string $field): string => '<li>'.e($labels[$field]).': <span dir="auto">'.(filled($first->{$field})
+                    ? e(str_replace("\n", ' · ', trim((string) $first->{$field})))
+                    : e(__('the default'))).'</span></li>')
+                ->implode('');
+
+            return '<div style="margin-bottom: .75rem;"><strong>'.e(__('Group :n', ['n' => $i + 1])).':</strong> '.e($types->pluck('name')->implode('، '))
+                .'<ul style="list-style: disc; padding-inline-start: 1.1rem; margin: .25rem 0 0;">'.$folders.'</ul></div>';
+        })->implode(''));
+    }
+
     public function form(Schema $schema): Schema
     {
         return $schema
@@ -114,9 +142,11 @@ class OneDriveSettings extends Page implements HasTable
                             ->helperText(__('One per line, in order. Use "/" for a folder inside another, e.g. "02 المستندات/من المدعي". Changes apply to folders made from now on; existing folders stay as they are.').' '.__('The default — a matter type can have its own (below, or on the type).').' '.__('A folder may use the matter\'s placeholders, like the letters do, e.g. {{matter.custom.phase}}/01 المراسلات; one the matter has no value for is left out.'))
                             ->rows(10)
                             ->extraInputAttributes(['dir' => 'auto']),
+                        // The types with folders of their own, in groups of those alike — one read: a group's are
+                        // changed together from any of its types (Settings → Matter types → its folders).
                         Placeholder::make('type_structures')
-                            ->label(__('Matter types with their own structure'))
-                            ->content(fn (): string => Type::query()->whereNotNull('onedrive_subfolders')->where('onedrive_subfolders', '!=', '')->orderBy('name')->pluck('name')->implode('، ') ?: __('None — every type uses the structure above.'))
+                            ->label(__('Matter types with folders of their own'))
+                            ->content(fn (): HtmlString => self::typeGroups())
                             ->hintAction(
                                 Action::make('assignToTypes')
                                     ->label(__('Assign a structure to matter types'))
@@ -163,15 +193,7 @@ class OneDriveSettings extends Page implements HasTable
                             ))
                             ->live(debounce: 500)
                             ->extraInputAttributes(['dir' => 'ltr']),
-                        Placeholder::make('type_sent_folders')
-                            ->label(__('Matter types with their own sent emails folder'))
-                            ->content(fn (): string => Type::query()->whereNotNull('onedrive_sent_emails')->where('onedrive_sent_emails', '!=', '')->orderBy('name')->pluck('name')->implode('، ') ?: __('None — every type uses the folder above.')),
-                        Placeholder::make('type_signed_folders')
-                            ->label(__('Matter types with their own signed minutes folder'))
-                            ->content(fn (): string => Type::query()->whereNotNull('onedrive_signed_minutes')->where('onedrive_signed_minutes', '!=', '')->orderBy('name')->pluck('name')->implode('، ') ?: __('None — every type uses the folder above.')),
-                        Placeholder::make('type_received_structures')
-                            ->label(__('Matter types with their own received emails folder'))
-                            ->content(fn (): string => Type::query()->whereNotNull('onedrive_received_emails')->where('onedrive_received_emails', '!=', '')->orderBy('name')->pluck('name')->implode('، ') ?: __('None — every type uses the structure above.')),
+
                         // The custom fields that exist, ready to use: the placeholder is the field's name as it is on the type.
                         Placeholder::make('custom_field_placeholders')
                             ->label(__('Custom fields you can use'))

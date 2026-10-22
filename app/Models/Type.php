@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -133,6 +134,50 @@ class Type extends Model
     public function fieldDefinitions(): BelongsToMany
     {
         return $this->belongsToMany(MatterFieldDefinition::class, 'matter_field_definition_type');
+    }
+
+    /** Its own OneDrive folders (Settings → OneDrive Folders): empty — the default one. */
+    public const FOLDER_FIELDS = ['onedrive_subfolders', 'onedrive_received_emails', 'onedrive_sent_emails', 'onedrive_signed_minutes'];
+
+    /**
+     * Its OneDrive folders as one value, to compare: types alike in all four are a group.
+     *
+     * @param  array<string, mixed>|null  $values  as given, else as it is
+     */
+    public function folderKey(?array $values = null): ?string
+    {
+        $folders = array_map(fn (string $field): string => trim((string) (($values ?? $this->getAttributes())[$field] ?? '')), self::FOLDER_FIELDS);
+
+        return implode('', $folders) === '' ? null : md5(implode("\0", $folders));
+    }
+
+    /**
+     * The types with OneDrive folders of their own, in groups of those alike — read at once.
+     *
+     * @return \Illuminate\Support\Collection<string, Collection<int, Type>>
+     */
+    public static function folderGroups(): \Illuminate\Support\Collection
+    {
+        return static::query()->orderBy('name')->get(['id', 'name', ...self::FOLDER_FIELDS])
+            ->filter(fn (Type $type): bool => $type->folderKey() !== null)
+            ->groupBy(fn (Type $type): string => (string) $type->folderKey());
+    }
+
+    /**
+     * The other types whose OneDrive folders are the same as this one's (as saved): its group.
+     *
+     * @return Collection<int, Type>
+     */
+    public function folderGroupmates(): Collection
+    {
+        // Read once a request (a form asks for it more than once), from what was saved.
+        return once(function (): Collection {
+            $key = $this->folderKey($this->getOriginal());
+
+            return $key === null ? new Collection : static::query()->whereKeyNot($this->getKey())->get(['id', 'name', ...self::FOLDER_FIELDS])
+                ->filter(fn (Type $type): bool => $type->folderKey() === $key)
+                ->values();
+        });
     }
 
     /** The letter templates linked to this type — offered for it, or (`excluded`) left out for it. */

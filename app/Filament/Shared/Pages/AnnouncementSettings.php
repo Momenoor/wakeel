@@ -6,7 +6,6 @@ use App\Models\Setting;
 use App\Support\LiveRefresh;
 use App\Support\ScreenPermissions;
 use BackedEnum;
-use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -43,7 +42,6 @@ class AnnouncementSettings extends SettingsFormPage
     protected function defaults(): array
     {
         return [
-            'leave_request_recipients' => (array) Setting::get('leave_request_recipients', []),
             LiveRefresh::SETTING => LiveRefresh::configured(),
             'system_announcement' => Setting::get('system_announcement', ''),
             'show_system_announcement' => Setting::get('show_system_announcement', false),
@@ -73,17 +71,6 @@ class AnnouncementSettings extends SettingsFormPage
                         ->label(__('Announcement Message'))
                         ->rows(3)
                         ->visible(fn (Get $get): bool => (bool) $get('show_system_announcement')),
-                ]),
-
-            Section::make(__('Leave Requests'))
-                ->icon(Heroicon::CalendarDays)
-                ->schema([
-                    // Who hears of a new leave request (email + bell).
-                    TagsInput::make('leave_request_recipients')
-                        ->label(__('Leave requests are sent to'))
-                        ->placeholder(__('Add an email address'))
-                        ->nestedRecursiveRules(['email'])
-                        ->helperText(__('Empty: everyone who can approve leave requests.')),
                 ]),
 
             Section::make(__('Chat'))

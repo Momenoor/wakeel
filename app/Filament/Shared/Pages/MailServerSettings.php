@@ -23,7 +23,7 @@ class MailServerSettings extends SettingsFormPage
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Envelope;
 
-    protected static ?int $navigationSort = 22;
+    protected static ?int $navigationSort = 21;
 
     public static function getNavigationLabel(): string
     {
@@ -76,7 +76,7 @@ class MailServerSettings extends SettingsFormPage
                     // fields below are only for a custom setup.
                     Select::make('mail_sender_key')
                         ->label(__('Send system emails from'))
-                        ->options(fn () => SenderMailer::options())
+                        ->options(fn () => SenderMailer::options(sharedOnly: true))
                         ->placeholder(__('A custom mail server (below)'))
                         ->helperText(__('Notifications, assistant emails and every other email the system sends go out from this mailbox. Mailboxes are added under Settings → Mail senders.'))
                         ->live()
@@ -144,6 +144,7 @@ class MailServerSettings extends SettingsFormPage
                         ->placeholder(__('Your office name'))
                         ->required(),
                 ]),
+
         ];
     }
 

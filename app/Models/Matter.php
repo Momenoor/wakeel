@@ -107,6 +107,29 @@ class Matter extends Model implements AttachmentOwner
         $query->whereNull(['initial_report_at', 'final_report_at', 'final_report_memo_date']);
     }
 
+    /**
+     * The matters that are someone's own: those they are on (as an assistant, an expert …) and those of the
+     * assistants they administer (User::ownMatterPartyIds()). None for one on no matter — never all.
+     *
+     * @param  Builder<Matter>  $query
+     */
+    public function scopeOwnedBy(Builder $query, User $user): void
+    {
+        $parties = $user->ownMatterPartyIds();
+
+        $parties === []
+            ? $query->whereRaw('1 = 0')
+            : $query->whereHas('matterParties', fn (Builder $q) => $q->whereIn('party_id', $parties));
+    }
+
+    /** Whether it is one of someone's own matters (scopeOwnedBy()). */
+    public function isOwnedBy(User $user): bool
+    {
+        $parties = $user->ownMatterPartyIds();
+
+        return $parties !== [] && $this->matterParties()->whereIn('party_id', $parties)->exists();
+    }
+
     protected static function booted()
     {
         static::saved(function (Matter $matter) {

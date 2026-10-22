@@ -3,6 +3,7 @@
 namespace App\Enums;
 
 use App\Models\User;
+use App\Services\WhatsAppCloud;
 
 /**
  * Everything the system tells a user, one case each: what it is, which channels it can use, and which
@@ -22,6 +23,7 @@ enum NotificationType: string
     case MATTER_REPLY_RECEIVED = 'matter.reply_received';
     case MATTER_EMAIL_RECEIVED = 'matter.email_received';
     case MATTER_EMAIL_UNFILED = 'matter.email_unfiled';
+    case MATTER_EMAIL_SENT = 'matter.email_sent';
     case MINUTES_REPLY = 'minutes.reply_received';
     case ONEDRIVE_FOLDER_REVIEW = 'onedrive.folder_review';
 
@@ -52,6 +54,7 @@ enum NotificationType: string
             self::MATTER_REPLY_RECEIVED => __('A reply to an email I sent'),
             self::MATTER_EMAIL_RECEIVED => __('An email from a matter\'s party was kept'),
             self::MATTER_EMAIL_UNFILED => __('An email waiting for its matter to be chosen'),
+            self::MATTER_EMAIL_SENT => __('Someone else sent an email on my matter'),
             self::MINUTES_REPLY => __('A reply to minutes I sent for signature'),
             self::ONEDRIVE_FOLDER_REVIEW => __('A OneDrive folder to review'),
             self::LEAVE_SUBMITTED => __('A leave request to decide'),
@@ -71,7 +74,7 @@ enum NotificationType: string
     {
         return match ($this) {
             self::REQUEST_CREATED, self::REQUEST_DECIDED, self::REQUEST_CHANGES => __('Requests'),
-            self::MATTER_ASSIGNED, self::MATTER_REPLY_RECEIVED, self::MATTER_EMAIL_RECEIVED, self::MATTER_EMAIL_UNFILED,
+            self::MATTER_ASSIGNED, self::MATTER_REPLY_RECEIVED, self::MATTER_EMAIL_RECEIVED, self::MATTER_EMAIL_UNFILED, self::MATTER_EMAIL_SENT,
             self::MINUTES_REPLY, self::ONEDRIVE_FOLDER_REVIEW => __('Matters'),
             self::LEAVE_SUBMITTED, self::LEAVE_DECIDED => __('Leave'),
             self::CHAT_MESSAGE, self::CHAT_REACTION, self::TODO_MENTIONED, self::TODO_COMPLETED => __('Chat and to-dos'),
@@ -87,13 +90,28 @@ enum NotificationType: string
      */
     public function channels(): array
     {
-        return match ($this) {
+        $channels = match ($this) {
             // Live things: in the app (and on the phone with it).
             self::CHAT_MESSAGE, self::CHAT_REACTION, self::TODO_MENTIONED, self::TODO_COMPLETED => [NotificationChannel::BELL],
             // A daily report.
             self::CALENDAR_UNMATCHED => [NotificationChannel::MAIL],
             default => [NotificationChannel::BELL, NotificationChannel::MAIL, NotificationChannel::WHATSAPP],
         };
+
+        // Only what really sends: no WhatsApp switch while nothing would go out on WhatsApp.
+        return array_values(array_filter($channels, fn (NotificationChannel $channel): bool => $this->reaches($channel)));
+    }
+
+    /**
+     * Whether something goes out on the channel for it: a new request on WhatsApp has its own approved
+     * template (WhatsAppService::notifyNewRequest), so WhatsApp being set up is enough; the rest go out
+     * with the notification template (NotificationChannel::isAvailable()).
+     */
+    private function reaches(NotificationChannel $channel): bool
+    {
+        return $channel === NotificationChannel::WHATSAPP && $this === self::REQUEST_CREATED
+            ? WhatsAppCloud::configured()
+            : $channel->isAvailable();
     }
 
     /**
@@ -126,7 +144,7 @@ enum NotificationType: string
      */
     public static function aboutEmails(): array
     {
-        return [self::MATTER_REPLY_RECEIVED, self::MATTER_EMAIL_RECEIVED, self::MATTER_EMAIL_UNFILED];
+        return [self::MATTER_REPLY_RECEIVED, self::MATTER_EMAIL_RECEIVED, self::MATTER_EMAIL_UNFILED, self::MATTER_EMAIL_SENT];
     }
 
     public function supports(NotificationChannel $channel): bool

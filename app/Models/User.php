@@ -60,9 +60,23 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         'profile_photo_path',
         'last_seen_at',
         'theme_id',
+        'ms_account',
+        'mailbox_reads',
+        'mailbox_keeps_all',
+        'mailbox_sends',
+        'shared_senders',
+        'mail_signature',
     ];
 
     protected $with = [
+    ];
+
+    /** As the table makes them: a new user may send from the shared mailboxes, has no mailbox of their own on. */
+    protected $attributes = [
+        'shared_senders' => true,
+        'mailbox_reads' => false,
+        'mailbox_keeps_all' => false,
+        'mailbox_sends' => false,
     ];
 
     /**
@@ -88,6 +102,10 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         'notify_by_email' => 'boolean',
         'notify_by_whatsapp' => 'boolean',
         'last_seen_at' => 'datetime',
+        'mailbox_reads' => 'boolean',
+        'mailbox_keeps_all' => 'boolean',
+        'mailbox_sends' => 'boolean',
+        'shared_senders' => 'boolean',
     ];
 
     /**
@@ -145,6 +163,70 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     public function party(): HasOne
     {
         return $this->hasOne(Party::class);
+    }
+
+    /** The work account's fields: a change to any keeps their own mailbox and OneDrive in step. */
+    public const WORK_ACCOUNT = ['email', 'ms_account', 'mailbox_reads', 'mailbox_keeps_all', 'mailbox_sends', 'mail_signature', 'display_name', 'name'];
+
+    protected static function booted(): void
+    {
+        // Only when the work account changed: a user is saved often (last seen) — then nothing is read.
+        static::saved(function (User $user): void {
+            if (! $user->wasRecentlyCreated && ! $user->wasChanged(self::WORK_ACCOUNT)) {
+                return;
+            }
+
+            MailSender::syncFor($user);
+
+            // An assistant's OneDrive is in the same account: set once, here. Read, not kept as the relation
+            // (a party linked to them later must be found then).
+            $party = $user->party()->first();
+            if ($party?->isAssistant() && $party->onedrive_email !== $user->msAccount()) {
+                $party->update(['onedrive_email' => $user->msAccount()]);
+            }
+        });
+    }
+
+    /**
+     * Their Microsoft 365 account — their OneDrive, calendar and own mailbox: as set, else the email they sign
+     * in with.
+     */
+    public function msAccount(): ?string
+    {
+        $account = trim((string) ($this->ms_account ?: $this->email));
+
+        return filter_var($account, FILTER_VALIDATE_EMAIL) ? mb_strtolower($account) : null;
+    }
+
+    /** Their own mailbox, as a mail sender (MailSender::syncFor()). */
+    public function ownMailSender(): HasOne
+    {
+        return $this->hasOne(MailSender::class);
+    }
+
+    /**
+     * The assistants whose matters they handle with them: their matters theirs to open and work on, and
+     * what happens on them told to them too.
+     *
+     * @return BelongsToMany<Party, $this>
+     */
+    public function administeredAssistants(): BelongsToMany
+    {
+        return $this->belongsToMany(Party::class, 'assistant_administrators')->withTimestamps();
+    }
+
+    /**
+     * Whose matters are theirs, as parties on them: their own party, and the assistants they administer.
+     * Read once a request.
+     *
+     * @return list<int>
+     */
+    public function ownMatterPartyIds(): array
+    {
+        return once(fn (): array => array_values(array_unique(array_map('intval', array_filter([
+            $this->party?->getKey(),
+            ...$this->administeredAssistants()->pluck('parties.id')->all(),
+        ])))));
     }
 
     /** The theme they chose (App\Support\ThemeManager decides whether it is used). */

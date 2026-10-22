@@ -458,7 +458,7 @@ class MatterRepliesTest extends TestCase
         Http::assertNotSent(fn (Request $request) => str_contains(rawurldecode($request->url()), 'users/info@jpa.ae/mailFolders'));
 
         // That mailbox set to keep every email: it is.
-        MailSender::query()->where('key', 'info')->update(['keep_all_inbox' => true]);
+        MailSender::query()->where('key', 'info')->first()->update(['keep_all_inbox' => true]);
         app(MatterReplyCollector::class)->collect(null, 60);
         $this->assertSame('info', MatterEmail::pending()->sole()->sender_key);
         // Unread in the mailbox before: kept, so an undo can put it back.

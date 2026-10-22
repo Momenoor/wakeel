@@ -8,6 +8,7 @@ use App\Models\CalendarEventAlert;
 use App\Models\Matter;
 use App\Models\MatterParty;
 use App\Models\Party;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\CronWebhookRunner;
 use App\Services\MMS\Calendar\CalendarAlarms;
@@ -179,6 +180,22 @@ class CalendarAlarmsTest extends TestCase
             ['amr@jpa.ae', 'expert.user@jpa.ae'],
             array_map(fn (array $attendee): string => $attendee['emailAddress']['address'], $created['data']['attendees']),
         );
+    }
+
+    public function test_invitations_can_be_switched_off_and_the_reminders_still_come(): void
+    {
+        Setting::set(OutlookCalendarService::INVITES, false);
+        $event = $this->event('2026-11-05 10:00:00');
+
+        app(OutlookCalendarService::class)->pushEvent($event);
+
+        // On Outlook with no one invited: no invitation emails.
+        $created = collect($this->calls('POST'))->first(fn (array $call): bool => str_contains($call['url'], 'users/calendar@jpa.ae/events'));
+        $this->assertEmpty($created['data']['attendees'] ?? []);
+
+        // Their reminder items all the same.
+        app(CalendarAlarms::class)->run(everything: true);
+        $this->assertNotEmpty(array_filter($this->calls('POST'), fn (array $call): bool => str_contains($call['url'], 'users/amr@jpa.ae/')));
     }
 
     public function test_a_mailbox_that_refuses_is_tried_later_and_later_then_left_and_tried_afresh_when_the_event_moves(): void

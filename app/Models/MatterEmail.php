@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\AnnouncesChanges;
+use App\Services\MMS\MatterEmailSentNotifier;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -82,7 +83,7 @@ class MatterEmail extends Model
     public static function recordSent(?int $matterId, ?Model $source, string $senderKey, ?string $messageId, string $subject, array $to, ?int $userId): ?self
     {
         try {
-            return static::create([
+            return tap(static::create([
                 'matter_id' => $matterId,
                 'direction' => self::SENT,
                 'source_type' => $source?->getMorphClass(),
@@ -93,7 +94,8 @@ class MatterEmail extends Model
                 'to' => array_values(array_unique(array_map('mb_strtolower', array_filter($to)))),
                 'at' => now(),
                 'user_id' => $userId,
-            ]);
+                // The matter's people told — once the request is done.
+            ]), fn (self $email) => MatterEmailSentNotifier::note($email));
         } catch (Throwable $e) {
             Log::warning('Matter email not recorded: '.$e->getMessage());
 
@@ -240,17 +242,21 @@ class MatterEmail extends Model
      * that may be about one of these matters, when given.
      *
      * @param  list<int>|null  $matterIds
+     * @param  list<string>  $mailboxes  and those waiting in these mailboxes, whatever they may be about (one's own)
      * @return Builder<self>
      */
-    public static function pending(?array $matterIds = null): Builder
+    public static function pending(?array $matterIds = null, array $mailboxes = []): Builder
     {
         return static::query()
             ->where('direction', self::RECEIVED)
             ->where('status', self::PENDING)
-            ->when($matterIds !== null, fn (Builder $q) => $q->where(function (Builder $q) use ($matterIds) {
+            ->when($matterIds !== null, fn (Builder $q) => $q->where(function (Builder $q) use ($matterIds, $mailboxes) {
                 $q->whereRaw('1 = 0');
                 foreach ($matterIds as $id) {
                     $q->orWhereJsonContains('candidates', (int) $id);
+                }
+                if ($mailboxes !== []) {
+                    $q->orWhereIn('sender_key', $mailboxes);
                 }
             }));
     }

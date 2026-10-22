@@ -14,6 +14,7 @@ use BackedEnum;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
 use Filament\Support\Icons\Heroicon;
@@ -52,6 +53,7 @@ class LettersSettings extends SettingsFormPage
             EmailSendFields::DEFAULT_SENDER => Setting::get(EmailSendFields::DEFAULT_SENDER),
             Branding::EMAIL_PDF => Setting::get(Branding::EMAIL_PDF, Branding::EMAIL_PDF_OUTLOOK),
             Branding::EMAIL_PDF_FONT => Setting::get(Branding::EMAIL_PDF_FONT),
+            'leave_request_recipients' => (array) Setting::get('leave_request_recipients', []),
         ];
     }
 
@@ -91,7 +93,7 @@ class LettersSettings extends SettingsFormPage
                     // Letters, minutes and bulk mail start from this mailbox; chosen again each send.
                     Select::make(EmailSendFields::DEFAULT_SENDER)
                         ->label(__('Send letters, minutes and bulk mail from'))
-                        ->options(fn () => SenderMailer::options())
+                        ->options(fn () => SenderMailer::options(sharedOnly: true))
                         ->placeholder(__('As the system emails'))
                         ->helperText(__('The mailbox a letter, minutes or a bulk mail campaign starts from when sent; another can be chosen each time.'))
                         ->columnSpanFull(),
@@ -111,6 +113,17 @@ class LettersSettings extends SettingsFormPage
                         ->placeholder(__('Calibri, when uploaded; otherwise the standard font'))
                         ->helperText(__('A font uploaded under Letter fonts. The emails kept as PDF are written in it.'))
                         ->columnSpanFull(),
+                ]),
+
+            // Who gets a new leave request by email (and is copied in on its decision).
+            Section::make(__('Leave Requests'))
+                ->icon(Heroicon::CalendarDays)
+                ->schema([
+                    TagsInput::make('leave_request_recipients')
+                        ->label(__('Leave requests are sent to'))
+                        ->placeholder(__('Add an email address'))
+                        ->nestedRecursiveRules(['email'])
+                        ->helperText(__('Empty: everyone who can approve leave requests.')),
                 ]),
         ];
     }

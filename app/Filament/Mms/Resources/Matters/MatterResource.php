@@ -163,11 +163,7 @@ class MatterResource extends Resource
         // $user->party, and without it the query was left completely unscoped,
         // exposing every matter in the office.
         if (! $user->can('ViewAny:Matter') && $user->can('ViewOwn:Matter')) {
-            if (! $user->party) {
-                return $query->whereRaw('1 = 0');
-            }
-
-            $query->whereHas('matterParties', fn (Builder $q) => $q->where('party_id', $user->party->id));
+            $query->ownedBy($user);
         }
 
         return $query;

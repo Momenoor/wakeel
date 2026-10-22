@@ -1,10 +1,10 @@
 <?php
 
+use App\Filament\Shared\Users\UserForm;
+use App\Filament\Shared\Users\UserInfolist;
 use App\Models\Team;
 use App\Models\User;
 use Spatie\Permission\Models\Role;
-use TomatoPHP\FilamentUsers\Filament\Resources\Users\Schemas\UserForm;
-use TomatoPHP\FilamentUsers\Filament\Resources\Users\Schemas\UserInfolist;
 use TomatoPHP\FilamentUsers\Filament\Resources\Users\Tables\UserActions;
 use TomatoPHP\FilamentUsers\Filament\Resources\Users\Tables\UserBulkActions;
 use TomatoPHP\FilamentUsers\Filament\Resources\Users\Tables\UserFilters;

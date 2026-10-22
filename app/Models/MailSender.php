@@ -2,8 +2,11 @@
 
 namespace App\Models;
 
+use App\Filament\Support\EmailSendFields;
+use App\Services\MMS\SenderMailer;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * A mailbox letters and bulk mail can be sent from: a cPanel mailbox over
@@ -11,7 +14,7 @@ use Illuminate\Database\Eloquent\Model;
  * through Microsoft Graph with the app registration in .env
  * (MICROSOFT_GRAPH_TENANT_ID / CLIENT_ID / CLIENT_SECRET) — no password.
  */
-#[Fillable('key', 'name', 'address', 'driver', 'host', 'port', 'encryption', 'username', 'password', 'signature', 'is_active', 'keep_all_inbox')]
+#[Fillable('user_id', 'key', 'name', 'address', 'driver', 'host', 'port', 'encryption', 'username', 'password', 'signature', 'is_active', 'collects', 'sends', 'keep_all_inbox')]
 class MailSender extends Model
 {
     public const SMTP = 'smtp';
@@ -27,6 +30,8 @@ class MailSender extends Model
             'port' => 'integer',
             'is_active' => 'boolean',
             'keep_all_inbox' => 'boolean',
+            'collects' => 'boolean',
+            'sends' => 'boolean',
         ];
     }
 
@@ -35,6 +40,52 @@ class MailSender extends Model
      *
      * @return array<string, mixed>
      */
+    /** Whose own mailbox it is — none: one of the office's shared ones. */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    /** The mailboxes are read once a request (SenderMailer::all()): a change, read again. */
+    protected static function booted(): void
+    {
+        static::saved(fn () => SenderMailer::forget());
+        static::deleted(fn () => SenderMailer::forget());
+    }
+
+    /**
+     * A user's own mailbox kept as their work account says (Users → Edit): their Microsoft 365 account,
+     * read and filed and/or sent from — on while either is; their signature, else the office's. The one place
+     * it is made or changed: Settings → Mail senders only shows it.
+     */
+    public static function syncFor(User $user): void
+    {
+        $account = $user->msAccount();
+        $sender = static::query()->firstWhere('user_id', $user->getKey());
+
+        if ($account === null || ! ($user->mailbox_reads || $user->mailbox_sends)) {
+            $sender?->update(['is_active' => false]);
+
+            return;
+        }
+
+        $sender ??= new static(['user_id' => $user->getKey()]);
+        $sender->fill([
+            'key' => 'user-'.$user->getKey(),
+            'name' => $user->display_name ?: $user->name,
+            'address' => $account,
+            'driver' => self::MICROSOFT,
+            'is_active' => true,
+            'collects' => $user->mailbox_reads,
+            'sends' => $user->mailbox_sends,
+            // What concerns a matter — or, as they chose, every email (the rest waiting for them alone).
+            'keep_all_inbox' => $user->mailbox_reads && $user->mailbox_keeps_all,
+            'signature' => filled(strip_tags((string) $user->mail_signature, '<img>'))
+                ? $user->mail_signature
+                : static::query()->whereNull('user_id')->where('key', Setting::get(EmailSendFields::DEFAULT_SENDER))->value('signature'),
+        ])->save();
+    }
+
     public function toSender(): array
     {
         return [
@@ -49,6 +100,10 @@ class MailSender extends Model
             'signature' => self::leftToRight($this->signature),
             // Every email of this mailbox kept, not only those concerning a matter (MatterReplyCollector).
             'keep_all' => (bool) $this->keep_all_inbox,
+            // A user's own (none: the office's shared one), and whether it is read and filed, and sent from.
+            'owner' => $this->user_id !== null ? (int) $this->user_id : null,
+            'collects' => (bool) ($this->collects ?? true),
+            'sends' => (bool) ($this->sends ?? true),
         ];
     }
 

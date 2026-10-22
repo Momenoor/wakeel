@@ -33,7 +33,7 @@ class NewMatterNotification
             return;
         }
 
-        $matter->load(['assistantsOnly.party', 'court', 'type']);
+        $matter->load(['assistantsOnly.party.administrators', 'court', 'type']);
 
         $assistants = $matter->assistantsOnly->filter(fn ($mp) => $mp->party?->email);
 
@@ -72,18 +72,24 @@ class NewMatterNotification
                     Log::info("NewMatterNotification: Mail queued for party #{$party->id} on Matter #{$matter->id}.");
                 }
 
-                if ($user) {
-                    $title = __('New matter assigned');
-                    $body = __('Matter :number/:year — :type — :court. Please confirm the received date.', [
-                        'number' => $matter->number,
-                        'year' => $matter->year,
-                        'type' => $matter->type?->getAttribute('name') ?? '—',
-                        'court' => $matter->court?->getAttribute('name') ?? '—',
-                    ]);
+                $body = __('Matter :number/:year — :type — :court. Please confirm the received date.', [
+                    'number' => $matter->number,
+                    'year' => $matter->year,
+                    'type' => $matter->type?->getAttribute('name') ?? '—',
+                    'court' => $matter->court?->getAttribute('name') ?? '—',
+                ]);
+                $url = self::url('filament.mms.resources.matter-requests.view', $matterRequest);
 
+                if ($user) {
                     // The rest in the system — bell, desktop and phone — and on WhatsApp, linked to
                     // the request where the received date is confirmed.
-                    Notifier::send($type, [$user], $title, $body, self::url('filament.mms.resources.matter-requests.view', $matterRequest), only: [NotificationChannel::BELL, NotificationChannel::WHATSAPP]);
+                    Notifier::send($type, [$user], __('New matter assigned'), $body, $url, only: [NotificationChannel::BELL, NotificationChannel::WHATSAPP]);
+                }
+
+                // Those who handle this assistant's matters with them: told as they chose.
+                $administrators = $party->administrators->reject(fn ($admin) => $admin->is($user));
+                if ($administrators->isNotEmpty()) {
+                    Notifier::send($type, $administrators, __('New matter assigned to :name', ['name' => $party->name]), $body, $url);
                 }
 
             } catch (\Throwable $e) {

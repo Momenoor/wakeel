@@ -3,6 +3,7 @@
 namespace App\Services\MMS;
 
 use App\Models\MailSender;
+use App\Models\User;
 use Illuminate\Support\Facades\Log;
 use Microsoft\Graph\Generated\Models\ODataErrors\ODataError;
 use RuntimeException;
@@ -22,31 +23,72 @@ use Throwable;
 class SenderMailer
 {
     /**
+     * The mailboxes someone may send from, for the "Send from" lists: their own first, then the office's shared
+     * ones — unless they are kept to their own (Users → Edit). Without a user (the settings' defaults, a job):
+     * the shared ones.
+     *
      * @return array<string, string> key => display name
      */
-    public static function options(): array
+    public static function options(?User $user = null, bool $sharedOnly = false): array
     {
-        return collect(self::all())
-            ->map(fn (array $sender, string $key) => ($sender['name'] ?? $key).' <'.($sender['address'] ?? '').'> — '
-                .(self::isMicrosoft($sender) ? 'Microsoft 365' : 'cPanel'))
-            ->all();
+        $user ??= $sharedOnly ? null : auth()->user();
+        $label = fn (array $sender, string $key): string => ($sender['name'] ?? $key).' <'.($sender['address'] ?? '').'> — '
+            .(self::isMicrosoft($sender) ? 'Microsoft 365' : 'cPanel');
+
+        $senders = collect(self::all())->filter(fn (array $sender): bool => $sender['sends']);
+        $own = $user ? $senders->filter(fn (array $sender): bool => $sender['owner'] === (int) $user->getKey()) : collect();
+        $shared = ($user === null || $user->shared_senders) ? $senders->filter(fn (array $sender): bool => $sender['owner'] === null) : collect();
+
+        return $own->union($shared)->map($label)->all();
     }
 
     /**
+     * The mailboxes read for their emails (MatterReplyCollector): those set to be.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public static function collected(): array
+    {
+        return array_filter(self::all(), fn (array $sender): bool => $sender['collects']);
+    }
+
+    /** Whose mailbox it is: a user's own (their id), or none (one of the office's shared ones). */
+    public static function ownerOf(?string $key): ?int
+    {
+        return filled($key) ? (self::all()[$key]['owner'] ?? null) : null;
+    }
+
+    /**
+     * Every active mailbox, shared and personal — read once a request (a change to one forgets it).
+     *
      * @return array<string, array<string, mixed>>
      */
     public static function all(): array
     {
+        if (app()->bound(self::CACHE)) {
+            return app(self::CACHE);
+        }
+
         try {
             $managed = MailSender::query()->where('is_active', true)->orderBy('name')->get()
                 ->mapWithKeys(fn (MailSender $sender) => [$sender->key => $sender->toSender()])
                 ->all();
         } catch (Throwable) {
-            $managed = []; // Before the table exists (e.g. mid-install).
+            return []; // Before the table exists (e.g. mid-install).
         }
+
+        app()->instance(self::CACHE, $managed);
 
         return $managed;
     }
+
+    /** Read again on next ask: a mailbox was added, changed or removed. */
+    public static function forget(): void
+    {
+        app()->forgetInstance(self::CACHE);
+    }
+
+    private const CACHE = 'sender-mailer.all';
 
     /**
      * @return array<string, mixed>
@@ -60,6 +102,19 @@ class SenderMailer
         }
 
         return $sender;
+    }
+
+    /**
+     * An email's body with the signature of the mailbox it goes from, at its end — every email sent from
+     * a mailbox (letters, minutes, bulk mail) through here, so none goes without it.
+     *
+     * @param  array<string, mixed>|null  $sender
+     */
+    public static function withSignature(string $html, ?array $sender, string $gap = '<br>'): string
+    {
+        $signature = trim((string) ($sender['signature'] ?? ''));
+
+        return $signature === '' ? $html : $html.$gap.$signature;
     }
 
     public static function isMicrosoft(array $sender): bool

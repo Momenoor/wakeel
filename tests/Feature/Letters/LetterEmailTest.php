@@ -122,7 +122,7 @@ class LetterEmailTest extends TestCase
 
     public function test_the_letter_itself_as_the_email_has_no_signature_of_its_own_but_the_mailboxs(): void
     {
-        MailSender::where('key', 'iflas')->update(['signature' => '<div dir="ltr" id="Signature"><p>Best Regards <b>JPA Iflas</b></p></div>']);
+        MailSender::where('key', 'iflas')->first()->update(['signature' => '<div dir="ltr" id="Signature"><p>Best Regards <b>JPA Iflas</b></p></div>']);
 
         app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::BODY);
 
@@ -140,7 +140,7 @@ class LetterEmailTest extends TestCase
 
     public function test_the_mailboxs_signature_ends_the_covering_email_too_and_is_in_its_pdf(): void
     {
-        MailSender::where('key', 'iflas')->update(['signature' => '<div dir="ltr" id="Signature"><p>Best Regards <b>JPA Iflas</b></p></div>']);
+        MailSender::where('key', 'iflas')->first()->update(['signature' => '<div dir="ltr" id="Signature"><p>Best Regards <b>JPA Iflas</b></p></div>']);
 
         app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::ATTACHMENT, null, ['pdf']);
 
@@ -220,7 +220,7 @@ class LetterEmailTest extends TestCase
 
     public function test_a_failed_send_is_recorded_per_recipient(): void
     {
-        MailSender::where('key', 'iflas')->update(['host' => '127.0.0.1', 'port' => 9]);
+        MailSender::where('key', 'iflas')->first()->update(['host' => '127.0.0.1', 'port' => 9]);
         config(['mail.mailers.smtp.transport' => 'smtp', 'mail.mailers.smtp.timeout' => 2]);
 
         $result = app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::ATTACHMENT, null, ['pdf']);
@@ -380,7 +380,7 @@ class LetterEmailTest extends TestCase
 
     public function test_the_letter_as_the_email_is_previewed_with_the_mailboxs_signature_not_its_own(): void
     {
-        MailSender::where('key', 'iflas')->update(['signature' => '<div id="Signature"><p>Best Regards <b>JPA Iflas</b></p></div>']);
+        MailSender::where('key', 'iflas')->first()->update(['signature' => '<div id="Signature"><p>Best Regards <b>JPA Iflas</b></p></div>']);
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->letter->matter, 'pageClass' => ViewMatter::class])
             ->mountTableAction('email', $this->letter)

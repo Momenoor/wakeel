@@ -82,7 +82,7 @@ class MinutesSender
             $emails = Addresses::emails(collect($group['rows'])->flatMap(fn (array $r) => $r['emails'])->all());
             $greeting = $personal($group);
 
-            $email = self::letterEmail($subject, $body, $greeting, $arabic, $files);
+            $email = self::letterEmail($subject, $body, $greeting, $arabic, $files, SenderMailer::sender($senderKey));
             // …and whom these recipients brought into the matter.
             $theirs = MatterContact::copiedFor($minutes->matter_id, $emails, collect($group['rows'])->pluck('party_id')->filter()->all(), $contactsCc);
             $copied = Addresses::without(Addresses::emails([...$cc, ...$theirs]), $emails);
@@ -211,7 +211,7 @@ class MinutesSender
      * @param  list<array<string, mixed>>  $recipients  the send screen's lines
      * @return array{to: string, others: int, subject: string, html: string, rtl: bool}
      */
-    public static function preview(MatterMinutes $minutes, array $recipients, string $grouping, ?string $subject, ?string $body): array
+    public static function preview(MatterMinutes $minutes, array $recipients, string $grouping, ?string $subject, ?string $body, ?string $senderKey = null): array
     {
         $composer = MinutesService::composer($minutes);
         $arabic = $composer->isArabic();
@@ -219,7 +219,7 @@ class MinutesSender
         $groups = self::emailGroups(self::emailLines(array_values(array_filter($recipients, 'is_array'))), $grouping, $arabic);
         $first = $groups[0] ?? ['name' => '', 'capacity' => '', 'rows' => []];
         $greeting = [...$composer->values(), ...self::recipientValues($first, $arabic)];
-        $email = self::letterEmail($subject, $body, $greeting, $arabic, []);
+        $email = self::letterEmail($subject, $body, $greeting, $arabic, [], filled($senderKey) ? (SenderMailer::all()[$senderKey] ?? null) : null);
 
         $html = $email->letterHtml;
         foreach ($email->images as $token => $path) {
@@ -323,11 +323,12 @@ class MinutesSender
      * @param  array<string, string>  $greeting
      * @param  list<array<string, mixed>>  $files
      */
-    private static function letterEmail(?string $subject, ?string $body, array $greeting, bool $arabic, array $files): LetterEmail
+    private static function letterEmail(?string $subject, ?string $body, array $greeting, bool $arabic, array $files, ?array $sender = null): LetterEmail
     {
         return new LetterEmail(
             BulkMailPlaceholders::apply((string) ($subject ?: self::defaultSubject($arabic)), array_map(fn ($value) => str_replace(self::LINE, $arabic ? '، ' : '; ', strip_tags((string) $value)), $greeting)),
-            str_replace(self::LINE, '<br>', BulkMailPlaceholders::apply((string) ($body ?: self::defaultBody($arabic)), $greeting, escape: true)),
+            // The mailbox's signature at its end, as every email sent from a mailbox.
+            SenderMailer::withSignature(str_replace(self::LINE, '<br>', BulkMailPlaceholders::apply((string) ($body ?: self::defaultBody($arabic)), $greeting, escape: true)), $sender),
             $arabic,
             [],
             $files,

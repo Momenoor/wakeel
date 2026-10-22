@@ -21,6 +21,7 @@ use App\Filament\Shared\Pages\AnnouncementSettings;
 use App\Filament\Shared\Pages\GeneralSettings;
 use App\Filament\Shared\Pages\IntegrationsSettings;
 use App\Filament\Shared\Pages\LettersSettings;
+use App\Filament\Shared\Pages\MailCollectingSettings;
 use App\Filament\Shared\Pages\MailServerSettings;
 use App\Filament\Shared\Pages\NotificationSettings;
 use App\Filament\Shared\Pages\OfflineSettings;
@@ -331,6 +332,7 @@ return [
             // to a permission of their own for each page.
             GeneralSettings::class,
             MailServerSettings::class,
+            MailCollectingSettings::class,
             LettersSettings::class,
             NotificationSettings::class,
             AnnouncementSettings::class,

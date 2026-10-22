@@ -3,7 +3,6 @@
 namespace App\Filament\Shared\Pages;
 
 use App\Filament\Shared\Pages\Schemas\IntegrationsSettingsForm;
-use App\Services\MMS\MatterReplyCollector;
 use App\Support\Integrations;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Support\Utils;
@@ -48,16 +47,6 @@ class IntegrationsSettings extends SettingsFormPage
         return [
             // Saved secrets stay on the server (empty here).
             ...collect(Integrations::KEYS)->mapWithKeys(fn (string $key): array => [$key => in_array($key, Integrations::SECRETS, true) ? null : Integrations::get($key)])->all(),
-            MatterReplyCollector::LOOK_BACK => MatterReplyCollector::lookBackDays(),
-            MatterReplyCollector::IGNORED => MatterReplyCollector::ignoredSenders(),
-        ];
-    }
-
-    protected function groups(): array
-    {
-        return [
-            MatterReplyCollector::LOOK_BACK => 'mail',
-            MatterReplyCollector::IGNORED => 'mail',
         ];
     }
 

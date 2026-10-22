@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Policies;
 
 use App\Models\Matter;
+use App\Models\User;
 use Illuminate\Auth\Access\HandlesAuthorization;
 use Illuminate\Foundation\Auth\User as AuthUser;
 
@@ -24,10 +25,9 @@ class MatterPolicy
         }
 
         // A user restricted to their own matters (ViewOwn) can open the ones
-        // they are a party of — the same scope the resource's list applies.
-        return $authUser->can('ViewOwn:Matter')
-            && $authUser->party !== null
-            && $matter->matterParties()->where('party_id', $authUser->party->id)->exists();
+        // they are on, or their administered assistants are — the same scope
+        // the resource's list applies (Matter::scopeOwnedBy()).
+        return $authUser->can('ViewOwn:Matter') && $authUser instanceof User && $matter->isOwnedBy($authUser);
     }
 
     public function create(AuthUser $authUser): bool

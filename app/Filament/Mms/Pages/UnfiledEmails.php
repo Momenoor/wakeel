@@ -92,16 +92,24 @@ class UnfiledEmails extends Page implements HasTable
     public static function waiting(): Builder
     {
         $user = auth()->user();
+        // Someone's own mailbox: what waits there is theirs alone — any super admin's too.
+        [$own, $others] = collect(SenderMailer::all())
+            ->filter(fn (array $sender): bool => $sender['owner'] !== null)
+            ->partition(fn (array $sender): bool => $sender['owner'] === $user?->getKey())
+            ->map(fn ($mailboxes): array => array_map('strval', $mailboxes->keys()->all()))
+            ->all();
 
-        if (! $user || $user->can('ViewAny:Matter')) {
-            return MatterEmail::pending();
-        }
+        $query = ! $user || $user->can('ViewAny:Matter')
+            ? MatterEmail::pending()
+            : MatterEmail::pending(Matter::query()->ownedBy($user)->pluck('id')->map(fn ($id) => (int) $id)->all(), $own);
 
-        $mine = $user->party
-            ? Matter::query()->whereHas('matterParties', fn (Builder $q) => $q->where('party_id', $user->party->id))->pluck('id')->map(fn ($id) => (int) $id)->all()
-            : [];
+        return $query->when($others !== [], fn (Builder $q) => $q->where(fn (Builder $q) => $q->whereNull('sender_key')->orWhereNotIn('sender_key', $others)));
+    }
 
-        return MatterEmail::pending($mine);
+    /** Whether it waits in the user's own mailbox: theirs to file on any matter it may be about. */
+    public static function inOwnMailbox(MatterEmail $email): bool
+    {
+        return SenderMailer::ownerOf($email->sender_key) === auth()->id();
     }
 
     /** The "All" tab's key — not a mailbox's (theirs are slugs: no underscores at the start). */
@@ -161,7 +169,12 @@ class UnfiledEmails extends Page implements HasTable
         $counts = self::waiting()->reorder()->selectRaw('sender_key, count(*) as total')->groupBy('sender_key')->pluck('total', 'sender_key');
         $tabs = [self::ALL => ['label' => __('All'), 'count' => (int) $counts->sum()]];
 
+        // The shared mailboxes and the user's own — never a colleague's.
         foreach (SenderMailer::all() as $key => $sender) {
+            if ($sender['owner'] !== null && $sender['owner'] !== auth()->id()) {
+                continue;
+            }
+
             $tabs[(string) $key] = ['label' => (string) ($sender['name'] ?? '' ?: ($sender['address'] ?? $key)), 'count' => (int) ($counts[$key] ?? 0)];
         }
 
@@ -233,7 +246,9 @@ class UnfiledEmails extends Page implements HasTable
                     ])
                     ->action(function (MatterEmail $record, array $data): void {
                         $matter = Matter::findOrFail($data['matter_id']);
-                        abort_unless(auth()->user()?->can('update', $matter), 403);
+                        // One who may change the matter — or the owner of the mailbox it came to, on a matter it may be about.
+                        abort_unless(auth()->user()?->can('update', $matter)
+                            || (self::inOwnMailbox($record) && in_array((int) $matter->getKey(), array_map('intval', (array) $record->candidates), true)), 403);
 
                         app(MatterReplyCollector::class)->file($record, $matter, auth()->id());
 
