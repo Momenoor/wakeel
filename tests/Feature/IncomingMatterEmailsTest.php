@@ -363,6 +363,64 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertSame(EmailJob::BUSY, (new FileUnfiledEmail($email->id, $this->second->id, $this->user->id))->start());
     }
 
+    public function test_the_emails_ticked_are_filed_set_aside_or_made_again_together(): void
+    {
+        // Four from a lawyer on both matters, nothing to say which: all waiting.
+        $this->collect(
+            $this->email(['message_id' => '<b1@albanna.ae>']),
+            $this->email(['message_id' => '<b2@albanna.ae>']),
+            $this->email(['message_id' => '<b3@albanna.ae>']),
+            $this->email(['message_id' => '<b4@albanna.ae>']),
+        );
+        [$one, $two, $three, $four] = MatterEmail::orderBy('id')->get()->all();
+
+        Livewire::test(UnfiledEmails::class)
+            ->callTableBulkAction('fileAll', [$one, $two], ['matter_id' => $this->first->id])
+            ->callTableBulkAction('dismissAll', [$three]);
+
+        $this->assertSame([MatterEmail::FILED, MatterEmail::FILED, MatterEmail::DISMISSED], [$one->fresh()->status, $two->fresh()->status, $three->fresh()->status]);
+        $this->assertSame([$this->first->id, $this->first->id], [$one->fresh()->matter_id, $two->fresh()->matter_id]);
+
+        // Made again, each in the background.
+        config(['queue.default' => 'database']);
+        Queue::fake();
+        Livewire::test(UnfiledEmails::class)->callTableBulkAction('regenerateAll', [$four]);
+        Queue::assertPushed(RegenerateEmail::class, 1);
+    }
+
+    public function test_each_sees_all_the_shared_mailboxes_unfiled_emails_or_only_those_of_their_matters_as_set(): void
+    {
+        $waiting = fn (array $candidates, string $id) => MatterEmail::create(['direction' => MatterEmail::RECEIVED, 'status' => MatterEmail::PENDING, 'sender_key' => 'iflas', 'subject' => 's', 'from' => 'x@y.ae', 'at' => now(), 'candidates' => $candidates, 'message_id' => $id]);
+        $theirs = $waiting([$this->first->id], 'u1@y.ae');
+        $notTheirs = $waiting([$this->second->id], 'u2@y.ae');
+        $user = $this->assistantOn($this->first)->givePermissionTo(Permission::findOrCreate('View:UnfiledEmails'), Permission::findOrCreate('ViewAny:Matter'));
+
+        // Seeing every matter: all of them, unless set otherwise.
+        $this->actingAs($user->fresh());
+        Livewire::test(UnfiledEmails::class)->assertCanSeeTableRecords([$theirs, $notTheirs]);
+
+        $user->update(['unfiled_all' => false]);
+        $this->actingAs($user->fresh());
+        Livewire::test(UnfiledEmails::class)->assertCanSeeTableRecords([$theirs])->assertCanNotSeeTableRecords([$notTheirs]);
+
+        // Set to all; but kept from the shared mailboxes, only theirs.
+        $user->update(['unfiled_all' => true, 'shared_senders' => false]);
+        $this->actingAs($user->fresh());
+        Livewire::test(UnfiledEmails::class)->assertCanSeeTableRecords([$theirs])->assertCanNotSeeTableRecords([$notTheirs]);
+    }
+
+    public function test_one_kept_from_the_shared_mailboxes_has_no_mailbox_tabs(): void
+    {
+        $this->collect($this->email(['message_id' => '<t1@albanna.ae>']));
+        MailSenders::add('other', ['username' => 'other@jpa.ae', 'address' => 'other@jpa.ae', 'name' => 'Other', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
+
+        $this->assertNotSame([], Livewire::test(UnfiledEmails::class)->instance()->getTabs());
+
+        $this->user->update(['shared_senders' => false]);
+        $this->actingAs($this->user->fresh());
+        $this->assertSame([], Livewire::test(UnfiledEmails::class)->instance()->getTabs());
+    }
+
     public function test_every_email_that_comes_in_filed_or_waiting_is_in_the_bells_emails_tab(): void
     {
         $admin = User::factory()->create()->assignRole('super-admin');

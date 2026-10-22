@@ -62,6 +62,10 @@ class UserInfolist extends PluginUserInfolist
                                 ->visible(fn (User $record): bool => $record->mailbox_reads),
                             IconEntry::make('mailbox_sends')->label(__('Send from it'))->boolean(),
                             IconEntry::make('shared_senders')->label(__('May send from the office\'s shared mailboxes'))->boolean(),
+                            TextEntry::make('unfiled_all')
+                                ->label(__('In Unfiled emails, from the shared mailboxes'))
+                                ->state(fn (User $record): string => $record->seesAllUnfiled() ? __('All of them') : __('Those that may be about their matters'))
+                                ->visible(fn (User $record): bool => (bool) $record->shared_senders),
                             TextEntry::make('mail_signature')
                                 ->label(__('Signature'))
                                 ->state(fn (User $record): ?HtmlString => filled($record->mail_signature) ? new HtmlString((string) $record->mail_signature) : null)

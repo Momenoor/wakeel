@@ -84,6 +84,16 @@ class UserForm extends PluginUserForm
                 Toggle::make('shared_senders')
                     ->label(__('May send from the office\'s shared mailboxes'))
                     ->default(true)
+                    ->live()
+                    ->columnSpanFull(),
+                // Which unfiled emails of the shared mailboxes they see (Unfiled emails).
+                Radio::make('unfiled_all')
+                    ->label(__('In Unfiled emails, from the shared mailboxes'))
+                    ->options([0 => __('Those that may be about their matters'), 1 => __('All of them')])
+                    ->default(null)
+                    ->formatStateUsing(fn ($state, ?User $record): int => (int) ($state ?? $record?->can('ViewAny:Matter') ?? false))
+                    ->dehydrateStateUsing(fn ($state): bool => (bool) $state)
+                    ->visible(fn (Get $get): bool => (bool) $get('shared_senders'))
                     ->columnSpanFull(),
                 RichText::make('mail_signature')
                     ->label(__('Signature'))

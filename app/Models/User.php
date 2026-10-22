@@ -65,6 +65,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         'mailbox_keeps_all',
         'mailbox_sends',
         'shared_senders',
+        'unfiled_all',
         'mail_signature',
     ];
 
@@ -106,6 +107,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         'mailbox_keeps_all' => 'boolean',
         'mailbox_sends' => 'boolean',
         'shared_senders' => 'boolean',
+        'unfiled_all' => 'boolean',
     ];
 
     /**
@@ -166,6 +168,16 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     }
 
     /** The work account's fields: a change to any keeps their own mailbox and OneDrive in step. */
+    /**
+     * Whether they see every unfiled email of the shared mailboxes, or only those that may be about their own
+     * matters (Unfiled emails): as set on their page — else all for whoever sees every matter. One kept from the
+     * shared mailboxes never sees all.
+     */
+    public function seesAllUnfiled(): bool
+    {
+        return $this->shared_senders && ($this->unfiled_all ?? $this->can('ViewAny:Matter'));
+    }
+
     public const WORK_ACCOUNT = ['email', 'ms_account', 'mailbox_reads', 'mailbox_keeps_all', 'mailbox_sends', 'mail_signature', 'display_name', 'name'];
 
     protected static function booted(): void

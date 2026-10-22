@@ -4627,5 +4627,20 @@
     "Paid in advance — employee request #:id": "صُرفت مقدماً — طلب موظف رقم :id",
     ":amount AED — the :year ticket": ":amount درهم — تذكرة :year",
     "Marked paid: the year's flight ticket is paid, and not paid again with a salary.": "سُجّل الصرف: صُرفت تذكرة السنة، ولن تُصرف مرة أخرى مع الراتب.",
-    "Salary Advances": "السلف على الرواتب"
+    "Salary Advances": "السلف على الرواتب",
+    "Filed on matter :matter: :count emails.": "حُفظت في القضية :matter: :count رسالة.",
+    "Being filed in the background: you are told in the bell when each is done.": "جارٍ الحفظ في الخلفية: تصلك رسالة في الإشعارات عند انتهاء كل منها.",
+    "Already being worked on, left: :count.": "قيد المعالجة بالفعل، تُركت: :count.",
+    "Not yours to file on that matter, left: :count.": "لا يحق لك حفظها في تلك القضية، تُركت: :count.",
+    "Ignore senders": "تجاهل المرسلين",
+    "Never check emails from these :count senders?": "عدم فحص رسائل هؤلاء المرسلين (:count) مرة أخرى؟",
+    ":count senders will not be checked again.": "لن تُفحص رسائل :count مرسل مرة أخرى.",
+    "They are set aside and their kept PDFs and files deleted; the emails stay in the mailbox.": "تُستبعد وتُحذف ملفات PDF والملفات المحفوظة لها؛ وتبقى الرسائل في صندوق البريد.",
+    ":count emails set aside.": "استُبعدت :count رسالة.",
+    "Each email is read again from the mailbox it came to: its PDF made anew, its original (.eml) and its attachments downloaded again, each put in place of the old one — in the system and in the matter's OneDrive.": "تُقرأ كل رسالة من جديد من صندوق البريد الذي وصلت إليه: يُنشأ ملف PDF من جديد، ويُعاد تنزيل الأصل (.eml) والمرفقات، ويحل كل منها محل القديم — في النظام وفي OneDrive الخاص بالقضية.",
+    "Being made again: :count emails.": "جارٍ إنشاء :count رسالة من جديد.",
+    "You are told in the bell when each is done.": "تصلك رسالة في الإشعارات عند انتهاء كل منها.",
+    "In Unfiled emails, from the shared mailboxes": "في الرسائل غير المصنفة، من صناديق البريد المشتركة",
+    "Those that may be about their matters": "ما قد يخص قضاياه فقط",
+    "All of them": "جميعها"
 }

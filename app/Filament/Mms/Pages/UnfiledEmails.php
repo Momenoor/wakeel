@@ -16,6 +16,8 @@ use App\Support\MatterSearch;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
+use Filament\Actions\BulkAction;
+use Filament\Actions\BulkActionGroup;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -28,6 +30,7 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Livewire\Attributes\Url;
 
 /**
@@ -102,7 +105,8 @@ class UnfiledEmails extends Page implements HasTable
             ->map(fn ($mailboxes): array => array_map('strval', $mailboxes->keys()->all()))
             ->all();
 
-        $query = ! $user || $user->can('ViewAny:Matter')
+        // All of them, or those that may be about their own matters (and their own mailbox's): as set for them (User::seesAllUnfiled).
+        $query = ! $user || $user->seesAllUnfiled()
             ? MatterEmail::pending()
             : MatterEmail::pending(Matter::query()->ownedBy($user)->pluck('id')->map(fn ($id) => (int) $id)->all(), $own);
 
@@ -149,6 +153,11 @@ class UnfiledEmails extends Page implements HasTable
      */
     public function getTabs(): array
     {
+        // No tabs for one kept from the shared mailboxes (their work account): their own emails only, as one list.
+        if (! auth()->user()?->shared_senders) {
+            return [];
+        }
+
         $tabs = $this->mailboxTabs();
 
         if (count($tabs) <= 1) {
@@ -249,9 +258,7 @@ class UnfiledEmails extends Page implements HasTable
                     ])
                     ->action(function (MatterEmail $record, array $data): void {
                         $matter = Matter::findOrFail($data['matter_id']);
-                        // One who may change the matter — or the owner of the mailbox it came to, on a matter it may be about.
-                        abort_unless(auth()->user()?->can('update', $matter)
-                            || (self::inOwnMailbox($record) && in_array((int) $matter->getKey(), array_map('intval', (array) $record->candidates), true)), 403);
+                        abort_unless(self::mayFile($record, $matter), 403);
 
                         // In the background (its files go to the matter and its OneDrive): told in the bell when done.
                         match ((new FileUnfiledEmail((int) $record->getKey(), (int) $matter->getKey(), auth()->id()))->start()) {
@@ -293,9 +300,106 @@ class UnfiledEmails extends Page implements HasTable
                 // Its PDF made wrongly: made again from the mailbox, its files in their places — last, in the row's "…" menu.
                 ActionGroup::make([RegenerateEmailAction::make(fn (): bool => true)]),
             ])
+            // The same, to the emails ticked.
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    self::fileAll(),
+                    self::ignoreAll(),
+                    self::dismissAll(),
+                    RegenerateEmailAction::bulk(fn (): bool => true),
+                ]),
+            ])
             ->emptyStateIcon('heroicon-o-inbox')
             ->emptyStateHeading(__('No unfiled emails'))
             ->emptyStateDescription(__('Emails from the parties are kept on their matter by themselves; one appears here only when its matter is not certain.'));
+    }
+
+    /** Who may file an email on a matter: one who may change the matter — or the owner of the mailbox it came to, on a matter it may be about. */
+    public static function mayFile(MatterEmail $email, Matter $matter): bool
+    {
+        return (bool) auth()->user()?->can('update', $matter)
+            || (self::inOwnMailbox($email) && in_array((int) $matter->getKey(), array_map('intval', (array) $email->candidates), true));
+    }
+
+    /** The emails ticked filed on one matter, each in the background (FileUnfiledEmail); those that may not be, left. */
+    private static function fileAll(): BulkAction
+    {
+        return BulkAction::make('fileAll')
+            ->label(__('File to matter'))
+            ->icon('heroicon-o-folder-arrow-down')
+            ->color('primary')
+            ->modalWidth('lg')
+            ->schema(fn (Collection $records): array => [
+                Select::make('matter_id')
+                    ->label(__('Matter'))
+                    // The matters they may be about; any other by its number.
+                    ->options(fn (): array => self::matterLabels($records->flatMap(fn (MatterEmail $email): array => array_map('intval', (array) $email->candidates))->unique()->values()->all()))
+                    ->searchable()
+                    ->getSearchResultsUsing(fn (string $search): array => self::searchMatters($search))
+                    ->getOptionLabelUsing(fn ($value): ?string => self::matterLabels([(int) $value])[(int) $value] ?? null)
+                    ->required(),
+            ])
+            ->databaseTransaction(false)
+            ->deselectRecordsAfterCompletion()
+            ->action(function (Collection $records, array $data): void {
+                $matter = Matter::findOrFail($data['matter_id']);
+                $results = $records->map(fn (MatterEmail $email): string => self::mayFile($email, $matter)
+                    ? (new FileUnfiledEmail((int) $email->getKey(), (int) $matter->getKey(), auth()->id()))->start()
+                    : 'refused')->countBy();
+
+                Notification::make()
+                    ->success()
+                    ->title(__('Filed on matter :matter: :count emails.', ['matter' => $matter->year.'/'.$matter->number, 'count' => ($results[EmailJob::QUEUED] ?? 0) + ($results[EmailJob::DONE] ?? 0)]))
+                    ->body(collect([
+                        ($results[EmailJob::QUEUED] ?? 0) ? __('Being filed in the background: you are told in the bell when each is done.') : null,
+                        ($results[EmailJob::BUSY] ?? 0) ? __('Already being worked on, left: :count.', ['count' => $results[EmailJob::BUSY]]) : null,
+                        ($results['refused'] ?? 0) ? __('Not yours to file on that matter, left: :count.', ['count' => $results['refused']]) : null,
+                    ])->filter()->implode(' '))
+                    ->send();
+            });
+    }
+
+    /** The senders of the emails ticked never checked again (ignore), their waiting emails set aside. */
+    private static function ignoreAll(): BulkAction
+    {
+        return BulkAction::make('ignoreAll')
+            ->label(__('Ignore senders'))
+            ->icon('heroicon-o-no-symbol')
+            ->color('gray')
+            ->requiresConfirmation()
+            ->modalHeading(fn (Collection $records): string => __('Never check emails from these :count senders?', ['count' => $records->map(fn (MatterEmail $email): string => MatterEmail::addressOf((string) $email->from))->unique()->count()]))
+            ->modalDescription(__('Their emails waiting here are set aside, and new ones are not read (they stay unread in the mailbox). The address can be taken off the list in Settings → Integrations.'))
+            ->visible(fn (): bool => auth()->user()?->can('View:SystemSettings') ?? false)
+            ->deselectRecordsAfterCompletion()
+            ->action(function (Collection $records): void {
+                $collector = app(MatterReplyCollector::class);
+                $addresses = $records->map(fn (MatterEmail $email): string => MatterEmail::addressOf((string) $email->from))->filter()->unique();
+                $count = $addresses->sum(fn (string $address): int => $collector->ignore($address));
+
+                Notification::make()
+                    ->success()
+                    ->title(__(':count senders will not be checked again.', ['count' => $addresses->count()]))
+                    ->body(trans_choice('{0} |{1} 1 waiting email set aside.|[2,*] :count waiting emails set aside.', $count, ['count' => $count]))
+                    ->send();
+            });
+    }
+
+    /** The emails ticked set aside as about no matter, their kept files deleted. */
+    private static function dismissAll(): BulkAction
+    {
+        return BulkAction::make('dismissAll')
+            ->label(__('About no matter'))
+            ->icon('heroicon-o-archive-box-x-mark')
+            ->color('danger')
+            ->requiresConfirmation()
+            ->modalDescription(__('They are set aside and their kept PDFs and files deleted; the emails stay in the mailbox.'))
+            ->deselectRecordsAfterCompletion()
+            ->action(function (Collection $records): void {
+                $collector = app(MatterReplyCollector::class);
+                $records->each(fn (MatterEmail $email) => $collector->dismiss($email));
+
+                Notification::make()->success()->title(__(':count emails set aside.', ['count' => $records->count()]))->send();
+            });
     }
 
     /**
