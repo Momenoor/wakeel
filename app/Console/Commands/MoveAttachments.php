@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Attachments\FileCopy;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\DB;
@@ -130,42 +131,10 @@ class MoveAttachments extends Command
     private function move(object $row, string $path, string $disk, Filesystem $public, Filesystem $private, array &$stats): int
     {
         $target = $this->targetPath($row, $path);
-
-        // What the original is: its size and sha256, read as a stream.
-        $source = $public->readStream($path);
-        throw_unless(is_resource($source), \RuntimeException::class, 'the file cannot be read');
-
-        $hash = hash_init('sha256');
-        hash_update_stream($hash, $source);
-        $checksum = hash_final($hash);
-        $size = (int) $public->size($path);
+        ['size' => $size, 'checksum' => $checksum] = FileCopy::copy($public, $path, $private, $target, $row->checksum);
         $mime = $row->mime ?: ($public->mimeType($path) ?: null);
 
-        if (filled($row->checksum) && ! hash_equals((string) $row->checksum, $checksum)) {
-            fclose($source);
-
-            throw new \RuntimeException('the file is not the one that was recorded (checksum differs)');
-        }
-
-        // Copied: from its start again, a stream at a time.
-        if (! @rewind($source)) {
-            fclose($source);
-            $source = $public->readStream($path);
-            throw_unless(is_resource($source), \RuntimeException::class, 'the file cannot be read');
-        }
-
         try {
-            $written = $private->writeStream($target, $source);
-        } finally {
-            if (is_resource($source)) {
-                fclose($source);
-            }
-        }
-
-        try {
-            throw_if($written === false, \RuntimeException::class, 'the copy could not be written');
-            $this->verify($private, $target, $size, $checksum);
-
             // Pointed at the copy — not through the model: nothing about the file's contents changed, so no
             // activity entry and no new "updated" time.
             $updated = DB::table('attachments')->where('id', $row->id)->where('disk', 'public')->update([
@@ -192,21 +161,6 @@ class MoveAttachments extends Command
         }
 
         return $size;
-    }
-
-    /** The copy is the original: its size and its sha256. */
-    private function verify(Filesystem $disk, string $path, int $size, string $checksum): void
-    {
-        throw_unless($disk->exists($path) && (int) $disk->size($path) === $size, \RuntimeException::class, 'the copy is not the size of the original');
-
-        $stream = $disk->readStream($path);
-        throw_unless(is_resource($stream), \RuntimeException::class, 'the copy cannot be read back');
-
-        $hash = hash_init('sha256');
-        hash_update_stream($hash, $stream);
-        fclose($stream);
-
-        throw_unless(hash_equals($checksum, hash_final($hash)), \RuntimeException::class, 'the copy differs from the original');
     }
 
     /** Named as the attachment service names a new file: <owner>/<year>/<owner id>/<uuid>.<ext>. */

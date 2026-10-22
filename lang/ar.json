@@ -4493,5 +4493,21 @@
     "The field is shared: a change to it is a change on these types too.": "الحقل مشترك: أي تعديل عليه يسري على هذه الأنواع أيضاً.",
     "Also for the types with the same folders: :types": "تطبيق التعديل أيضاً على الأنواع ذات المجلدات نفسها: :types",
     "The top of their OneDrive": "أعلى OneDrive الخاص به",
-    "The office's": "توقيع المكتب"
+    "The office's": "توقيع المكتب",
+    "Your storage account in Azure (Storage account → Access keys) and a private container in it, where attached files, signatures and stamps are kept instead of on this server. They still open only through Wakeel, for whoever may see them.": "حساب التخزين الخاص بكم في Azure (Storage account ← Access keys) وحاوية خاصة فيه، تُحفظ فيها الملفات المرفقة والتواقيع والأختام بدلاً من هذا الخادم. وتبقى لا تُفتح إلا من خلال وكيل، لمن يحق له الاطلاع عليها.",
+    "Storage account name": "اسم حساب التخزين",
+    "Access key": "مفتاح الوصول",
+    "Container": "الحاوية",
+    "Keep new files in Azure": "حفظ الملفات الجديدة في Azure",
+    "Those kept before stay on this server until copied (\"Copy the files to Azure\"); either way each opens from where it is.": "الملفات المحفوظة سابقاً تبقى على هذا الخادم حتى تُنسخ (\"نسخ الملفات إلى Azure\")؛ وفي الحالتين يُفتح كل ملف من مكانه.",
+    "The file written could not be read back.": "تعذّرت قراءة الملف بعد كتابته.",
+    "Azure is connected: a file was written, read and deleted.": "Azure متصل: كُتب ملف ثم قُرئ ثم حُذف.",
+    "Azure could not be reached": "تعذّر الوصول إلى Azure",
+    "Copy the files to Azure": "نسخ الملفات إلى Azure",
+    "Files kept on this server: :count.": "الملفات المحفوظة على هذا الخادم: :count.",
+    "Up to :limit are copied each time, each checked against its original before it opens from Azure. The originals stay on this server.": "يُنسخ حتى :limit ملف في كل مرة، ويُطابَق كل منها مع أصله قبل أن يُفتح من Azure. وتبقى الأصول على هذا الخادم.",
+    ":count files copied to Azure.": "نُسخ :count ملف إلى Azure.",
+    "Still on this server: :count — copy again.": "ما زال على هذا الخادم: :count — انسخ مرة أخرى.",
+    "Not found on this server (left as they are): :count.": "غير موجودة على هذا الخادم (تُركت كما هي): :count.",
+    "Not copied: :errors": "لم يُنسخ: :errors"
 }

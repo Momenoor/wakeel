@@ -61,12 +61,12 @@ class WhatsAppCloud
     }
 
     /**
-     * Uploads a file for a message; its media id.
+     * Uploads a file (its contents) for a message; its media id.
      */
-    public function upload(string $path, string $mime, string $name): string
+    public function upload(string $contents, string $mime, string $name): string
     {
         $response = $this->http()
-            ->attach('file', (string) file_get_contents($path), $name, ['Content-Type' => $mime])
+            ->attach('file', $contents, $name, ['Content-Type' => $mime])
             ->post(self::GRAPH.'/'.config('services.whatsapp.phone_id').'/media', [
                 'messaging_product' => 'whatsapp',
                 'type' => $mime,

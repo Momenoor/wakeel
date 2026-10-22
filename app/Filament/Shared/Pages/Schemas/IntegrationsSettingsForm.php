@@ -2,6 +2,7 @@
 
 namespace App\Filament\Shared\Pages\Schemas;
 
+use App\Services\Attachments\CopyToAzure;
 use App\Services\MMS\CollectedEmailUndo;
 use App\Services\MMS\MatterReplyCollector;
 use App\Support\Integrations;
@@ -9,23 +10,29 @@ use BezhanSalleh\FilamentShield\Support\Utils;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * Settings → Integrations (the sections of that page): this office's own
- * Microsoft 365, Pusher, cron-job.org link and WhatsApp. Each is off until it
+ * Microsoft 365, Pusher, cron-job.org link, WhatsApp and Azure Blob Storage. Each is off until it
  * is filled in. Only the super admin sees the page — it holds the office's
  * keys. Saved secrets never come back to the page; a blank secret field keeps
  * the saved one.
  */
 class IntegrationsSettingsForm
 {
+    /** How many files "Copy the files to Azure" copies a click: well within a request's time. */
+    private const COPY_LIMIT = 200;
+
     /**
      * @return array<int, Section>
      */
@@ -103,7 +110,84 @@ class IntegrationsSettingsForm
                     TextInput::make(Integrations::WHATSAPP_PHONE)->label(__('Phone number ID'))->extraInputAttributes(['dir' => 'ltr']),
                     self::secret(Integrations::WHATSAPP_TOKEN, __('Access token')),
                 ]),
+
+            Section::make('Azure Blob Storage')
+                ->description(__('Your storage account in Azure (Storage account → Access keys) and a private container in it, where attached files, signatures and stamps are kept instead of on this server. They still open only through Wakeel, for whoever may see them.'))
+                ->icon(Heroicon::ServerStack)
+                ->headerActions([
+                    self::testAzureAction(),
+                    self::copyToAzureAction(),
+                    self::turnOff('azure', [Integrations::AZURE_ACCOUNT, Integrations::AZURE_KEY, Integrations::AZURE_CONTAINER, Integrations::AZURE_ATTACHMENTS]),
+                ])
+                ->columns(2)
+                ->schema([
+                    self::status('azure', fn (): bool => Integrations::azureOn()),
+                    TextInput::make(Integrations::AZURE_ACCOUNT)->label(__('Storage account name'))->extraInputAttributes(['dir' => 'ltr']),
+                    self::secret(Integrations::AZURE_KEY, __('Access key')),
+                    TextInput::make(Integrations::AZURE_CONTAINER)->label(__('Container'))->placeholder('wakeel')->extraInputAttributes(['dir' => 'ltr']),
+                    Toggle::make(Integrations::AZURE_ATTACHMENTS)
+                        ->label(__('Keep new files in Azure'))
+                        ->helperText(__('Those kept before stay on this server until copied ("Copy the files to Azure"); either way each opens from where it is.'))
+                        ->formatStateUsing(fn ($state): bool => (bool) $state)
+                        ->dehydrateStateUsing(fn ($state): string => $state ? '1' : '0')
+                        ->columnSpanFull(),
+                ]),
         ];
+    }
+
+    /** Whether the saved account can be written to and read from: a small file put, read back and deleted. */
+    private static function testAzureAction(): Action
+    {
+        return Action::make('testAzure')
+            ->label(__('Test connection'))
+            ->icon(Heroicon::Signal)
+            ->link()
+            ->visible(fn (): bool => Integrations::azureOn())
+            ->action(function (): void {
+                $disk = Storage::disk(Integrations::AZURE_DISK);
+                $path = 'wakeel-connection-test-'.Str::random(8).'.txt';
+
+                try {
+                    $disk->put($path, 'ok');
+                    $read = $disk->get($path);
+                    $disk->delete($path);
+                    throw_unless($read === 'ok', \RuntimeException::class, __('The file written could not be read back.'));
+
+                    Notification::make()->success()->title(__('Azure is connected: a file was written, read and deleted.'))->send();
+                } catch (Throwable $e) {
+                    Notification::make()->danger()->title(__('Azure could not be reached'))->body(Str::limit($e->getMessage(), 300))->persistent()->send();
+                }
+            });
+    }
+
+    /** The files kept on this server copied to Azure, a few hundred a click (attachments:to-azure does them all). */
+    private static function copyToAzureAction(): Action
+    {
+        return Action::make('copyToAzure')
+            ->label(__('Copy the files to Azure'))
+            ->icon(Heroicon::CloudArrowUp)
+            ->link()
+            ->visible(fn (): bool => Integrations::azureOn())
+            ->requiresConfirmation()
+            ->modalIcon(Heroicon::CloudArrowUp)
+            ->modalDescription(fn (): string => __('Files kept on this server: :count.', ['count' => CopyToAzure::remaining()]).' '
+                .__('Up to :limit are copied each time, each checked against its original before it opens from Azure. The originals stay on this server.', ['limit' => self::COPY_LIMIT]))
+            ->modalSubmitActionLabel(__('Copy'))
+            ->action(function (): void {
+                $stats = app(CopyToAzure::class)->run(self::COPY_LIMIT);
+                $left = CopyToAzure::remaining();
+
+                Notification::make()
+                    ->title(__(':count files copied to Azure.', ['count' => $stats['copied']]))
+                    ->body(collect([
+                        $left ? __('Still on this server: :count — copy again.', ['count' => $left]) : null,
+                        $stats['missing'] ? __('Not found on this server (left as they are): :count.', ['count' => $stats['missing']]) : null,
+                        $stats['errors'] ? __('Not copied: :errors', ['errors' => implode(' | ', array_slice($stats['errors'], 0, 5))]) : null,
+                    ])->filter()->implode(' '))
+                    ->{$stats['failed'] ? 'warning' : 'success'}()
+                    ->persistent()
+                    ->send();
+            });
     }
 
     private static function status(string $name, Closure $on): TextEntry

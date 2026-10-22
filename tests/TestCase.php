@@ -51,7 +51,9 @@ abstract class TestCase extends BaseTestCase
      * statics, and LastSeen guards itself with one: the first test that listed
      * users left its column object — with that test's rows — for every later
      * test, and "the users table shows last seen" failed only in a full run.
-     * Emptied here, the next boot registers them fresh.
+     * Emptied here, the next boot registers them fresh. The settings too: the
+     * next boot applies them (Integrations::apply) before its setUp clears
+     * them, so a service switched on in one test was on in the next.
      */
     protected function tearDown(): void
     {
@@ -62,6 +64,8 @@ abstract class TestCase extends BaseTestCase
         ] as [$class, $property, $empty]) {
             (new \ReflectionProperty($class, $property))->setValue(null, $empty);
         }
+
+        \App\Models\Setting::clearCache();
 
         parent::tearDown();
     }

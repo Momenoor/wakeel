@@ -9,7 +9,8 @@ use Throwable;
  * The office's own outside services, entered in Settings →
  * Integrations: Microsoft 365 (OneDrive, Outlook calendar, Microsoft 365
  * mailboxes), Pusher (live updates), the cron-job.org link (scheduled tasks
- * and the queue) and WhatsApp. Each office has its own; nothing is shared.
+ * and the queue), WhatsApp and Azure Blob Storage (where attached files are
+ * kept). Each office has its own; nothing is shared.
  *
  * Applied over the configuration on every request, ahead of .env (which
  * stays as the fallback for an installation set up before these settings).
@@ -40,15 +41,28 @@ class Integrations
 
     public const WHATSAPP_TOKEN = 'integration_whatsapp_token';
 
+    public const AZURE_ACCOUNT = 'integration_azure_account';
+
+    public const AZURE_KEY = 'integration_azure_key';
+
+    public const AZURE_CONTAINER = 'integration_azure_container';
+
+    /** "1": new attached files are kept in Azure (those before stay where they are until copied). */
+    public const AZURE_ATTACHMENTS = 'integration_azure_attachments';
+
+    /** The storage Azure is, once set (config/filesystems.php has no such disk until then). */
+    public const AZURE_DISK = 'azure';
+
     public const KEYS = [
         self::MS_TENANT, self::MS_CLIENT, self::MS_SECRET, self::MS_CALENDAR,
         self::PUSHER_APP, self::PUSHER_KEY, self::PUSHER_SECRET, self::PUSHER_CLUSTER,
         self::CRON_TOKEN,
         self::WHATSAPP_PHONE, self::WHATSAPP_TOKEN,
+        self::AZURE_ACCOUNT, self::AZURE_KEY, self::AZURE_CONTAINER, self::AZURE_ATTACHMENTS,
     ];
 
     /** Kept encrypted; a blank field on save leaves the saved one as it is. */
-    public const SECRETS = [self::MS_SECRET, self::PUSHER_SECRET, self::CRON_TOKEN, self::WHATSAPP_TOKEN];
+    public const SECRETS = [self::MS_SECRET, self::PUSHER_SECRET, self::CRON_TOKEN, self::WHATSAPP_TOKEN, self::AZURE_KEY];
 
     public static function get(string $key): string
     {
@@ -169,6 +183,32 @@ class Integrations
                 'services.whatsapp.token' => $whatsapp[1],
             ]);
         }
+
+        $azure = [self::get(self::AZURE_ACCOUNT), self::get(self::AZURE_KEY), self::get(self::AZURE_CONTAINER)];
+
+        if (! in_array('', $azure, true)) {
+            [$account, $key, $container] = $azure;
+
+            config(['filesystems.disks.'.self::AZURE_DISK => [
+                'driver' => 'azure-storage-blob',
+                'credential' => 'shared_key',
+                'account_name' => $account,
+                'account_key' => $key,
+                'container' => $container,
+                // Private: a file is only ever opened through Wakeel, after its checks.
+                'visibility' => 'private',
+            ]]);
+
+            // New attached files there; each one before keeps the storage it was saved in (Attachment::$disk).
+            if (self::get(self::AZURE_ATTACHMENTS) === '1') {
+                config(['attachments.disk' => self::AZURE_DISK]);
+            }
+        }
+    }
+
+    public static function azureOn(): bool
+    {
+        return is_array(config('filesystems.disks.'.self::AZURE_DISK));
     }
 
     public static function microsoftOn(): bool

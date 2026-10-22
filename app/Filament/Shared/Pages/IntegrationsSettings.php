@@ -10,7 +10,7 @@ use Filament\Support\Icons\Heroicon;
 
 /**
  * Settings → Integrations: this office's own Microsoft 365, Pusher, cron-job.org
- * link and WhatsApp, with the inbox checks the scheduled tasks run. Only the
+ * link, WhatsApp and Azure Blob Storage, with the inbox checks the scheduled tasks run. Only the
  * super admin sees it — it holds the office's keys.
  */
 class IntegrationsSettings extends SettingsFormPage
@@ -48,6 +48,12 @@ class IntegrationsSettings extends SettingsFormPage
             // Saved secrets stay on the server (empty here).
             ...collect(Integrations::KEYS)->mapWithKeys(fn (string $key): array => [$key => in_array($key, Integrations::SECRETS, true) ? null : Integrations::get($key)])->all(),
         ];
+    }
+
+    /** At once: the sections' status (and Azure's actions) read what was just saved. */
+    protected function saved(array $state): void
+    {
+        Integrations::apply();
     }
 
     protected function fields(): array

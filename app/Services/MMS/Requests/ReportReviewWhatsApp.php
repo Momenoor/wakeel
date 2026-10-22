@@ -96,7 +96,7 @@ class ReportReviewWhatsApp
 
             try {
                 if ($template->header === 'document' && $file !== null) {
-                    $mediaId ??= $this->whatsapp->upload($file['path'], $file['mime'], $file['name']);
+                    $mediaId ??= $this->whatsapp->upload((string) $file['attachment']->storage()->get($file['attachment']->path), $file['mime'], $file['name']);
                 }
 
                 $messageId = $this->whatsapp->sendTemplate(
@@ -125,7 +125,7 @@ class ReportReviewWhatsApp
      * The report of the current round (the request's own files first sent, or those added when it was
      * sent again): its first file, which goes in the message header.
      *
-     * @return array{path: string, mime: string, name: string}|null
+     * @return array{attachment: Attachment, mime: string, name: string}|null
      */
     private function reportFile(MatterRequest $request): ?array
     {
@@ -134,16 +134,16 @@ class ReportReviewWhatsApp
         $attachment = $request->attachments()->where('id', '>', $from)->oldest('id')->get()
             ->first(fn ($attachment) => $attachment->fileExists());
 
-        // Wherever it is kept: the private disk, or the public one for a file not moved yet.
+        // Read from wherever it is kept (here, the public disk for a file not moved yet, or Azure) when it is sent.
         return $attachment
-            ? ['path' => $attachment->storage()->path($attachment->path), 'mime' => (string) ($attachment->storage()->mimeType($attachment->path) ?: 'application/pdf'), 'name' => (string) ($attachment->name ?: basename($attachment->path))]
+            ? ['attachment' => $attachment, 'mime' => (string) ($attachment->storage()->mimeType($attachment->path) ?: 'application/pdf'), 'name' => (string) ($attachment->name ?: basename($attachment->path))]
             : null;
     }
 
     /**
      * What the template's parameters may hold: the matter's own placeholders, and these.
      *
-     * @param  array{path: string, mime: string, name: string}|null  $file
+     * @param  array{attachment: Attachment, mime: string, name: string}|null  $file
      * @return array<string, string>
      */
     private function values(MatterRequest $request, User $reviewer, ?array $file): array

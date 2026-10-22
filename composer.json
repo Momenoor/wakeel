@@ -10,6 +10,7 @@
         "ext-pdo": "*",
         "ext-zip": "*",
         "alizharb/filament-activity-log": "^2.0",
+        "azure-oss/storage-blob-laravel": "^2.2",
         "bezhansalleh/filament-shield": "^4.1",
         "craft-forge/filament-language-switcher": "*",
         "filament/actions": "^5.0",
