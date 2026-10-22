@@ -3,6 +3,7 @@
 namespace App\Services\MMS\Calendar;
 
 use App\Models\Matter;
+use Illuminate\Support\Collection;
 
 /**
  * Finds the matters an event title talks about, by the way the office
@@ -17,6 +18,9 @@ class MatterReferenceMatcher
 {
     /** The year the office's first matter was opened. */
     public const FIRST_YEAR = 2018;
+
+    /** Between a number and its year: "/", or "\" as some type it (shown the other way round in Arabic text). */
+    private const SLASH = '[/\\\\]';
 
     private const DIGITS = ['٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4', '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9',
         '۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4', '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9'];
@@ -38,14 +42,14 @@ class MatterReferenceMatcher
         // matches both number-first and year-first, and is still one matter.
         // [number group, year group, preference — lower wins]
         $patterns = [
-            // Number then year: 639/2025, 639 of 2025, 639 لسنة 2025. The
-            // number is not itself the end of a date (…/09/2026) and the year
-            // is not the start of a longer number.
-            ['~(?<![\d/])(\d{1,6})\s*(?:/|\bof\b|لسنة|لعام|سنة)\s*((?:19|20)\d{2})(?!\d)~iu', 1, 2, 0],
+            // Number then year: 639/2025, 639\2025, 639 of 2025, 639 لسنة 2025.
+            // The number is not itself the end of a date (…/09/2026) and the
+            // year is not the start of a longer number.
+            ['~(?<![\d/\\\\])(\d{1,6})\s*(?:'.self::SLASH.'|\bof\b|لسنة|لعام|سنة)\s*((?:19|20)\d{2})(?!\d)~iu', 1, 2, 0],
             // Number, dash, year: 3153-2026 — but not 29-09-2026 or 2026-09-29.
             ['~(?<![\d/\-–])(\d{1,6})\s*[-–]\s*((?:19|20)\d{2})(?![\d/\-–])~u', 1, 2, 0],
-            // Year then number: 2025/639 — but not 2026/09/29.
-            ['~(?<!\d)((?:19|20)\d{2})/(\d{1,6})(?![\d/])~u', 2, 1, 1],
+            // Year then number: 2025/639, 2025\639 — but not 2026/09/29.
+            ['~(?<!\d)((?:19|20)\d{2})'.self::SLASH.'(\d{1,6})(?![\d/\\\\])~u', 2, 1, 1],
             // Year, dash, number: 2026-3153 — but not 2026-09-29, nor a
             // year-month like 2026-09 (a matter number has no leading zero here).
             ['~(?<![\d/\-–])((?:19|20)\d{2})\s*[-–]\s*([1-9]\d{0,5})(?![\d/\-–])~u', 2, 1, 1],
@@ -80,6 +84,25 @@ class MatterReferenceMatcher
                     // office's number/year wins.
                     'rank' => $preference,
                 ];
+            }
+        }
+
+        // Several numbers of one year: "1323، 1332/2026", "1323 و 1332 لسنة 2026" — each of that year.
+        preg_match_all('~(?<![\d/\\\\])((?:\d{1,6}\s*(?:[،,&]|و)\s*)+)\d{1,6}\s*(?:'.self::SLASH.'|\bof\b|لسنة|لعام|سنة)\s*((?:19|20)\d{2})(?!\d)~iu', $text, $lists, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
+
+        foreach ($lists as $m) {
+            $year = (int) $m[2][0];
+
+            if ($year < self::FIRST_YEAR || $year > $thisYear) {
+                continue;
+            }
+
+            preg_match_all('~\d{1,6}~', $m[1][0], $numbers, PREG_OFFSET_CAPTURE);
+
+            foreach ($numbers[0] as [$number, $at]) {
+                if (! self::looksLikeYear($number)) {
+                    $spans[$m[1][1] + $at][] = ['number' => ltrim($number, '0') ?: '0', 'year' => $year, 'rank' => 0];
+                }
             }
         }
 
@@ -163,7 +186,7 @@ class MatterReferenceMatcher
      * normalised number.
      *
      * @param  list<array{number: string, year: int}>  $refs
-     * @return array<string, \Illuminate\Support\Collection<int, Matter>>
+     * @return array<string, Collection<int, Matter>>
      */
     public static function allMattersFor(array $refs): array
     {

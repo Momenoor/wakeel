@@ -512,6 +512,17 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertCount(1, $held->attachmentFiles());
     }
 
+    public function test_a_number_written_with_a_backslash_or_beside_another_of_its_year_says_which(): void
+    {
+        // The lawyer is on both: only the number can say which.
+        $this->collect($this->email(['message_id' => '<bs@albanna.ae>', 'subject' => 'Re: محضر اجتماع الخبرة في الدعوى 987\2026']));
+        $this->assertSame($this->second->id, MatterEmail::where('message_id', 'bs@albanna.ae')->value('matter_id'));
+
+        // "1000، 986/2026": 1000/2026 is no matter here, 986/2026 is.
+        $this->collect($this->email(['message_id' => '<list@albanna.ae>', 'subject' => 'الدعوتين رقم 1000، 986/2026']));
+        $this->assertSame($this->first->id, MatterEmail::where('message_id', 'list@albanna.ae')->value('matter_id'));
+    }
+
     public function test_a_file_named_without_an_extension_is_still_saved_in_onedrive(): void
     {
         // OneDrive refused "Scan 21-10." ("illegal characters"): the dot added before a missing extension.

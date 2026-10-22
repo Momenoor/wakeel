@@ -134,6 +134,16 @@ class CalendarMatterLinkingTest extends TestCase
             MatterReferenceMatcher::references('12/2024, 15/2024 (Dubai Courts)'),
         );
 
+        // A backslash for the slash, as some type it (Arabic text shows 1952\2026 as 2026\1952).
+        $this->travelTo(now()->setDate(2026, 10, 22));
+        $this->assertSame([['number' => '1952', 'year' => 2026]], MatterReferenceMatcher::references('محضر اجتماع الخبرة في الدعوى 1952\2026 استئناف تجاري دبي'));
+        $this->assertSame([['number' => '1952', 'year' => 2026]], MatterReferenceMatcher::references('الدعوى 2026\1952'));
+        $this->assertSame([], MatterReferenceMatcher::references('Hearing 29\09\2026'));
+        // Several numbers of one year, the year written once.
+        $this->assertSame([['number' => '1323', 'year' => 2026], ['number' => '1332', 'year' => 2026]], MatterReferenceMatcher::references('الدعوتين رقم 1323، 1332/2026 استئناف عمالي دبي'));
+        $this->assertSame([['number' => '1323', 'year' => 2026], ['number' => '1332', 'year' => 2026]], MatterReferenceMatcher::references('الدعويين 1323 و1332 لسنة 2026'));
+        $this->travelBack();
+
         // Dates are not matter numbers.
         $this->assertSame([], MatterReferenceMatcher::references('Hearing 29/09/2026'));
         $this->assertSame([], MatterReferenceMatcher::references('Review 2026/09/29'));
