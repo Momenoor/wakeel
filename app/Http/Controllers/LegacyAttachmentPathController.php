@@ -6,6 +6,7 @@ use App\Filament\Mms\Pages\UnfiledEmails;
 use App\Models\Attachment;
 use App\Models\BulkMailCampaign;
 use App\Support\Documents;
+use App\Support\StoredFile;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
@@ -38,7 +39,7 @@ class LegacyAttachmentPathController extends Controller
         abort_unless($disk !== null, 404);
         abort_unless(self::mayOpen($oldPath), 403);
 
-        return $disk->response($oldPath, basename($oldPath));
+        return StoredFile::response($disk, $oldPath, basename($oldPath));
     }
 
     private static function mayOpen(string $path): bool

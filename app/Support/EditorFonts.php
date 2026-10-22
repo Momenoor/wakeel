@@ -93,10 +93,11 @@ class EditorFonts
         return $this->faces()
             // The page fills the field, white to its edges.
             .' html { background: #fff; }'
-            .' body { box-sizing: border-box; background: #fff; color: #111827; margin: 0; padding: 12mm 14mm;'
+            // The sides as margins: the editor sets its own side padding (1px) on the body as it resizes.
+            .' body { box-sizing: border-box; background: #fff; color: #111827; margin: 0 14mm; padding: 12mm 0;'
             .' font-family: '.$family.'; font-size: 12pt; line-height: 1.55; text-align: justify; }'
             // A narrow screen keeps its width for the text.
-            .' @media (max-width: 640px) { body { padding: 16px; } }'
+            .' @media (max-width: 640px) { body { margin: 0 16px; padding: 16px 0; } }'
             .' p { margin: 0 0 6pt 0; }'
             .' ol, ul { margin: 0 0 6pt 0; padding-inline-start: 18pt; } li { margin-bottom: 3pt; }'
             .' h1 { font-size: 18pt; } h2 { font-size: 16pt; } h3 { font-size: 14pt; } h4 { font-size: 12pt; }'
@@ -135,7 +136,10 @@ class EditorFonts
     public function emailCss(): string
     {
         return $this->faces()
-            .' body { margin: 12px 16px; font-family: Calibri, Arial, Tahoma, sans-serif; font-size: 11pt; line-height: 1.5; color: #111827; }'
+            // Room inside the box: the text not against its edges (less on a phone). As margins: the editor
+            // sets its own side padding (1px) on the body as it resizes.
+            .' body { margin: 18px 24px; font-family: Calibri, Arial, Tahoma, sans-serif; font-size: 11pt; line-height: 1.5; color: #111827; }'
+            .' @media (max-width: 640px) { body { margin: 12px 14px; } }'
             .' p { margin: 0 0 8pt 0; } img { vertical-align: middle; }'
             .' table { border-collapse: collapse; } td, th { padding: 4px 6px; }'
             .self::markedCss();

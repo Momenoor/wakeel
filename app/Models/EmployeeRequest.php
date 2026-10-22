@@ -20,8 +20,9 @@ use Spatie\Activitylog\Support\LogOptions;
  * What an employee asks for (Human Resources → Employee requests): a loan or petty cash — how much, over how
  * many months, from which month's salary — or a certificate from a template, addressed to whom and why.
  * Decided like a leave request (in the panel, or from the office email's links), the approver able to change
- * what was asked. An approved loan becomes an advance (EmployeeLoan) only once the accountant confirms it was
- * paid — payroll deducts nothing for money not yet handed over; an approved certificate is issued at once,
+ * what was asked. An approved loan (petty cash, salary advance) becomes an advance (EmployeeLoan) only once the
+ * accountant confirms it was paid — payroll deducts nothing for money not yet handed over; a ticket advance,
+ * paid, is that year's flight ticket paid (payroll does not pay it again); an approved certificate is issued at once,
  * kept as its file (ownedAttachments).
  */
 #[ObservedBy(EmployeeRequestObserver::class)]
@@ -38,6 +39,7 @@ class EmployeeRequest extends Model implements AttachmentOwner
         'amount',
         'months',
         'starts_on',
+        'ticket_year',
         'letter_template_id',
         'addressed_to',
         'purpose',
@@ -49,6 +51,7 @@ class EmployeeRequest extends Model implements AttachmentOwner
         'paid_by',
         'payment_note',
         'employee_loan_id',
+        'flight_ticket_id',
         'reference',
     ];
 
@@ -59,6 +62,7 @@ class EmployeeRequest extends Model implements AttachmentOwner
             'status' => RequestStatus::class,
             'amount' => 'decimal:2',
             'months' => 'integer',
+            'ticket_year' => 'integer',
             'starts_on' => 'date',
             'approved_at' => 'datetime',
             'paid_on' => 'date',
@@ -94,6 +98,12 @@ class EmployeeRequest extends Model implements AttachmentOwner
     public function loan(): BelongsTo
     {
         return $this->belongsTo(EmployeeLoan::class, 'employee_loan_id');
+    }
+
+    /** The year's flight ticket it paid, once paid (a ticket advance). */
+    public function flightTicket(): BelongsTo
+    {
+        return $this->belongsTo(FlightTicket::class);
     }
 
     /** The certificate's template. */
@@ -144,7 +154,7 @@ class EmployeeRequest extends Model implements AttachmentOwner
     public function scopeAwaitingPayment(Builder $query): void
     {
         $query->where('status', RequestStatus::APPROVED->value)
-            ->whereIn('type', [EmployeeRequestType::LOAN->value, EmployeeRequestType::PETTY_CASH->value])
+            ->whereIn('type', EmployeeRequestType::moneyValues())
             ->whereNull('paid_on');
     }
 }

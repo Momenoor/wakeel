@@ -3,6 +3,7 @@
 namespace App\Services\MMS;
 
 use App\Enums\AttachmentCategory;
+use App\Enums\EmployeeRequestType;
 use App\Enums\LoanStatus;
 use App\Enums\NotificationChannel;
 use App\Enums\NotificationType;
@@ -12,6 +13,7 @@ use App\Mail\EmployeeRequestDecisionMail;
 use App\Models\Attachment;
 use App\Models\EmployeeLoan;
 use App\Models\EmployeeRequest;
+use App\Models\FlightTicket;
 use App\Models\User;
 use App\Services\Attachments\AttachmentService;
 use App\Services\MMS\Letters\LetterComposer;
@@ -45,9 +47,28 @@ class EmployeeRequestService
     public const PAY = 'Pay:EmployeeRequest';
 
     /** What an approver may change of what was asked. */
-    public const CHANGEABLE = ['amount', 'months', 'starts_on', 'letter_template_id', 'addressed_to', 'purpose'];
+    public const CHANGEABLE = ['amount', 'months', 'starts_on', 'ticket_year', 'letter_template_id', 'addressed_to', 'purpose'];
 
-    public function __construct(private LoanScheduleService $schedule) {}
+    public function __construct(private LoanScheduleService $schedule, private FlightTicketService $tickets) {}
+
+    /** What the employee earns a month now (their salary's components). */
+    public static function monthlySalary(int $partyId): float
+    {
+        return $partyId ? (float) app(PayrollService::class)->salaryAt($partyId, now())->sum() : 0.0;
+    }
+
+    /**
+     * Why it cannot be asked (or approved) as it is, if it cannot: a salary advance beyond the salary of its
+     * months; a ticket for a year with none due (not entitled, or that year's paid already).
+     */
+    public static function beyondLimit(EmployeeRequestType $type, int $partyId, float $amount, int $months, mixed $ticketYear): ?string
+    {
+        return match (true) {
+            $type === EmployeeRequestType::SALARY_ADVANCE && $amount > ($salary = self::monthlySalary($partyId)) * max(1, $months) => __('A salary advance can be at most the salary of its months: :amount.', ['amount' => number_format($salary * max(1, $months), 2)]),
+            $type === EmployeeRequestType::TICKET_ADVANCE && (blank($ticketYear) || FlightTicketService::amountFor($partyId, (int) $ticketYear) === null) => __('No flight ticket is due that year: not entitled to one, or it is paid already.'),
+            default => null,
+        };
+    }
 
     /**
      * @param  array<string, mixed>  $changes  of CHANGEABLE
@@ -61,6 +82,12 @@ class EmployeeRequestService
 
             if (filled($changes['starts_on'] ?? null)) {
                 $changes['starts_on'] = Carbon::parse($changes['starts_on'])->startOfMonth();
+            }
+
+            $asked = (clone $request)->fill($changes);
+
+            if ($error = self::beyondLimit($request->type, (int) $request->party_id, (float) $asked->amount, (int) ($asked->months ?: 1), $asked->ticket_year)) {
+                throw new RuntimeException($error);
             }
 
             $request->fill($changes)->forceFill([
@@ -100,16 +127,62 @@ class EmployeeRequestService
     }
 
     /**
-     * The money handed to the employee: the advance made, its instalments from the month approved — payroll
-     * deducts them from then on.
+     * The money handed to the employee: an advance made, its instalments from the month approved — payroll
+     * deducts them from then on; or, a ticket advance, that year's flight ticket paid (payroll does not pay
+     * it again).
      */
-    public function markPaid(EmployeeRequest $request, User $by, CarbonInterface $on, ?string $note = null): EmployeeLoan
+    public function markPaid(EmployeeRequest $request, User $by, CarbonInterface $on, ?string $note = null): EmployeeLoan|FlightTicket
     {
         if (! $request->awaitsPayment()) {
-            throw new RuntimeException(__('Only an approved loan or petty cash not yet paid can be marked paid.'));
+            throw new RuntimeException(__('Only an approved request for money not yet paid can be marked paid.'));
         }
 
-        $loan = DB::transaction(function () use ($request, $by, $on, $note): EmployeeLoan {
+        $paid = $request->type->isRepaid() ? $this->advance($request, $by, $on, $note) : $this->ticket($request, $by, $on, $note);
+
+        if ($user = $request->party?->user) {
+            Notifier::send(
+                NotificationType::EMPLOYEE_REQUEST_DECIDED,
+                [$user],
+                __(':type paid', ['type' => $request->type->getLabel()]),
+                $request->type->isRepaid()
+                    ? __(':amount AED paid on :date; deducted from your salary over :months months from :month.', [
+                        'amount' => number_format((float) $request->amount, 2),
+                        'date' => $on->format('d/m/Y'),
+                        'months' => $request->months,
+                        'month' => $request->starts_on?->format('m/Y'),
+                    ])
+                    : __(':amount AED paid on :date for your :year flight ticket.', ['amount' => number_format((float) $request->amount, 2), 'date' => $on->format('d/m/Y'), 'year' => $request->ticket_year]),
+                self::url($request, $user),
+                fn (Notification $n) => $n->status('success')->iconColor('success'),
+                [NotificationChannel::BELL, NotificationChannel::WHATSAPP],
+            );
+        }
+
+        return $paid;
+    }
+
+    /** A ticket advance paid: that year's flight ticket, paid directly. */
+    private function ticket(EmployeeRequest $request, User $by, CarbonInterface $on, ?string $note): FlightTicket
+    {
+        return DB::transaction(function () use ($request, $by, $on, $note): FlightTicket {
+            $ticket = $this->tickets->payInAdvance(
+                (int) $request->party_id,
+                (int) $request->ticket_year,
+                (float) $request->amount,
+                $on,
+                trim(__('Paid in advance — employee request #:id', ['id' => $request->getKey()]).($note ? ' — '.$note : '')),
+            );
+
+            $request->forceFill(['paid_on' => $on, 'paid_by' => $by->getKey(), 'payment_note' => $note, 'flight_ticket_id' => $ticket->getKey()])->save();
+
+            return $ticket;
+        });
+    }
+
+    /** Money recovered from the salary paid: the advance, its schedule from the month approved. */
+    private function advance(EmployeeRequest $request, User $by, CarbonInterface $on, ?string $note): EmployeeLoan
+    {
+        return DB::transaction(function () use ($request, $by, $on, $note): EmployeeLoan {
             $loan = EmployeeLoan::create([
                 'party_id' => $request->party_id,
                 'kind' => $request->type->loanKind(),
@@ -131,25 +204,6 @@ class EmployeeRequestService
 
             return $loan;
         });
-
-        if ($user = $request->party?->user) {
-            Notifier::send(
-                NotificationType::EMPLOYEE_REQUEST_DECIDED,
-                [$user],
-                __(':type paid', ['type' => $request->type->getLabel()]),
-                __(':amount AED paid on :date; deducted from your salary over :months months from :month.', [
-                    'amount' => number_format((float) $request->amount, 2),
-                    'date' => $on->format('d/m/Y'),
-                    'months' => $request->months,
-                    'month' => $request->starts_on?->format('m/Y'),
-                ]),
-                self::url($request, $user),
-                fn (Notification $n) => $n->status('success')->iconColor('success'),
-                [NotificationChannel::BELL, NotificationChannel::WHATSAPP],
-            );
-        }
-
-        return $loan;
     }
 
     /** The certificate issued from its template (again: in place of the one before), kept as its file. */
@@ -185,14 +239,16 @@ class EmployeeRequestService
     public static function rows(EmployeeRequest $request): array
     {
         $money = $request->type?->isMoney();
+        $repaid = $request->type?->isRepaid();
 
         return array_filter([
             __('Employee') => (string) $request->party?->name,
             __('Request') => (string) $request->type?->getLabel(),
+            __('Ticket of the year') => $request->type === EmployeeRequestType::TICKET_ADVANCE ? (string) $request->ticket_year : null,
             __('Amount (AED)') => $money ? number_format((float) $request->amount, 2) : null,
-            __('Months') => $money ? (string) $request->months : null,
-            __('First deduction from the salary of') => $money ? (string) $request->starts_on?->locale('ar')->translatedFormat('F Y') : null,
-            __('Instalments') => $money ? self::plan($request) : null,
+            __('Months') => $repaid ? (string) $request->months : null,
+            __('First deduction from the salary of') => $repaid ? (string) $request->starts_on?->locale('ar')->translatedFormat('F Y') : null,
+            __('Instalments') => $repaid ? self::plan($request) : null,
             __('Certificate') => $money ? null : (string) $request->template?->name,
             __('Addressed to') => $money ? null : (string) $request->addressed_to,
             __('Purpose') => $money ? null : (string) $request->purpose,

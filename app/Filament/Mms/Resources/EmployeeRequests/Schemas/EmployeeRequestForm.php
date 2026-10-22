@@ -8,6 +8,8 @@ use App\Filament\Mms\Resources\LeaveRequests\LeaveRequestResource;
 use App\Models\EmployeeRequest;
 use App\Models\LetterTemplate;
 use App\Models\Party;
+use App\Services\MMS\EmployeeRequestService;
+use App\Services\MMS\FlightTicketService;
 use App\Support\Currency;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -16,6 +18,7 @@ use Filament\Forms\Components\ToggleButtons;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Carbon;
@@ -74,8 +77,12 @@ class EmployeeRequestForm
                 ]),
             Section::make(__('Amount and repayment'))
                 ->columns(3)
-                ->visible(fn (Get $get): bool => (bool) $type($get)?->isMoney())
+                ->visible(fn (Get $get): bool => (bool) $type($get)?->isRepaid())
                 ->schema(self::moneyFields()),
+            Section::make(__('Flight ticket'))
+                ->columns(2)
+                ->visible(fn (Get $get): bool => $type($get) === EmployeeRequestType::TICKET_ADVANCE)
+                ->schema(self::ticketFields()),
             Section::make(__('Certificate'))
                 ->columns(2)
                 ->visible(fn (Get $get): bool => $type($get) === EmployeeRequestType::CERTIFICATE)
@@ -96,7 +103,11 @@ class EmployeeRequestForm
     public static function clean(array $data): array
     {
         $type = $data['type'] instanceof EmployeeRequestType ? $data['type'] : EmployeeRequestType::from((string) $data['type']);
-        $none = $type->isMoney() ? ['letter_template_id', 'addressed_to', 'purpose'] : ['amount', 'months', 'starts_on'];
+        $none = match (true) {
+            $type->isRepaid() => ['letter_template_id', 'addressed_to', 'purpose', 'ticket_year'],
+            $type === EmployeeRequestType::TICKET_ADVANCE => ['letter_template_id', 'addressed_to', 'purpose', 'months', 'starts_on'],
+            default => ['amount', 'months', 'starts_on', 'ticket_year'],
+        };
 
         foreach ($none as $field) {
             $data[$field] = null;
@@ -108,7 +119,16 @@ class EmployeeRequestForm
 
         if (! auth()->user()?->can('manageOthers', EmployeeRequest::class)) {
             $data['party_id'] = auth()->user()?->party?->getKey()
-                ?? throw ValidationException::withMessages(['party_id' => __('Your user account is not linked to an employee record, so you cannot file requests.')]);
+                ?? throw ValidationException::withMessages(['data.party_id' => __('Your user account is not linked to an employee record, so you cannot file requests.')]);
+        }
+
+        // A ticket: for what that year's ticket is, unless an amount was given.
+        if ($type === EmployeeRequestType::TICKET_ADVANCE && blank($data['amount'] ?? null) && filled($data['ticket_year'] ?? null)) {
+            $data['amount'] = FlightTicketService::amountFor((int) $data['party_id'], (int) $data['ticket_year']);
+        }
+
+        if ($error = EmployeeRequestService::beyondLimit($type, (int) $data['party_id'], (float) ($data['amount'] ?? 0), (int) ($data['months'] ?? 1), $data['ticket_year'] ?? null)) {
+            throw ValidationException::withMessages(['data.'.($type === EmployeeRequestType::TICKET_ADVANCE ? 'ticket_year' : 'amount') => $error]);
         }
 
         return $data;
@@ -148,6 +168,39 @@ class EmployeeRequestForm
                 ->label(__('Instalments'))
                 ->state(fn (Get $get) => EmployeeLoanForm::preview((float) $get('amount'), (int) $get('months')))
                 ->columnSpanFull(),
+            // A salary advance: what the salary is, which it may not go beyond over its months.
+            TextEntry::make('monthly_salary')
+                ->label(__('Monthly salary'))
+                ->state(fn (Get $get, ?EmployeeRequest $record): string => number_format(EmployeeRequestService::monthlySalary((int) ($record?->party_id ?? $get('party_id'))), 2))
+                ->visible(fn (Get $get, ?EmployeeRequest $record): bool => ($record?->type ?? EmployeeRequestType::tryFrom((string) ($get('type') instanceof EmployeeRequestType ? $get('type')->value : $get('type')))) === EmployeeRequestType::SALARY_ADVANCE)
+                ->columnSpanFull(),
+        ];
+    }
+
+    /**
+     * Which year's flight ticket, and its amount — what that year's ticket is, filled in as the year is chosen.
+     *
+     * @return array<int, mixed>
+     */
+    public static function ticketFields(): array
+    {
+        $party = fn (Get $get, ?EmployeeRequest $record): int => (int) ($record?->party_id ?? $get('party_id'));
+
+        return [
+            Select::make('ticket_year')
+                ->label(__('Ticket of the year'))
+                ->options(fn (): array => collect([now()->year, now()->year + 1])->mapWithKeys(fn (int $year): array => [$year => (string) $year])->all())
+                ->default(now()->year)
+                ->required()
+                ->live()
+                ->afterStateUpdated(fn ($state, Get $get, Set $set, ?EmployeeRequest $record) => $set('amount', filled($state) ? FlightTicketService::amountFor($party($get, $record), (int) $state) : null)),
+            TextInput::make('amount')
+                ->label(Currency::label(__('Amount (AED)')))
+                ->helperText(__('What the year\'s ticket is — paid now, it is not paid again with a salary.'))
+                ->numeric()
+                ->minValue(1)
+                // Left empty: what the year's ticket is (EmployeeRequestForm::clean).
+                ->default(fn (Get $get): ?float => filled($get('party_id')) ? FlightTicketService::amountFor((int) $get('party_id'), now()->year) : null),
         ];
     }
 

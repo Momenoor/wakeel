@@ -50,7 +50,11 @@ class EmployeeRequestActions
                 'starts_on' => $record->starts_on?->toDateString(),
             ])
             ->schema(fn (EmployeeRequest $record): array => [
-                ...($record->type === EmployeeRequestType::CERTIFICATE ? EmployeeRequestForm::certificateFields() : EmployeeRequestForm::moneyFields()),
+                ...match ($record->type) {
+                    EmployeeRequestType::CERTIFICATE => EmployeeRequestForm::certificateFields(),
+                    EmployeeRequestType::TICKET_ADVANCE => EmployeeRequestForm::ticketFields(),
+                    default => EmployeeRequestForm::moneyFields(),
+                },
                 Textarea::make('approved_comment')->label(__('Note'))->rows(2)->columnSpanFull(),
             ])
             ->modalWidth('2xl')
@@ -98,7 +102,7 @@ class EmployeeRequestActions
             ->modalSubmitActionLabel(__('Mark paid'))
             ->action(fn (EmployeeRequest $record, array $data) => self::attempt(
                 fn () => app(EmployeeRequestService::class)->markPaid($record, auth()->user(), Carbon::parse($data['paid_on']), $data['payment_note'] ?? null),
-                __('Marked paid: its instalments are deducted from the salary from the month approved.'),
+                $record->type->isRepaid() ? __('Marked paid: its instalments are deducted from the salary from the month approved.') : __('Marked paid: the year\'s flight ticket is paid, and not paid again with a salary.'),
             ));
     }
 

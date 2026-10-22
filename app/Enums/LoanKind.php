@@ -8,19 +8,21 @@ use Filament\Support\Contracts\HasLabel;
 /**
  * Advances recovered from salary.
  *
- * Both settle against the employee the same way; they differ only in which
+ * All settle against the employee the same way; they differ only in which
  * asset account the journal voucher clears.
  */
 enum LoanKind: string implements HasColor, HasLabel
 {
     case LOAN = 'loan';
     case PETTY_CASH = 'petty_cash';
+    case SALARY_ADVANCE = 'salary_advance';
 
     public function getLabel(): ?string
     {
         return match ($this) {
             self::LOAN => __('Staff Loan'),
             self::PETTY_CASH => __('Petty Cash'),
+            self::SALARY_ADVANCE => __('Salary advance'),
         };
     }
 
@@ -29,6 +31,7 @@ enum LoanKind: string implements HasColor, HasLabel
         return match ($this) {
             self::LOAN => 'warning',
             self::PETTY_CASH => 'info',
+            self::SALARY_ADVANCE => 'primary',
         };
     }
 
@@ -37,6 +40,7 @@ enum LoanKind: string implements HasColor, HasLabel
         return match ($this) {
             self::LOAN => 'Staff Loans Receivable',
             self::PETTY_CASH => 'Petty Cash Advances',
+            self::SALARY_ADVANCE => 'Salary Advances',
         };
     }
 }

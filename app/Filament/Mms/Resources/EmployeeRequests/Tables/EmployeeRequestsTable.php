@@ -35,9 +35,11 @@ class EmployeeRequestsTable
                 // What was asked: the money and its months, or the certificate and whom it is to.
                 TextColumn::make('details')
                     ->label(__('Details'))
-                    ->state(fn (EmployeeRequest $record): string => $record->type?->isMoney()
-                        ? __(':amount AED over :months months, from :month', ['amount' => number_format((float) $record->amount, 2), 'months' => $record->months, 'month' => $record->starts_on?->translatedFormat('F Y')])
-                        : trim($record->template?->name.' — '.$record->addressed_to, ' —'))
+                    ->state(fn (EmployeeRequest $record): string => match (true) {
+                        (bool) $record->type?->isRepaid() => __(':amount AED over :months months, from :month', ['amount' => number_format((float) $record->amount, 2), 'months' => $record->months, 'month' => $record->starts_on?->translatedFormat('F Y')]),
+                        $record->type === EmployeeRequestType::TICKET_ADVANCE => __(':amount AED — the :year ticket', ['amount' => number_format((float) $record->amount, 2), 'year' => $record->ticket_year]),
+                        default => trim($record->template?->name.' — '.$record->addressed_to, ' —'),
+                    })
                     ->wrap(),
                 TextColumn::make('status')
                     ->label(__('Status'))

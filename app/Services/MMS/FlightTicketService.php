@@ -155,6 +155,40 @@ class FlightTicketService
         ]);
     }
 
+    /**
+     * What a year's ticket is for an employee: the ticket already due, else what their profile entitles them
+     * to — null for one not entitled, or whose ticket that year is paid.
+     */
+    public static function amountFor(int $partyId, int $year): ?float
+    {
+        $ticket = FlightTicket::query()->where('party_id', $partyId)->where('year', $year)->first();
+
+        if ($ticket) {
+            return $ticket->isPaid() ? null : (float) $ticket->getAttribute('amount');
+        }
+
+        $profile = EmployeeProfile::query()->where('party_id', $partyId)->where('flight_ticket_entitled', true)->first();
+
+        return $profile && (float) $profile->getAttribute('flight_ticket_amount') > 0 ? (float) $profile->getAttribute('flight_ticket_amount') : null;
+    }
+
+    /**
+     * A year's ticket paid before it is due (an employee's ticket advance): the year's ticket made if it is not
+     * yet, for the amount paid, and marked paid directly — payroll does not pay it again.
+     */
+    public function payInAdvance(int $partyId, int $year, float $amount, CarbonInterface $on, ?string $note = null): FlightTicket
+    {
+        $ticket = FlightTicket::firstOrCreate(['party_id' => $partyId, 'year' => $year], ['amount' => $amount, 'is_prorated' => false]);
+
+        if (! $ticket->isPaid() && $ticket->getAttribute('payroll_run_id') === null) {
+            $ticket->update(['amount' => $amount]);
+        }
+
+        $this->markPaid($ticket, $on, $note);
+
+        return $ticket;
+    }
+
     private function create(EmployeeProfile $profile, int $year, float $amount, bool $prorated): int
     {
         $ticket = FlightTicket::firstOrCreate(

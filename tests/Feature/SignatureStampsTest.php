@@ -113,6 +113,9 @@ class SignatureStampsTest extends TestCase
 
         $this->actingAs($me);
         $this->get($mine->imageUrl())->assertOk()->assertHeader('Content-Type', 'image/png');
+        // Read from its storage (Azure: a second a request) once a day at most; the browser keeps it until it changes.
+        Storage::disk(SignatureStamp::disk())->delete($mine->path);
+        $this->get($mine->imageUrl())->assertOk()->assertHeader('Cache-Control', 'immutable, max-age=31536000, private');
         $this->get($theirs->imageUrl())->assertForbidden();
         $this->get($office->imageUrl())->assertForbidden();
 

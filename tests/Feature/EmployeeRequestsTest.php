@@ -19,6 +19,7 @@ use App\Models\EmployeeLoan;
 use App\Models\EmployeeProfile;
 use App\Models\EmployeeRequest;
 use App\Models\EmployeeSalaryComponent;
+use App\Models\FlightTicket;
 use App\Models\LetterTemplate;
 use App\Models\Party;
 use App\Models\Setting;
@@ -190,6 +191,67 @@ class EmployeeRequestsTest extends TestCase
         // The employee downloads it; another employee may not.
         $this->actingAs($this->employee)->get($certificate->url())->assertOk();
         $this->actingAs(User::factory()->create()->givePermissionTo(Permission::findOrCreate('View:EmployeeRequest')))->get($certificate->url())->assertForbidden();
+    }
+
+    public function test_a_salary_advance_is_at_most_the_salary_of_its_months_and_paid_back_from_it(): void
+    {
+        Mail::fake();
+        $this->actingAs($this->employee);
+
+        // 12,500 a month: 13,000 over one month is too much.
+        Livewire::test(CreateEmployeeRequest::class)
+            ->fillForm(['type' => EmployeeRequestType::SALARY_ADVANCE->value, 'amount' => 13000, 'months' => 1, 'starts_on' => '2026-11-01'])
+            ->assertSee('12,500.00')
+            ->call('create')
+            ->assertHasFormErrors(['amount']);
+
+        Livewire::test(CreateEmployeeRequest::class)
+            ->fillForm(['type' => EmployeeRequestType::SALARY_ADVANCE->value, 'amount' => 5000, 'months' => 1, 'starts_on' => '2026-11-01'])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $request = EmployeeRequest::sole();
+        $this->actingAs($this->approver);
+        Livewire::test(ViewEmployeeRequest::class, ['record' => $request->getKey()])->callAction('approve', ['amount' => 5000, 'months' => 1, 'starts_on' => '2026-11-01']);
+        $this->actingAs($this->accountant);
+        Livewire::test(ViewEmployeeRequest::class, ['record' => $request->getKey()])->callAction('markPaid', ['paid_on' => '2026-10-22']);
+
+        $loan = EmployeeLoan::sole();
+        $this->assertSame([LoanKind::SALARY_ADVANCE, '5000.00', '2026-11'], [$loan->kind, $loan->principal, $loan->installments()->value('due_period')]);
+    }
+
+    public function test_a_ticket_advance_pays_the_years_ticket_which_payroll_then_does_not_pay_again(): void
+    {
+        Mail::fake();
+        $this->party()->employeeProfile->update(['flight_ticket_entitled' => true, 'flight_ticket_amount' => 2800]);
+        $this->actingAs($this->employee);
+
+        // For what the year's ticket is.
+        Livewire::test(CreateEmployeeRequest::class)
+            ->fillForm(['type' => EmployeeRequestType::TICKET_ADVANCE->value, 'ticket_year' => 2026, 'amount' => null])
+            ->call('create')
+            ->assertHasNoFormErrors();
+        $request = EmployeeRequest::sole();
+        $this->assertSame(['2800.00', 2026, null], [$request->amount, $request->ticket_year, $request->months]);
+
+        $this->actingAs($this->approver);
+        Livewire::test(ViewEmployeeRequest::class, ['record' => $request->getKey()])->callAction('approve', ['ticket_year' => 2026, 'amount' => 2800]);
+        $this->actingAs($this->accountant);
+        Livewire::test(ViewEmployeeRequest::class, ['record' => $request->getKey()])->callAction('markPaid', ['paid_on' => '2026-10-22', 'payment_note' => 'Cash']);
+
+        // The year's ticket paid directly; nothing to deduct, nothing for payroll to pay.
+        $ticket = FlightTicket::sole();
+        $this->assertSame([2026, '2800.00', FlightTicket::PAID_VIA_DIRECT, '2026-10-22'], [$ticket->year, $ticket->amount, $ticket->paid_via, $ticket->paid_at->toDateString()]);
+        $this->assertSame($ticket->id, $request->fresh()->flight_ticket_id);
+        $this->assertSame(0, EmployeeLoan::count());
+        $this->assertSame(0, FlightTicket::unpaid()->count());
+
+        // Not asked for twice.
+        $this->actingAs($this->employee);
+        Livewire::test(CreateEmployeeRequest::class)
+            ->fillForm(['type' => EmployeeRequestType::TICKET_ADVANCE->value, 'ticket_year' => 2026, 'amount' => 2800])
+            ->call('create')
+            ->assertHasFormErrors(['ticket_year']);
     }
 
     public function test_leave_is_asked_for_from_here_too_on_its_own_form(): void
