@@ -119,7 +119,9 @@ class IntegrationsSettingsForm
                     self::testAzureAction(),
                     self::copyToAzureAction(),
                     self::removeLocalAction(),
-                    self::turnOff('azure', [Integrations::AZURE_ACCOUNT, Integrations::AZURE_KEY, Integrations::AZURE_CONTAINER, Integrations::AZURE_ATTACHMENTS]),
+                    // Not while files are kept there: they would no longer open.
+                    self::turnOff('azure', [Integrations::AZURE_ACCOUNT, Integrations::AZURE_KEY, Integrations::AZURE_CONTAINER, Integrations::AZURE_ATTACHMENTS])
+                        ->hidden(fn (): bool => CopyToAzure::anyInAzure()),
                 ])
                 ->columns(2)
                 ->schema([

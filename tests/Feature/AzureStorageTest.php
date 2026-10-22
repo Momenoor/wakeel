@@ -26,6 +26,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -160,6 +161,30 @@ class AzureStorageTest extends TestCase
         $this->actingAs(User::factory()->create());
         $this->get('/storage/'.$before)->assertForbidden();
         $this->get('/storage/email-unfiled/1/x.pdf')->assertForbidden();
+
+        // A file of no row anywhere else: nobody's to open.
+        Storage::disk('azure-public')->put('branding/other.pdf', 'x');
+        $this->get('/storage/branding/other.pdf')->assertForbidden();
+
+        // Azure holds files: it cannot be turned off (they would no longer open).
+        $this->assertTrue(CopyToAzure::anyInAzure());
+    }
+
+    public function test_a_deleted_evidence_files_copy_in_azure_opens_only_for_its_matters_people(): void
+    {
+        Storage::fake('public');
+        $matter = Matter::factory()->create();
+        $this->connect();
+        $path = app(SentEmailArchive::class)->keepFile($matter, 'محضر.pdf', '%PDF-old', 'application/pdf', '', auth()->id());
+        // Evidence, deleted: hidden, its file kept.
+        $file = Attachment::where('path', $path)->first();
+        $file->update(['category' => AttachmentCategory::TAX_INVOICE]);
+        $file->delete();
+        $this->assertSoftDeleted($file);
+
+        $this->get('/storage/'.$path)->assertOk();
+        $this->actingAs(User::factory()->create()->givePermissionTo(Permission::findOrCreate('View:UnfiledEmails')));
+        $this->get('/storage/'.$path)->assertForbidden();
     }
 
     public function test_asked_to_it_deletes_each_original_once_copied(): void

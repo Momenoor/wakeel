@@ -23,8 +23,14 @@ class CopyFilesToAzure implements ShouldQueue
     /** Set while it runs, so it is not started twice. */
     public const RUNNING = 'copy-to-azure.queued';
 
-    /** Each turn's time: the worker gives a job 35 seconds. */
-    private const SECONDS = 25;
+    /**
+     * Its own queue, taken after the others (CronWebhookRunner, bootstrap/app.php): emails and bulk mail are
+     * never kept waiting behind it.
+     */
+    public const QUEUE = 'azure';
+
+    /** Each turn's time: short, so the worker's call (about 40 seconds) is not run over by the last one. */
+    private const SECONDS = 15;
 
     public int $tries = 1;
 
@@ -32,7 +38,10 @@ class CopyFilesToAzure implements ShouldQueue
      * @param  int  $copied  files copied (or copies removed) in the turns before
      * @param  list<string>  $errors
      */
-    public function __construct(public ?int $userId = null, public int $copied = 0, public int $failed = 0, public array $errors = [], public bool $removeLocal = false) {}
+    public function __construct(public ?int $userId = null, public int $copied = 0, public int $failed = 0, public array $errors = [], public bool $removeLocal = false)
+    {
+        $this->onQueue(self::QUEUE);
+    }
 
     /** Started, unless it already runs. Whether it was. */
     public static function start(?int $userId, bool $removeLocal = false): bool
@@ -72,16 +81,17 @@ class CopyFilesToAzure implements ShouldQueue
         $this->copied += $done;
         $this->failed = $stats['failed'];
         $this->errors = array_slice($stats['errors'], 0, 5);
-        $left = $this->removeLocal ? count(CopyToAzure::leftHere()) : CopyToAzure::remaining();
 
         // On while each turn does something; what cannot be done is left, not tried for ever.
-        if ($left > 0 && $done > 0) {
+        if ($done > 0) {
             self::dispatch($this->userId, $this->copied, $this->failed, $this->errors, $this->removeLocal);
 
             return;
         }
 
         Cache::forget(self::RUNNING);
+        // Counted once, at the end.
+        $left = $this->removeLocal ? count(CopyToAzure::leftHere()) : CopyToAzure::remaining();
 
         if ($user = $this->userId ? User::find($this->userId) : null) {
             Notification::make()

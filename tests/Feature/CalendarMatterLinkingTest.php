@@ -147,6 +147,9 @@ class CalendarMatterLinkingTest extends TestCase
         // Several numbers of one year, the year written once.
         $this->assertSame([['number' => '1323', 'year' => 2026], ['number' => '1332', 'year' => 2026]], MatterReferenceMatcher::references('الدعوتين رقم 1323، 1332/2026 استئناف عمالي دبي'));
         $this->assertSame([['number' => '1323', 'year' => 2026], ['number' => '1332', 'year' => 2026]], MatterReferenceMatcher::references('الدعويين 1323 و1332 لسنة 2026'));
+        // Only numbers like the one with the year: a circuit or a room before it is no matter.
+        $this->assertSame([['number' => '1332', 'year' => 2026]], MatterReferenceMatcher::references('الدائرة 5، 1332/2026'));
+        $this->assertSame([['number' => '1332', 'year' => 2026]], MatterReferenceMatcher::references('Room 12, 1332/2026'));
         $this->travelBack();
 
         // Dates are not matter numbers.

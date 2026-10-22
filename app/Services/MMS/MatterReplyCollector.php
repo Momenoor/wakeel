@@ -656,8 +656,10 @@ class MatterReplyCollector
      *
      * @return array{pdf: bool, eml: bool, attachments: int}
      */
-    public function regenerate(MatterEmail $email): array
+    public function regenerate(MatterEmail $email, ?int $userId = null): array
     {
+        $userId ??= auth()->id();
+
         abort_if($email->direction !== MatterEmail::RECEIVED, 422);
 
         $message = $this->findMessage($email)
@@ -724,7 +726,7 @@ class MatterReplyCollector
                 Attachment::query()->where('path', $path)->get()->each->forceDelete();
                 Documents::delete($path);
             } elseif (! $saved && $path === null) {
-                $path = $this->archive->keepFile($matter, $fileName, $contents, (string) ($file['mime'] ?? 'application/octet-stream'), '', auth()->id(), inOneDrive: $ignored);
+                $path = $this->archive->keepFile($matter, $fileName, $contents, (string) ($file['mime'] ?? 'application/octet-stream'), '', $userId, inOneDrive: $ignored);
             } elseif (! $saved) {
                 $replace($path, $contents);
             }

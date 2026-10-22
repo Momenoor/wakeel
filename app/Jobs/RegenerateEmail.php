@@ -15,7 +15,7 @@ class RegenerateEmail extends EmailJob
 {
     protected function work(MatterEmail $email): ?Notification
     {
-        $done = app(MatterReplyCollector::class)->regenerate($email);
+        $done = app(MatterReplyCollector::class)->regenerate($email, $this->userId);
 
         return Notification::make()
             ->success()

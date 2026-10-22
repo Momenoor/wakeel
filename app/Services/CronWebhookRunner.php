@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\CopyFilesToAzure;
 use App\Services\Updater\Updater;
 use Illuminate\Console\Scheduling\CallbackEvent;
 use Illuminate\Console\Scheduling\Event;
@@ -198,7 +199,7 @@ class CronWebhookRunner
         $output = new BufferedOutput;
 
         Artisan::call('queue:work', [
-            '--queue' => 'default,mail',
+            '--queue' => 'default,mail,'.CopyFilesToAzure::QUEUE,
             '--stop-when-empty' => true,
             '--max-time' => $seconds,
             '--tries' => 3,

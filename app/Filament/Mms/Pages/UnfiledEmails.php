@@ -211,7 +211,7 @@ class UnfiledEmails extends Page implements HasTable
                     ->label(__('Subject'))
                     ->searchable()
                     ->weight('bold')
-                    ->description(fn (MatterEmail $record): ?string => EmailJob::note($record))
+                    ->description(fn (MatterEmail $record): ?string => EmailJob::note($record, $this->getTableRecords()))
 
                     ->wrap(),
                 TextColumn::make('candidates')
@@ -260,7 +260,8 @@ class UnfiledEmails extends Page implements HasTable
                             default => null,
                         };
                     })
-                    ->hidden(fn (MatterEmail $record): bool => EmailJob::busy((int) $record->getKey()) !== null),
+                    ->databaseTransaction(false)
+                    ->hidden(fn (MatterEmail $record): bool => EmailJob::busy((int) $record->getKey(), $this->getTableRecords()) !== null),
 
                 Action::make('ignore')
                     ->label(__('Ignore sender'))

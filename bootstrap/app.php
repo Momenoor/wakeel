@@ -95,7 +95,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // simply finds nothing to do.
         // What it worked on (each job, DONE or FAIL) goes to a log file of its
         // own, one per day, instead of being thrown away.
-        $schedule->command('queue:work --queue=default,mail --stop-when-empty --max-time=50 --tries=3 --timeout=45')
+        $schedule->command('queue:work --queue=default,mail,azure --stop-when-empty --max-time=50 --tries=3 --timeout=45')
             ->everyMinute()
             ->withoutOverlapping(5)
             ->runInBackground()

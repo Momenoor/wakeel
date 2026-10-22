@@ -97,7 +97,7 @@ class EmailsRelationManager extends RelationManager
                 TextColumn::make('subject')
                     ->label(__('Subject'))
                     ->weight('bold')
-                    ->description(fn (MatterEmail $record): ?string => EmailJob::note($record))
+                    ->description(fn (MatterEmail $record): ?string => EmailJob::note($record, $this->getTableRecords()))
 
                     ->searchable()
                     ->wrap(),

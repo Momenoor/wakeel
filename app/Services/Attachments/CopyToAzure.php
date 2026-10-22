@@ -108,6 +108,17 @@ class CopyToAzure
         return array_keys($paths);
     }
 
+    /** Whether any file is kept in Azure (then Azure cannot be turned off: they would no longer open). */
+    public static function anyInAzure(): bool
+    {
+        $azure = [Integrations::AZURE_DISK, Integrations::AZURE_PUBLIC_DISK];
+
+        // The emails' files of no row (unfiled ones) by what is under public/ there; Azure unreachable: taken to hold some.
+        return once(fn (): bool => DB::table('attachments')->whereIn('disk', $azure)->exists()
+            || DB::table('signature_stamps')->whereIn('disk', $azure)->exists()
+            || (Integrations::azureOn() && rescue(fn (): bool => Storage::disk(Integrations::AZURE_PUBLIC_DISK)->directories() !== [], true, report: false)));
+    }
+
     /**
      * Where the files are, by kind: in Azure, and on this server.
      *

@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\MatterEmail;
 use App\Models\User;
 use Filament\Notifications\Notification;
+use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
@@ -36,6 +37,9 @@ abstract class EmailJob implements ShouldQueue
     /** What came of it, when done at once: shown on the page. */
     private ?Notification $outcome = null;
 
+    /** @var array<int, ?string> the flags read in this request (busy()), kept as this process changes them */
+    private static array $known = [];
+
     /** @param  bool  $tell  whether whoever started it is told in their notifications (not when done at once) */
     public function __construct(public int $emailId, public ?int $userId = null, public bool $tell = true) {}
 
@@ -55,6 +59,8 @@ abstract class EmailJob implements ShouldQueue
             return self::BUSY;
         }
 
+        self::$known[$this->emailId] = $this->doing();
+
         if (config('queue.default') === 'sync') {
             $this->tell = false;
             $this->handle();
@@ -68,20 +74,44 @@ abstract class EmailJob implements ShouldQueue
         return self::QUEUED;
     }
 
-    /** What is being done to the email now, if anything ("Being filed…"). */
-    public static function busy(int $emailId): ?string
+    /**
+     * What is being done to the email now, if anything ("Being filed…"). Given the emails of the page it is
+     * on, read for all of them at once — not row by row (the cache is a table).
+     *
+     * @param  iterable<MatterEmail>|null  $page
+     */
+    public static function busy(int $emailId, ?iterable $page = null): ?string
     {
-        $doing = Cache::get(self::key($emailId));
+        if (! array_key_exists($emailId, self::$known)) {
+            $ids = collect($page instanceof Paginator ? $page->items() : ($page ?? []))->map(fn (MatterEmail $email): int => (int) $email->getKey())->push($emailId)->unique()->values();
+            $flags = Cache::many($ids->map(fn (int $id): string => self::key($id))->all());
 
-        return is_string($doing) ? $doing : null;
+            foreach ($ids as $id) {
+                self::$known[$id] = is_string($flags[self::key($id)] ?? null) ? $flags[self::key($id)] : null;
+            }
+        }
+
+        return self::$known[$emailId];
     }
 
-    /** Under an email's subject in a list: what is being done to it now, else how many files it came with. */
-    public static function note(MatterEmail $email): ?string
+    /**
+     * Under an email's subject in a list: what is being done to it now, else how many files it came with.
+     *
+     * @param  iterable<MatterEmail>|null  $page  the emails of its page
+     */
+    public static function note(MatterEmail $email, ?iterable $page = null): ?string
     {
         $files = count($email->attachmentFiles());
 
-        return self::busy((int) $email->getKey()) ?? ($files ? trans_choice(':count file|:count files', $files, ['count' => $files]) : null);
+        return self::busy((int) $email->getKey(), $page) ?? ($files ? trans_choice(':count file|:count files', $files, ['count' => $files]) : null);
+    }
+
+    /** The worker died on it (past its time): the email freed, and whoever started it told. */
+    public function failed(?Throwable $e = null): void
+    {
+        $this->free();
+        $this->tell = true;
+        $this->told(Notification::make()->danger()->title($this->failedTitle())->body($e?->getMessage()));
     }
 
     public function handle(): void
@@ -95,8 +125,14 @@ abstract class EmailJob implements ShouldQueue
 
             $this->told(Notification::make()->danger()->title($this->failedTitle())->body($e->getMessage()));
         } finally {
-            Cache::forget(self::key($this->emailId));
+            $this->free();
         }
+    }
+
+    private function free(): void
+    {
+        Cache::forget(self::key($this->emailId));
+        self::$known[$this->emailId] = null;
     }
 
     private function told(?Notification $notification): void

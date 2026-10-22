@@ -37,6 +37,6 @@ class RegenerateEmailAction
                 EmailJob::QUEUED => Notification::make()->success()->title(__('Being made again: you are told in the bell when it is done.'))->send(),
                 default => null,
             })
-            ->hidden(fn (MatterEmail $record): bool => EmailJob::busy((int) $record->getKey()) !== null);
+            ->hidden(fn (MatterEmail $record, $livewire): bool => EmailJob::busy((int) $record->getKey(), method_exists($livewire, 'getTableRecords') ? $livewire->getTableRecords() : null) !== null);
     }
 }

@@ -87,11 +87,13 @@ class MatterReferenceMatcher
             }
         }
 
-        // Several numbers of one year: "1323، 1332/2026", "1323 و 1332 لسنة 2026" — each of that year.
-        preg_match_all('~(?<![\d/\\\\])((?:\d{1,6}\s*(?:[،,&]|و)\s*)+)\d{1,6}\s*(?:'.self::SLASH.'|\bof\b|لسنة|لعام|سنة)\s*((?:19|20)\d{2})(?!\d)~iu', $text, $lists, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
+        // Several numbers of one year: "1323، 1332/2026", "1323 و 1332 لسنة 2026" — each of that year. Only
+        // numbers like the last one (three digits or more, at most one fewer): "الدائرة 5، 1332/2026" is no 5/2026.
+        preg_match_all('~(?<![\d/\\\\])((?:\d{1,6}\s*(?:[،,&]|و)\s*)+)(\d{1,6})\s*(?:'.self::SLASH.'|\bof\b|لسنة|لعام|سنة)\s*((?:19|20)\d{2})(?!\d)~iu', $text, $lists, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
 
         foreach ($lists as $m) {
-            $year = (int) $m[2][0];
+            $year = (int) $m[3][0];
+            $digits = strlen(ltrim($m[2][0], '0'));
 
             if ($year < self::FIRST_YEAR || $year > $thisYear) {
                 continue;
@@ -100,8 +102,8 @@ class MatterReferenceMatcher
             preg_match_all('~\d{1,6}~', $m[1][0], $numbers, PREG_OFFSET_CAPTURE);
 
             foreach ($numbers[0] as [$number, $at]) {
-                if (! self::looksLikeYear($number)) {
-                    $spans[$m[1][1] + $at][] = ['number' => ltrim($number, '0') ?: '0', 'year' => $year, 'rank' => 0];
+                if (! self::looksLikeYear($number) && strlen($plain = ltrim($number, '0')) >= max(3, $digits - 1)) {
+                    $spans[$m[1][1] + $at][] = ['number' => $plain, 'year' => $year, 'rank' => 0];
                 }
             }
         }

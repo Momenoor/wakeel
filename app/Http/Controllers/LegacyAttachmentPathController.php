@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Filament\Mms\Pages\UnfiledEmails;
 use App\Models\Attachment;
+use App\Models\BulkMailCampaign;
 use App\Support\Documents;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -14,7 +16,9 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  *  - the old address of a file attached before the private disk existed — once `php artisan attachments:move`
  *    has taken it away, a signed-in user who may see the file is sent to its new address;
  *  - a document of the system's now in Azure (App\Support\Documents) — sent from there, to whoever may see
- *    it: its attachment's people, or (an email not filed yet) those who file emails.
+ *    it: the people of its attachment (deleted or not — the file of a deleted one stays); with no attachment,
+ *    an email not filed yet (email-unfiled/) to those who file emails, a campaign's reply of no matter
+ *    (email-replies/) to those who see campaigns, and nothing else to anyone.
  * (A file still on the public disk is served by the web server itself and never gets here.)
  */
 class LegacyAttachmentPathController extends Controller
@@ -32,13 +36,20 @@ class LegacyAttachmentPathController extends Controller
 
         $disk = Documents::storage($oldPath);
         abort_unless($disk !== null, 404);
-
-        $attachments = Attachment::query()->where('path', $oldPath)->limit(5)->get();
-        abort_unless(
-            $attachments->isEmpty() ? UnfiledEmails::canAccess() : $attachments->contains(fn (Attachment $attachment): bool => Gate::allows('view', $attachment)),
-            403,
-        );
+        abort_unless(self::mayOpen($oldPath), 403);
 
         return $disk->response($oldPath, basename($oldPath));
+    }
+
+    private static function mayOpen(string $path): bool
+    {
+        $attachments = Attachment::withTrashed()->where('path', $path)->limit(5)->get();
+
+        return match (true) {
+            $attachments->isNotEmpty() => $attachments->contains(fn (Attachment $attachment): bool => Gate::allows('view', $attachment)),
+            Str::startsWith($path, 'email-unfiled/') => UnfiledEmails::canAccess(),
+            Str::startsWith($path, 'email-replies/') => Gate::allows('viewAny', BulkMailCampaign::class),
+            default => false,
+        };
     }
 }

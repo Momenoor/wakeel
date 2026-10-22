@@ -2,8 +2,14 @@
 
 namespace Tests;
 
+use App\Filament\Shared\Users\LastSeen;
+use App\Jobs\EmailJob;
+use App\Models\Setting;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Illuminate\Support\Facades\Storage;
 use RuntimeException;
+use TomatoPHP\FilamentUsers\Filament\Resources\Users\Schemas\UserInfolist;
+use TomatoPHP\FilamentUsers\Filament\Resources\Users\Tables\UsersTable;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -28,10 +34,10 @@ abstract class TestCase extends BaseTestCase
         // Settings are kept in a static for the request; between tests that
         // static outlived the database, and one test's setting (Word's font)
         // turned up in the next.
-        \App\Models\Setting::clearCache();
+        Setting::clearCache();
 
         // Attached files go to the private disk: never the real one from a test.
-        \Illuminate\Support\Facades\Storage::fake('attachments');
+        Storage::fake('attachments');
 
         $connection = config('database.default');
         $database = config("database.connections.{$connection}.database");
@@ -58,14 +64,15 @@ abstract class TestCase extends BaseTestCase
     protected function tearDown(): void
     {
         foreach ([
-            [\TomatoPHP\FilamentUsers\Filament\Resources\Users\Tables\UsersTable::class, 'columns', []],
-            [\TomatoPHP\FilamentUsers\Filament\Resources\Users\Schemas\UserInfolist::class, 'schema', []],
-            [\App\Filament\Shared\Users\LastSeen::class, 'registered', false],
+            [UsersTable::class, 'columns', []],
+            [UserInfolist::class, 'schema', []],
+            [LastSeen::class, 'registered', false],
+            [EmailJob::class, 'known', []],
         ] as [$class, $property, $empty]) {
             (new \ReflectionProperty($class, $property))->setValue(null, $empty);
         }
 
-        \App\Models\Setting::clearCache();
+        Setting::clearCache();
 
         parent::tearDown();
     }
