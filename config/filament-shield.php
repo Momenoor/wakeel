@@ -223,11 +223,13 @@ return [
             ],
             LeaveRequestResource::class => [
                 'approve',
+                'viewAll',
             ],
             // Decide them; confirm the money paid.
             EmployeeRequestResource::class => [
                 'approve',
                 'pay',
+                'viewAll',
             ],
             PayrollRunResource::class => [
                 'generate',

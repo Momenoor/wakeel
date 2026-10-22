@@ -7,8 +7,9 @@ use App\Models\User;
 use App\Services\MMS\EmployeeRequestService;
 
 /**
- * Employee requests: each employee their own — made, seen, and changed or withdrawn while pending; whoever
- * decides them (Approve) and whoever pays them (Pay) everyone's.
+ * Employee requests: each employee their own — made, seen, and changed or withdrawn while pending; everyone's
+ * only for a role given to see them all (ViewAll) — given at first to those who decide them (Approve) and
+ * pay them (Pay), and changed in Roles.
  */
 class EmployeeRequestPolicy
 {
@@ -47,10 +48,16 @@ class EmployeeRequestPolicy
         return $user->can(EmployeeRequestService::PAY);
     }
 
-    /** Sees and files everyone's: who decides them, and who pays them. */
+    /** Sees everyone's, and files for others. */
+    public function viewAll(User $user): bool
+    {
+        return $user->can(EmployeeRequestService::VIEW_ALL);
+    }
+
+    /** Sees and files everyone's (viewAll). */
     public function manageOthers(User $user): bool
     {
-        return $user->can(EmployeeRequestService::APPROVE) || $user->can(EmployeeRequestService::PAY);
+        return $this->viewAll($user);
     }
 
     private function isOwn(User $user, EmployeeRequest $request): bool

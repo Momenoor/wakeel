@@ -9,6 +9,7 @@ use App\Enums\LoanStatus;
 use App\Enums\NotificationType;
 use App\Enums\RequestStatus;
 use App\Enums\SalaryComponent;
+use App\Filament\Mms\Resources\EmployeeRequests\EmployeeRequestResource;
 use App\Filament\Mms\Resources\EmployeeRequests\Pages\CreateEmployeeRequest;
 use App\Filament\Mms\Resources\EmployeeRequests\Pages\ListEmployeeRequests;
 use App\Filament\Mms\Resources\EmployeeRequests\Pages\ViewEmployeeRequest;
@@ -20,6 +21,7 @@ use App\Models\EmployeeProfile;
 use App\Models\EmployeeRequest;
 use App\Models\EmployeeSalaryComponent;
 use App\Models\FlightTicket;
+use App\Models\LeaveRequest;
 use App\Models\LetterTemplate;
 use App\Models\Party;
 use App\Models\Setting;
@@ -65,8 +67,8 @@ class EmployeeRequestsTest extends TestCase
         EmployeeSalaryComponent::create(['party_id' => $party->id, 'component' => SalaryComponent::BASIC->value, 'amount' => 8000, 'effective_from' => '2021-03-01']);
         EmployeeSalaryComponent::create(['party_id' => $party->id, 'component' => SalaryComponent::HOUSING->value, 'amount' => 4500, 'effective_from' => '2021-03-01']);
 
-        $this->approver = User::factory()->create(['email' => 'hr@office.test'])->givePermissionTo($permissions('ViewAny:EmployeeRequest', 'View:EmployeeRequest', 'Approve:EmployeeRequest'));
-        $this->accountant = User::factory()->create(['email' => 'accounts@office.test'])->givePermissionTo($permissions('ViewAny:EmployeeRequest', 'View:EmployeeRequest', 'Pay:EmployeeRequest'));
+        $this->approver = User::factory()->create(['email' => 'hr@office.test'])->givePermissionTo($permissions('ViewAny:EmployeeRequest', 'View:EmployeeRequest', 'Approve:EmployeeRequest', 'ViewAll:EmployeeRequest'));
+        $this->accountant = User::factory()->create(['email' => 'accounts@office.test'])->givePermissionTo($permissions('ViewAny:EmployeeRequest', 'View:EmployeeRequest', 'Pay:EmployeeRequest', 'ViewAll:EmployeeRequest'));
     }
 
     private function party(): Party
@@ -252,6 +254,32 @@ class EmployeeRequestsTest extends TestCase
             ->fillForm(['type' => EmployeeRequestType::TICKET_ADVANCE->value, 'ticket_year' => 2026, 'amount' => 2800])
             ->call('create')
             ->assertHasFormErrors(['ticket_year']);
+    }
+
+    public function test_everyones_requests_only_for_a_role_given_to_see_them_all(): void
+    {
+        $own = EmployeeRequest::create(['party_id' => $this->party()->id, 'type' => EmployeeRequestType::PETTY_CASH, 'status' => RequestStatus::PENDING, 'amount' => 200, 'months' => 1, 'starts_on' => '2026-11-01']);
+        $colleague = User::factory()->create()->givePermissionTo(Permission::findOrCreate('ViewAny:EmployeeRequest'), Permission::findOrCreate('View:EmployeeRequest'), Permission::findOrCreate('Approve:EmployeeRequest'));
+        $theirs = EmployeeRequest::create(['party_id' => Party::factory()->employee()->create(['user_id' => $colleague->id])->id, 'type' => EmployeeRequestType::PETTY_CASH, 'status' => RequestStatus::PENDING, 'amount' => 300, 'months' => 1, 'starts_on' => '2026-11-01']);
+
+        // Approving is not seeing all: their own only, and nothing of the others' to count.
+        $this->actingAs($colleague);
+        Livewire::test(ListEmployeeRequests::class)->assertCanSeeTableRecords([$theirs])->assertCanNotSeeTableRecords([$own]);
+        $this->assertFalse($colleague->can('view', $own));
+        $this->assertNull(EmployeeRequestResource::getNavigationBadge());
+
+        // Given to see them all: everyone's.
+        $this->actingAs($this->approver);
+        Livewire::test(ListEmployeeRequests::class)->assertCanSeeTableRecords([$own, $theirs]);
+
+        // Leave alike: approving it is not seeing everyone's.
+        $leave = LeaveRequest::create(['party_id' => $this->party()->id, 'status' => RequestStatus::PENDING, 'start_date' => '2026-11-10', 'end_date' => '2026-11-12']);
+        $colleague->givePermissionTo(Permission::findOrCreate('ViewAny:LeaveRequest'), Permission::findOrCreate('Approve:LeaveRequest'));
+        $this->actingAs($colleague->fresh());
+        $this->assertSame(0, LeaveRequestResource::getEloquentQuery()->whereKey($leave->id)->count());
+        $colleague->givePermissionTo(Permission::findOrCreate('ViewAll:LeaveRequest'));
+        $this->actingAs($colleague->fresh());
+        $this->assertSame(1, LeaveRequestResource::getEloquentQuery()->whereKey($leave->id)->count());
     }
 
     public function test_leave_is_asked_for_from_here_too_on_its_own_form(): void

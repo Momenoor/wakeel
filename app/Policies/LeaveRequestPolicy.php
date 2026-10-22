@@ -77,17 +77,19 @@ class LeaveRequestPolicy
     }
 
     /**
-     * Whether this user acts for the office rather than only for themselves.
+     * Whether this user sees everyone's requests and files for others, rather than only their own.
      *
-     * Everyone else may file a request against their own party and see their own
-     * requests, and nothing else. Deliberately the same permission that decides
-     * requests: the people who approve leave here are the people who file it on
-     * behalf of others and who need to see everybody's. A second permission would
-     * be one more thing to keep in step with the first, and the failure mode of
-     * them drifting apart is an employee reading a colleague's sick note.
+     * Its own permission (ViewAll), not approving's: only a role given it sees everybody's — given at first
+     * to those who approve leave, and changed in Roles. Everyone else files against their own party and
+     * sees their own requests, and nothing else (an employee never reads a colleague's sick note).
      */
+    public function viewAll(AuthUser $authUser): bool
+    {
+        return $authUser->can('ViewAll:LeaveRequest');
+    }
+
     public function manageOthers(AuthUser $authUser): bool
     {
-        return $authUser->can('Approve:LeaveRequest');
+        return $this->viewAll($authUser);
     }
 }

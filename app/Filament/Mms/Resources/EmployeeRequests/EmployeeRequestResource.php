@@ -58,7 +58,7 @@ class EmployeeRequestResource extends Resource
         return __('Human Resources');
     }
 
-    /** Each employee their own; whoever decides or pays them everyone's. None for one who is no employee. */
+    /** Each employee their own; everyone's only for a role given to see them all. None for one who is no employee. */
     public static function getEloquentQuery(): Builder
     {
         $query = parent::getEloquentQuery();
@@ -79,7 +79,8 @@ class EmployeeRequestResource extends Resource
         $decides = (bool) $user?->can('approve', EmployeeRequest::class);
         $pays = (bool) $user?->can('pay', EmployeeRequest::class);
 
-        if (! $decides && ! $pays) {
+        // Of the requests they see: everyone's only for those who see them all.
+        if ((! $decides && ! $pays) || ! $user?->can('viewAll', EmployeeRequest::class)) {
             return null;
         }
 

@@ -46,6 +46,9 @@ class EmployeeRequestService
     /** Who confirms the money paid. */
     public const PAY = 'Pay:EmployeeRequest';
 
+    /** Who sees everyone's (EmployeeRequestPolicy::viewAll); the rest their own. */
+    public const VIEW_ALL = 'ViewAll:EmployeeRequest';
+
     /** What an approver may change of what was asked. */
     public const CHANGEABLE = ['amount', 'months', 'starts_on', 'ticket_year', 'letter_template_id', 'addressed_to', 'purpose'];
 

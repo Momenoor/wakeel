@@ -42,6 +42,8 @@ return [
         // Resource actions & approvals.
         'send' => 'إرسال',
         'approve' => 'اعتماد',
+        'pay' => 'تسجيل الصرف',
+        'view_all' => 'عرض كل الطلبات',
         'print' => 'طباعة',
         'generate' => 'توليد',
         'hr_approve' => 'اعتماد الموارد البشرية',
