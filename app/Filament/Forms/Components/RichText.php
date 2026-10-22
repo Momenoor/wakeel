@@ -241,6 +241,8 @@ class RichText extends TinyEditor
             // its > written &gt;), not one inside a tag (a link's address) — and
             // signature blocks keep their data.
             'noneditable_regexp' => '\{\{(?:[^{}<>&]|&(?:gt|lt|amp|quot|#39|nbsp);)+\}\}(?![^<]*>)',
+            // …yet bold, a size or a colour wraps one as it does its text (<strong>{{employee.name}}</strong>).
+            'format_noneditable_selector' => 'span[data-mce-content]',
             'extended_valid_elements' => 'div[data-type|data-id|data-config|data-label|contenteditable|class|style|dir|align|title|id]',
             'invalid_elements' => 'script,iframe,object,embed,form,input,button,select,textarea,style,link,meta,base,frame,frameset,applet',
 

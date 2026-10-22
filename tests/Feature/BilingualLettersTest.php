@@ -110,6 +110,15 @@ class BilingualLettersTest extends TestCase
         $this->assertStringNotContainsString('<bdo dir="ltr">'.now()->format('d/m/Y'), $html);
     }
 
+    public function test_a_placeholder_keeps_the_formatting_given_to_it(): void
+    {
+        $html = (new LetterComposer($this->template('ar', '<p>السيد <span style="color: #e03e2d; font-size: 18pt;"><strong>{{employee.name}}</strong></span> هوية <em>{{employee.emirates_id}}</em></p>'), null,
+            extra: ['employee.name' => 'عمرو حسن', 'employee.emirates_id' => '784-1990-1234567-1']))->bodyHtml();
+
+        $this->assertStringContainsString('<span style="color: #e03e2d; font-size: 18pt;"><strong>عمرو حسن</strong></span>', $html);
+        $this->assertStringContainsString('<em><bdo dir="ltr">784-1990-1234567-1</bdo></em>', $html);
+    }
+
     public function test_a_certified_experts_registration_number_at_the_matters_court(): void
     {
         $dubai = Court::factory()->create(['name' => 'محاكم دبي']);

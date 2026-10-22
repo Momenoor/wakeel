@@ -150,6 +150,8 @@ class EditorFonts
     {
         return ' span[data-mce-content] { background: #eef2ff; color: #3730a3; border-radius: 3px; padding: 0 2px; white-space: normal; unicode-bidi: isolate; direction: ltr; cursor: default; }'
             .' span[data-mce-content][data-mce-selected] { outline: 2px solid #3b82f6; }'
+            // One given a colour shows it.
+            .' [style*="color"] span[data-mce-content] { color: inherit; }'
             // TinyMCE keeps a copy of what is selected far to the left; on a right-to-left page that far left
             // can be scrolled to, so clicking a placeholder threw the page there. Kept in place, unseen.
             .' .mce-offscreen-selection { position: fixed !important; inset: 0 auto auto 0 !important; width: 1px !important; height: 1px !important;'
