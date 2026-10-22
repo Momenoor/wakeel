@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
@@ -12,12 +13,14 @@ class MatterFieldDefinition extends Model
         'type',
         'required',
         'show_in_supplementary',
+        'show_with_number',
         'options',
     ];
 
     protected $casts = [
         'required' => 'boolean',
         'show_in_supplementary' => 'boolean',
+        'show_with_number' => 'boolean',
         'options' => 'json',
     ];
 
@@ -57,6 +60,17 @@ class MatterFieldDefinition extends Model
         $label = ((array) $this->options)[$key] ?? null;
 
         return is_scalar($label) && trim((string) $label) !== '' ? trim((string) $label) : $value;
+    }
+
+    /**
+     * The fields shown beside a matter's number where matters are picked or searched (its phase …),
+     * read once a request.
+     *
+     * @return Collection<int, self>
+     */
+    public static function shownWithNumber(): Collection
+    {
+        return once(fn (): Collection => self::query()->where('show_with_number', true)->orderBy('id')->get());
     }
 
     public function types(): BelongsToMany

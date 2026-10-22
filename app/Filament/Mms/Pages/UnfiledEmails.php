@@ -10,6 +10,7 @@ use App\Models\MatterEmail;
 use App\Services\MMS\Calendar\MatterReferenceMatcher;
 use App\Services\MMS\MatterReplyCollector;
 use App\Services\MMS\SenderMailer;
+use App\Support\MatterSearch;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -295,20 +296,15 @@ class UnfiledEmails extends Page implements HasTable
     }
 
     /**
-     * "2026/986 — plaintiff v defendant" for each matter.
+     * Each matter as it is picked anywhere (MatterSearch::label): its number, court, type and parties, its
+     * degree, nature, phase and whether it is finished — two of one number told apart.
      *
      * @param  list<int>  $ids
      * @return array<int, string>
      */
     public static function matterLabels(array $ids): array
     {
-        if ($ids === []) {
-            return [];
-        }
-
-        return Matter::query()->whereKey($ids)->with('parties:id,name')->get(['id', 'year', 'number'])
-            ->mapWithKeys(fn (Matter $m): array => [(int) $m->id => trim($m->year.'/'.$m->number.' — '.$m->parties->where('pivot.role', 'party')->pluck('name')->take(2)->implode(' / '), ' —')])
-            ->all();
+        return $ids === [] ? [] : MatterSearch::labels($ids);
     }
 
     /**

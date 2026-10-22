@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Enums\MatterLevel;
 use App\Filament\Mms\Resources\CalendarEvents\Pages\ListCalendarEvents;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
 use App\Models\CalendarEvent;
 use App\Models\Matter;
+use App\Models\MatterFieldDefinition;
 use App\Models\User;
 use App\Services\MMS\Calendar\EventMatterLinker;
 use App\Services\MMS\Calendar\MatterReferenceMatcher;
@@ -301,6 +303,23 @@ class CalendarMatterLinkingTest extends TestCase
         $this->assertArrayHasKey($matter->id, MatterSearch::options('639/2025'));
         $this->assertArrayHasKey($matter->id, MatterSearch::options('639'));
         $this->assertSame([], MatterSearch::options('640/2025'));
+    }
+
+    public function test_two_matters_of_one_number_are_told_apart_by_degree_nature_phase_and_status(): void
+    {
+        $phase = MatterFieldDefinition::create(['label' => 'المرحلة', 'type' => 'select_input', 'options' => ['second' => 'مرحلة ثانية'], 'show_with_number' => true]);
+        MatterFieldDefinition::create(['label' => 'ملاحظة', 'type' => 'text_input']);
+        $original = Matter::factory()->create(['number' => '1952 ', 'year' => 2026, 'level' => MatterLevel::FIRST_INSTANCE, 'final_report_at' => now(), 'initial_report_at' => now()]);
+        $supplementary = Matter::factory()->create(['number' => '1952', 'year' => 2026, 'level' => MatterLevel::APPEAL, 'parent_id' => $original->id, 'custom_fields' => ['المرحلة' => 'second', 'ملاحظة' => 'x']]);
+
+        // (A number kept with a space after it shown without.)
+        $labels = MatterSearch::labels([$original->id, $supplementary->id]);
+
+        $this->assertStringStartsWith('1952/2026', $labels[$original->id]);
+        $this->assertStringEndsWith('('.implode(' · ', [__('First Instance'), __('Original'), __('Finished')]).')', $labels[$original->id]);
+        // Its phase shown (its field is), a field not shown left out.
+        $this->assertStringEndsWith('('.implode(' · ', [__('Appeal'), __('Supplementary'), 'مرحلة ثانية', __('In Progress')]).')', $labels[$supplementary->id]);
+        $this->assertSame(['المرحلة' => 'مرحلة ثانية'], array_intersect_key(MatterSearch::details($supplementary), [$phase->label => true]));
     }
 
     /**

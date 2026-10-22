@@ -150,7 +150,7 @@ class CalendarEventCreationTest extends TestCase
         MatterParty::create(['matter_id' => $matter->id, 'role' => 'party', 'type' => 'plaintiff', 'party_id' => $party->id]);
         Matter::factory()->create(['number' => '640', 'year' => '2024']);
 
-        $label = '639/2025 — محكمة دبي — عمالي — شركة المهاد';
+        $label = '639/2025 — محكمة دبي — عمالي — شركة المهاد ('.__('Original').' · '.__('In Progress').')';
 
         foreach (['639/2025', '2025/639', '٦٣٩/٢٠٢٥', '639 دبي', 'عمالي 2025', 'المهاد'] as $search) {
             $this->assertSame([$matter->id => $label], MatterSearch::options($search), $search);

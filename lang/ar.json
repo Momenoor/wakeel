@@ -4516,5 +4516,13 @@
     "Each file is checked against its original before it opens from Azure. Attached files, signatures and stamps keep their originals here; the emails' and minutes' files are moved (removed here once checked).": "يُطابَق كل ملف مع أصله قبل أن يُفتح من Azure. الملفات المرفقة والتواقيع والأختام تبقى أصولها هنا؛ أما ملفات الرسائل والمحاضر فتُنقل (تُحذف من هنا بعد مطابقتها).",
     "Copying in the background: you are told in the bell when it is done.": "النسخ جارٍ في الخلفية: تصلك رسالة في الإشعارات عند الانتهاء.",
     "Still on this server: :count (not found here, or not copied).": "ما زال على هذا الخادم: :count (غير موجود هنا، أو لم يُنسخ).",
-    "Nothing is left on this server to copy.": "لم يبقَ على هذا الخادم شيء للنسخ."
+    "Nothing is left on this server to copy.": "لم يبقَ على هذا الخادم شيء للنسخ.",
+    "Nature": "طبيعة القضية",
+    "Supplementary": "تكميلية",
+    "Original": "أصلية",
+    "Finished": "منتهية",
+    "Show beside the matter's number": "إظهاره بجانب رقم القضية",
+    "Shown with the matter's number wherever matters are picked or searched (filing an email, the search …), to tell apart matters of one number — its phase, for one.": "يظهر مع رقم القضية أينما تُختار القضايا أو يُبحث عنها (حفظ رسالة في قضية، البحث …)، للتمييز بين القضايا ذات الرقم الواحد — كمرحلتها مثلاً.",
+    "With the number": "مع الرقم",
+    "Shown beside the matter's number where matters are picked or searched": "يظهر بجانب رقم القضية حيث تُختار القضايا أو يُبحث عنها"
 }

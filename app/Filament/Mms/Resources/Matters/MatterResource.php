@@ -10,6 +10,7 @@ use App\Filament\Mms\Resources\Matters\Schemas\MatterForm;
 use App\Filament\Mms\Resources\Matters\Schemas\MatterInfolist;
 use App\Filament\Mms\Resources\Matters\Tables\MattersTable;
 use App\Models\Matter;
+use App\Support\MatterSearch;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -95,10 +96,12 @@ class MatterResource extends Resource
 
     public static function getGlobalSearchResultDetails(Model $record): array
     {
+        // With its degree, nature, phase and whether it is finished: two of one number told apart.
         return array_filter([
             __('Court') => $record->court?->name,
             __('Type') => $record->type?->name,
             __('Parties') => $record->mainPartiesOnly->pluck('party.name')->filter()->take(3)->implode('، '),
+            ...MatterSearch::details($record),
         ]);
     }
 

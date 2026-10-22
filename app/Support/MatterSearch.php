@@ -2,7 +2,9 @@
 
 namespace App\Support;
 
+use App\Enums\MatterStatus;
 use App\Models\Matter;
+use App\Models\MatterFieldDefinition;
 use App\Services\MMS\Calendar\MatterReferenceMatcher;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -76,20 +78,45 @@ class MatterSearch
     private const WITH = ['court:id,name', 'type:id,name', 'mainPartiesOnly.party:id,name'];
 
     /**
-     * "639/2025 — محكمة دبي — عمالي — شركة المهاد، محمد علي": the number,
-     * court, type and its first parties, to tell matters apart.
+     * "639/2025 — محكمة دبي — عمالي — شركة المهاد، محمد علي (استئناف · أصلية · مرحلة ثانية · قيد العمل)":
+     * the number, court, type and its first parties, then its details (details()), to tell matters apart —
+     * two of one number above all.
      */
     public static function label(Matter $matter): string
     {
         $parties = $matter->relationLoaded('mainPartiesOnly')
             ? $matter->mainPartiesOnly->pluck('party.name')->filter()->take(2)->implode('، ')
             : null;
+        $details = self::details($matter);
 
         return collect([
-            $matter->number.'/'.$matter->year,
+            trim((string) $matter->number).'/'.$matter->year,
             $matter->court?->getAttribute('name'),
             $matter->type?->getAttribute('name'),
             $parties,
-        ])->filter()->implode(' — ');
+        ])->filter()->implode(' — ').($details !== [] ? ' ('.implode(' · ', $details).')' : '');
+    }
+
+    /**
+     * What tells apart matters of one number, read from the matter itself: its degree, whether it is the
+     * original or a supplementary one, the custom fields shown with the number (its phase …), and how far it
+     * is — in progress, at its initial report, or finished.
+     *
+     * @return array<string, string> what each is => its value
+     */
+    public static function details(Matter $matter): array
+    {
+        $fields = MatterFieldDefinition::shownWithNumber()->mapWithKeys(function (MatterFieldDefinition $field) use ($matter): array {
+            $value = $field->displayValue(((array) $matter->custom_fields)[$field->label] ?? null);
+
+            return [$field->label => is_bool($value) ? ($value ? __('Yes') : null) : (is_scalar($value) ? trim((string) $value) : null)];
+        });
+
+        return array_filter([
+            __('Level') => $matter->level?->getLabel(),
+            __('Nature') => $matter->parent_id ? __('Supplementary') : __('Original'),
+            ...$fields->all(),
+            __('Status') => $matter->status === MatterStatus::FINALIZED ? __('Finished') : $matter->status?->getLabel(),
+        ], fn ($value): bool => filled($value));
     }
 }

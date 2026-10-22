@@ -79,6 +79,10 @@ class FieldDefinitionsRelationManager extends RelationManager
                 Toggle::make('show_in_supplementary')
                     ->label(__('Show when adding a supplementary matter'))
                     ->helperText(__('The field is shown in the form that adds a supplementary matter from its parent, to be filled for the new matter. A field not shown keeps the parent\'s value.')),
+                // Beside the matter's number where matters are picked or searched: its phase, say.
+                Toggle::make('show_with_number')
+                    ->label(__('Show beside the matter\'s number'))
+                    ->helperText(__('Shown with the matter\'s number wherever matters are picked or searched (filing an email, the search …), to tell apart matters of one number — its phase, for one.')),
                 KeyValue::make('options')
                     ->label(__('Options'))
                     ->visible(fn (Get $get) => $get('type') === 'select_input'),
@@ -99,6 +103,9 @@ class FieldDefinitionsRelationManager extends RelationManager
                     ->boolean(),
                 IconEntry::make('show_in_supplementary')
                     ->label(__('Show when adding a supplementary matter'))
+                    ->boolean(),
+                IconEntry::make('show_with_number')
+                    ->label(__('Show beside the matter\'s number'))
                     ->boolean(),
                 KeyValueEntry::make('options')
                     ->label(__('Options'))
@@ -141,6 +148,10 @@ class FieldDefinitionsRelationManager extends RelationManager
                 IconColumn::make('show_in_supplementary')
                     ->label(__('Supplementary matter'))
                     ->tooltip(__('Shown when adding a supplementary matter'))
+                    ->boolean(),
+                IconColumn::make('show_with_number')
+                    ->label(__('With the number'))
+                    ->tooltip(__('Shown beside the matter\'s number where matters are picked or searched'))
                     ->boolean(),
                 TextColumn::make('created_at')
                     ->label(__('Created At'))
