@@ -2,6 +2,7 @@
 
 namespace App\Services\MMS\Letters;
 
+use App\Enums\LetterTemplateCategories;
 use App\Models\Letterhead;
 use App\Models\LetterItem;
 use App\Models\LetterTemplate;
@@ -9,6 +10,7 @@ use App\Models\Matter;
 use App\Models\MatterParty;
 use App\Models\Type;
 use App\Services\MMS\BulkMailPlaceholders;
+use App\Services\MMS\EmployeePlaceholders;
 use App\Services\MMS\Letters\Blocks\SignatureBlock;
 use App\Support\CompanyContact;
 use App\Support\Honorific;
@@ -55,7 +57,8 @@ class LetterComposer
 
     public function __construct(
         public LetterTemplate $template,
-        public Matter $matter,
+        // None for a letter of no matter: an employee's certificate (its values in $extra).
+        public ?Matter $matter,
         /** @var array<string, mixed> */
         public array $inputs = [],
         /** @var list<array{name: string, role: ?string, emails: list<string>}> */
@@ -65,6 +68,8 @@ class LetterComposer
         public ?Letterhead $letterhead = null,
         // Printed under the addressees: "لعناية السيد/ … المحترم".
         public ?string $attention = null,
+        /** @var array<string, string> more placeholders' values ({{employee.*}}, {{request.*}} — EmployeePlaceholders) */
+        public array $extra = [],
     ) {
         $this->date ??= now();
         $this->letterhead ??= $template->letterhead ?? Letterhead::default() ?? Letterhead::fallback();
@@ -158,7 +163,7 @@ class LetterComposer
     {
         $values = [
             ...CompanyContact::values(),
-            ...BulkMailPlaceholders::forMatter($this->matter),
+            ...($this->matter ? BulkMailPlaceholders::forMatter($this->matter) : []),
             'reference' => (string) $this->reference,
             'date' => $this->date->format('d/m/Y'),
             'subject' => '',
@@ -174,6 +179,14 @@ class LetterComposer
             foreach ($this->formatInput($input, $value) as $suffix => $formatted) {
                 $values[$key.$suffix] = $formatted;
             }
+        }
+
+        // A letter of no matter (an employee's certificate): its own values, nothing of a matter or a meeting.
+        if ($this->matter === null) {
+            $values = [...$values, ...$this->extra];
+            $values['subject'] = BulkMailPlaceholders::apply((string) $this->template->subject, $values);
+
+            return $values;
         }
 
         // The experts' areas of expertise, in the letter's own language.
@@ -213,6 +226,7 @@ class LetterComposer
         // Last: their wording may hold any of the above.
         $values['minutes.opening'] = $this->paragraphsHtml((string) ($minutes['opening'] ?? ''), $values);
         $values['minutes.closing'] = $this->paragraphsHtml((string) ($minutes['closing'] ?? ''), $values);
+        $values = [...$values, ...$this->extra];
 
         $values['subject'] = BulkMailPlaceholders::apply((string) $this->template->subject, $values);
 
@@ -1039,8 +1053,23 @@ class LetterComposer
      *
      * @return array<string, string>
      */
-    public static function catalog(?LetterTemplate $template = null, ?array $inputs = null): array
+    public static function catalog(?LetterTemplate $template = null, ?array $inputs = null, mixed $category = null): array
     {
+        $category = $category instanceof LetterTemplateCategories ? $category->value : ($category ?? ($template?->category instanceof LetterTemplateCategories ? $template->category->value : $template?->category));
+
+        // An employee's certificate: the employee's and the request's, nothing of a matter.
+        if ($category === LetterTemplateCategories::CERTIFICATES->value) {
+            return [
+                'reference' => __('Reference number'),
+                'date' => __('Letter date'),
+                'subject' => __('Subject'),
+                'signature' => __('Signature'),
+                'stamp' => __('Stamp'),
+                ...EmployeePlaceholders::catalog(),
+                ...CompanyContact::catalog(),
+            ];
+        }
+
         $catalog = [
             'reference' => __('Reference number'),
             'date' => __('Letter date'),

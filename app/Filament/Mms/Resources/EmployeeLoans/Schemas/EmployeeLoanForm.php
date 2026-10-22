@@ -76,7 +76,8 @@ class EmployeeLoanForm
             ]);
     }
 
-    private static function preview(float $principal, int $months): string|HtmlString
+    /** The schedule as it will be, before saving (also for an employee's request). */
+    public static function preview(float $principal, int $months): string|HtmlString
     {
         if ($principal <= 0 || $months < 1) {
             return __('Enter an amount and a term to preview the schedule.');

@@ -2,7 +2,6 @@
 
 namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 
-use App\Enums\LetterTemplateCategories;
 use App\Filament\Concerns\GuardsSentDeletion;
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Concerns\RefreshesMatterPage;
@@ -890,7 +889,7 @@ class LettersRelationManager extends RelationManager
                     Select::make('letter_template_id')
                         ->label(__('Template'))
                         // Only the templates for this matter's type and court (and those for every one).
-                        ->options(fn () => LetterTemplate::query()->forMatter($matter)->where('category', '!=', LetterTemplateCategories::MINUTES->value)->orderBy('name')->pluck('name', 'id'))
+                        ->options(fn () => LetterTemplate::query()->forMatter($matter)->letters()->orderBy('name')->pluck('name', 'id'))
                         ->searchable()
                         ->required()
                         ->live()

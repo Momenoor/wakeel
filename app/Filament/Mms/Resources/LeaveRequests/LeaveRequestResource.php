@@ -47,6 +47,12 @@ class LeaveRequestResource extends Resource
         return __('Human Resources');
     }
 
+    /** Under Employee requests: an employee's requests in one place. */
+    public static function getNavigationParentItem(): ?string
+    {
+        return __('Employee requests');
+    }
+
     protected static string|null|BackedEnum $navigationIcon = 'heroicon-o-inbox-arrow-down';
 
     protected static ?int $navigationSort = 2;

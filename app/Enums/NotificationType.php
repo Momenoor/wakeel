@@ -31,6 +31,11 @@ enum NotificationType: string
     case LEAVE_SUBMITTED = 'leave.submitted';
     case LEAVE_DECIDED = 'leave.decided';
 
+    // Employee requests (loans, petty cash, certificates)
+    case EMPLOYEE_REQUEST_SUBMITTED = 'employee_request.submitted';
+    case EMPLOYEE_REQUEST_DECIDED = 'employee_request.decided';
+    case EMPLOYEE_REQUEST_TO_PAY = 'employee_request.to_pay';
+
     // Chat and to-dos
     case CHAT_MESSAGE = 'chat.message';
     case CHAT_REACTION = 'chat.reaction';
@@ -59,6 +64,9 @@ enum NotificationType: string
             self::ONEDRIVE_FOLDER_REVIEW => __('A OneDrive folder to review'),
             self::LEAVE_SUBMITTED => __('A leave request to decide'),
             self::LEAVE_DECIDED => __('My leave request was decided'),
+            self::EMPLOYEE_REQUEST_SUBMITTED => __('A loan, petty cash or certificate request to decide'),
+            self::EMPLOYEE_REQUEST_DECIDED => __('My loan, petty cash or certificate request was decided'),
+            self::EMPLOYEE_REQUEST_TO_PAY => __('An approved loan or petty cash to pay'),
             self::CHAT_MESSAGE => __('A chat message'),
             self::CHAT_REACTION => __('A reaction to my chat message'),
             self::TODO_MENTIONED => __('I was mentioned in a to-do'),
@@ -77,6 +85,7 @@ enum NotificationType: string
             self::MATTER_ASSIGNED, self::MATTER_REPLY_RECEIVED, self::MATTER_EMAIL_RECEIVED, self::MATTER_EMAIL_UNFILED, self::MATTER_EMAIL_SENT,
             self::MINUTES_REPLY, self::ONEDRIVE_FOLDER_REVIEW => __('Matters'),
             self::LEAVE_SUBMITTED, self::LEAVE_DECIDED => __('Leave'),
+            self::EMPLOYEE_REQUEST_SUBMITTED, self::EMPLOYEE_REQUEST_DECIDED, self::EMPLOYEE_REQUEST_TO_PAY => __('Employee requests'),
             self::CHAT_MESSAGE, self::CHAT_REACTION, self::TODO_MENTIONED, self::TODO_COMPLETED => __('Chat and to-dos'),
             self::CALENDAR_UNMATCHED, self::CALENDAR_REMINDER => __('Calendar'),
             self::FEES_CHANGED => __('Fees'),
@@ -124,7 +133,8 @@ enum NotificationType: string
         $bell = in_array(NotificationChannel::BELL, $this->channels(), true) ? [NotificationChannel::BELL] : [];
 
         return match ($this) {
-            self::REQUEST_CREATED, self::REQUEST_DECIDED, self::REQUEST_CHANGES, self::MATTER_ASSIGNED, self::LEAVE_SUBMITTED, self::LEAVE_DECIDED => [...$bell, NotificationChannel::MAIL],
+            self::REQUEST_CREATED, self::REQUEST_DECIDED, self::REQUEST_CHANGES, self::MATTER_ASSIGNED, self::LEAVE_SUBMITTED, self::LEAVE_DECIDED,
+            self::EMPLOYEE_REQUEST_SUBMITTED, self::EMPLOYEE_REQUEST_DECIDED, self::EMPLOYEE_REQUEST_TO_PAY => [...$bell, NotificationChannel::MAIL],
             self::CALENDAR_UNMATCHED => [NotificationChannel::MAIL],
             // Only for the roles given it (super admins and accountants to begin with).
             self::FEES_CHANGED => [],
@@ -160,6 +170,8 @@ enum NotificationType: string
     {
         $permissions = match ($this) {
             self::LEAVE_SUBMITTED => ['Approve:LeaveRequest'],
+            self::EMPLOYEE_REQUEST_SUBMITTED => ['Approve:EmployeeRequest'],
+            self::EMPLOYEE_REQUEST_TO_PAY => ['Pay:EmployeeRequest'],
             self::REQUEST_CREATED => ['ApproveRequest:Matter', 'RejectRequest:Matter', 'Update:MatterRequest'],
             self::ONEDRIVE_FOLDER_REVIEW => ['View:OneDriveSettings'],
             self::MATTER_EMAIL_UNFILED => ['View:UnfiledEmails'],

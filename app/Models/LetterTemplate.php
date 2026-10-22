@@ -94,7 +94,7 @@ class LetterTemplate extends Model
         return static::query()
             ->forMatterType($typeId)
             ->forCourt($courtId)
-            ->where('category', '!=', LetterTemplateCategories::MINUTES->value)
+            ->letters()
             ->whereHas('entities', fn (Builder $q) => $q->whereKey($partyId))
             ->orderByDesc('is_default')
             ->orderBy('name')
@@ -154,6 +154,26 @@ class LetterTemplate extends Model
     public function scopeForMatter(Builder $query, Matter $matter): void
     {
         $query->forMatterType($matter->type_id)->forCourt($matter->court_id);
+    }
+
+    /**
+     * Those issued as a matter's letter: not minutes, not employee certificates.
+     *
+     * @param  Builder<LetterTemplate>  $query
+     */
+    public function scopeLetters(Builder $query): void
+    {
+        $query->whereNotIn('category', LetterTemplateCategories::notLetters());
+    }
+
+    /**
+     * The active employee certificates (Employee requests).
+     *
+     * @param  Builder<LetterTemplate>  $query
+     */
+    public function scopeCertificates(Builder $query): void
+    {
+        $query->where('is_active', true)->where('category', LetterTemplateCategories::CERTIFICATES->value);
     }
 
     /**

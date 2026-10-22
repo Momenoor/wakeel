@@ -3,6 +3,7 @@
 use App\Enums\BulkMailRecipientStatus;
 use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\BulkMailController;
+use App\Http\Controllers\EmployeeRequestEmailActionController;
 use App\Http\Controllers\EndOfServiceGratuityClosingVoucherPrintController;
 use App\Http\Controllers\IncentiveCalculationAssistantPrintController;
 use App\Http\Controllers\IncentiveCalculationPrintController;
@@ -213,4 +214,15 @@ Route::prefix('leave-requests/{leaveRequest}/email-action')
 
         Route::match(['get', 'post'], 'reject', [LeaveRequestEmailActionController::class, 'reject'])
             ->name('leave-request.email-action.reject');
+    });
+
+// An employee request (loan, petty cash, certificate) decided from the office email, the same way.
+Route::prefix('employee-requests/{employeeRequest}/email-action')
+    ->middleware('signed')
+    ->group(function () {
+        Route::match(['get', 'post'], 'approve', [EmployeeRequestEmailActionController::class, 'approve'])
+            ->name('employee-request.email-action.approve');
+
+        Route::match(['get', 'post'], 'reject', [EmployeeRequestEmailActionController::class, 'reject'])
+            ->name('employee-request.email-action.reject');
     });

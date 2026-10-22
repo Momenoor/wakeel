@@ -15,6 +15,7 @@ enum AttachmentCategory: string
     case CORRESPONDENCE = 'correspondence';
     case MINUTES_SIGNED = 'minutes_signed';
     case CONTRACT = 'contract';
+    case CERTIFICATE = 'certificate';
 
     // Fees and allocations
     // The decision that set the fee (the expert's fee, the deposit): what a fee's file usually is.
@@ -35,6 +36,7 @@ enum AttachmentCategory: string
             self::CORRESPONDENCE => __('Correspondence'),
             self::MINUTES_SIGNED => __('Minutes signed'),
             self::CONTRACT => __('Contract'),
+            self::CERTIFICATE => __('Certificate'),
             self::COURT_DECISION => __('Court decision'),
             self::FEE_INVOICE => __('Fee invoice'),
             self::TAX_INVOICE => __('Tax invoice'),

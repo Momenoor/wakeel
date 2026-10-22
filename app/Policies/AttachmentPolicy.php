@@ -32,7 +32,16 @@ class AttachmentPolicy
     {
         $matter = $attachment->matter;
 
-        // With no matter (a party's file, an employee's): its owner decides — no one yet but who made it.
-        return $matter ? $user->can($ability, $matter) : (int) $attachment->user_id === (int) $user->getKey();
+        if ($matter) {
+            return $user->can($ability, $matter);
+        }
+
+        // With no matter (a party's file, an employee's): its owner decides when it says (an employee
+        // request's certificate: whoever may see the request) — else no one but who made it.
+        $owner = $attachment->attachable;
+
+        return $owner && method_exists($owner, 'allowsAttachment')
+            ? $owner->allowsAttachment($user, $ability)
+            : (int) $attachment->user_id === (int) $user->getKey();
     }
 }

@@ -44,9 +44,9 @@ class LeaveRequestEmailActionController
             __('Approved by email.'),
         );
 
-        return view('mails.leave-request-response', [
+        return view('mails.request-response', [
             'type' => 'approved',
-            'leaveRequest' => $leaveRequest,
+            'rows' => self::rows($leaveRequest),
             'message' => __('Leave request approved.'),
         ]);
     }
@@ -63,27 +63,42 @@ class LeaveRequestEmailActionController
 
         $service->reject($leaveRequest, null, __('Rejected by email.'));
 
-        return view('mails.leave-request-response', [
+        return view('mails.request-response', [
             'type' => 'rejected',
-            'leaveRequest' => $leaveRequest,
+            'rows' => self::rows($leaveRequest),
             'message' => __('Leave request rejected.'),
         ]);
     }
 
     private function confirm(LeaveRequest $leaveRequest, string $action)
     {
-        return view('mails.leave-request-confirm', [
-            'leaveRequest' => $leaveRequest,
+        return view('mails.request-confirm', [
+            'rows' => self::rows($leaveRequest),
             'action' => $action,
         ]);
     }
 
     private function alreadyUsed(LeaveRequest $leaveRequest)
     {
-        return view('mails.leave-request-response', [
+        return view('mails.request-response', [
             'type' => 'error',
-            'leaveRequest' => $leaveRequest,
+            'rows' => self::rows($leaveRequest),
             'message' => __('This link has already been used. The request status is: ').$leaveRequest->status->getLabel(),
         ]);
+    }
+
+    /**
+     * What the confirm and result pages show of it.
+     *
+     * @return array<string, string>
+     */
+    private static function rows(LeaveRequest $leaveRequest): array
+    {
+        return [
+            __('Employee') => (string) $leaveRequest->party?->name,
+            __('From') => (string) $leaveRequest->start_date?->locale('ar')->translatedFormat('d F Y'),
+            __('To') => (string) $leaveRequest->end_date?->locale('ar')->translatedFormat('d F Y'),
+            __('Requested Leave Type') => $leaveRequest->requested_leave_type?->getLabel() ?? '—',
+        ];
     }
 }

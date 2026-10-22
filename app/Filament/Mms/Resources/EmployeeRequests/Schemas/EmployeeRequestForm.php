@@ -1,0 +1,193 @@
+<?php
+
+namespace App\Filament\Mms\Resources\EmployeeRequests\Schemas;
+
+use App\Enums\EmployeeRequestType;
+use App\Filament\Mms\Resources\EmployeeLoans\Schemas\EmployeeLoanForm;
+use App\Filament\Mms\Resources\LeaveRequests\LeaveRequestResource;
+use App\Models\EmployeeRequest;
+use App\Models\LetterTemplate;
+use App\Models\Party;
+use App\Support\Currency;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\ToggleButtons;
+use Filament\Infolists\Components\TextEntry;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Carbon;
+use Illuminate\Validation\ValidationException;
+
+/**
+ * An employee's request: what — a loan, petty cash or a certificate — and its details. The fields of each
+ * (moneyFields(), certificateFields()) are those an approver can change too (EmployeeRequestActions::approve).
+ */
+class EmployeeRequestForm
+{
+    /** The choice that opens the leave request form instead (leave is its own request: LeaveRequest). */
+    public const LEAVE = 'leave';
+
+    public static function configure(Schema $schema): Schema
+    {
+        $type = fn (Get $get): ?EmployeeRequestType => $get('type') instanceof EmployeeRequestType ? $get('type') : EmployeeRequestType::tryFrom((string) $get('type'));
+
+        return $schema->columns(1)->components([
+            Section::make(__('Request'))
+                ->columns(2)
+                ->schema([
+                    Select::make('party_id')
+                        ->label(__('Employee'))
+                        ->options(fn () => Party::withRole('employee')->orderBy('name')->pluck('name', 'id'))
+                        ->default(fn () => auth()->user()?->party?->getKey())
+                        ->searchable()
+                        ->required()
+                        // Their own, unless they file for others (who decides or pays them).
+                        ->disabled(fn (): bool => ! auth()->user()?->can('manageOthers', EmployeeRequest::class))
+                        ->dehydrated(),
+                    ToggleButtons::make('type')
+                        ->label(__('Request'))
+                        ->options(fn (string $operation): array => [
+                            ...collect(EmployeeRequestType::cases())->mapWithKeys(fn (EmployeeRequestType $type): array => [$type->value => $type->getLabel()])->all(),
+                            // Leave too, from here: its own form opens (its balance, its approval).
+                            ...($operation === 'create' && LeaveRequestResource::canCreate() ? [self::LEAVE => __('Vacation')] : []),
+                        ])
+                        ->icons(fn (): array => [
+                            ...collect(EmployeeRequestType::cases())->mapWithKeys(fn (EmployeeRequestType $type): array => [$type->value => $type->getIcon()])->all(),
+                            self::LEAVE => Heroicon::OutlinedSun,
+                        ])
+                        ->colors(fn (): array => [
+                            ...collect(EmployeeRequestType::cases())->mapWithKeys(fn (EmployeeRequestType $type): array => [$type->value => $type->getColor()])->all(),
+                            self::LEAVE => 'primary',
+                        ])
+                        ->default(EmployeeRequestType::LOAN->value)
+                        ->inline()
+                        ->required()
+                        ->live()
+                        ->afterStateUpdated(function (mixed $state, $livewire): void {
+                            if ($state === self::LEAVE) {
+                                $livewire->redirect(LeaveRequestResource::getUrl('create'), navigate: true);
+                            }
+                        }),
+                ]),
+            Section::make(__('Amount and repayment'))
+                ->columns(3)
+                ->visible(fn (Get $get): bool => (bool) $type($get)?->isMoney())
+                ->schema(self::moneyFields()),
+            Section::make(__('Certificate'))
+                ->columns(2)
+                ->visible(fn (Get $get): bool => $type($get) === EmployeeRequestType::CERTIFICATE)
+                ->schema(self::certificateFields()),
+            Textarea::make('reason')
+                ->label(__('Reason'))
+                ->rows(2),
+        ]);
+    }
+
+    /**
+     * What is saved: only the fields of its kind of request, the month its first day; the employee one's own
+     * unless they file for others (a disabled field still arrives in the request, so it is enforced here).
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function clean(array $data): array
+    {
+        $type = $data['type'] instanceof EmployeeRequestType ? $data['type'] : EmployeeRequestType::from((string) $data['type']);
+        $none = $type->isMoney() ? ['letter_template_id', 'addressed_to', 'purpose'] : ['amount', 'months', 'starts_on'];
+
+        foreach ($none as $field) {
+            $data[$field] = null;
+        }
+
+        if (filled($data['starts_on'] ?? null)) {
+            $data['starts_on'] = Carbon::parse($data['starts_on'])->startOfMonth()->toDateString();
+        }
+
+        if (! auth()->user()?->can('manageOthers', EmployeeRequest::class)) {
+            $data['party_id'] = auth()->user()?->party?->getKey()
+                ?? throw ValidationException::withMessages(['party_id' => __('Your user account is not linked to an employee record, so you cannot file requests.')]);
+        }
+
+        return $data;
+    }
+
+    /**
+     * How much, over how many months, from which month's salary — and the instalments that makes.
+     *
+     * @return array<int, mixed>
+     */
+    public static function moneyFields(): array
+    {
+        return [
+            TextInput::make('amount')
+                ->label(Currency::label(__('Amount (AED)')))
+                ->numeric()
+                ->minValue(1)
+                ->required()
+                ->live(onBlur: true),
+            TextInput::make('months')
+                ->label(__('Months'))
+                ->helperText(__('How many months it is paid back over.'))
+                ->numeric()
+                ->integer()
+                ->minValue(1)
+                ->maxValue(60)
+                ->default(1)
+                ->required()
+                ->live(onBlur: true),
+            Select::make('starts_on')
+                ->label(__('First deduction from the salary of'))
+                ->options(fn ($state): array => self::months($state))
+                ->default(fn (): string => now()->addMonth()->startOfMonth()->toDateString())
+                ->formatStateUsing(fn ($state): ?string => filled($state) ? Carbon::parse($state)->startOfMonth()->toDateString() : null)
+                ->required(),
+            TextEntry::make('instalments')
+                ->label(__('Instalments'))
+                ->state(fn (Get $get) => EmployeeLoanForm::preview((float) $get('amount'), (int) $get('months')))
+                ->columnSpanFull(),
+        ];
+    }
+
+    /**
+     * Which certificate, addressed to whom, what for.
+     *
+     * @return array<int, mixed>
+     */
+    public static function certificateFields(): array
+    {
+        return [
+            Select::make('letter_template_id')
+                ->label(__('Certificate'))
+                ->options(fn () => LetterTemplate::query()->certificates()->orderBy('name')->pluck('name', 'id'))
+                ->required(),
+            TextInput::make('addressed_to')
+                ->label(__('Addressed to'))
+                ->placeholder(__('To whom it may concern'))
+                ->required()
+                ->maxLength(255),
+            TextInput::make('purpose')
+                ->label(__('Purpose'))
+                ->maxLength(255)
+                ->columnSpanFull(),
+        ];
+    }
+
+    /**
+     * This month and the next twelve: "October 2026" => its first day — and the one already chosen.
+     *
+     * @return array<string, string>
+     */
+    public static function months(mixed $chosen = null): array
+    {
+        return collect(range(0, 12))
+            ->map(fn (int $i) => now()->startOfMonth()->addMonths($i))
+            ->when(filled($chosen), fn ($months) => $months->prepend(Carbon::parse($chosen)->startOfMonth()))
+            ->unique(fn (Carbon $month): string => $month->toDateString())
+            ->sort()
+            ->mapWithKeys(fn (Carbon $month): array => [$month->toDateString() => $month->translatedFormat('F Y')])
+            ->all();
+    }
+}

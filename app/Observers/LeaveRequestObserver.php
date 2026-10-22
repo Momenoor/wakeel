@@ -6,12 +6,9 @@ use App\Enums\NotificationChannel;
 use App\Enums\NotificationType;
 use App\Mail\LeaveRequestSubmittedMail;
 use App\Models\LeaveRequest;
-use App\Models\Setting;
 use App\Models\User;
-use App\Services\Notifications\NotificationPreferences;
+use App\Services\MMS\HrRecipients;
 use App\Services\Notifications\Notifier;
-use BezhanSalleh\FilamentShield\Support\Utils;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 
@@ -63,47 +60,23 @@ class LeaveRequestObserver
 
     /**
      * Of recipients(), those the office's leave emails go to — the new request, and the decision copied
-     * to them: those who are users, as they chose; an address that is no user's (typed in System
-     * Settings) always.
+     * to them (HrRecipients::mailed()).
      *
      * @return list<string>
      */
     public static function mailed(): array
     {
-        $recipients = self::recipients();
-        $users = User::whereIn('email', $recipients)->get();
-
-        return array_values(array_filter($recipients, function (string $address) use ($users): bool {
-            $owners = $users->filter(fn (User $user): bool => strcasecmp((string) $user->email, $address) === 0);
-
-            return $owners->isEmpty() || NotificationPreferences::wanting(NotificationType::LEAVE_SUBMITTED, $owners, NotificationChannel::MAIL)->isNotEmpty();
-        }));
+        return HrRecipients::mailed('Approve:LeaveRequest', NotificationType::LEAVE_SUBMITTED);
     }
 
     /**
      * The addresses set in System Settings (Notifications) — or, none set,
-     * everyone who can approve leave requests.
+     * everyone who can approve leave requests (HrRecipients).
      *
      * @return list<string>
      */
     public static function recipients(): array
     {
-        $set = array_values(array_filter((array) Setting::get('leave_request_recipients', []), fn ($email) => filter_var($email, FILTER_VALIDATE_EMAIL)));
-
-        if ($set !== []) {
-            return $set;
-        }
-
-        return User::query()
-            ->where(fn (Builder $query) => $query
-                ->whereHas('roles', fn (Builder $role) => $role->where('name', Utils::getSuperAdminName())
-                    ->orWhereHas('permissions', fn (Builder $permission) => $permission->where('name', 'Approve:LeaveRequest')))
-                ->orWhereHas('permissions', fn (Builder $permission) => $permission->where('name', 'Approve:LeaveRequest')))
-            ->whereNotNull('email')
-            ->orderBy('id')
-            ->pluck('email')
-            ->unique()
-            ->values()
-            ->all();
+        return HrRecipients::recipients('Approve:LeaveRequest');
     }
 }

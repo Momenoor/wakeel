@@ -35,14 +35,11 @@
         </h1>
     </div>
 
+    {{-- What is being decided: label => value. --}}
     <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6 text-sm text-gray-700 space-y-1">
-        <div><strong>{{ __('Employee') }}:</strong> {{ $leaveRequest->party->name }}</div>
-        <div>
-            <strong>{{ __('From') }}:</strong> {{ $leaveRequest->start_date->locale('ar')->translatedFormat('d F Y') }}
-            —
-            <strong>{{ __('To') }}:</strong> {{ $leaveRequest->end_date->locale('ar')->translatedFormat('d F Y') }}
-        </div>
-        <div><strong>{{ __('Requested Leave Type') }}:</strong> {{ $leaveRequest->requested_leave_type?->getLabel() ?? '—' }}</div>
+        @foreach ($rows as $label => $value)
+            <div><strong>{{ $label }}:</strong> {{ $value }}</div>
+        @endforeach
     </div>
 
     <form method="POST" action="{{ url()->full() }}">

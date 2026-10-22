@@ -298,7 +298,7 @@ class LetterTemplateForm
                             ->label(__('Letter'))->hiddenLabel()
                             ->required()
                             ->document()
-                            ->placeholders(fn (Get $get) => LetterComposer::catalog(null, $get('inputs') ?? []))
+                            ->placeholders(fn (Get $get) => LetterComposer::catalog(null, $get('inputs') ?? [], $get('category')))
                             ->signatureBlocks()
                             ->contentDirection(fn (Get $get) => $get('locale') === 'en' ? 'ltr' : 'rtl')
                             ->letterFonts(fn (Get $get) => [$get('letter_font_id'), $get('arabic_font_id')]),

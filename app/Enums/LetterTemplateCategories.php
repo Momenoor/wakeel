@@ -14,6 +14,7 @@ enum LetterTemplateCategories: string implements HasColor, HasLabel
     case APPOINTMENTS = 'appointments';
     case REPORTS = 'reports';
     case MINUTES = 'minutes';
+    case CERTIFICATES = 'certificates';
     case OTHERS = 'others';
 
     public function getColor(): string|array|null
@@ -25,6 +26,7 @@ enum LetterTemplateCategories: string implements HasColor, HasLabel
             self::APPOINTMENTS => 'primary',
             self::REPORTS => 'danger',
             self::MINUTES => 'info',
+            self::CERTIFICATES => 'success',
             self::OTHERS => 'gray',
         };
     }
@@ -38,7 +40,14 @@ enum LetterTemplateCategories: string implements HasColor, HasLabel
             self::APPOINTMENTS => __('Appointments'),
             self::REPORTS => __('Reports'),
             self::MINUTES => __('Meeting minutes'),
+            self::CERTIFICATES => __('Employee certificates'),
             self::OTHERS => __('Others'),
         };
+    }
+
+    /** Not issued as a matter's letter: minutes are made from a meeting, certificates for an employee. */
+    public static function notLetters(): array
+    {
+        return [self::MINUTES->value, self::CERTIFICATES->value];
     }
 }

@@ -8,6 +8,7 @@ use App\Filament\Mms\Pages\SplitPdf;
 use App\Filament\Mms\Resources\BulkMailCampaigns\BulkMailCampaignResource;
 use App\Filament\Mms\Resources\CalendarEvents\CalendarEventResource;
 use App\Filament\Mms\Resources\EmployeeLoans\EmployeeLoanResource;
+use App\Filament\Mms\Resources\EmployeeRequests\EmployeeRequestResource;
 use App\Filament\Mms\Resources\Incentive\IncentiveCalculations\IncentiveCalculationResource;
 use App\Filament\Mms\Resources\Incentive\IncentiveMetaAdjustments\IncentiveMetaAdjustmentResource;
 use App\Filament\Mms\Resources\LeaveRequests\LeaveRequestResource;
@@ -222,6 +223,11 @@ return [
             ],
             LeaveRequestResource::class => [
                 'approve',
+            ],
+            // Decide them; confirm the money paid.
+            EmployeeRequestResource::class => [
+                'approve',
+                'pay',
             ],
             PayrollRunResource::class => [
                 'generate',

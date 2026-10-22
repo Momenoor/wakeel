@@ -44,12 +44,11 @@
 
     <p class="text-gray-600 text-sm leading-relaxed">{{ $message }}</p>
 
-    @if ($leaveRequest)
+    @if (! empty($rows))
         <div class="mt-4 bg-gray-50 rounded-lg p-3 text-xs text-gray-500">
-            {{ __('Employee') }}: <span class="font-semibold">{{ $leaveRequest->party->name }}</span><br>
-            {{ __('From') }}: <span class="font-semibold">{{ $leaveRequest->start_date->translatedFormat('d M Y') }}</span>
-            —
-            {{ __('To') }}: <span class="font-semibold">{{ $leaveRequest->end_date->translatedFormat('d M Y') }}</span>
+            @foreach ($rows as $label => $value)
+                {{ $label }}: <span class="font-semibold">{{ $value }}</span>@if (! $loop->last)<br>@endif
+            @endforeach
         </div>
     @endif
 
