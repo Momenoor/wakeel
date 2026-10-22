@@ -121,13 +121,7 @@ class MinutesSender
 
                 $sent = $this->attempt($minutes, [$recipient], MinutesDelivery::WHATSAPP, $phone, $userId, $result, function () use ($template, $phone, $greeting, $pdf, $fileName, &$mediaId) {
                     if ($template->header === 'document' && $mediaId === null) {
-                        $file = tempnam(sys_get_temp_dir(), 'minutes');
-                        file_put_contents($file, $pdf);
-                        try {
-                            $mediaId = $this->whatsapp->upload($file, 'application/pdf', $fileName);
-                        } finally {
-                            @unlink($file);
-                        }
+                        $mediaId = $this->whatsapp->upload($pdf, 'application/pdf', $fileName);
                     }
 
                     return $this->whatsapp->sendTemplate(

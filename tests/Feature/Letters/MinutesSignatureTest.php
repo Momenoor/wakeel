@@ -57,6 +57,9 @@ class MinutesSignatureTest extends TestCase
     /** @var list<array<string, mixed>> */
     private array $whatsapp = [];
 
+    /** @var list<string> what was uploaded to WhatsApp as media */
+    private array $uploaded = [];
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -105,7 +108,11 @@ class MinutesSignatureTest extends TestCase
             $url = $request->url();
 
             return match (true) {
-                str_ends_with($url, '/1234/media') => Http::response(['id' => 'media-1']),
+                str_ends_with($url, '/1234/media') => (function () use ($request) {
+                    $this->uploaded[] = $request->body();
+
+                    return Http::response(['id' => 'media-1']);
+                })(),
                 str_ends_with($url, '/1234/messages') => (function () use ($request) {
                     $this->whatsapp[] = $request->data();
 
@@ -288,8 +295,10 @@ class MinutesSignatureTest extends TestCase
 
         $this->assertSame([MinutesService::fileName($this->minutes).'.pdf', 'مذكرة.pdf'],
             array_map(fn ($part) => $part->getFilename(), $this->sent[0]->getAttachments()));
-        // By WhatsApp: the minutes only.
+        // By WhatsApp: the minutes only — the PDF itself (it went as the name of a file on the server once).
         $this->assertCount(1, $this->whatsapp);
+        $this->assertCount(1, $this->uploaded);
+        $this->assertStringContainsString('%PDF', $this->uploaded[0]);
         // The upload was for this send only.
         $this->assertSame([], Storage::disk('local')->allFiles('minutes-attachments'));
     }
