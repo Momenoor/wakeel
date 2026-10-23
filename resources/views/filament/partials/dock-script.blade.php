@@ -98,6 +98,20 @@
                 // Opened by the page itself (a new message): kept too.
                 this.$wire.$watch('isOpen', (open) => this.storeOpen(open));
             },
+            // Kept on the screen: the panel (x-ref="panel") moved sideways as far
+            // as it would run past either edge — a narrow phone, or the bubble
+            // near the side the panel opens toward. Again whenever the bubble
+            // moves or the panel is shown, filled or resized.
+            shiftX: 0,
+            fit() {
+                const panel = this.$refs.panel;
+                if (! panel || this.docked() || ! panel.offsetWidth || ! panel.offsetParent) { this.shiftX = 0; return; }
+                const left = panel.offsetParent.getBoundingClientRect().left + panel.offsetLeft - this.shiftX;
+                const right = left + panel.offsetWidth;
+                // 16px from each edge; wider than that leaves, centred.
+                const edge = Math.min(16, (window.innerWidth - panel.offsetWidth) / 2);
+                this.shiftX = Math.round(left < edge ? edge - left : Math.min(0, window.innerWidth - edge - right));
+            },
             // The distance between two fingers, for a pinch.
             gap(e) {
                 return Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);

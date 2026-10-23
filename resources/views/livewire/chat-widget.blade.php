@@ -90,7 +90,7 @@
             loadPos();
             loadScale();
             restoreOpen();
-            window.addEventListener('resize', () => clamp());
+            window.addEventListener('resize', () => { clamp(); fit() });
         }
         if (! Alpine.store('chatOnline')) {
             Alpine.store('chatOnline', { ids: null });
@@ -181,7 +181,10 @@
             x-transition:leave-start="opacity-100 translate-y-0 scale-100"
             x-transition:leave-end="opacity-0 translate-y-4 scale-95"
             style="display: none; touch-action: pan-x pan-y;"
-            :style="docked() ? {} : { width: (23 * scale) + 'rem', height: (32 * scale) + 'rem', maxHeight: 'calc(100vh - 7rem)' }"
+            x-ref="panel"
+            x-init="new ResizeObserver(() => fit()).observe($el)"
+            x-effect="pos; docked(); $nextTick(() => fit())"
+            :style="docked() ? {} : { width: (23 * scale) + 'rem', height: (32 * scale) + 'rem', maxHeight: 'calc(100vh - 7rem)', left: shiftX + 'px' }"
             x-on:touchstart.passive="pinchStart($event)"
             x-on:touchmove.passive="pinchMove($event)"
             x-on:touchend.passive="pinchEnd($event)"

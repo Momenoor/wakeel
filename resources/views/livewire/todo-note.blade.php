@@ -69,7 +69,7 @@
             ].join('; ');
         },
     })"
-    x-init="loadPos(); restoreOpen(); window.addEventListener('resize', () => clamp())"
+    x-init="loadPos(); restoreOpen(); window.addEventListener('resize', () => { clamp(); fit() })"
     x-on:keydown.escape.window="if ($wire.isOpen && ! docked()) { toggle(false) }"
     :style="placement()"
     :class="docked() ? 'wakeel-docked wakeel-docked-todo' : ''"
@@ -111,7 +111,10 @@
         x-transition:leave-start="opacity-100 translate-y-0 scale-100"
         x-transition:leave-end="opacity-0 translate-y-4 scale-95"
         style="display: none; touch-action: pan-x pan-y;"
-        :style="docked() ? {} : { width: width + 'px' }"
+        x-ref="panel"
+        x-init="new ResizeObserver(() => fit()).observe($el)"
+        x-effect="pos; docked(); $nextTick(() => fit())"
+        :style="docked() ? {} : { width: width + 'px', left: shiftX + 'px' }"
         :class="resizing || pinch ? 'select-none' : ''"
         x-on:touchstart.passive="pinchStart($event)"
         x-on:touchmove.passive="pinchMove($event)"
