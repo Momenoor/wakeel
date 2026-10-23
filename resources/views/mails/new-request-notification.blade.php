@@ -44,7 +44,7 @@
                 </tr>
                 <tr>
                     <td>{{ __('Created At') }}:</td>
-                    <td>{{ $matterRequest->created_at->locale(app()->getLocale())->translatedFormat('d F Y - h:i A') }}</td>
+                    <td>{{ $matterRequest->created_at->locale(app()->getLocale())->format(\App\Support\Dates::dateTimeFormat()) }}</td>
                 </tr>
             </table>
         </div>

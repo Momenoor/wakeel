@@ -4,6 +4,7 @@ namespace App\Services\MMS;
 
 use App\Enums\SalaryComponent;
 use App\Models\EmployeeRequest;
+use App\Support\Dates;
 use App\Support\Nationalities;
 use Illuminate\Support\Carbon;
 use NumberFormatter;
@@ -54,13 +55,13 @@ class EmployeePlaceholders
 
         foreach (self::DOCUMENTS as $key => [$number, $expiry]) {
             $values['employee.'.$key] = (string) $profile?->getAttribute($number);
-            $values['employee.'.$key.'_expiry'] = (string) $profile?->getAttribute($expiry)?->format('d/m/Y');
+            $values['employee.'.$key.'_expiry'] = (string) $profile?->getAttribute($expiry)?->format(Dates::dateFormat());
         }
 
         $values = [
             ...$values,
             'employee.employee_no' => (string) $profile?->employee_no,
-            'employee.joining_date' => (string) $profile?->date_of_joining?->format('d/m/Y'),
+            'employee.joining_date' => (string) $profile?->date_of_joining?->format(Dates::dateFormat()),
             // As it was named before: the passport's number.
             'employee.passport_no' => (string) $profile?->passport_no,
             'employee.salary.total' => $amount($total),

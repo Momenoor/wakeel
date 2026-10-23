@@ -15,6 +15,7 @@ use App\Observers\LeaveRequestObserver;
 use App\Services\Notifications\NotificationPreferences;
 use App\Services\Notifications\Notifier;
 use App\Support\Addresses;
+use App\Support\Dates;
 use Carbon\CarbonImmutable;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Carbon;
@@ -157,8 +158,8 @@ class LeaveRequestService
         }
 
         $period = __(':start to :end', [
-            'start' => $request->start_date?->format('d/m/Y') ?? '—',
-            'end' => $request->end_date?->format('d/m/Y') ?? '—',
+            'start' => $request->start_date?->format(Dates::dateFormat()) ?? '—',
+            'end' => $request->end_date?->format(Dates::dateFormat()) ?? '—',
         ]);
         $status = $approved ? 'success' : 'danger';
         $type = NotificationType::LEAVE_DECIDED;

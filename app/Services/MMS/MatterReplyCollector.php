@@ -16,6 +16,7 @@ use App\Models\Party;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\Notifications\Notifier;
+use App\Support\Dates;
 use App\Support\Documents;
 use App\Support\Tolerant;
 use Carbon\CarbonInterface;
@@ -213,11 +214,11 @@ class MatterReplyCollector
         $started = Carbon::parse($last['started_at']);
 
         if (blank($last['finished_at'] ?? null)) {
-            return __('Started :when and has not finished (still running, or it was cut off).', ['when' => $started->format('d/m/Y H:i')]);
+            return __('Started :when and has not finished (still running, or it was cut off).', ['when' => $started->format(Dates::dateTimeFormat())]);
         }
 
         $kept = array_sum((array) ($last['kept'] ?? []));
-        $line = Carbon::parse($last['finished_at'])->format('d/m/Y H:i').' — '.trans_choice('{0} nothing new|{1} 1 email kept|[2,*] :count emails kept', $kept, ['count' => $kept]);
+        $line = Carbon::parse($last['finished_at'])->format(Dates::dateTimeFormat()).' — '.trans_choice('{0} nothing new|{1} 1 email kept|[2,*] :count emails kept', $kept, ['count' => $kept]);
 
         if ($last['stopped'] ?? false) {
             $line .= ' — '.__('more to read on the next run');

@@ -73,7 +73,7 @@
                             };
                             
                             $tooltip = trans_choice('filament-activity-log::activity.widgets.heatmap.tooltip', $count, [
-                                'date' => $currentDate->isoFormat('ll'),
+                                'date' => \App\Support\Dates::date($currentDate),
                             ]);
                         @endphp
                         

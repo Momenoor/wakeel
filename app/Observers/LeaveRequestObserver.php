@@ -9,6 +9,7 @@ use App\Models\LeaveRequest;
 use App\Models\User;
 use App\Services\MMS\HrRecipients;
 use App\Services\Notifications\Notifier;
+use App\Support\Dates;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 
@@ -48,8 +49,8 @@ class LeaveRequestObserver
             __('New leave request'),
             __(':name requested leave from :start to :end.', [
                 'name' => $leaveRequest->party?->name ?? '—',
-                'start' => $leaveRequest->start_date?->format('d/m/Y') ?? '—',
-                'end' => $leaveRequest->end_date?->format('d/m/Y') ?? '—',
+                'start' => $leaveRequest->start_date?->format(Dates::dateFormat()) ?? '—',
+                'end' => $leaveRequest->end_date?->format(Dates::dateFormat()) ?? '—',
             ]),
             Route::has('filament.mms.resources.leave-requests.edit')
                 ? route('filament.mms.resources.leave-requests.edit', $leaveRequest)

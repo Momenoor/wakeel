@@ -191,7 +191,7 @@
                         <p class="whitespace-pre-wrap break-words leading-relaxed">{!! \App\Support\Linkify::html($message->body) !!}</p>
                     @endif
                     <p class="wk-meta">
-                        <span>{{ $message->created_at->translatedFormat('g:i A') }}</span>
+                        <span>{{ $message->created_at->format(\App\Support\Dates::timeFormat()) }}</span>
                         {{-- Mine: one tick sent, two delivered, two coloured read. --}}
                         @if ($isMine)
                             @php($status = $this->messageStatus($message))

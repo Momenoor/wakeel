@@ -125,11 +125,13 @@ class QuotationResourceTest extends TestCase
 
         // Kept on the edit page, and in the lease wizard.
         Livewire::test(EditQuotation::class, ['record' => $quotation->getKey()])
-            ->assertSet('data.schedule', fn ($rows) => array_column(array_values($rows), 'due_date') === ['2026-06-21', '2027-01-05', '2026-06-01']);
+            // A date picker holds its day in the form with a time (the panel's picker); it is saved as a date.
+            ->assertSet('data.schedule', fn ($rows) => array_map(fn ($date): string => substr((string) $date, 0, 10), array_column(array_values($rows), 'due_date')) === ['2026-06-21', '2027-01-05', '2026-06-01']);
 
         $data = Livewire::withQueryParams(['quotation' => $quotation->getKey()])->test(CreateLease::class)->instance()->data;
-        $this->assertSame(['2026-06-21', '2027-01-05'], array_column(array_values($data['installments']), 'payment_date'));
-        $this->assertSame('2026-06-01', $data['deposit_payment']['payment_date']);
+        $days = fn ($dates): array => array_map(fn ($date): string => substr((string) $date, 0, 10), (array) $dates);
+        $this->assertSame(['2026-06-21', '2027-01-05'], $days(array_column(array_values($data['installments']), 'payment_date')));
+        $this->assertSame(['2026-06-01'], $days($data['deposit_payment']['payment_date']));
     }
 
     public function test_the_quotation_page_lists_its_expected_instalments_with_their_total(): void

@@ -9,7 +9,7 @@
     <div class="text-right text-xs text-gray-500 space-y-1">
         <p>
             <span class="font-semibold text-gray-700">{{ __('Period') }}:</span>
-            {{ $calculation->period_start->format('d M Y') }} — {{ $calculation->period_end->format('d M Y') }}
+            {{ $calculation->period_start->format(\App\Support\Dates::dateFormat()) }} — {{ $calculation->period_end->format(\App\Support\Dates::dateFormat()) }}
         </p>
         <p>
             <span class="font-semibold text-gray-700">{{ __('Status') }}:</span>
@@ -24,7 +24,7 @@
         @if($calculation->finalized_at)
             <p>
                 <span class="font-semibold text-gray-700">{{ __('Finalized') }}:</span>
-                {{ $calculation->finalized_at->format('d M Y H:i') }}
+                {{ $calculation->finalized_at->format(\App\Support\Dates::dateTimeFormat()) }}
             </p>
         @endif
         <p>
@@ -33,7 +33,7 @@
         </p>
         <p>
             <span class="font-semibold text-gray-700">{{ __('Printed') }}:</span>
-            {{ now()->format('d M Y H:i') }}
+            {{ now()->format(\App\Support\Dates::dateTimeFormat()) }}
         </p>
     </div>
 </div>

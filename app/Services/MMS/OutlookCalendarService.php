@@ -99,8 +99,8 @@ class OutlookCalendarService
     }
 
     /**
-     * Setting (Settings → General → Calendar): whether "Send invitations" is on when an event is made — the matter's
-     * assistant and expert invited, an email to each. Off unless set. (A new key: the one before was on by default.)
+     * Setting (Settings → General → Calendar): whether "Send an invitation email" is on when an event is made — the
+     * matter's assistant invited. Off unless set. (A new key: the one before was on by default.)
      */
     public const INVITES = 'calendar_invite_by_default';
 
@@ -124,9 +124,9 @@ class OutlookCalendarService
             'end_datetime' => $event->end_datetime,
             'location' => $event->location,
             'is_teams_meeting' => $event->is_teams_meeting,
-            // Invited, when asked for ("Send invitations", off unless the setting says otherwise): the event in the
-            // matter's assistant's and expert's own calendars (Outlook, Teams, phone) — an invitation email to each.
-            // Their reminders come all the same.
+            // Invited, when asked for ("Send an invitation email", off unless the setting says otherwise): the
+            // matter's assistant, an invitation email. The event is kept in the shared calendar; its reminders go
+            // into the assistant's calendar all the same (CalendarAlarms).
             'attendees' => ($invite ?? self::invitesPeople()) ? CalendarAlarms::attendees($event) : [],
         ]);
 

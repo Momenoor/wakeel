@@ -21,6 +21,7 @@ use App\Services\MMS\Letters\LetterPdf;
 use App\Services\Notifications\NotificationPreferences;
 use App\Services\Notifications\Notifier;
 use App\Support\Addresses;
+use App\Support\Dates;
 use BezhanSalleh\FilamentShield\Support\Utils;
 use Carbon\CarbonInterface;
 use Filament\Notifications\Notification;
@@ -150,11 +151,11 @@ class EmployeeRequestService
                 $request->type->isRepaid()
                     ? __(':amount AED paid on :date; deducted from your salary over :months months from :month.', [
                         'amount' => number_format((float) $request->amount, 2),
-                        'date' => $on->format('d/m/Y'),
+                        'date' => $on->format(Dates::dateFormat()),
                         'months' => $request->months,
                         'month' => $request->starts_on?->format('m/Y'),
                     ])
-                    : __(':amount AED paid on :date for your :year flight ticket.', ['amount' => number_format((float) $request->amount, 2), 'date' => $on->format('d/m/Y'), 'year' => $request->ticket_year]),
+                    : __(':amount AED paid on :date for your :year flight ticket.', ['amount' => number_format((float) $request->amount, 2), 'date' => $on->format(Dates::dateFormat()), 'year' => $request->ticket_year]),
                 self::url($request, $user),
                 fn (Notification $n) => $n->status('success')->iconColor('success'),
                 [NotificationChannel::BELL, NotificationChannel::WHATSAPP],

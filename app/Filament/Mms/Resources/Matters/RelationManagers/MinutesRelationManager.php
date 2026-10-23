@@ -22,6 +22,7 @@ use App\Models\WhatsAppTemplate;
 use App\Services\MMS\Letters\MinutesSender;
 use App\Services\MMS\Letters\MinutesService;
 use App\Services\WhatsAppCloud;
+use App\Support\Dates;
 use App\Support\EmailGrouping;
 use App\Support\Honorific;
 use App\Support\ScreenPermissions;
@@ -99,7 +100,7 @@ class MinutesRelationManager extends RelationManager
             ->defaultSort('number', 'desc')
             ->columns([
                 TextColumn::make('number')->label(__('No.'))->formatStateUsing(fn ($state) => '('.$state.')')->weight('bold')->sortable(),
-                TextColumn::make('meeting_at')->label(__('Meeting'))->dateTime('d/m/Y H:i')->sortable(),
+                TextColumn::make('meeting_at')->label(__('Meeting'))->dateTime()->sortable(),
                 TextColumn::make('template.name')->label(__('Template'))->wrap(),
                 TextColumn::make('answered')
                     ->label(__('Answered'))
@@ -239,7 +240,7 @@ class MinutesRelationManager extends RelationManager
                         Select::make('calendar_event_id')
                             ->label(__('The meeting'))
                             ->options(fn () => CalendarEvent::query()->where(fn ($query) => $query->where('matter_id', $matter->getKey())->orWhereHas('matters', fn ($q) => $q->whereKey($matter->getKey())))->latest('start_datetime')->limit(50)->get()
-                                ->mapWithKeys(fn (CalendarEvent $event) => [$event->getKey() => $event->start_datetime?->format('d/m/Y H:i').' — '.$event->title]))
+                                ->mapWithKeys(fn (CalendarEvent $event) => [$event->getKey() => $event->start_datetime?->format(Dates::dateTimeFormat()).' — '.$event->title]))
                             ->placeholder(__('Not on the calendar'))
                             ->live()
                             ->afterStateUpdated(fn ($state, Set $set) => $set('meeting_at', CalendarEvent::find($state)?->start_datetime?->format('Y-m-d H:i:s'))),
@@ -550,13 +551,13 @@ class MinutesRelationManager extends RelationManager
                 ->belowContent(fn (MinutesDelivery $record): Text => $note($record->address)->extraAttributes(['dir' => 'ltr'])),
             TextEntry::make('sent_at')
                 ->label(__('Sent'))
-                ->dateTime('d/m/Y H:i')
+                ->dateTime()
                 ->placeholder('—'),
             TextEntry::make('status')
                 ->label(__('Status'))
                 ->badge()
                 ->formatStateUsing(fn (string $state, MinutesDelivery $record): string => match ($state) {
-                    MinutesDelivery::SIGNED => trim(__('Signed').' '.$record->signed_at?->format('d/m/Y H:i')),
+                    MinutesDelivery::SIGNED => trim(__('Signed').' '.$record->signed_at?->format(Dates::dateTimeFormat())),
                     MinutesDelivery::FAILED => __('Failed'),
                     default => __('Awaiting signature'),
                 })
@@ -595,11 +596,11 @@ class MinutesRelationManager extends RelationManager
                     ->schema([
                         TextEntry::make('text')
                             ->hiddenLabel()
-                            ->aboveContent(fn (TextEntry $component): Text => $note(__('Their reply').' · '.Carbon::parse(EntryTable::row($component)['at'] ?? null)->timezone(config('app.timezone'))->format('d/m/Y H:i')))
+                            ->aboveContent(fn (TextEntry $component): Text => $note(__('Their reply').' · '.Carbon::parse(EntryTable::row($component)['at'] ?? null)->timezone(config('app.timezone'))->format(Dates::dateTimeFormat())))
                             ->extraAttributes(['dir' => 'auto', 'class' => 'whitespace-pre-line']),
                     ])
                     ->visible(fn ($state): bool => filled($state)),
-                $note(fn (MinutesDelivery $record): string => __('Answered with how to send the signed copy').' · '.$record->text_reply_sent_at?->format('d/m/Y H:i'))
+                $note(fn (MinutesDelivery $record): string => __('Answered with how to send the signed copy').' · '.$record->text_reply_sent_at?->format(Dates::dateTimeFormat()))
                     ->visible(fn (MinutesDelivery $record): bool => filled($record->text_reply_sent_at)),
                 $note(__('A copy signed by email is added by hand, under the matter\'s attachments.'))
                     ->visible(fn (MinutesDelivery $record): bool => $record->channel === MinutesDelivery::EMAIL && $record->status !== MinutesDelivery::SIGNED),

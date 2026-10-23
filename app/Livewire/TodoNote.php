@@ -52,15 +52,13 @@ class TodoNote extends Component
 
     public const FONT_STEP = 10;
 
-    private const STATE = 'wakeel.todo.open';
-
     /** @param  bool  $open  opened from a notification (?todo=1) */
     public function mount(bool $open = false): void
     {
-        // Pinned to the page: always open.
-        $this->isOpen = $open || Dock::pinned(auth()->user(), Dock::TODO) || (bool) session(self::STATE, false);
+        // Pinned to the page: always open. Else as this user left it on this device (Dock::wasOpen()).
+        $this->isOpen = $open || Dock::pinned(auth()->user(), Dock::TODO) || Dock::wasOpen(Dock::TODO);
         if ($open) {
-            session([self::STATE => true]);
+            Dock::rememberOpen(Dock::TODO, true);
         }
         $this->dueOn = today()->toDateString();
         $this->width = self::clampWidth((int) (auth()->user()?->ui_preferences['todo_width'] ?? self::WIDTH));
@@ -87,7 +85,7 @@ class TodoNote extends Component
     {
         Dock::set(auth()->user(), Dock::TODO, $pinned);
         $this->isOpen = true;
-        session([self::STATE => true]);
+        Dock::rememberOpen(Dock::TODO, true);
     }
 
     /** Dragged wider or narrower: kept for this user, on every device. */
@@ -105,7 +103,7 @@ class TodoNote extends Component
         return max(self::MIN_WIDTH, min(self::MAX_WIDTH, $width));
     }
 
-    /** Opened or hidden — already, in the browser; kept here for the next page. No answer (null): nothing. */
+    /** Opened or hidden — already, in the browser; kept on this device for the next page. No answer (null): nothing. */
     public function setOpen(?bool $open): void
     {
         if ($open === null) {
@@ -115,7 +113,7 @@ class TodoNote extends Component
         }
 
         $this->isOpen = $open;
-        session([self::STATE => $open]);
+        Dock::rememberOpen(Dock::TODO, $open);
 
         if (! $open) {
             $this->skipRender();

@@ -11,6 +11,7 @@ use App\Models\IncentiveCalculation;
 use App\Models\IncentiveLine;
 use App\Models\Matter;
 use App\Services\MMS\IncentiveCalculatorService;
+use App\Support\Dates;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Infolists\Components\TextEntry;
@@ -308,7 +309,7 @@ class MyIncentiveReport extends Page implements HasTable
         $extra = $this->periodTotals();
 
         return Section::make($calculation?->name)
-            ->description(__('Finalized :date', ['date' => $calculation?->finalized_at?->translatedFormat('d M Y') ?? '—']))
+            ->description(__('Finalized :date', ['date' => $calculation?->finalized_at?->format(Dates::dateFormat()) ?? '—']))
             ->icon(Heroicon::OutlinedBanknotes)
             ->visible($calculation !== null)
             ->schema([

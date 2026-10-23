@@ -70,7 +70,7 @@ class ArrearsAgingReport extends PmsReport
                     ->wrap(),
                 TextColumn::make('oldest_due')
                     ->label(__('Oldest due'))
-                    ->date('d/m/Y')
+                    ->date()
                     ->description(fn (Lease $lease) => __(':days days', ['days' => (int) $lease->oldest_days]))
                     ->sortable(),
                 TextColumn::make('bucket_30')->label(__('0–30 days'))->aed()->alignEnd()->sortable()

@@ -39,7 +39,7 @@
 <div class="flex justify-between items-center border-t border-gray-200 pt-4 mt-8 text-xs text-gray-400">
     <span>{{ config('app.name') }}</span>
     <span>{{ $title }}</span>
-    <span>{{ now()->format('d M Y') }}</span>
+    <span>{{ now()->format(\App\Support\Dates::dateFormat()) }}</span>
 </div>
 
 </body>

@@ -128,12 +128,12 @@ class ChatWidget extends Component
             }
         }
 
-        // The popup comes back as it was left — open, on the same
-        // conversation — after a refresh or on the next page.
+        // The popup comes back as it was left — open as this user left it on this device (Dock::wasOpen()),
+        // on the same conversation — after a refresh, on the next page, or the next time they sign in here.
         if ($mode === 'popup') {
             $state = session(self::POPUP_STATE, []);
             // Pinned to the page: always open.
-            $this->isOpen = (bool) ($state['open'] ?? false) || Dock::pinned(auth()->user(), Dock::CHAT);
+            $this->isOpen = Dock::wasOpen(Dock::CHAT) || Dock::pinned(auth()->user(), Dock::CHAT);
             $this->activeConversationId = $state['conversation'] ?? null;
 
             if ($this->activeConversationId !== null && $this->activeConversation === null) {
@@ -147,12 +147,13 @@ class ChatWidget extends Component
     }
 
     /**
-     * Remembers the popup's open state and conversation for the next page.
+     * Remembers the popup's open state (on this device, for this user) and its conversation (for the next page).
      */
     private function rememberState(): void
     {
         if ($this->mode === 'popup') {
-            session([self::POPUP_STATE => ['open' => $this->isOpen, 'conversation' => $this->activeConversationId]]);
+            Dock::rememberOpen(Dock::CHAT, $this->isOpen);
+            session([self::POPUP_STATE => ['conversation' => $this->activeConversationId]]);
         }
     }
 

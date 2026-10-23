@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\Notifications\NotificationPreferences as Prefs;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
@@ -236,11 +237,18 @@ class TodoNoteTest extends TestCase
 
         $this->get(Filament::getPanel('mms')->getUrl())->assertSeeLivewire(TodoNote::class);
 
+        $cookie = 'wakeel_todo_open_'.auth()->id();
         Livewire::test(TodoNote::class)->call('setOpen', true);
-        Livewire::test(TodoNote::class)->assertSet('isOpen', true);
+        // Kept on this device (a cookie for this user), which the browser sends with the next page.
+        $this->assertSame('1', Cookie::queued($cookie)?->getValue());
+        Livewire::withCookies([$cookie => '1'])->test(TodoNote::class)->assertSet('isOpen', true);
 
         // The browser sent null (a click that fell through to the bubble): left as it was.
-        Livewire::test(TodoNote::class)->call('setOpen', null)->assertSet('isOpen', true);
-        $this->assertTrue(session('wakeel.todo.open'));
+        Livewire::withCookies([$cookie => '1'])->test(TodoNote::class)->call('setOpen', null)->assertSet('isOpen', true);
+        $this->assertSame('1', Cookie::queued($cookie)?->getValue());
+
+        // Another person signing in on this device: their own, not this one's.
+        $this->actingAs(User::factory()->create());
+        Livewire::withCookies([$cookie => '1'])->test(TodoNote::class)->assertSet('isOpen', false);
     }
 }

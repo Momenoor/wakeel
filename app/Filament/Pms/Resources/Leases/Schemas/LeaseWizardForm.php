@@ -17,6 +17,7 @@ use App\Services\PMS\InstallmentGenerator;
 use App\Services\PMS\QuotationService;
 use App\Support\ChequeNumber;
 use App\Support\Currency;
+use App\Support\Dates;
 use App\Support\UaeBanks;
 use Closure;
 use Filament\Actions\Action;
@@ -613,8 +614,8 @@ class LeaseWizardForm
         }
 
         return __('This date falls outside the lease period (:start – :end).', [
-            'start' => Carbon::parse($startDate)->format('d/m/Y'),
-            'end' => Carbon::parse($endDate)->format('d/m/Y'),
+            'start' => Carbon::parse($startDate)->format(Dates::dateFormat()),
+            'end' => Carbon::parse($endDate)->format(Dates::dateFormat()),
         ]);
     }
 

@@ -9,6 +9,7 @@ use App\Services\Installer\EnvironmentFileWriter;
 use App\Services\MMS\OutlookCalendarService;
 use App\Support\Branding;
 use App\Support\CompanyContact;
+use App\Support\Dates;
 use App\Support\ScreenPermissions;
 use BackedEnum;
 use Filament\Forms\Components\Select;
@@ -53,6 +54,8 @@ class GeneralSettings extends SettingsFormPage
             // app_timezone_display is a text entry — it reads config('app.timezone')
             // directly in the schema and carries no state of its own.
             'app_locale' => Setting::get('app_locale', 'ar'),
+            Dates::DATE_SETTING => Dates::dateFormat(),
+            Dates::TIME_SETTING => Dates::timeFormat(),
             'currency_code' => Setting::get('currency_code', 'AED'),
             'records_per_page' => Setting::get('records_per_page', 25),
             ...collect(Branding::KEYS)->mapWithKeys(fn (string $key): array => [$key => Setting::get($key)])->all(),
@@ -131,6 +134,19 @@ class GeneralSettings extends SettingsFormPage
                         ->required()
                         ->default('ar'),
 
+                    // How every date and time is shown, everywhere: tables, pages, pickers, emails, PDFs.
+                    Select::make(Dates::DATE_SETTING)
+                        ->label(__('Date format'))
+                        ->options(Dates::options(Dates::DATE_FORMATS))
+                        ->required()
+                        ->default(Dates::DATE_FORMATS[0]),
+                    Select::make(Dates::TIME_SETTING)
+                        ->label(__('Time format'))
+                        ->options(Dates::options(Dates::TIME_FORMATS))
+                        ->helperText(__('Used everywhere a date or time is shown: tables, pages, date pickers, emails and PDFs.'))
+                        ->required()
+                        ->default(Dates::TIME_FORMATS[0]),
+
                     // Read-only, not a Select: this used to let an
                     // admin "choose" a timezone that was saved to
                     // Settings and then never read by anything —
@@ -172,8 +188,8 @@ class GeneralSettings extends SettingsFormPage
                 ->icon(Heroicon::CalendarDays)
                 ->schema([
                     Toggle::make(OutlookCalendarService::INVITES)
-                        ->label(__('"Send invitations" on when an event is made'))
-                        ->helperText(__('Each new event put on Outlook asks whether to invite the matter\'s assistant and expert (an invitation email to each, and the event in their own calendars). This is what it starts as; off unless turned on here. Their reminders (24 hours and 1 hour before) come either way.')),
+                        ->label(__('"Send an invitation email" on when an event is made'))
+                        ->helperText(__('Each new event put on Outlook asks whether to email the matter\'s assistant an invitation. This is what it starts as; off unless turned on here. Events are kept in the shared calendar; a single event\'s reminders (24 hours and 1 hour before) go into its assistant\'s calendar either way.')),
                     TextInput::make(CalendarEventForm::SESSIONS_PREFIX)
                         ->label(__('Court sessions\' titles start with'))
                         ->helperText(__('Before the matter numbers of a bulk (court sessions) event: "د.رضا 639/2025, 640/2025 (court) (type) (جلسات المحكمة)". Empty: the numbers first.'))

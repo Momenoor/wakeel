@@ -40,7 +40,7 @@
                 </tr>
                 <tr>
                     <td>{{ __('Action Date') }}:</td>
-                    <td>{{ $matterRequest->approved_at->locale(app()->getLocale())->translatedFormat('d F Y - h:i A') }}</td>
+                    <td>{{ $matterRequest->approved_at->locale(app()->getLocale())->format(\App\Support\Dates::dateTimeFormat()) }}</td>
                 </tr>
             </table>
         </div>

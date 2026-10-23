@@ -12,6 +12,7 @@ use App\Filament\Mms\Resources\EmployeeProfiles\RelationManagers\SalaryComponent
 use App\Filament\Mms\Resources\EmployeeProfiles\Schemas\EmployeeProfileForm;
 use App\Filament\Mms\Resources\EmployeeProfiles\Tables\EmployeeProfilesTable;
 use App\Models\EmployeeProfile;
+use App\Support\EmployeeSearch;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -32,6 +33,12 @@ class EmployeeProfileResource extends Resource
     public static function getGloballySearchableAttributes(): array
     {
         return ['employee_no', 'display_name', 'name_ar', 'party.name'];
+    }
+
+    /** Found by their name, number, phone, email, Emirates ID or passport (EmployeeSearch). */
+    protected static function applyGlobalSearchAttributeConstraints(Builder $query, string $search): void
+    {
+        $query->whereHas('party', fn (Builder $party) => EmployeeSearch::apply($party, $search));
     }
 
     public static function getGlobalSearchEloquentQuery(): Builder

@@ -18,6 +18,7 @@ use App\Services\Notifications\NotificationPreferences;
 use App\Services\Push\WebPushSender;
 use App\Support\CachedAuditSchema;
 use App\Support\Currency;
+use App\Support\Dates;
 use App\Support\Integrations;
 use App\Support\InterfaceFont;
 use App\Support\ModelLabels;
@@ -77,6 +78,9 @@ class AppServiceProvider extends ServiceProvider
         // (System Settings → Integrations), over .env — first, before
         // anything sends, broadcasts or queues.
         Integrations::apply();
+
+        // Dates and times shown as set for the whole system (Settings → General): tables, pages, date pickers.
+        Dates::configureFilament();
 
         // The activity log's column checks, read once a day, not five
         // queries a request (bound here: the package binds its own when

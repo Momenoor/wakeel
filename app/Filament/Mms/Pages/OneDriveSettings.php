@@ -13,6 +13,7 @@ use App\Models\Setting;
 use App\Models\Type;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\OneDriveClient;
+use App\Support\Dates;
 use App\Support\MatterSearch;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -135,7 +136,7 @@ class OneDriveSettings extends Page implements HasTable
                             ->label(__('Create OneDrive folders for new matters')),
                         Placeholder::make('since')
                             ->label(__('Matters created from'))
-                            ->content(fn (): string => MatterOneDriveFolders::enabledAt()?->translatedFormat('d M Y, g:i A') ?? __('Not switched on yet'))
+                            ->content(fn (): string => MatterOneDriveFolders::enabledAt()?->format(Dates::dateTimeFormat()) ?? __('Not switched on yet'))
                             ->helperText(__('Matters created before the feature was switched on are not touched.')),
                         Textarea::make('subfolders')
                             ->label(__('Standard subfolders'))

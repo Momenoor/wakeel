@@ -12,12 +12,16 @@ use App\Filament\Mms\Resources\EmployeeRequests\Schemas\EmployeeRequestForm;
 use App\Filament\Mms\Resources\EmployeeRequests\Schemas\EmployeeRequestInfolist;
 use App\Filament\Mms\Resources\EmployeeRequests\Tables\EmployeeRequestsTable;
 use App\Models\EmployeeRequest;
+use App\Support\Currency;
+use App\Support\Dates;
+use App\Support\EmployeeSearch;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * Human Resources → Employee requests: loans, petty cash and certificates — each employee their own, whoever
@@ -70,6 +74,42 @@ class EmployeeRequestResource extends Resource
         $partyId = auth()->user()?->party?->getKey();
 
         return $partyId === null ? $query->whereRaw('1 = 0') : $query->where('party_id', $partyId);
+    }
+
+    protected static bool $isGloballySearchable = true;
+
+    protected static int $globalSearchResultsLimit = 5;
+
+    /** Searched by the employee (EmployeeSearch); a field named so the panel searches it at all. */
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['party.name'];
+    }
+
+    /** Found by the employee — their name, number, phone, email, Emirates ID or passport — or its own number ("#12"). */
+    protected static function applyGlobalSearchAttributeConstraints(Builder $query, string $search): void
+    {
+        EmployeeSearch::requests($query, $search);
+    }
+
+    /** Only the requests one may see (getEloquentQuery()), the latest first. */
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return static::getEloquentQuery()->with('party')->latest('id');
+    }
+
+    public static function getGlobalSearchResultTitle(Model $record): string
+    {
+        return '#'.$record->getKey().' '.trim($record->type?->getLabel().' — '.$record->party?->name, ' —');
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        return array_filter([
+            __('Status') => $record->status?->getLabel(),
+            __('Amount') => (float) $record->amount > 0 ? Currency::text($record->amount) : null,
+            __('Date') => $record->created_at?->format(Dates::dateFormat()),
+        ]);
     }
 
     /** What waits for whoever looks: requests to decide, and money to pay — one count. */

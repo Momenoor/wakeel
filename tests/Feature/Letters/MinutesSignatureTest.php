@@ -26,6 +26,7 @@ use App\Services\MMS\Letters\MinutesService;
 use App\Services\Notifications\NotificationPreferences as Prefs;
 use App\Services\WhatsAppCloud;
 use App\Support\CompanyContact;
+use App\Support\Dates;
 use App\Support\EmailGrouping;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -411,7 +412,7 @@ class MinutesSignatureTest extends TestCase
         Livewire::test(MinutesRelationManager::class, ['ownerRecord' => $this->minutes->matter, 'pageClass' => ViewMatter::class])
             ->assertTableColumnStateSet('signed', '1 / 1', $this->minutes)
             ->mountTableAction('signatures', $this->minutes)
-            ->assertMountedActionModalSee(['https://od/signed/file.pdf', __('In OneDrive'), __('Signed').' '.$delivery->fresh()->signed_at->format('d/m/Y H:i')]);
+            ->assertMountedActionModalSee(['https://od/signed/file.pdf', __('In OneDrive'), __('Signed').' '.Dates::dateTime($delivery->fresh()->signed_at)]);
     }
 
     public function test_the_sender_is_told_of_a_reply_only_when_they_want_the_bell(): void

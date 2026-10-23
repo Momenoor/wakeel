@@ -6,6 +6,7 @@ use App\Filament\Mms\Actions\Calendar\CalendarMatterActions;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Models\CalendarEvent;
 use App\Services\MMS\Calendar\UnmatchedEventReferences;
+use App\Support\Dates;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
 use Filament\Tables\Columns\TextColumn;
@@ -67,7 +68,7 @@ class UnmatchedEventReferencesWidget extends TableWidget
             ->columns([
                 TextColumn::make('start_datetime')
                     ->label(__('Date'))
-                    ->formatStateUsing(fn (CalendarEvent $record) => $record->start_datetime?->translatedFormat('D d/m/Y g:i A'))
+                    ->formatStateUsing(fn (CalendarEvent $record) => $record->start_datetime?->format(Dates::dateTimeFormat()))
                     ->badge()
                     ->color(fn (CalendarEvent $record) => $record->start_datetime?->isPast() ? 'gray' : 'warning'),
                 TextColumn::make('title')

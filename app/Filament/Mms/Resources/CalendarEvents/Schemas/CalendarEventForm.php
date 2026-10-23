@@ -321,12 +321,12 @@ class CalendarEventForm
         return collect($ids)->map(fn (int $id): ?Matter => $found->get($id))->filter()->values();
     }
 
-    /** "Send invitations": the matter's assistant and expert invited to the event put on Outlook (an email to each). */
+    /** "Send an invitation": the matter's assistant invited to the event put on Outlook (an email). */
     public static function inviteToggle(Closure $hidden): Toggle
     {
         return Toggle::make('invite_people')
-            ->label(__('Send invitations to the matter\'s assistant and expert'))
-            ->helperText(__('An invitation email to each, and the event in their own calendars. Their reminders come either way.'))
+            ->label(__('Send an invitation email to the matter\'s assistant'))
+            ->helperText(__('Off: the event stays in the shared calendar, and only its reminders (24 hours and 1 hour before) go into the assistant\'s calendar.'))
             ->default(fn (): bool => OutlookCalendarService::invitesPeople())
             ->hidden($hidden);
     }

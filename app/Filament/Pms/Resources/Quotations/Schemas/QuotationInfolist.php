@@ -7,6 +7,7 @@ use App\Filament\Support\EntryTable;
 use App\Models\Quotation;
 use App\Services\PMS\QuotationService;
 use App\Support\Currency;
+use App\Support\Dates;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
@@ -116,7 +117,7 @@ class QuotationInfolist
         return EntryTable::make('expected_installments', [
             TextEntry::make('number')->label('#'),
             TextEntry::make('label')->label(__('Instalment'))->weight(EntryTable::totalWeight(...)),
-            TextEntry::make('due_date')->label(__('Due Date'))->formatStateUsing(fn ($state): string => $state->format('d/m/Y')),
+            TextEntry::make('due_date')->label(__('Due Date'))->formatStateUsing(fn ($state): string => $state->format(Dates::dateFormat())),
             EntryTable::amount('amount', Currency::label(__('Amount (AED)'))),
         ])
             ->state($rows === [] ? [] : [...$rows, ['total' => true, 'label' => __('Total'), 'amount' => array_sum(array_column($rows, 'amount'))]])

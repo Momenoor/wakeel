@@ -93,12 +93,12 @@ class CalendarAlarmsTest extends TestCase
 
         app(CalendarAlarms::class)->run();
 
-        // The assistant and the expert (not the external one), each twice: in their own calendars.
-        $this->assertSame(4, CalendarEventAlert::count());
+        // The matter's assistant only (not its expert, nor the external one), twice: in their own calendar.
+        $this->assertSame(2, CalendarEventAlert::count());
         $posts = $this->calls('POST');
-        $this->assertCount(4, $posts);
-        $this->assertEqualsCanonicalizing(
-            ['amr@jpa.ae', 'amr@jpa.ae', 'expert.user@jpa.ae', 'expert.user@jpa.ae'],
+        $this->assertCount(2, $posts);
+        $this->assertSame(
+            ['amr@jpa.ae', 'amr@jpa.ae'],
             array_map(fn (array $call): string => str($call['url'])->after('users/')->before('/events')->toString(), $posts),
         );
         $dayBefore = collect($posts)->first(fn (array $call): bool => $call['data']['start']['dateTime'] === '2026-11-02T10:00:00');
@@ -109,21 +109,21 @@ class CalendarAlarmsTest extends TestCase
 
         // Again: nothing made twice.
         app(CalendarAlarms::class)->run();
-        $this->assertCount(4, $this->calls('POST'));
+        $this->assertCount(2, $this->calls('POST'));
 
         // 24 hours before: told, in the system.
         Carbon::setTestNow('2026-11-02 10:00:30');
         app(CalendarAlarms::class)->run();
         $this->assertSame(1, $this->assistantUser->notifications()->count());
         $this->assertSame(NotificationType::CALENDAR_REMINDER->value, $this->assistantUser->notifications()->first()->data['viewData'][NotificationType::DATA_KEY] ?? null);
-        $this->assertSame(1, $this->expertUser->notifications()->count());
+        $this->assertSame(0, $this->expertUser->notifications()->count());
         $this->assertCount(0, $this->calls('DELETE'));
 
         // Rung: taken away from the calendars; the hour-before ones stay.
         Carbon::setTestNow('2026-11-02 10:11:00');
         app(CalendarAlarms::class)->run();
-        $this->assertCount(2, $this->calls('DELETE'));
-        $this->assertSame(2, CalendarEventAlert::query()->where('minutes_before', 1440)->whereNotNull('removed_at')->count());
+        $this->assertCount(1, $this->calls('DELETE'));
+        $this->assertSame(1, CalendarEventAlert::query()->where('minutes_before', 1440)->whereNotNull('removed_at')->count());
         $this->assertSame(1, $this->assistantUser->notifications()->count());
 
         // An hour before: told again; then that item goes too.
@@ -132,7 +132,7 @@ class CalendarAlarmsTest extends TestCase
         $this->assertSame(2, $this->assistantUser->notifications()->count());
         Carbon::setTestNow('2026-11-03 09:15:00');
         app(CalendarAlarms::class)->run();
-        $this->assertCount(4, $this->calls('DELETE'));
+        $this->assertCount(2, $this->calls('DELETE'));
         $this->assertSame(0, CalendarEventAlert::query()->whereNull('removed_at')->count());
     }
 
@@ -145,13 +145,13 @@ class CalendarAlarmsTest extends TestCase
         app(CalendarAlarms::class)->run();
 
         $patches = $this->calls('PATCH');
-        $this->assertCount(4, $patches);
+        $this->assertCount(2, $patches);
         $this->assertContains('2026-11-05T12:00:00', array_map(fn (array $call): string => $call['data']['start']['dateTime'], $patches));
         $this->assertTrue(CalendarEventAlert::query()->where('minutes_before', 60)->get()->every(fn (CalendarEventAlert $alert): bool => $alert->alarm_at->equalTo('2026-11-06 11:00:00')));
 
         $event->delete();
 
-        $this->assertCount(4, $this->calls('DELETE'));
+        $this->assertCount(2, $this->calls('DELETE'));
         $this->assertSame(0, CalendarEventAlert::count());
     }
 
@@ -171,7 +171,7 @@ class CalendarAlarmsTest extends TestCase
         // Its reminder items say so on the next run, not only when moved.
         app(CalendarAlarms::class)->run();
         $items = collect($this->calls('PATCH'))->reject(fn (array $call): bool => str_contains($call['url'], 'events/shared-1'));
-        $this->assertCount(4, $items);
+        $this->assertCount(2, $items);
         $this->assertTrue($items->every(fn (array $call): bool => str_contains($call['data']['subject'], 'moved to the warehouse')));
 
         // What comes from Outlook is not sent back to it.
@@ -194,7 +194,7 @@ class CalendarAlarmsTest extends TestCase
         $this->assertSame(0, CalendarEventAlert::query()->whereNull('notified_at')->count());
     }
 
-    public function test_an_event_put_on_outlook_invites_the_assistant_and_the_expert_when_asked(): void
+    public function test_an_event_put_on_outlook_invites_its_assistant_when_asked(): void
     {
         $event = $this->event('2026-11-05 10:00:00');
 
@@ -206,8 +206,8 @@ class CalendarAlarmsTest extends TestCase
         app(OutlookCalendarService::class)->pushEvent($event, invite: true);
 
         $created = collect($this->calls('POST'))->first(fn (array $call): bool => str_contains($call['url'], 'users/calendar@jpa.ae/events'));
-        $this->assertEqualsCanonicalizing(
-            ['amr@jpa.ae', 'expert.user@jpa.ae'],
+        $this->assertSame(
+            ['amr@jpa.ae'],
             array_map(fn (array $attendee): string => $attendee['emailAddress']['address'], $created['data']['attendees']),
         );
     }
@@ -264,13 +264,27 @@ class CalendarAlarmsTest extends TestCase
     public function test_a_mailbox_that_is_not_there_is_left_at_once(): void
     {
         $this->refuse['amr@jpa.ae'] = [404, 'ErrorInvalidUser'];
+        // A second assistant on the matter.
+        $second = Party::factory()->create(['name' => 'Sara', 'onedrive_email' => 'sara@jpa.ae']);
+        MatterParty::create(['matter_id' => $this->matter->id, 'role' => 'expert', 'type' => 'assistant', 'party_id' => $second->id]);
         $this->event('2026-11-20 10:00:00');
 
         app(CalendarAlarms::class)->run(everything: true);
 
         $this->assertSame(2, CalendarEventAlert::query()->where('mailbox', 'amr@jpa.ae')->whereNotNull('gave_up_at')->count());
         // The other one's are made as usual.
-        $this->assertSame(2, CalendarEventAlert::query()->where('mailbox', 'expert.user@jpa.ae')->whereNotNull('outlook_item_id')->count());
+        $this->assertSame(2, CalendarEventAlert::query()->where('mailbox', 'sara@jpa.ae')->whereNotNull('outlook_item_id')->count());
+    }
+
+    public function test_a_bulk_event_has_no_reminders(): void
+    {
+        $event = $this->event('2026-11-05 10:00:00');
+        $event->forceFill(['type' => 'bulk'])->save();
+
+        app(CalendarAlarms::class)->run(everything: true);
+
+        $this->assertSame(0, CalendarEventAlert::count());
+        $this->assertCount(0, $this->calls('POST'));
     }
 
     public function test_the_alarms_are_asked_every_minute(): void

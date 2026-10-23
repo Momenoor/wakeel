@@ -20,6 +20,7 @@ use App\Services\MMS\MatterReplyCollector;
 use App\Services\MMS\OutlookCalendarService;
 use App\Support\Branding;
 use App\Support\CompanyContact;
+use App\Support\Dates;
 use App\Support\Integrations;
 use App\Support\LiveRefresh;
 use App\Support\ScreenPermissions;
@@ -307,7 +308,7 @@ class SystemSettingsTest extends TestCase
         }
 
         $keys = [
-            GeneralSettings::class => ['app_name', 'company_name', 'company_phone', 'company_whatsapp', 'company_email', 'app_locale', 'currency_code', 'records_per_page', ...Branding::KEYS, OutlookCalendarService::INVITES, CompanyContact::NAME_AR, CompanyContact::ADDRESS_EN, CompanyContact::ADDRESS_AR, CompanyContact::LICENSE_NO, CalendarEventForm::SESSIONS_PREFIX],
+            GeneralSettings::class => ['app_name', 'company_name', 'company_phone', 'company_whatsapp', 'company_email', 'app_locale', 'currency_code', 'records_per_page', ...Branding::KEYS, OutlookCalendarService::INVITES, CompanyContact::NAME_AR, CompanyContact::ADDRESS_EN, CompanyContact::ADDRESS_AR, CompanyContact::LICENSE_NO, CalendarEventForm::SESSIONS_PREFIX, Dates::DATE_SETTING, Dates::TIME_SETTING],
             MailServerSettings::class => ['mail_sender_key', 'mail_mailer', 'mail_host', 'mail_port', 'mail_username', 'mail_password', 'mail_encryption', 'mail_from_address', 'mail_from_name'],
             LettersSettings::class => ['letter_reference_format', 'letter_cc_expert_types', EmailSendFields::DEFAULT_SENDER, Branding::EMAIL_PDF, Branding::EMAIL_PDF_FONT, 'leave_request_recipients'],
             OfflineSettings::class => ['app_offline', 'offline_message', 'offline_allow_admins'],

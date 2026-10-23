@@ -96,7 +96,7 @@ class ReportExcelAction
             $state === null => null,
             $state instanceof HasLabel => (string) $state->getLabel(),
             $state instanceof BackedEnum => (string) $state->value,
-            $state instanceof CarbonInterface => $state->format('d/m/Y'),
+            $state instanceof CarbonInterface => $state->format(Dates::dateFormat()),
             is_bool($state) => $state ? __('Yes') : __('No'),
             is_int($state), is_float($state) => $state,
             is_numeric($state) => (float) $state,

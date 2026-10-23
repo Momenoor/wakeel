@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Widgets;
 
 use App\Filament\Mms\Resources\CalendarEvents\Schemas\CalendarEventForm;
 use App\Models\CalendarEvent;
+use App\Support\Dates;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
 use Illuminate\Database\Eloquent\Model;
@@ -120,6 +121,9 @@ class CalendarWidget extends FullCalendarWidget
             'firstDay' => 0, // Sunday (Common for Gulf region)
             'slotMinTime' => '08:00:00', // Start workday at 8 AM
             'slotMaxTime' => '20:00:00', // End at 8 PM
+            // Times as shown everywhere (Settings → General): 12 or 24 hours, two digits.
+            'eventTimeFormat' => ['hour' => '2-digit', 'minute' => '2-digit', 'hour12' => Dates::twelveHours()],
+            'slotLabelFormat' => ['hour' => '2-digit', 'minute' => '2-digit', 'hour12' => Dates::twelveHours()],
         ];
     }
 }

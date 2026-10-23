@@ -8,6 +8,7 @@ use App\Models\Court;
 use App\Models\Matter;
 use App\Models\Party;
 use App\Models\Type;
+use App\Support\Dates;
 use Carbon\Carbon;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -210,7 +211,7 @@ class MattersTable
                     ->label(__('Next Session'))
                     ->date()
                     ->description(fn ($record) => $record->distributed_at
-                        ? __('Report').': '.Carbon::parse($record->distributed_at)->format('M d, Y')
+                        ? __('Report').': '.Carbon::parse($record->distributed_at)->format(Dates::dateFormat())
                         : null
                     )
                     ->sortable()
@@ -634,7 +635,7 @@ class MattersTable
 
             return '<tr>'
                 .'<td style="'.$cell.'">'.e($fee->type?->getLabel() ?? '—').$note.'</td>'
-                .'<td style="'.$cell.'">'.e($fee->date?->format('d/m/Y') ?? '—').'</td>'
+                .'<td style="'.$cell.'">'.e($fee->date?->format(Dates::dateFormat()) ?? '—').'</td>'
                 .'<td style="'.$cell.';text-align:end;font-weight:600">'.number_format((float) $fee->amount, 2).'</td>'
                 .'<td style="'.$cell.';text-align:end;opacity:.8">'.number_format($collected, 2).'</td>'
                 .'</tr>';

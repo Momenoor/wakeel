@@ -75,7 +75,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('calendar:sync-outlook')->everyFiveMinutes()->withoutOverlapping(10);
         $schedule->command('calendar:sync-outlook --days-back=365 --days-ahead=0')->dailyAt('02:30')->withoutOverlapping(30);
 
-        // The events' alarms (24 hours and 1 hour before) for each matter's assistant and expert: reminder
+        // Single events' alarms (24 hours and 1 hour before) for the matter's assistant: reminder
         // items in their calendars, notifications when due, items that have rung taken away.
         $schedule->command('calendar:alarms')->everyMinute()->withoutOverlapping(10);
 

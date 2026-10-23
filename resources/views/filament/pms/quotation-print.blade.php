@@ -71,8 +71,8 @@
         <div class="meta">
             <h1>{{ __('Quotation') }}</h1>
             <div class="muted">{{ __('Prospect / Tenant') }}: {{ $quotation->party->name }}</div>
-            <div class="muted">{{ __('Valid Until') }}: {{ $quotation->validity_date->translatedFormat('d M Y') }}</div>
-            <div class="muted">{{ __('Printed') }}: {{ now()->translatedFormat('d M Y') }}</div>
+            <div class="muted">{{ __('Valid Until') }}: {{ $quotation->validity_date->format(\App\Support\Dates::dateFormat()) }}</div>
+            <div class="muted">{{ __('Printed') }}: {{ now()->format(\App\Support\Dates::dateFormat()) }}</div>
         </div>
     </header>
 
@@ -136,9 +136,9 @@
         <tbody>
             <tr>
                 <td>{{ __('Start Date') }}</td>
-                <td>{{ $period[0]->format('d/m/Y') }}</td>
+                <td>{{ $period[0]->format(\App\Support\Dates::dateFormat()) }}</td>
                 <td>{{ __('End Date') }}</td>
-                <td>{{ $period[1]->format('d/m/Y') }}</td>
+                <td>{{ $period[1]->format(\App\Support\Dates::dateFormat()) }}</td>
             </tr>
             <tr>
                 <td>{{ __('Contract Type') }}</td>
@@ -170,7 +170,7 @@
                 <tr>
                     <td>{{ $row['number'] }}</td>
                     <td>{{ $row['label'] }}</td>
-                    <td>{{ $row['due_date']->format('d/m/Y') }}</td>
+                    <td>{{ $row['due_date']->format(\App\Support\Dates::dateFormat()) }}</td>
                     <td class="amount">{{ number_format($row['amount'], 2) }}</td>
                 </tr>
             @endforeach

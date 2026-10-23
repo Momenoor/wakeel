@@ -210,7 +210,7 @@ class UnfiledEmails extends Page implements HasTable
             ->columns([
                 TextColumn::make('at')
                     ->label(__('Received'))
-                    ->dateTime('d/m/Y H:i')
+                    ->dateTime()
                     ->sortable(),
                 TextColumn::make('from')
                     ->label(__('From'))

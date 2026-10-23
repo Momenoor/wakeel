@@ -118,7 +118,7 @@ class ExistingMeetingTest extends TestCase
 
         $html = SameDayMeetings::html('2026-10-20 15:00:00');
         $this->assertStringContainsString('اجتماع مباشر', $html);
-        $this->assertStringContainsString('10:00–11:00', $html);
+        $this->assertStringContainsString('10:00 AM–11:00 AM', $html);
         $this->assertStringContainsString('Teams', $html);
         $this->assertStringNotContainsString('في يوم آخر', $html);
 

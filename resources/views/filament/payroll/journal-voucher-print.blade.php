@@ -99,7 +99,7 @@
             <h1>{{ __('Journal Voucher') }}</h1>
             <div class="muted">{{ __('Period') }}: {{ $voucher['period'] }}</div>
             <div class="muted">{{ __('Employees') }}: {{ $voucher['employee_count'] }}</div>
-            <div class="muted">{{ __('Printed') }}: {{ now()->translatedFormat('d M Y') }}</div>
+            <div class="muted">{{ __('Printed') }}: {{ now()->format(\App\Support\Dates::dateFormat()) }}</div>
         </div>
     </header>
 

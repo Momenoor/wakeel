@@ -10,6 +10,7 @@ use App\Models\CalendarEvent;
 use App\Models\User;
 use App\Services\MMS\Calendar\UnmatchedEventReferences;
 use App\Services\Notifications\NotificationPreferences;
+use App\Support\Dates;
 use BezhanSalleh\FilamentShield\Support\Utils;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Mail;
@@ -53,7 +54,7 @@ class ReportUnmatchedEventReferences extends Command
         app()->setLocale('ar');
 
         $rows = UnmatchedEventReferences::events()->get()->map(fn (CalendarEvent $event) => [
-            'date' => $event->start_datetime?->translatedFormat('D d/m/Y g:i A'),
+            'date' => $event->start_datetime?->format(Dates::dateTimeFormat()),
             'title' => $event->title,
             'missing' => $missing[$event->id] ?? [],
         ])->all();

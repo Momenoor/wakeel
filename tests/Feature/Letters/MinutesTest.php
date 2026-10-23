@@ -184,7 +184,7 @@ class MinutesTest extends TestCase
         $html = MinutesService::composer($minutes->fresh())->bodyHtml();
         $this->assertStringContainsString('محضر الخبرة الحسابية عن بُعد رقم (1)', $html);
         $this->assertStringContainsString('في الدعوى رقم 3153/2026', $html);
-        $this->assertStringContainsString('اليوم الأربعاء الموافق 30/09/2026 الساعة 4:00 مساءً', $html);
+        $this->assertStringContainsString('اليوم الأربعاء الموافق 30/09/2026 الساعة 04:00 مساءً', $html);
         // Under their capacity, each on a line.
         $this->assertStringContainsString('<p><strong>المدعي:</strong></p><p>السيد/ المهاد لخدمات صيانة السفن – رقم الهوية: <bdo dir="ltr">784-1998-6110217-8</bdo></p>', $html);
         $this->assertStringContainsString('<p><strong>وكيل المدعي:</strong></p><p>الأستاذ/ محمد عبد المقصود – رقم الهوية: <bdo dir="ltr">784-1987-8792411-1</bdo> – رقم الهاتف: <bdo dir="ltr">0501132801</bdo></p>', $html);
@@ -321,7 +321,7 @@ class MinutesTest extends TestCase
 
         // Not finalised: no link, no end time — those parts are left out.
         $html = MinutesService::composer($minutes->fresh())->bodyHtml();
-        $this->assertStringContainsString('<p>افتتح الاجتماع الساعة 4:00 مساءً.</p><p>بحضور كل من:</p>', $html);
+        $this->assertStringContainsString('<p>افتتح الاجتماع الساعة 04:00 مساءً.</p><p>بحضور كل من:</p>', $html);
         $this->assertStringContainsString('<p>وأقفل المحضر.</p>', $html);
 
         $this->minutesPage()
@@ -333,7 +333,7 @@ class MinutesTest extends TestCase
 
         $minutes->refresh();
         $this->assertSame('2026-09-30 17:30', $minutes->ended_at->format('Y-m-d H:i'));
-        $this->assertStringContainsString('<p>وأقفل المحضر في تمام الساعة 5:30 مساءً.</p>', MinutesService::composer($minutes)->bodyHtml());
+        $this->assertStringContainsString('<p>وأقفل المحضر في تمام الساعة 05:30 مساءً.</p>', MinutesService::composer($minutes)->bodyHtml());
     }
 
     public function test_the_attendees_list_is_laid_out_as_the_template_says(): void

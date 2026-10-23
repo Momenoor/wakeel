@@ -38,7 +38,7 @@ class PaymentsReceivedReport extends PmsReport
             ->columns([
                 TextColumn::make('paid_date')
                     ->label(__('Paid on'))
-                    ->date('d/m/Y')
+                    ->date()
                     ->sortable()
                     ->summarize(Count::make()->label(__('Payments'))),
                 TextColumn::make('tenant')
@@ -52,7 +52,7 @@ class PaymentsReceivedReport extends PmsReport
                     ->wrap(),
                 TextColumn::make('installment.due_date')
                     ->label(__('Instalment due'))
-                    ->date('d/m/Y'),
+                    ->date(),
                 TextColumn::make('payment_method')
                     ->label(__('Method'))
                     ->badge(),

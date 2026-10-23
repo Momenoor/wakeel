@@ -6,6 +6,7 @@ use App\Enums\RequestStatus;
 use App\Models\Matter;
 use App\Models\MatterRequest;
 use App\Services\MMS\Requests\RequestServiceFactory;
+use App\Support\Dates;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -70,7 +71,7 @@ class MatterReceivedNotificationController
         ]);
 
         $matterRequest->update([
-            'comment' => __('New Receive Date Request to').':'.Carbon::parse($httpRequest->input('proposed_distributed_at'))->format('M d, Y').' - '.$httpRequest->input('comment'),
+            'comment' => __('New Receive Date Request to').':'.Carbon::parse($httpRequest->input('proposed_distributed_at'))->format(Dates::dateFormat()).' - '.$httpRequest->input('comment'),
             'status' => RequestStatus::DISPUTED,
             'email_action' => 'dispute',
             'extra' => array_merge($matterRequest->extra ?? [], [

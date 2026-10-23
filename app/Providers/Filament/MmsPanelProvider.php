@@ -14,6 +14,7 @@ use App\Models\Setting;
 use App\Services\MMS\Calendar\UnmatchedEventReferences;
 use App\Services\Push\VapidKeys;
 use App\Support\Branding;
+use App\Support\Dates;
 use App\Support\Dock;
 use App\Support\Live;
 use BezhanSalleh\FilamentShield\Support\Utils;
@@ -163,7 +164,7 @@ class MmsPanelProvider extends PanelProvider
                 }
 
                 $rows = UnmatchedEventReferences::events()->limit(10)->get()->map(fn (CalendarEvent $event) => [
-                    'date' => $event->start_datetime?->translatedFormat('D d/m/Y'),
+                    'date' => $event->start_datetime?->format(Dates::dateFormat()),
                     'title' => $event->title,
                     'missing' => $missing[$event->id] ?? [],
                 ])->all();

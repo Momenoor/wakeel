@@ -198,6 +198,8 @@
                 <input
                     type="date"
                     wire:model="dueOn"
+                    {{-- Wide enough for the date written out in words (an iPhone's, in Arabic too) on one line. --}}
+                    style="min-width: 13rem; white-space: nowrap"
                     class="w-40 rounded px-2 py-1 text-xs focus:border-purple-500 focus:ring-purple-500 border-purple-300 dark:border-purple-700 bg-white/70 dark:bg-[#1a0035]/60 text-purple-950 dark:text-purple-50"
                     aria-label="{{ __('Date') }}"
                 >
@@ -255,7 +257,7 @@
                                             @include('livewire.partials.todo-mention-list')
                                         </div>
                                         <div class="flex items-center gap-2">
-                                            <input type="date" x-model="date" class="rounded border-purple-300 dark:border-purple-700 px-2 py-0.5 text-xs bg-white/70 dark:bg-[#1a0035]/60 text-purple-950 dark:text-purple-50">
+                                            <input type="date" x-model="date" style="min-width: 13rem; white-space: nowrap" class="rounded border-purple-300 dark:border-purple-700 px-2 py-0.5 text-xs bg-white/70 dark:bg-[#1a0035]/60 text-purple-950 dark:text-purple-50">
                                             <button type="submit" class="text-xs font-semibold underline">{{ __('Save') }}</button>
                                         </div>
                                     </form>

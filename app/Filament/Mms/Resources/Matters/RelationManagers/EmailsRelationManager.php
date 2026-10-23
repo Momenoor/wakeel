@@ -12,6 +12,7 @@ use App\Models\Matter;
 use App\Models\MatterEmail;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterReplyCollector;
+use App\Support\Dates;
 use App\Support\Documents;
 use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
@@ -80,7 +81,7 @@ class EmailsRelationManager extends RelationManager
             ->columns([
                 TextColumn::make('at')
                     ->label(__('Date'))
-                    ->dateTime('d/m/Y H:i')
+                    ->dateTime()
                     ->sortable(),
                 TextColumn::make('direction')
                     ->label(__('Direction'))
@@ -256,7 +257,7 @@ class EmailsRelationManager extends RelationManager
         $files = self::fileLinks($email);
 
         $rows = array_filter([
-            'at' => [__('Date'), $email->at?->format('d/m/Y H:i')],
+            'at' => [__('Date'), $email->at?->format(Dates::dateTimeFormat())],
             'from' => [__('From'), $sent ? $email->user?->name : $email->from],
             'to' => [__('To'), implode('، ', (array) $email->to)],
             'cc' => [__('Cc'), implode('، ', (array) $email->cc)],

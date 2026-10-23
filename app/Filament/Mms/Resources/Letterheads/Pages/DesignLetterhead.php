@@ -8,6 +8,7 @@ use App\Models\LetterTemplate;
 use App\Models\Matter;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterPdf;
+use App\Support\Dates;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
@@ -194,7 +195,7 @@ class DesignLetterhead extends Page
     {
         return match ($element['type'] ?? 'text') {
             'reference' => 'المرجع: JPA/2026/123/1',
-            'date' => 'التاريخ: '.now()->format('d/m/Y'),
+            'date' => 'التاريخ: '.now()->format(Dates::dateFormat()),
             'page_number' => '1 / 1',
             'logo' => __('Logo'),
             'image' => __('Image'),

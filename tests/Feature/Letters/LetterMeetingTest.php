@@ -277,7 +277,7 @@ class LetterMeetingTest extends TestCase
         $this->assertSame('2026-10-07 13:00', CalendarEvent::sole()->start_datetime->format('Y-m-d H:i'));
         $html = MatterLetter::sole()->rendered_html;
         // When it is, as the meeting was set.
-        $this->assertStringContainsString('يوم الأربعاء الموافق 07/10/2026 الساعة 1:00 مساءً', $html);
+        $this->assertStringContainsString('يوم الأربعاء الموافق 07/10/2026 الساعة 01:00 مساءً', $html);
         $this->assertStringContainsString('<a href="'.e(self::JOIN_URL).'">انقر هنا للانضمام إلى الاجتماع</a>', $html);
         $this->assertStringNotContainsString('meeting.link', $html);
     }

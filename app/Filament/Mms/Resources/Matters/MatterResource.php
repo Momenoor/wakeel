@@ -10,6 +10,7 @@ use App\Filament\Mms\Resources\Matters\Schemas\MatterForm;
 use App\Filament\Mms\Resources\Matters\Schemas\MatterInfolist;
 use App\Filament\Mms\Resources\Matters\Tables\MattersTable;
 use App\Models\Matter;
+use App\Support\ContactSearch;
 use App\Support\MatterSearch;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -60,6 +61,13 @@ class MatterResource extends Resource
      */
     protected static function applyGlobalSearchAttributeConstraints(Builder $query, string $search): void
     {
+        // An email or a phone number: the matters it is a main party's of.
+        if ($contact = ContactSearch::parse($search)) {
+            $query->whereHas('mainPartiesOnly.party', fn (Builder $party) => ContactSearch::apply($party, $contact));
+
+            return;
+        }
+
         $words = preg_split('/[\s\/\\\\-]+/u', trim($search), -1, PREG_SPLIT_NO_EMPTY);
 
         foreach ($words as $word) {

@@ -65,7 +65,7 @@ class BulkMailRelationManager extends RelationManager
                     ->state(fn (BulkMailCampaign $record): string => "{$record->sent_count} / {$record->total_recipients}".($record->failed_count ? ' ('.__('bulk_mail.fields.failed').": {$record->failed_count})" : '')),
                 TextColumn::make('created_at')
                     ->label(__('bulk_mail.fields.created_at'))
-                    ->dateTime('d/m/Y H:i')
+                    ->dateTime()
                     ->sortable(),
             ])
             ->headerActions([

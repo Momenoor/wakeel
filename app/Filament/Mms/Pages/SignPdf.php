@@ -12,6 +12,7 @@ use App\Models\Attachment;
 use App\Models\Contracts\AttachmentOwner;
 use App\Models\SignatureStamp;
 use App\Services\SignatureStamps\SigningLog;
+use App\Support\Dates;
 use App\Support\ScreenPermissions;
 use BackedEnum;
 use Filament\Notifications\Notification;
@@ -110,7 +111,7 @@ class SignPdf extends Page
             'stamps' => SignatureStamp::query()->usableBy(auth()->user())->orderByDesc('is_shared')->orderBy('name')->get()->map->toEditor()->all(),
             'widths' => collect(SignatureStampKind::cases())->mapWithKeys(fn (SignatureStampKind $kind): array => [$kind->value => $kind->defaultWidthMm()])->all(),
             'canSaveDrawn' => auth()->user()->can('create', SignatureStamp::class),
-            'today' => now()->format('d/m/Y'),
+            'today' => now()->format(Dates::dateFormat()),
             'labels' => [
                 'tooBig' => __('The file is bigger than :size MB.', ['size' => round((int) config('attachments.max_kb') / 1024)]),
                 'notPdf' => __('This is not a PDF file.'),

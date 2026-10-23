@@ -104,7 +104,7 @@ class MyMattersReport extends Page implements HasTable
 
                 TextColumn::make('next_session_date')
                     ->label(__('Next Session'))
-                    ->dateTime('D, d M Y')
+                    ->date()
                     ->description(fn (Matter $record) => $record->next_session_date?->isFuture()
                         ? $record->next_session_date->diffForHumans()
                         : null)

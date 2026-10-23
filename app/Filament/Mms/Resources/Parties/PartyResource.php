@@ -12,6 +12,7 @@ use App\Filament\Mms\Resources\Parties\Schemas\PartyForm;
 use App\Filament\Mms\Resources\Parties\Schemas\PartyInfolist;
 use App\Filament\Mms\Resources\Parties\Tables\PartiesTable;
 use App\Models\Party;
+use App\Support\ContactSearch;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -26,13 +27,6 @@ class PartyResource extends Resource
     protected static bool $isGloballySearchable = true;
 
     protected static int $globalSearchResultsLimit = 10;
-
-    public static function getGlobalSearchResultDetails(Model $record): array
-    {
-        $phone = collect((array) $record->phone)->flatten()->filter()->first();
-
-        return array_filter([__('Phone') => is_scalar($phone) ? (string) $phone : null]);
-    }
 
     protected static string|null|BackedEnum $navigationIcon = 'heroicon-o-user-group';
 
@@ -70,6 +64,29 @@ class PartyResource extends Resource
     }
 
     protected static ?string $recordTitleAttribute = 'name';
+
+    /** By name — or, given an email or a phone number, by those (ContactSearch). */
+    protected static function applyGlobalSearchAttributeConstraints(Builder $query, string $search): void
+    {
+        if ($contact = ContactSearch::parse($search)) {
+            ContactSearch::apply($query, $contact);
+
+            return;
+        }
+
+        parent::applyGlobalSearchAttributeConstraints($query, $search);
+    }
+
+    /** Its phone and email under its name, so the one found is told apart. */
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        $list = fn (mixed $values): string => collect((array) $values)->flatten()->filter(fn ($value): bool => is_scalar($value) && filled($value))->implode('، ');
+
+        return array_filter([
+            __('Phone') => $list($record->phone),
+            __('Email') => $list($record->email),
+        ]);
+    }
 
     public static function form(Schema $schema): Schema
     {

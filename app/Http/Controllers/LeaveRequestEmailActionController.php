@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\LeaveRequest;
 use App\Services\MMS\LeaveRequestService;
+use App\Support\Dates;
 use Illuminate\Http\Request;
 
 /**
@@ -96,8 +97,8 @@ class LeaveRequestEmailActionController
     {
         return [
             __('Employee') => (string) $leaveRequest->party?->name,
-            __('From') => (string) $leaveRequest->start_date?->locale('ar')->translatedFormat('d F Y'),
-            __('To') => (string) $leaveRequest->end_date?->locale('ar')->translatedFormat('d F Y'),
+            __('From') => (string) $leaveRequest->start_date?->locale('ar')->format(Dates::dateFormat()),
+            __('To') => (string) $leaveRequest->end_date?->locale('ar')->format(Dates::dateFormat()),
             __('Requested Leave Type') => $leaveRequest->requested_leave_type?->getLabel() ?? '—',
         ];
     }

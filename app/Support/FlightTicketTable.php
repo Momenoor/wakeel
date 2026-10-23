@@ -48,7 +48,7 @@ class FlightTicketTable
                 ->placeholder('—'),
             TextColumn::make('paid_at')
                 ->label(__('Paid On'))
-                ->date('d/m/Y')
+                ->date()
                 ->placeholder('—')
                 ->description(fn (FlightTicket $record): ?string => match ($record->paid_via) {
                     FlightTicket::PAID_VIA_PAYROLL => __('Through payroll'),

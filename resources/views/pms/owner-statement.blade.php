@@ -7,9 +7,9 @@
         ->map(fn ($list, $building) => trim($building.' — '.$list->pluck('unit_number')->implode(', '), ' —'))
         ->implode(' | ') ?: '—';
     $period = match (true) {
-        $from && $until => $from->format('d/m/Y').' – '.$until->format('d/m/Y'),
-        (bool) $from => __('From').' '.$from->format('d/m/Y'),
-        (bool) $until => __('Until').' '.$until->format('d/m/Y'),
+        $from && $until => $from->format(\App\Support\Dates::dateFormat()).' – '.$until->format(\App\Support\Dates::dateFormat()),
+        (bool) $from => __('From').' '.$from->format(\App\Support\Dates::dateFormat()),
+        (bool) $until => __('Until').' '.$until->format(\App\Support\Dates::dateFormat()),
         default => __('All dates'),
     };
     $align = $rtl ? 'left' : 'right';
@@ -47,7 +47,7 @@
                     <img src="{{ $logo }}" style="max-height: 55px; max-width: 180px;" /><br>
                 @endif
                 <span class="muted">{{ $company }}</span><br>
-                <span class="muted" style="font-size: 8pt;">{{ __('Issued') }} {{ now()->format('d/m/Y') }}</span>
+                <span class="muted" style="font-size: 8pt;">{{ __('Issued') }} {{ now()->format(\App\Support\Dates::dateFormat()) }}</span>
             </td>
         </tr>
     </table>
@@ -90,7 +90,7 @@
             <tbody>
                 @foreach ($installments as $installment)
                     <tr>
-                        <td>{{ $installment->due_date?->format('d/m/Y') }}</td>
+                        <td>{{ $installment->due_date?->format(\App\Support\Dates::dateFormat()) }}</td>
                         <td>{{ $tenant($installment->lease) }}</td>
                         <td>{{ $units($installment->lease) }}</td>
                         <td class="num">{{ $money($installment->total_due_amount) }}</td>
@@ -128,7 +128,7 @@
             <tbody>
                 @foreach ($payments as $payment)
                     <tr>
-                        <td>{{ $payment->paid_date?->format('d/m/Y') }}</td>
+                        <td>{{ $payment->paid_date?->format(\App\Support\Dates::dateFormat()) }}</td>
                         <td>{{ $tenant($payment->installment?->lease) }}</td>
                         <td>{{ $units($payment->installment?->lease) }}</td>
                         <td>{{ $payment->payment_method?->getLabel() ?? '—' }}</td>

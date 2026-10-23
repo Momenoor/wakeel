@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\User;
+use Illuminate\Support\Facades\Cookie;
 
 /**
  * The to-do note and the chat pinned to the page: a column beside it on
@@ -53,6 +54,29 @@ final class Dock
     public static function pinned(?User $user, string $which): bool
     {
         return self::state($user)[$which] ?? false;
+    }
+
+    /** How long a device remembers the note or the chat open or closed: a year. */
+    private const REMEMBER_MINUTES = 525600;
+
+    /**
+     * Whether the to-do note or the chat was left open on this device by this user — a cookie of this browser,
+     * one for each user, so another device, or another person signing in here, keeps their own.
+     */
+    public static function wasOpen(string $which): bool
+    {
+        return request()->cookie(self::cookie($which)) === '1';
+    }
+
+    /** Opened or closed: remembered on this device for this user. */
+    public static function rememberOpen(string $which, bool $open): void
+    {
+        Cookie::queue(self::cookie($which), $open ? '1' : '0', self::REMEMBER_MINUTES);
+    }
+
+    private static function cookie(string $which): string
+    {
+        return 'wakeel_'.$which.'_open_'.(auth()->id() ?? 0);
     }
 
     public static function set(User $user, string $which, bool $pinned): void

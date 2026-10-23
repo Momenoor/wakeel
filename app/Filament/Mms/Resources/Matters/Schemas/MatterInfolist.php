@@ -40,6 +40,7 @@ use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\OneDriveFolderLinker;
 use App\Services\MMS\Requests\RequestHistory;
 use App\Support\Currency;
+use App\Support\Dates;
 use App\Support\ScreenPermissions;
 use Closure;
 use Filament\Actions\Action;
@@ -294,7 +295,7 @@ class MatterInfolist
 
                         return $next ?? $record?->next_session_date;
                     })
-                    ->dateTime('D d/m/Y g:i A')
+                    ->dateTime()
                     ->placeholder('—')
                     ->color('primary'),
                 // The latest step of its progress.
@@ -304,7 +305,7 @@ class MatterInfolist
                     ->state(function ($record): ?string {
                         $step = $record?->progress()->latest('happened_at')->latest('id')->first();
 
-                        return $step ? $step->type->getLabel().(trim($step->title) !== $step->type->getLabel() ? ': '.$step->title : '').' — '.$step->happened_at->format('d/m/Y') : null;
+                        return $step ? $step->type->getLabel().(trim($step->title) !== $step->type->getLabel() ? ': '.$step->title : '').' — '.$step->happened_at->format(Dates::dateFormat()) : null;
                     })
                     ->placeholder('—'),
                 TextEntry::make('assistants_summary')
@@ -377,9 +378,9 @@ class MatterInfolist
             TextEntry::make('start_datetime')
                 ->label(__('Date'))
                 ->hiddenLabel()
-                ->formatStateUsing(fn (CalendarEvent $record): ?string => $record->start_datetime?->translatedFormat('D d/m/Y'))
+                ->formatStateUsing(fn (CalendarEvent $record): ?string => $record->start_datetime?->format(Dates::dateFormat()))
                 ->weight(FontWeight::SemiBold)
-                ->helperText(fn (CalendarEvent $record): ?string => $record->is_all_day ? __('All day') : $record->start_datetime?->translatedFormat('g:i A')),
+                ->helperText(fn (CalendarEvent $record): ?string => $record->is_all_day ? __('All day') : $record->start_datetime?->format(Dates::timeFormat())),
             TextEntry::make('title')
                 ->label(__('Title'))
                 ->hiddenLabel()
@@ -427,7 +428,7 @@ class MatterInfolist
                     ->searchable()
                     ->required()
                     ->getOptionLabelUsing(fn ($value): ?string => ($event = CalendarEvent::find($value))
-                        ? $event->start_datetime?->format('d/m/Y g:i A').' — '.$event->title
+                        ? $event->start_datetime?->format(Dates::dateTimeFormat()).' — '.$event->title
                         : null)
                     ->getSearchResultsUsing(function (string $search): array {
                         $query = CalendarEvent::query()->orderByDesc('start_datetime')->limit(30);
@@ -438,7 +439,7 @@ class MatterInfolist
                             : $query->where('title', 'like', '%'.$search.'%');
 
                         return $query->get()->mapWithKeys(fn (CalendarEvent $event) => [
-                            $event->id => $event->start_datetime?->format('d/m/Y g:i A').' — '.$event->title,
+                            $event->id => $event->start_datetime?->format(Dates::dateTimeFormat()).' — '.$event->title,
                         ])->all();
                     }),
             ])

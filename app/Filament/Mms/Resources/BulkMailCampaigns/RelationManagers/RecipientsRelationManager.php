@@ -9,6 +9,7 @@ use App\Jobs\RebuildCampaignPdfs;
 use App\Models\BulkMailRecipient;
 use App\Models\MatterEmail;
 use App\Services\MMS\BulkMailService;
+use App\Support\Dates;
 use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
@@ -169,7 +170,7 @@ class RecipientsRelationManager extends RelationManager
                 TextColumn::make('reply')
                     ->label(__('Reply'))
                     ->state(fn (BulkMailRecipient $record) => $this->replies()->get($record->getKey())?->first()?->at)
-                    ->dateTime('d/m/Y H:i')
+                    ->dateTime()
                     ->description(fn (BulkMailRecipient $record): ?string => ($count = $this->replies()->get($record->getKey())?->count() ?? 0) > 1 ? trans_choice(':count reply|:count replies', $count, ['count' => $count]) : null)
                     ->placeholder('—')
                     ->color('success'),
@@ -241,7 +242,7 @@ class RecipientsRelationManager extends RelationManager
                                     ->weight(FontWeight::SemiBold),
                                 TextEntry::make('from')
                                     ->hiddenLabel()
-                                    ->state(fn (MatterEmail $record): string => $record->from.' — '.$record->at?->format('d/m/Y H:i'))
+                                    ->state(fn (MatterEmail $record): string => $record->from.' — '.$record->at?->format(Dates::dateTimeFormat()))
                                     ->size(TextSize::ExtraSmall)
                                     ->color('gray'),
                                 TextEntry::make('files')

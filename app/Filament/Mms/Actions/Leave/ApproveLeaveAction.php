@@ -8,6 +8,7 @@ use App\Models\LeaveRequest;
 use App\Services\MMS\LeaveBalanceService;
 use App\Services\MMS\LeaveEntitlementService;
 use App\Services\MMS\LeaveRequestService;
+use App\Support\Dates;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Placeholder;
@@ -122,8 +123,8 @@ class ApproveLeaveAction extends Action
                     'days' => number_format($record->requestedDays(), 1)
                             |> (fn ($x) => rtrim($x, '0'))
                             |> (fn ($x) => rtrim($x, '.')),
-                    'from' => $record->start_date->translatedFormat('d M Y'),
-                    'to' => $record->end_date->translatedFormat('d M Y'),
+                    'from' => $record->start_date->format(Dates::dateFormat()),
+                    'to' => $record->end_date->format(Dates::dateFormat()),
                 ]) : ''),
 
             // The balances the decision turns on, put in front of the person

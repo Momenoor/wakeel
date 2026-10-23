@@ -9,6 +9,9 @@ use App\Filament\Mms\Resources\MatterRequests\Pages\ViewMatterRequest;
 use App\Filament\Mms\Resources\MatterRequests\Schemas\MatterRequestInfolist;
 use App\Filament\Mms\Resources\MatterRequests\Tables\MatterRequestsTable;
 use App\Models\MatterRequest;
+use App\Support\ContactSearch;
+use App\Support\Dates;
+use App\Support\RecordNumber;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -45,12 +48,30 @@ class MatterRequestResource extends Resource
     protected static int $globalSearchResultsLimit = 10;
 
     /**
+     * Searched as applyGlobalSearchAttributeConstraints() says; a field named so the panel searches it at all —
+     * with none (no record title attribute), requests were never in the results.
+     */
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['comment'];
+    }
+
+    /**
      * Each word (a "/" splits too, so "123/2024" works) must match the
      * matter's year or number, the kind of request as it reads ("الصعوبة"),
      * who asked, or the comment.
      */
     protected static function applyGlobalSearchAttributeConstraints(Builder $query, string $search): void
     {
+        // An email or a phone number: requests on the matters it is a main party's of, or asked by its owner.
+        if ($contact = ContactSearch::parse($search)) {
+            $query->where(fn (Builder $q) => $q
+                ->whereHas('matter.mainPartiesOnly.party', fn (Builder $party) => ContactSearch::apply($party, $contact))
+                ->orWhereHas('requestBy.party', fn (Builder $party) => ContactSearch::apply($party, $contact)));
+
+            return;
+        }
+
         $words = preg_split('/[\s\/]+/u', trim($search), -1, PREG_SPLIT_NO_EMPTY);
 
         foreach ($words as $word) {
@@ -59,12 +80,16 @@ class MatterRequestResource extends Resource
                 ->map(fn (RequestType $type): string => $type->value)
                 ->all();
 
+            $number = RecordNumber::parse($word);
+
             $query->where(fn (Builder $q) => $q
                 ->whereHas('matter', fn (Builder $m) => is_numeric($word)
                     ? $m->where('year', $word)->orWhere('number', $word)
                     : $m->where('number', 'like', "%{$word}%"))
                 ->orWhereHas('requestBy', fn (Builder $u) => $u->where('name', 'like', "%{$word}%"))
                 ->orWhere('comment', 'like', "%{$word}%")
+                // Its own number: "12" or "#12".
+                ->when($number !== null, fn (Builder $q) => $q->orWhere($q->qualifyColumn('id'), $number))
                 ->when($types !== [], fn (Builder $q) => $q->orWhereIn('type', $types)));
         }
     }
@@ -76,7 +101,7 @@ class MatterRequestResource extends Resource
 
     public static function getGlobalSearchResultTitle(Model $record): string
     {
-        return trim($record->type?->getLabel().' — '.$record->matter?->year.'/'.$record->matter?->number, ' —/');
+        return '#'.$record->getKey().' '.trim($record->type?->getLabel().' — '.$record->matter?->year.'/'.$record->matter?->number, ' —/');
     }
 
     public static function getGlobalSearchResultDetails(Model $record): array
@@ -84,7 +109,7 @@ class MatterRequestResource extends Resource
         return array_filter([
             __('Status') => $record->status?->getLabel(),
             __('Requester') => $record->requestBy?->name,
-            __('Date') => $record->created_at?->format('d/m/Y'),
+            __('Date') => $record->created_at?->format(Dates::dateFormat()),
         ]);
     }
 

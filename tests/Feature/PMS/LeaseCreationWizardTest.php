@@ -179,8 +179,8 @@ class LeaseCreationWizardTest extends TestCase
         );
         $this->assertSame(array_fill(0, 6, '10000.00'), array_column($rows, 'amount'));
         $this->assertSame(array_fill(0, 6, 'post_dated_cheque'), array_column($rows, 'payment_method'));
-        // The deposit defaults to the start date.
-        $this->assertSame('2026-06-21', $component->instance()->data['deposit_payment']['payment_date']);
+        // The deposit defaults to the start date (its day: a date picker holds it with a time in the form).
+        $this->assertSame('2026-06-21', substr((string) $component->instance()->data['deposit_payment']['payment_date'], 0, 10));
     }
 
     public function test_generated_rows_round_to_ten_and_share_a_bank_and_numbered_references(): void

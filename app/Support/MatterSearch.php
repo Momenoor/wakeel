@@ -15,7 +15,8 @@ use Illuminate\Support\Str;
  */
 class MatterSearch
 {
-    private const DIGITS = ['٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4', '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9'];
+    /** Arabic digits read as digits (also by ContactSearch). */
+    public const DIGITS = ['٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4', '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9'];
 
     /**
      * @return array<int, string> id => label

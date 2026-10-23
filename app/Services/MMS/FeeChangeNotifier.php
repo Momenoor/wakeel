@@ -10,6 +10,7 @@ use App\Models\Matter;
 use App\Models\User;
 use App\Services\Notifications\Notifier;
 use App\Support\Currency;
+use App\Support\Dates;
 use App\Support\PendingBatch;
 use ArrayObject;
 use Carbon\Carbon;
@@ -47,7 +48,7 @@ class FeeChangeNotifier
     {
         self::note($model, $model instanceof Fee
             ? __('Fee added: :fee', ['fee' => self::fee($model)])
-            : __('Collection recorded: :amount on the :type fee (:date)', ['amount' => Currency::text($model->amount), 'type' => self::type($model->fee), 'date' => $model->date?->format('d/m/Y')]));
+            : __('Collection recorded: :amount on the :type fee (:date)', ['amount' => Currency::text($model->amount), 'type' => self::type($model->fee), 'date' => $model->date?->format(Dates::dateFormat())]));
     }
 
     public static function updated(Model $model): void
@@ -139,7 +140,7 @@ class FeeChangeNotifier
             $new = $model->getAttribute($field);
             $show = fn ($value): string => match ($field) {
                 'amount' => Currency::text($value),
-                'date' => $value ? Carbon::parse($value)->format('d/m/Y') : '—',
+                'date' => $value ? Carbon::parse($value)->format(Dates::dateFormat()) : '—',
                 'type' => $value?->getLabel() ?? '—',
                 default => filled($value) ? (string) $value : '—',
             };
@@ -154,7 +155,7 @@ class FeeChangeNotifier
 
     private static function fee(Fee $fee): string
     {
-        return self::type($fee).' '.Currency::text($fee->amount).' ('.$fee->date?->format('d/m/Y').')';
+        return self::type($fee).' '.Currency::text($fee->amount).' ('.$fee->date?->format(Dates::dateFormat()).')';
     }
 
     private static function type(?Fee $fee): string

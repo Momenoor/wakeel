@@ -3,10 +3,13 @@
 namespace App\Filament\Support;
 
 use App\Models\CalendarEvent;
+use App\Support\Dates;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Closure;
 use Filament\Forms\Components\Placeholder;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
 use Throwable;
 
@@ -23,7 +26,7 @@ class SameDayMeetings
     /**
      * The events on a day, earliest first.
      *
-     * @return \Illuminate\Support\Collection<int, CalendarEvent>
+     * @return Collection<int, CalendarEvent>
      */
     public static function on(mixed $date, ?int $exceptId = null)
     {
@@ -47,7 +50,7 @@ class SameDayMeetings
      * none), would run during — any that is on in that time. All-day events
      * are not meetings that take the time.
      *
-     * @return \Illuminate\Support\Collection<int, CalendarEvent>
+     * @return Collection<int, CalendarEvent>
      */
     public static function overlapping(CarbonInterface $start, ?CarbonInterface $end = null, ?int $exceptId = null)
     {
@@ -73,7 +76,7 @@ class SameDayMeetings
     /** SQL for "start_datetime plus an hour", for the database in use. */
     private static function plusHour(): string
     {
-        return match (\Illuminate\Support\Facades\DB::connection()->getDriverName()) {
+        return match (DB::connection()->getDriverName()) {
             'sqlite' => "datetime(start_datetime, '+1 hour')",
             'pgsql' => "start_datetime + interval '1 hour'",
             default => 'DATE_ADD(start_datetime, INTERVAL 1 HOUR)',
@@ -83,7 +86,7 @@ class SameDayMeetings
     /**
      * Those meetings as lines: "10:00–11:00 title (matter)".
      *
-     * @param  \Illuminate\Support\Collection<int, CalendarEvent>  $events
+     * @param  Collection<int, CalendarEvent>  $events
      * @return list<string>
      */
     public static function lines($events): array
@@ -91,7 +94,7 @@ class SameDayMeetings
         return $events->map(function (CalendarEvent $event): string {
             $matters = $event->matters->push($event->matter)->filter()->unique('id')->map(fn ($matter) => $matter->reference)->implode('، ');
 
-            return $event->start_datetime->format('d/m/Y H:i').($event->end_datetime ? '–'.$event->end_datetime->format('H:i') : '').' — '.$event->title.($matters !== '' ? ' ('.$matters.')' : '');
+            return $event->start_datetime->format(Dates::dateTimeFormat()).($event->end_datetime ? '–'.$event->end_datetime->format(Dates::timeFormat()) : '').' — '.$event->title.($matters !== '' ? ' ('.$matters.')' : '');
         })->values()->all();
     }
 
@@ -116,7 +119,7 @@ class SameDayMeetings
 
         $rows = $events->take(self::LIMIT)->map(function (CalendarEvent $event): string {
             $matters = $event->matters->push($event->matter)->filter()->unique('id')->map(fn ($matter) => $matter->reference)->implode('، ');
-            $time = $event->is_all_day ? __('All Day') : $event->start_datetime->format('H:i').($event->end_datetime ? '–'.$event->end_datetime->format('H:i') : '');
+            $time = $event->is_all_day ? __('All Day') : $event->start_datetime->format(Dates::timeFormat()).($event->end_datetime ? '–'.$event->end_datetime->format(Dates::timeFormat()) : '');
 
             return '<li style="margin-bottom: 2px;"><strong dir="ltr" style="unicode-bidi: isolate;">'.e($time).'</strong> '.e($event->title)
                 .($matters !== '' ? ' <span style="opacity: .7;">('.e($matters).')</span>' : '')

@@ -111,7 +111,7 @@ class GlobalSearchTest extends TestCase
             'comment' => 'Another one',
         ]);
 
-        $title = RequestType::CHANGE_DIFFICULTY->getLabel().' — 2024/4321';
+        $title = '#'.$request->id.' '.RequestType::CHANGE_DIFFICULTY->getLabel().' — 2024/4321';
 
         foreach (['4321/2024', 'Requesting', 'Harder', RequestType::CHANGE_DIFFICULTY->getLabel()] as $search) {
             $results = MatterRequestResource::getGlobalSearchResults($search);

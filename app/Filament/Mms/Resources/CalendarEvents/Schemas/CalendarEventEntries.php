@@ -35,11 +35,11 @@ class CalendarEventEntries
         return [
             TextEntry::make('start_datetime')
                 ->label(__('Start At'))
-                ->dateTime('d M Y H:i'),
+                ->dateTime(),
 
             TextEntry::make('end_datetime')
                 ->label(__('End At'))
-                ->dateTime('d M Y H:i'),
+                ->dateTime(),
 
             IconEntry::make('is_all_day')
                 ->label(__('All Day'))

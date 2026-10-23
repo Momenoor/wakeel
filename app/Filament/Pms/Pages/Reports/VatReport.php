@@ -49,7 +49,7 @@ class VatReport extends PmsReport
                     ->summarize(Count::make()->label(__('Invoices'))),
                 TextColumn::make('supply_date')
                     ->label(__('Date of supply'))
-                    ->date('d/m/Y'),
+                    ->date(),
                 TextColumn::make('tenant')
                     ->label(__('Tenant'))
                     ->state(fn (Installment $installment) => static::tenantOf($installment->lease))

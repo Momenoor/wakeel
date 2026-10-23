@@ -99,7 +99,7 @@ trait ReviewsOneDriveFolders
                     ->label(__('Standard name'))
                     ->extraAttributes(['dir' => 'auto'])
                     ->wrap(),
-                TextColumn::make('decided_at')->label(__('Decided'))->dateTime('d/m/Y H:i')->placeholder('—')->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('decided_at')->label(__('Decided'))->dateTime()->placeholder('—')->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 SelectFilter::make('status')

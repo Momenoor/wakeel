@@ -24,6 +24,7 @@ use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterMailer;
 use App\Services\MMS\Letters\LetterMeeting;
 use App\Support\Addresses;
+use App\Support\Dates;
 use App\Support\EmailGrouping;
 use App\Support\ScreenPermissions;
 use Carbon\Carbon;
@@ -95,13 +96,13 @@ class LettersRelationManager extends RelationManager
             ->recordTitleAttribute('reference')
             ->columns([
                 TextColumn::make('reference')->label(__('Reference'))->weight('bold')->searchable(),
-                TextColumn::make('letter_date')->label(__('Date'))->date('d/m/Y')->sortable(),
+                TextColumn::make('letter_date')->label(__('Date'))->date()->sortable(),
                 TextColumn::make('subject')->label(__('Subject'))->wrap()->searchable(),
                 TextColumn::make('recipients.name')->label(__('To'))->listWithLineBreaks()->limitList(3)->expandableLimitedList(),
                 TextColumn::make('status')
                     ->label(__('Status'))
                     ->badge()
-                    ->description(fn (MatterLetter $record) => $record->sent_at?->format('d/m/Y H:i')),
+                    ->description(fn (MatterLetter $record) => $record->sent_at?->format(Dates::dateTimeFormat())),
                 TextColumn::make('template.name')->label(__('Template'))->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('sentBy.name')->label(__('By'))->toggleable(isToggledHiddenByDefault: true),
             ])
@@ -1085,7 +1086,7 @@ class LettersRelationManager extends RelationManager
             ->orderBy('start_datetime')
             ->limit(30)
             ->get()
-            ->mapWithKeys(fn (CalendarEvent $event) => [$event->getKey() => $event->start_datetime->format('d/m/Y H:i').' — '.$event->title.($event->is_teams_meeting ? ' · Teams' : '')])
+            ->mapWithKeys(fn (CalendarEvent $event) => [$event->getKey() => $event->start_datetime->format(Dates::dateTimeFormat()).' — '.$event->title.($event->is_teams_meeting ? ' · Teams' : '')])
             ->all();
 
         request()->attributes->set($key, $meetings);

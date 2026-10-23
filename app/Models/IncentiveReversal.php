@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\FeeType;
 use App\Support\Currency;
+use App\Support\Dates;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -64,13 +65,13 @@ class IncentiveReversal extends Model
         return __('Paid incentive taken back: the :fee fee of :amount (:date) on matter :matter was deleted on :deleted by :user, after its incentive was paid in «:calculation» (:from – :to). Of the :paid paid for the matter, this fee\'s part is deducted: :deducted.', [
             'fee' => FeeType::tryFrom((string) $this->fee_type)?->getLabel() ?? (string) $this->fee_type,
             'amount' => Currency::text((float) $this->fee_amount),
-            'date' => $this->fee_date?->format('d/m/Y') ?? '—',
+            'date' => $this->fee_date?->format(Dates::dateFormat()) ?? '—',
             'matter' => $this->matter ? $this->matter->number.'/'.$this->matter->year : '—',
-            'deleted' => $this->created_at?->format('d/m/Y') ?? '—',
+            'deleted' => $this->created_at?->format(Dates::dateFormat()) ?? '—',
             'user' => $this->deletedBy?->display_name ?: ($this->deletedBy?->name ?? '—'),
             'calculation' => $calculation?->name ?? '—',
-            'from' => $calculation?->period_start?->format('d/m/Y') ?? '—',
-            'to' => $calculation?->period_end?->format('d/m/Y') ?? '—',
+            'from' => $calculation?->period_start?->format(Dates::dateFormat()) ?? '—',
+            'to' => $calculation?->period_end?->format(Dates::dateFormat()) ?? '—',
             'paid' => Currency::text((float) $this->paid_amount),
             'deducted' => Currency::text((float) $this->amount),
         ]);

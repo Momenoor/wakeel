@@ -92,12 +92,12 @@ class CalendarEventsTable
                 TextColumn::make('start_datetime')
                     ->label(__('Start At'))
                     ->timezone(config('app.timezone'))
-                    ->dateTime('d M Y H:i')
+                    ->dateTime()
                     ->sortable(),
                 TextColumn::make('end_datetime')
                     ->label(__('End At'))
                     ->timezone(config('app.timezone'))
-                    ->dateTime('d M Y H:i')
+                    ->dateTime()
                     ->sortable(),
                 // Made in the system, or outside it (Outlook, Teams, a phone).
                 TextColumn::make('source')

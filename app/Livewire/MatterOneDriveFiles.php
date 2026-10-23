@@ -7,6 +7,7 @@ use App\Models\Matter;
 use App\Models\MatterOneDriveFolder;
 use App\Services\MMS\MatterOneDriveExplorer;
 use App\Services\MMS\MatterOneDriveFolders;
+use App\Support\Dates;
 use Filament\Actions\Action;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
@@ -203,7 +204,7 @@ class MatterOneDriveFiles extends Component implements HasActions, HasSchemas, H
                     ->wrap(),
                 TextColumn::make('modified')
                     ->label(__('Modified'))
-                    ->formatStateUsing(fn ($state) => $state ? Carbon::parse($state)->timezone(config('app.timezone'))->format('d/m/Y H:i') : null)
+                    ->formatStateUsing(fn ($state) => $state ? Carbon::parse($state)->timezone(config('app.timezone'))->format(Dates::dateTimeFormat()) : null)
                     ->placeholder('—'),
                 TextColumn::make('size')
                     ->label(__('Size'))

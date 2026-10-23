@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\Dates;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -272,7 +273,7 @@ class TemplatePlaceholderService
             try {
                 $raw = $model->{$var['column']};
                 $values[$var['key']] = match ($var['type']) {
-                    'date', 'datetime' => $raw ? Carbon::parse($raw)->format('d/m/Y') : '',
+                    'date', 'datetime' => $raw ? Carbon::parse($raw)->format(Dates::dateFormat()) : '',
                     'boolean' => $raw ? __('Yes') : __('No'),
                     default => (string) ($raw ?? ''),
                 };

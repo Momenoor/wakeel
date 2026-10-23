@@ -10,6 +10,7 @@ use App\Models\Matter;
 use App\Models\User;
 use App\Services\Notifications\NotificationPreferences;
 use App\Services\Notifications\Notifier;
+use App\Support\Dates;
 use Carbon\Carbon;
 use Filament\Forms\Components\DatePicker;
 
@@ -82,7 +83,7 @@ class ChangeDistributedAtRequestService extends BaseRequestService
         $body = __('The assistant disputed the received date of matter #:number / :year and proposes :date.', [
             'number' => $this->request->matter->number,
             'year' => $this->request->matter->year,
-            'date' => Carbon::parse($this->request->extra['proposed_distributed_at'])->format('d/m/Y'),
+            'date' => Carbon::parse($this->request->extra['proposed_distributed_at'])->format(Dates::dateFormat()),
         ]);
 
         $this->notify($type, $title, $body, $users);

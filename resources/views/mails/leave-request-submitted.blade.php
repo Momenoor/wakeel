@@ -31,11 +31,11 @@
                 </tr>
                 <tr>
                     <td>{{ __('From') }}:</td>
-                    <td>{{ $leaveRequest->start_date->locale('ar')->translatedFormat('d F Y') }}</td>
+                    <td>{{ $leaveRequest->start_date->locale('ar')->format(\App\Support\Dates::dateFormat()) }}</td>
                 </tr>
                 <tr>
                     <td>{{ __('To') }}:</td>
-                    <td>{{ $leaveRequest->end_date->locale('ar')->translatedFormat('d F Y') }}</td>
+                    <td>{{ $leaveRequest->end_date->locale('ar')->format(\App\Support\Dates::dateFormat()) }}</td>
                 </tr>
                 <tr>
                     <td>{{ __('Requested Leave Type') }}:</td>

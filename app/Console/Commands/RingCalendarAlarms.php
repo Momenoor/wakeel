@@ -6,7 +6,7 @@ use App\Services\MMS\Calendar\CalendarAlarms;
 use Illuminate\Console\Command;
 
 /**
- * The calendar events' alarms — 24 hours and 1 hour before, for each matter's assistant and expert: reminder
+ * Single calendar events' alarms — 24 hours and 1 hour before, for the matter's assistant: reminder
  * items put in their calendars, notifications sent when due, items that have rung taken away. Every minute
  * (bootstrap/app.php).
  */

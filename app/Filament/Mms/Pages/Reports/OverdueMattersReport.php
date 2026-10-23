@@ -173,7 +173,7 @@ class OverdueMattersReport extends Page implements HasTable
 
                 TextColumn::make('next_session_date')
                     ->label(__('Next Session'))
-                    ->dateTime('d M Y')
+                    ->date()
                     ->placeholder('—')
                     ->sortable(),
             ])

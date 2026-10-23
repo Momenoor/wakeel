@@ -15,6 +15,7 @@ use App\Models\Party;
 use App\Models\Property;
 use App\Models\Tenant;
 use App\Models\Unit;
+use App\Support\Dates;
 use Illuminate\Support\Collection;
 
 /**
@@ -221,7 +222,7 @@ class LeasePrintFieldResolver
     public static function installmentColumnValue(Installment $installment, string $column): string
     {
         return match ($column) {
-            'due_date' => $installment->getAttribute('due_date')?->format('d/m/Y') ?? '',
+            'due_date' => $installment->getAttribute('due_date')?->format(Dates::dateFormat()) ?? '',
             'net_amount' => number_format((float) $installment->getAttribute('net_amount'), 2),
             'vat_amount' => number_format((float) $installment->getAttribute('vat_amount'), 2),
             'total_due_amount' => number_format((float) $installment->getAttribute('total_due_amount'), 2),
@@ -518,7 +519,7 @@ class LeasePrintFieldResolver
 
     private function formatDate(mixed $date): ?string
     {
-        return $date?->format('d/m/Y');
+        return $date?->format(Dates::dateFormat());
     }
 
     private function formatMoney(mixed $amount): ?string

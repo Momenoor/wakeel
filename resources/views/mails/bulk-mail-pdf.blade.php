@@ -135,7 +135,7 @@
     </tr>
     <tr>
         <td class="label">Date</td>
-        <td>{{ \Carbon\Carbon::parse($sentAt)->format('D d-m-Y g:i A') }}</td>
+        <td>{{ \Carbon\Carbon::parse($sentAt)->format(\App\Support\Dates::dateTimeFormat()) }}</td>
     </tr>
     <tr>
         <td class="label">To</td>

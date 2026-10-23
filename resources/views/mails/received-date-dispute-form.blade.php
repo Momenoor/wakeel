@@ -36,7 +36,7 @@
 
     <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 text-sm text-blue-800">
         <strong>{{ __('Current Received Date') }}:</strong>
-        {{ \Carbon\Carbon::parse($matterRequest->extra['current_distributed_at'] ?? null)->locale('ar')->translatedFormat('d F Y') }}
+        {{ \Carbon\Carbon::parse($matterRequest->extra['current_distributed_at'] ?? null)->locale('ar')->format(\App\Support\Dates::dateFormat()) }}
     </div>
 
     <form method="POST"

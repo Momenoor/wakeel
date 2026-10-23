@@ -25,6 +25,16 @@ class ExpertRegistrationsRelationManager extends RelationManager
 {
     protected static string $relationship = 'expertRegistrations';
 
+    public static function getModelLabel(): string
+    {
+        return __('Court registration');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('Court registrations');
+    }
+
     public static function getTitle(Model $ownerRecord, string $pageClass): string
     {
         return __('Court registrations');

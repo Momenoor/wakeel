@@ -95,9 +95,10 @@ class LeaseResourceTest extends TestCase
         $data = $component->instance()->data;
 
         $this->assertEquals($unit->property_id, $data['property_id']);
-        $this->assertSame('2026-06-21', $data['start_date']);
-        $this->assertSame('2027-06-20', $data['end_date']);
-        $this->assertSame(['2026-06-21', '2026-09-21', '2026-12-21', '2027-03-21'], array_column(array_values($data['installments']), 'payment_date'));
+        // A date picker holds its day in the form with a time (the panel's picker); it is saved as a date.
+        $days = fn ($dates): array => array_map(fn ($date): string => substr((string) $date, 0, 10), (array) $dates);
+        $this->assertSame(['2026-06-21', '2027-06-20'], $days([$data['start_date'], $data['end_date']]));
+        $this->assertSame(['2026-06-21', '2026-09-21', '2026-12-21', '2027-03-21'], $days(array_column(array_values($data['installments']), 'payment_date')));
 
         $component->call('create')->assertHasNoFormErrors();
 

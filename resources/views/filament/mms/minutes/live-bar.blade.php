@@ -19,7 +19,8 @@
             this.saving = true;
             try {
                 await $wire.autosaveMinutes();
-                this.savedAt = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                // As times are shown everywhere (Settings → General): 05:35 PM, or 17:35.
+                this.savedAt = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: @js(\App\Support\Dates::twelveHours()) }).toUpperCase();
             } finally {
                 this.saving = false;
             }

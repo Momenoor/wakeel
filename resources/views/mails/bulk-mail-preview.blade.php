@@ -294,7 +294,7 @@
 
     {{-- ── Print-only page header (mirrors Outlook's "07/05/2026, 04:35  Inbox - Name - Outlook") ── --}}
     <div class="print-page-header">
-        <span>{{ \Carbon\Carbon::parse($sentAt)->format('d/m/Y, H:i') }}</span>
+        <span>{{ \Carbon\Carbon::parse($sentAt)->format(\App\Support\Dates::dateTimeFormat()) }}</span>
         <span>Sent - {{ $sender['name'] }} – Outlook</span>
     </div>
 
@@ -324,7 +324,7 @@
         <tr>
             <td class="meta-label">Date</td>
             <td class="meta-value">
-                {{ \Carbon\Carbon::parse($sentAt)->format('D d-m-Y g:i A') }}
+                {{ \Carbon\Carbon::parse($sentAt)->format(\App\Support\Dates::dateTimeFormat()) }}
             </td>
         </tr>
         <tr>

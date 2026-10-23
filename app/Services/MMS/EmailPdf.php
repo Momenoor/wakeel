@@ -4,6 +4,7 @@ namespace App\Services\MMS;
 
 use App\Models\LetterFont;
 use App\Support\Branding;
+use App\Support\Dates;
 use App\Support\Tolerant;
 use Carbon\CarbonInterface;
 use DOMDocument;
@@ -171,7 +172,7 @@ class EmailPdf
         return '
             <table dir="ltr" width="100%" style="font-size:8pt;color:#555;border-bottom:1px solid #ccc;padding-bottom:4px;">
                 <tr>
-                    <td>'.Carbon::parse($at)->format('d/m/Y, H:i').'</td>
+                    <td>'.Carbon::parse($at)->format(Dates::dateTimeFormat()).'</td>
                     <td align="right">'.($received ? 'Inbox' : 'Sent').' – '.htmlspecialchars($mailbox).' – '.htmlspecialchars($app).'</td>
                 </tr>
             </table>

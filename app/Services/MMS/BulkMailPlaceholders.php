@@ -10,6 +10,7 @@ use App\Models\Matter;
 use App\Models\MatterParty;
 use App\Models\Type;
 use App\Support\CompanyContact;
+use App\Support\Dates;
 use App\Support\Marks;
 use BackedEnum;
 use Carbon\CarbonInterface;
@@ -591,7 +592,7 @@ class BulkMailPlaceholders
             $value === null => '',
             $value instanceof HasLabel => (string) $value->getLabel(),
             $value instanceof BackedEnum => (string) $value->value,
-            $value instanceof CarbonInterface => $value->format('d/m/Y'),
+            $value instanceof CarbonInterface => $value->format(Dates::dateFormat()),
             is_bool($value) => $value ? __('Yes') : __('No'),
             is_array($value) => implode(', ', array_map(fn ($v) => is_scalar($v) ? (string) $v : '', $value)),
             default => (string) $value,

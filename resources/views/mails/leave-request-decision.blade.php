@@ -121,11 +121,11 @@
             <table>
                 <tr>
                     <td>{{ __('From') }}:</td>
-                    <td>{{ $leaveRequest->start_date->locale('ar')->translatedFormat('d F Y') }}</td>
+                    <td>{{ $leaveRequest->start_date->locale('ar')->format(\App\Support\Dates::dateFormat()) }}</td>
                 </tr>
                 <tr>
                     <td>{{ __('To') }}:</td>
-                    <td>{{ $leaveRequest->end_date->locale('ar')->translatedFormat('d F Y') }}</td>
+                    <td>{{ $leaveRequest->end_date->locale('ar')->format(\App\Support\Dates::dateFormat()) }}</td>
                 </tr>
                 @include('mails.partials.leave-balance', ['fromBalance' => $fromBalance, 'balanceBefore' => $balanceBefore])
                 @if ($leaveRequest->approved_comment)

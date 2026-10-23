@@ -7,6 +7,7 @@ use App\Models\Concerns\AnnouncesChanges;
 use App\Models\Concerns\HasAttachments;
 use App\Models\Contracts\AttachmentOwner;
 use App\Services\MMS\FeeChangeNotifier;
+use App\Support\Dates;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -113,8 +114,8 @@ class Allocation extends Model implements AttachmentOwner
             ->warning()
             ->title(__("The fee's date was updated"))
             ->body(__('The fee was dated :from, after this payment; it is now dated :to, as per the payment date.', [
-                'from' => $this->feeDateMovedFrom->format('d/m/Y'),
-                'to' => $this->date->format('d/m/Y'),
+                'from' => $this->feeDateMovedFrom->format(Dates::dateFormat()),
+                'to' => $this->date->format(Dates::dateFormat()),
             ]))
             ->persistent()
             ->send();

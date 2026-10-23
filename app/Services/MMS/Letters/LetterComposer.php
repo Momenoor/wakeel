@@ -13,6 +13,7 @@ use App\Services\MMS\BulkMailPlaceholders;
 use App\Services\MMS\EmployeePlaceholders;
 use App\Services\MMS\Letters\Blocks\SignatureBlock;
 use App\Support\CompanyContact;
+use App\Support\Dates;
 use App\Support\Honorific;
 use App\Support\RichHtml;
 use Carbon\Carbon;
@@ -166,7 +167,7 @@ class LetterComposer
             ...CompanyContact::values($this->isArabic()),
             ...($this->matter ? BulkMailPlaceholders::forMatter($this->matter) : []),
             'reference' => (string) $this->reference,
-            'date' => $this->date->format('d/m/Y'),
+            'date' => $this->date->format(Dates::dateFormat()),
             'subject' => '',
             'recipients' => $this->recipientsHtml(),
             'signature' => $this->withoutSignature ? '' : $this->imageHtml($this->letterhead?->file($this->letterhead?->signature_image), (float) ($this->letterhead?->signature_height ?: 45)),
@@ -206,7 +207,7 @@ class LetterComposer
 
         // When it is, as the template's own date and time fields show them.
         $start = filled($this->inputs[self::MEETING_START] ?? null) ? Carbon::parse($this->inputs[self::MEETING_START]) : null;
-        $values['meeting.date'] = $start ? $start->format('d/m/Y') : '';
+        $values['meeting.date'] = $start ? $start->format(Dates::dateFormat()) : '';
         $values['meeting.day'] = $start ? $start->copy()->locale($this->isArabic() ? 'ar' : 'en')->translatedFormat('l') : '';
         $values['meeting.time'] = $start ? $this->time($start->format('H:i')) : '';
 
@@ -223,7 +224,7 @@ class LetterComposer
         $values[self::SIGNATURES] = $this->signaturesHtml();
         $ended = filled($minutes['ended_at'] ?? null) ? Carbon::parse($minutes['ended_at']) : null;
         $values['minutes.end_time'] = $ended ? $this->time($ended->format('H:i')) : '';
-        $values['minutes.end_date'] = $ended ? $ended->format('d/m/Y') : '';
+        $values['minutes.end_date'] = $ended ? $ended->format(Dates::dateFormat()) : '';
         // Last: their wording may hold any of the above.
         $values['minutes.opening'] = $this->paragraphsHtml((string) ($minutes['opening'] ?? ''), $values);
         $values['minutes.closing'] = $this->paragraphsHtml((string) ($minutes['closing'] ?? ''), $values);
@@ -260,7 +261,7 @@ class LetterComposer
             'date' => (function () use ($value) {
                 $date = Carbon::parse($value)->locale($this->isArabic() ? 'ar' : 'en');
 
-                return ['' => $date->format('d/m/Y'), '.day' => $date->translatedFormat('l')];
+                return ['' => $date->format(Dates::dateFormat()), '.day' => $date->translatedFormat('l')];
             })(),
             'time' => ['' => $this->time((string) $value)],
             // Line breaks kept (as HTML); a single line stays plain text.
@@ -295,11 +296,12 @@ class LetterComposer
     {
         $time = Carbon::parse($value);
 
-        if (! $this->isArabic()) {
-            return $time->format('g:i A');
+        // As set for the whole system (Dates); an Arabic letter writes the 12 hours' morning and evening in words.
+        if (! $this->isArabic() || ! Dates::twelveHours()) {
+            return $time->format(Dates::timeFormat());
         }
 
-        return $time->format('g:i').' '.($time->hour < 12 ? 'صباحاً' : 'مساءً');
+        return $time->format('h:i').' '.($time->hour < 12 ? 'صباحاً' : 'مساءً');
     }
 
     /**

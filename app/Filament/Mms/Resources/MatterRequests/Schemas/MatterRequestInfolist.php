@@ -71,7 +71,7 @@ class MatterRequestInfolist
                                         TextEntry::make('approved_at')
                                             ->label(__('Handled At'))
                                             ->since()
-                                            ->dateTime('M d, Y H:i')
+                                            ->dateTime()
                                             ->size(TextSize::Small)
                                             ->color('gray'),
                                         TextEntry::make('approved_comment')

@@ -68,7 +68,7 @@ class SecurityDepositsReport extends PmsReport
                     ->badge(),
                 TextColumn::make('end_date')
                     ->label(__('Lease end'))
-                    ->date('d/m/Y')
+                    ->date()
                     ->sortable()
                     ->summarize(Count::make()->label(__('Leases'))),
                 TextColumn::make('security_deposit_amount')

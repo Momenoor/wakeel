@@ -3,6 +3,7 @@
 namespace App\Filament\Shared\Users;
 
 use App\Models\User;
+use App\Support\Dates;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
@@ -47,7 +48,7 @@ class LastSeen
             ->placeholder(fn () => __('Never seen'))
             ->badge()
             ->color(fn (User $record): string => $record->isOnline() ? 'success' : 'gray')
-            ->tooltip(fn (User $record): ?string => $record->last_seen_at?->format('d/m/Y H:i'))
+            ->tooltip(fn (User $record): ?string => $record->last_seen_at?->format(Dates::dateTimeFormat()))
             ->sortable();
     }
 
@@ -66,6 +67,6 @@ class LastSeen
             ->state(fn (User $record): string => $record->lastSeenText())
             ->badge()
             ->color(fn (User $record): string => $record->isOnline() ? 'success' : 'gray')
-            ->tooltip(fn (User $record): ?string => $record->last_seen_at?->format('d/m/Y H:i'));
+            ->tooltip(fn (User $record): ?string => $record->last_seen_at?->format(Dates::dateTimeFormat()));
     }
 }

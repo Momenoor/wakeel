@@ -55,7 +55,7 @@ class MatterHistoryTab extends Component implements HasActions, HasSchemas, HasT
             ->columns([
                 TextColumn::make('created_at')
                     ->label(__('When'))
-                    ->dateTime('d/m/Y H:i')
+                    ->dateTime()
                     ->description(fn (Activity $record): string => $record->created_at?->diffForHumans() ?? '')
                     ->width('1%'),
                 TextColumn::make('subject_type')

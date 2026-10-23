@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Widgets;
 
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Models\Matter;
+use App\Support\Dates;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -72,10 +73,10 @@ class UpcomingSessionsWidget extends TableWidget
                     // locale-blind and always renders "Sep" even when Carbon's
                     // locale is Arabic — only translatedFormat() reads it.
                     ->formatStateUsing(fn (Matter $record) => $record->next_session_date?->isToday()
-                        ? __('Today').' · '.$record->next_session_date->translatedFormat('H:i')
+                        ? __('Today').' · '.$record->next_session_date->format(Dates::timeFormat())
                         : ($record->next_session_date?->isTomorrow()
-                            ? __('Tomorrow').' · '.$record->next_session_date->translatedFormat('H:i')
-                            : $record->next_session_date?->translatedFormat('d M · H:i')))
+                            ? __('Tomorrow').' · '.$record->next_session_date->format(Dates::timeFormat())
+                            : $record->next_session_date?->format(Dates::dateTimeFormat())))
                     ->color(fn (Matter $record) => match (true) {
                         $record->next_session_date?->isToday() => 'danger',
                         $record->next_session_date?->isTomorrow() => 'warning',

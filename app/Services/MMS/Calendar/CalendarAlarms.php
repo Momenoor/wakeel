@@ -10,13 +10,15 @@ use App\Models\MatterParty;
 use App\Models\Party;
 use App\Services\MMS\OutlookCalendarService;
 use App\Services\Notifications\Notifier;
+use App\Support\Dates;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * A calendar event's two alarms — 24 hours and 1 hour before — for the people it concerns: its matter's own
- * assistant and expert. Outlook (and Teams, and a phone showing Outlook) allows one alarm per event, so each
+ * A single event's two alarms — 24 hours and 1 hour before — for its matter's assistant: the event itself is kept
+ * in the shared calendar only, and only its reminders go into the assistant's own calendar (a bulk event, court
+ * sessions for several matters, has none; an invitation email is asked for separately). Outlook (and Teams, and a phone showing Outlook) allows one alarm per event, so each
  * alarm is a short reminder item put in the person's own calendar, ringing at its start; it is taken away once
  * it has rung. With it, a system notification (bell, email, WhatsApp — as the person chose).
  *
@@ -41,26 +43,24 @@ class CalendarAlarms
     /** The longest wait between two tries, in minutes. */
     private const MAX_WAIT_MINUTES = 360;
 
-    /** The experts an event's alarms are for: the office's own (not external ones, who have no mailbox here). */
-    private const EXPERT_TYPES = ['assistant', 'certified'];
-
     public function __construct(private readonly OutlookCalendarService $outlook) {}
 
     /**
-     * The people an event's alarms are for: its matter's assistant and expert.
+     * The people an event's alarms are for: a single event's matter's assistant(s) — not its expert, and nobody for
+     * a bulk event (court sessions together). Those no longer so lose theirs (prepare()).
      *
      * @return Collection<int, Party>
      */
     public static function people(CalendarEvent $event): Collection
     {
-        if (! $event->matter_id) {
+        if (! $event->matter_id || $event->type === 'bulk') {
             return collect();
         }
 
         return MatterParty::query()
             ->where('matter_id', $event->matter_id)
             ->where('role', 'expert')
-            ->whereIn('type', self::EXPERT_TYPES)
+            ->where('type', 'assistant')
             ->with('party.user')
             ->get()
             ->pluck('party')
@@ -348,7 +348,7 @@ class CalendarAlarms
     /** "Reminder: <event> — tomorrow at 10:00" / "— in an hour, at 10:00". */
     public static function subject(CalendarEvent $event, CalendarEventAlert $alert): string
     {
-        $time = $event->start_datetime->format('H:i');
+        $time = $event->start_datetime->format(Dates::timeFormat());
         $when = $alert->minutes_before >= 1440
             ? __('tomorrow at :time', ['time' => $time])
             : __('in an hour, at :time', ['time' => $time]);
@@ -360,7 +360,7 @@ class CalendarAlarms
     {
         return collect([
             $event->title,
-            $event->start_datetime->format('d/m/Y H:i').($event->end_datetime ? ' – '.$event->end_datetime->format('H:i') : ''),
+            $event->start_datetime->format(Dates::dateTimeFormat()).($event->end_datetime ? ' – '.$event->end_datetime->format(Dates::timeFormat()) : ''),
             $event->location,
             $event->matter?->reference ? __('Matter').': '.$event->matter->reference : null,
             $event->online_meeting_url,

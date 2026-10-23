@@ -17,6 +17,7 @@ use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
@@ -730,7 +731,8 @@ class ChatWidgetTest extends TestCase
 
         // Closed in the browser already: kept, nothing sent back to redraw.
         $popup->call('setOpen', false)->assertSet('isOpen', false);
-        $this->assertFalse(session('chat.popup')['open']);
+        // Kept on this device, for this user.
+        $this->assertSame('0', Cookie::queued('wakeel_chat_open_'.auth()->id())?->getValue());
         $this->assertArrayNotHasKey('html', $popup->effects);
     }
 

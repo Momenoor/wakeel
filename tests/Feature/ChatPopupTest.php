@@ -7,8 +7,11 @@ use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Livewire;
+use Livewire\Mechanisms\FrontendAssets\FrontendAssets;
+use Symfony\Component\Finder\Finder;
 use Tests\TestCase;
 
 /**
@@ -117,17 +120,19 @@ class ChatPopupTest extends TestCase
         $conversation = ChatConversation::betweenUsers($me, $ali);
 
         $this->actingAs($me);
+        // This device's cookie for this user (Dock::rememberOpen()), sent back by the browser on the next page.
+        $device = fn (): array => ['wakeel_chat_open_'.$me->id => Cookie::queued('wakeel_chat_open_'.$me->id)?->getValue()];
         Livewire::test(ChatWidget::class, ['mode' => 'popup'])
             ->call('toggleOpen')
             ->call('selectConversation', $conversation->id);
 
         // A refresh or another page: a fresh component, same state.
-        Livewire::test(ChatWidget::class, ['mode' => 'popup'])
+        Livewire::withCookies($device())->test(ChatWidget::class, ['mode' => 'popup'])
             ->assertSet('isOpen', true)
             ->assertSet('activeConversationId', $conversation->id)
             ->call('toggleOpen');
 
-        Livewire::test(ChatWidget::class, ['mode' => 'popup'])->assertSet('isOpen', false);
+        Livewire::withCookies($device())->test(ChatWidget::class, ['mode' => 'popup'])->assertSet('isOpen', false);
 
         // The full Chat page never takes the popup's state.
         Livewire::test(ChatWidget::class, ['mode' => 'page'])->assertSet('activeConversationId', null);
@@ -146,7 +151,7 @@ class ChatPopupTest extends TestCase
             ->assertSeeHtml('style="transform: scaleX(-1)"');
 
         app()->setLocale('en');
-        Livewire::test(ChatWidget::class, ['mode' => 'popup'])
+        Livewire::withCookies(['wakeel_chat_open_'.$me->id => Cookie::queued('wakeel_chat_open_'.$me->id)?->getValue()])->test(ChatWidget::class, ['mode' => 'popup'])
             ->assertSet('isOpen', true)
             ->assertDontSeeHtml('scaleX(-1)');
     }
@@ -203,11 +208,11 @@ class ChatPopupTest extends TestCase
         // Livewire hides wire:loading elements before they are used with one
         // style per exact spelling; any other spelling stays on screen for
         // good — the chat's "loading" overlay did, after loading was done.
-        preg_match_all('/\[wire\\\\:(loading[^\]]*)\]/', \Livewire\Mechanisms\FrontendAssets\FrontendAssets::styles(), $hidden);
+        preg_match_all('/\[wire\\\\:(loading[^\]]*)\]/', FrontendAssets::styles(), $hidden);
         $hidden = array_unique(str_replace('\\', '', $hidden[1]));
 
         $wrong = [];
-        foreach (\Symfony\Component\Finder\Finder::create()->files()->in(resource_path('views'))->name('*.blade.php') as $file) {
+        foreach (Finder::create()->files()->in(resource_path('views'))->name('*.blade.php') as $file) {
             preg_match_all('/wire:(loading(?:\.[a-z-]+)*)(?=[\s>=])/', $file->getContents(), $found);
             foreach (array_unique($found[1]) as $spelling) {
                 if (! in_array($spelling, $hidden, true) && ! str_starts_with($spelling, 'loading.remove') && ! str_starts_with($spelling, 'loading.attr') && ! str_starts_with($spelling, 'loading.class')) {

@@ -75,12 +75,12 @@ class RentRollReport extends PmsReport
                 TextColumn::make('lease_start')
                     ->label(__('Lease start'))
                     ->state(fn (Unit $unit) => $this->lease($unit)?->start_date)
-                    ->date('d/m/Y')
+                    ->date()
                     ->placeholder('—'),
                 TextColumn::make('lease_end')
                     ->label(__('Lease end'))
                     ->state(fn (Unit $unit) => $this->lease($unit)?->end_date)
-                    ->date('d/m/Y')
+                    ->date()
                     ->placeholder('—'),
                 TextColumn::make('annual_rent')
                     ->label(__('Annual rent'))

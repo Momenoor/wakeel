@@ -4683,5 +4683,13 @@
     "Send invitations to the matter's assistant and expert": "إرسال دعوة لمساعد الدعوى وخبيرها",
     "An invitation email to each, and the event in their own calendars. Their reminders come either way.": "بريد دعوة لكل منهما، والحدث في تقويمه. التذكيرات تصلهما في الحالتين.",
     "\"Send invitations\" on when an event is made": "«إرسال دعوة» مفعّل عند إنشاء الحدث",
-    "Each new event put on Outlook asks whether to invite the matter's assistant and expert (an invitation email to each, and the event in their own calendars). This is what it starts as; off unless turned on here. Their reminders (24 hours and 1 hour before) come either way.": "كل حدث جديد يُرسل إلى Outlook يسأل هل يُدعى مساعد الدعوى وخبيرها (بريد دعوة لكل منهما، والحدث في تقويمه). هذا ما يبدأ به السؤال؛ غير مفعّل ما لم يُفعَّل هنا. التذكيرات (قبل 24 ساعة وقبل ساعة) تصلهما في الحالتين."
+    "Each new event put on Outlook asks whether to invite the matter's assistant and expert (an invitation email to each, and the event in their own calendars). This is what it starts as; off unless turned on here. Their reminders (24 hours and 1 hour before) come either way.": "كل حدث جديد يُرسل إلى Outlook يسأل هل يُدعى مساعد الدعوى وخبيرها (بريد دعوة لكل منهما، والحدث في تقويمه). هذا ما يبدأ به السؤال؛ غير مفعّل ما لم يُفعَّل هنا. التذكيرات (قبل 24 ساعة وقبل ساعة) تصلهما في الحالتين.",
+    "Send an invitation email to the matter's assistant": "إرسال بريد دعوة لمساعد الدعوى",
+    "Off: the event stays in the shared calendar, and only its reminders (24 hours and 1 hour before) go into the assistant's calendar.": "غير مفعّل: يبقى الحدث في التقويم المشترك، وتُضاف تذكيراته فقط (قبل 24 ساعة وقبل ساعة) إلى تقويم المساعد.",
+    "\"Send an invitation email\" on when an event is made": "«إرسال بريد دعوة» مفعّل عند إنشاء الحدث",
+    "Each new event put on Outlook asks whether to email the matter's assistant an invitation. This is what it starts as; off unless turned on here. Events are kept in the shared calendar; a single event's reminders (24 hours and 1 hour before) go into its assistant's calendar either way.": "كل حدث جديد يُرسل إلى Outlook يسأل هل يُرسل بريد دعوة لمساعد الدعوى. هذا ما يبدأ به السؤال؛ غير مفعّل ما لم يُفعَّل هنا. الأحداث تُحفظ في التقويم المشترك، وتذكيرات الحدث الفردي (قبل 24 ساعة وقبل ساعة) تُضاف إلى تقويم مساعده في الحالتين.",
+    "Date format": "صيغة التاريخ",
+    "Time format": "صيغة الوقت",
+    "Used everywhere a date or time is shown: tables, pages, date pickers, emails and PDFs.": "تُستعمل في كل مكان يظهر فيه تاريخ أو وقت: الجداول والصفحات ومنتقيات التاريخ ورسائل البريد وملفات PDF.",
+    "Court registration": "قيد لدى محكمة"
 }

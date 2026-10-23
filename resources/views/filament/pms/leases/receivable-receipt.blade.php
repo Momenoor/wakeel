@@ -60,7 +60,7 @@
                 <tbody>
                     @foreach ($lease->installments as $installment)
                         <tr>
-                            <td>{{ $installment->due_date?->format('d/m/Y') }}</td>
+                            <td>{{ $installment->due_date?->format(\App\Support\Dates::dateFormat()) }}</td>
                             <td>{{ number_format((float) $installment->net_amount, 2) }}</td>
                             <td>{{ number_format((float) $installment->vat_amount, 2) }}</td>
                             <td>{{ number_format((float) $installment->total_due_amount, 2) }}</td>

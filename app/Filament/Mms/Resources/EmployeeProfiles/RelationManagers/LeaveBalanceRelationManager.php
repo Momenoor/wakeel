@@ -7,6 +7,7 @@ use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Models\EmployeeProfile;
 use App\Models\LeaveBalanceEntry;
 use App\Services\MMS\LeaveBalanceService;
+use App\Support\Dates;
 use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -80,7 +81,7 @@ class LeaveBalanceRelationManager extends RelationManager
             ->columns([
                 TextColumn::make('entry_date')
                     ->label(__('Date'))
-                    ->date('d/m/Y')
+                    ->date()
                     ->sortable(),
                 TextColumn::make('kind')
                     ->label(__('Type'))
@@ -96,8 +97,8 @@ class LeaveBalanceRelationManager extends RelationManager
                     ->state(fn (LeaveBalanceEntry $record): ?string => $record->note
                         ?? ($record->leaveRequestPeriod
                             ? __(':from to :to', [
-                                'from' => $record->leaveRequestPeriod->start_date?->format('d/m/Y'),
-                                'to' => $record->leaveRequestPeriod->end_date?->format('d/m/Y'),
+                                'from' => $record->leaveRequestPeriod->start_date?->format(Dates::dateFormat()),
+                                'to' => $record->leaveRequestPeriod->end_date?->format(Dates::dateFormat()),
                             ])
                             : null))
                     ->wrap(),
