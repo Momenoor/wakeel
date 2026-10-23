@@ -20,6 +20,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 class CalendarEventForm
@@ -103,13 +104,31 @@ class CalendarEventForm
                             ? $component->state($record->matters()->pluck('matters.id')->map(fn ($id) => (int) $id)->all())
                             : null)
                         ->dehydrated(false)
+                        // Its title follows the matters chosen (one or several) — and, saved, reaches Outlook.
+                        ->live()
+                        ->afterStateUpdated(function (?array $state, Set $set, $record): void {
+                            if ($title = self::titleFor(self::mattersInOrder($state), sessions: $record instanceof CalendarEvent && $record->type === 'bulk')) {
+                                $set('title', $title);
+                            }
+                        })
                         ->saveRelationshipsUsing(function ($record, $state): void {
                             if (! $record instanceof CalendarEvent) {
                                 return;
                             }
 
-                            $record->matters()->sync($state ?? []);
-                            app(EventMatterLinker::class)->tidy($record->fresh());
+                            $before = $record->matters()->pluck('matters.id')->map(fn ($id): int => (int) $id)->all();
+                            $after = array_values(array_map('intval', $state ?? []));
+                            $record->matters()->sync($after);
+
+                            $linker = app(EventMatterLinker::class);
+
+                            // A bulk session, or one that sets its matter's next session: the matters added take its
+                            // date, as when it was made; those removed lose it.
+                            if ($record->type === 'bulk' || $record->update_next_session_date) {
+                                $linker->followSessionDate($record, array_values(array_diff($after, $before)), array_values(array_diff($before, $after)));
+                            }
+
+                            $linker->tidy($record->fresh());
                         })
                         // Editing an event only — not a new one opened from a matter's page,
                         // whose form is on the matter (no "matters" relation there).
@@ -238,10 +257,49 @@ class CalendarEventForm
         $teams ??= self::outlookOn();
 
         return [
-            'title' => $matter->year.'/'.$matter->number.' — '.$courtName.' — '.($matter->type?->name ?? ''),
+            'title' => self::titleFor(collect([$matter])),
             'location' => $teams ? 'Microsoft Teams - '.($courtName ?: 'Microsoft Teams') : $courtName,
             'description' => self::buildDescription($matter),
         ];
+    }
+
+    /**
+     * An event's title from its matters, as made and as their choice changes: one matter "2025/639 — court —
+     * type"; several — or a bulk event's (court sessions together), one or more — "639/2025, 640/2025 (court)
+     * (type) (جلسات المحكمة)". Null with none: the title is left as it is.
+     *
+     * @param  Collection<int, Matter>  $matters  their court and type loaded
+     */
+    public static function titleFor(Collection $matters, bool $sessions = false): ?string
+    {
+        if ($matters->isEmpty()) {
+            return null;
+        }
+
+        if ($matters->count() === 1 && ! $sessions) {
+            $matter = $matters->first();
+
+            return $matter->year.'/'.$matter->number.' — '.($matter->court?->name ?? '').' — '.($matter->type?->name ?? '');
+        }
+
+        $names = fn (string $of): string => $matters->map(fn (Matter $matter): ?string => $matter->{$of}?->name)->filter()->unique()->join('، ');
+
+        return $matters->map(fn (Matter $matter): string => $matter->number.'/'.$matter->year)->join(', ')
+            .' ('.$names('court').') ('.$names('type').') (جلسات المحكمة)';
+    }
+
+    /**
+     * The matters chosen, in the order chosen.
+     *
+     * @param  array<int|string>|null  $ids
+     * @return Collection<int, Matter>
+     */
+    public static function mattersInOrder(?array $ids): Collection
+    {
+        $ids = array_values(array_map('intval', $ids ?? []));
+        $found = Matter::query()->with(['court', 'type'])->whereIn('id', $ids)->get()->keyBy('id');
+
+        return collect($ids)->map(fn (int $id): ?Matter => $found->get($id))->filter()->values();
     }
 
     private static function outlookOn(): bool

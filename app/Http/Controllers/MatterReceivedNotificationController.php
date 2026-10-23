@@ -5,9 +5,12 @@ namespace App\Http\Controllers;
 use App\Enums\RequestStatus;
 use App\Models\Matter;
 use App\Models\MatterRequest;
+use App\Services\MMS\Requests\RequestServiceFactory;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
+use Throwable;
 
 class MatterReceivedNotificationController
 {
@@ -76,7 +79,12 @@ class MatterReceivedNotificationController
             ]),
         ]);
 
-        // Notify admins...
+        // The admins decide it (approving takes the proposed date); one who cannot be told does not stop it.
+        try {
+            RequestServiceFactory::make($matterRequest->fresh())->onDisputeNotify();
+        } catch (Throwable $e) {
+            Log::warning('Disputed received date not announced: '.$e->getMessage(), ['request' => $matterRequest->getKey()]);
+        }
 
         return view('mails.received-date-response', [
             'type' => 'disputed',

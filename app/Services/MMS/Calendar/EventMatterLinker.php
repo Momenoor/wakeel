@@ -3,6 +3,7 @@
 namespace App\Services\MMS\Calendar;
 
 use App\Models\CalendarEvent;
+use App\Models\Matter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -95,6 +96,30 @@ class EventMatterLinker
             ->groupBy('calendar_event_id')
             ->map(fn ($rows): array => $rows->pluck('matter_id')->map(fn ($id): int => (int) $id)->all())
             ->all();
+    }
+
+    /**
+     * The matters' next session as an event's matters change (a bulk session's, or one that sets it): a matter
+     * added takes the event's date, as those chosen when it was made; one removed whose next session was this
+     * event's takes its next event ahead, or none.
+     *
+     * @param  list<int>  $added
+     * @param  list<int>  $removed
+     */
+    public function followSessionDate(CalendarEvent $event, array $added, array $removed): void
+    {
+        if ($added !== [] && $event->start_datetime) {
+            Matter::query()->whereIn('id', $added)->update(['next_session_date' => $event->start_datetime]);
+        }
+
+        if ($removed === [] || ! $event->start_datetime) {
+            return;
+        }
+
+        Matter::query()->whereIn('id', $removed)->where('next_session_date', $event->start_datetime)->get()
+            ->each(fn (Matter $matter) => $matter->update([
+                'next_session_date' => $matter->linkedCalendarEvents()->whereKeyNot($event->getKey())->where('start_datetime', '>', now())->min('start_datetime'),
+            ]));
     }
 
     /**

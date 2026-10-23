@@ -129,6 +129,19 @@ class AzureStorageTest extends TestCase
         $this->get(route('attachment.download', $here))->assertOk();
     }
 
+    public function test_a_document_still_on_this_server_opens_only_for_who_may_see_it(): void
+    {
+        Storage::fake('public');
+        $kept = app(SentEmailArchive::class)->keepFile(Matter::factory()->create(), 'رد.pdf', '%PDF-here', 'application/pdf', '', auth()->id());
+
+        // Its folder is sent to Wakeel by the web server (public/.htaccess), not served from the disk.
+        $this->assertMatchesRegularExpression('~RewriteRule \^storage/\(attachments\|email-unfiled\|email-replies\)/ index\.php~', file_get_contents(public_path('.htaccess')));
+        $this->assertStringStartsWith('attachments/', $kept);
+
+        $this->get('/storage/'.$kept)->assertOk();
+        $this->actingAs(User::factory()->create())->get('/storage/'.$kept)->assertForbidden();
+    }
+
     public function test_the_emails_and_minutes_files_go_to_azure_and_open_at_their_address_for_who_may_see_them(): void
     {
         Storage::fake('public');

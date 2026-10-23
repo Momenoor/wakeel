@@ -132,6 +132,24 @@ class Setting extends Model
     }
 
     /**
+     * The SMTP password (Settings → Mail server): kept encrypted (one saved before then, as typed, still read).
+     */
+    public static function mailPassword(): ?string
+    {
+        $value = static::get('mail_password');
+
+        if (blank($value)) {
+            return null;
+        }
+
+        try {
+            return (string) decrypt($value);
+        } catch (\Throwable) {
+            return (string) $value;
+        }
+    }
+
+    /**
      * Check if a setting exists.
      */
     public static function has(string $key): bool
@@ -246,7 +264,7 @@ class Setting extends Model
         $host = static::get('mail_host');
         $port = static::get('mail_port');
         $username = static::get('mail_username');
-        $password = static::get('mail_password');
+        $password = static::mailPassword();
         $encryption = static::get('mail_encryption');
         $fromAddress = static::get('mail_from_address');
         $fromName = static::get('mail_from_name');

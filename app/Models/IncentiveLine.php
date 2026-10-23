@@ -16,6 +16,7 @@ class IncentiveLine extends Model
         'incentive_calculation_id',
         'matter_id',
         'fee_id',
+        'is_reversal',
         'completion_days',
         'difficulty',
         'fee_amount_excl_vat',
@@ -30,6 +31,7 @@ class IncentiveLine extends Model
     ];
 
     protected $casts = [
+        'is_reversal' => 'boolean',
         'completion_days' => 'integer',
         'fee_amount_excl_vat' => 'decimal:2',
         'base_percentage' => 'decimal:2',

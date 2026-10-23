@@ -7,6 +7,7 @@ use App\Filament\Mms\Resources\CalendarEvents\Pages\ListCalendarEvents;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
 use App\Models\CalendarEvent;
+use App\Models\CalendarEventAlert;
 use App\Models\Court;
 use App\Models\Matter;
 use App\Models\MatterFieldDefinition;
@@ -263,12 +264,40 @@ class CalendarMatterLinkingTest extends TestCase
         Livewire::test(ListCalendarEvents::class)
             ->mountTableAction('edit', $event)
             ->assertTableActionDataSet(fn (array $data) => collect($data['matters'] ?? [])->map(fn ($id) => (int) $id)->sort()->values()->all() === collect([$a->id, $b->id])->sort()->values()->all())
-            ->setTableActionData(['matters' => [$b->id, $c->id]])
+            // Its title follows the matters chosen.
+            ->set('mountedActions.0.data.matters', [$b->id, $c->id])
+            ->assertTableActionDataSet(['title' => '15/2024, 16/2024 ('.$b->court->name.($b->court_id === $c->court_id ? '' : '، '.$c->court->name).') ('.$b->type->name.($b->type_id === $c->type_id ? '' : '، '.$c->type->name).') (جلسات المحكمة)'])
             ->callMountedTableAction()
             ->assertHasNoTableActionErrors();
 
         $this->assertEqualsCanonicalizing([$b->id, $c->id], $event->matters()->pluck('matters.id')->all());
+        $this->assertStringStartsWith('15/2024, 16/2024 (', $event->fresh()->title);
         $this->assertSame('bulk', $event->fresh()->type);
+    }
+
+    public function test_a_bulk_sessions_matters_changed_take_or_lose_its_date_as_their_next_session(): void
+    {
+        $this->signIn();
+        $a = $this->matter(31, 2024);
+        $b = $this->matter(32, 2024);
+        $c = $this->matter(33, 2024);
+        $event = $this->event('Court sessions', ['type' => 'bulk', 'start_datetime' => now()->addDays(2)->startOfHour(), 'end_datetime' => now()->addDays(2)->startOfHour()->addHour()]);
+        $event->matters()->sync([$a->id, $b->id]);
+        Matter::whereIn('id', [$a->id, $b->id])->update(['next_session_date' => $event->start_datetime]);
+        // A's next one after this.
+        $later = $this->event('Another session', ['start_datetime' => now()->addDays(9)->startOfHour(), 'end_datetime' => now()->addDays(9)->startOfHour()->addHour()]);
+        $later->matters()->sync([$a->id]);
+
+        Livewire::test(ListCalendarEvents::class)
+            ->mountTableAction('edit', $event)
+            ->set('mountedActions.0.data.matters', [$b->id, $c->id])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+
+        // Added: its date. Removed: its next one ahead. Kept: as it was.
+        $this->assertTrue($c->fresh()->next_session_date->equalTo($event->start_datetime));
+        $this->assertTrue($a->fresh()->next_session_date->equalTo($later->start_datetime));
+        $this->assertTrue($b->fresh()->next_session_date->equalTo($event->start_datetime));
     }
 
     public function test_letters_are_a_tab_on_the_matter_page(): void
@@ -387,6 +416,8 @@ class CalendarMatterLinkingTest extends TestCase
         $deletedHere = $this->event('Deleted in Wakeel', ['outlook_event_id' => 'deleted-here', 'imported_from_outlook' => true]);
         $deletedHere->deleteQuietly();
         $ours = $this->event('Made in Wakeel', ['outlook_event_id' => 'ours', 'imported_from_outlook' => false, 'description' => 'Our notes', 'start_datetime' => now()->addDays(5)]);
+        // The one gone from Outlook had an alarm.
+        CalendarEventAlert::forceCreate(['calendar_event_id' => $gone->id, 'minutes_before' => 60, 'alarm_at' => now()->addDays(4)->subHour()]);
 
         $this->fakeOutlook(
             [
@@ -411,6 +442,8 @@ class CalendarMatterLinkingTest extends TestCase
 
         $this->assertSame('New title', $changed->fresh()->title);
         $this->assertSoftDeleted($gone);
+        // Its alarms go with it, or their reminder items would still ring.
+        $this->assertSame(0, CalendarEventAlert::query()->where('calendar_event_id', $gone->id)->count());
         $this->assertTrue($deletedHere->fresh()->trashed(), 'not brought back');
         $this->assertSame(0, CalendarEvent::where('outlook_event_id', 'cancelled')->count());
         $this->assertSame('Made in Wakeel (moved)', $ours->fresh()->title);

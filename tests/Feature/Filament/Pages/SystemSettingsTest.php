@@ -18,6 +18,7 @@ use App\Services\Installer\EnvironmentFileWriter;
 use App\Services\MMS\MatterReplyCollector;
 use App\Services\MMS\OutlookCalendarService;
 use App\Support\Branding;
+use App\Support\CompanyContact;
 use App\Support\Integrations;
 use App\Support\LiveRefresh;
 use App\Support\ScreenPermissions;
@@ -305,7 +306,7 @@ class SystemSettingsTest extends TestCase
         }
 
         $keys = [
-            GeneralSettings::class => ['app_name', 'company_name', 'company_phone', 'company_whatsapp', 'company_email', 'app_locale', 'currency_code', 'records_per_page', ...Branding::KEYS, OutlookCalendarService::INVITES],
+            GeneralSettings::class => ['app_name', 'company_name', 'company_phone', 'company_whatsapp', 'company_email', 'app_locale', 'currency_code', 'records_per_page', ...Branding::KEYS, OutlookCalendarService::INVITES, CompanyContact::NAME_AR, CompanyContact::ADDRESS_EN, CompanyContact::ADDRESS_AR, CompanyContact::LICENSE_NO],
             MailServerSettings::class => ['mail_sender_key', 'mail_mailer', 'mail_host', 'mail_port', 'mail_username', 'mail_password', 'mail_encryption', 'mail_from_address', 'mail_from_name'],
             LettersSettings::class => ['letter_reference_format', 'letter_cc_expert_types', EmailSendFields::DEFAULT_SENDER, Branding::EMAIL_PDF, Branding::EMAIL_PDF_FONT, 'leave_request_recipients'],
             OfflineSettings::class => ['app_offline', 'offline_message', 'offline_allow_admins'],
@@ -369,6 +370,29 @@ class SystemSettingsTest extends TestCase
 
         // Nothing else was written by this page.
         $this->assertNull(Setting::query()->where('key', 'app_name')->value('value'));
+    }
+
+    public function test_the_smtp_password_is_kept_encrypted_and_never_sent_back(): void
+    {
+        Livewire::test(MailServerSettings::class)
+            ->fillForm(['mail_mailer' => 'smtp', 'mail_password' => 'secret123', 'mail_from_address' => 'system@test.com', 'mail_from_name' => 'System'])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertNotSame('secret123', Setting::query()->where('key', 'mail_password')->value('value'));
+        $this->assertSame('secret123', Setting::mailPassword());
+
+        // Not on the page; left empty, kept as it is.
+        Livewire::test(MailServerSettings::class)
+            ->assertFormSet(['mail_password' => null])
+            ->fillForm(['mail_from_name' => 'Renamed'])
+            ->call('save')
+            ->assertHasNoFormErrors();
+        $this->assertSame('secret123', Setting::mailPassword());
+
+        // Given to the mailer as typed.
+        Setting::applyMailConfig();
+        $this->assertSame('secret123', config('mail.mailers.smtp.password'));
     }
 
     public function test_can_trigger_send_test_email(): void

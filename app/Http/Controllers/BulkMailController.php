@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Mail\BulkMailMessage;
 use App\Models\BulkMailCampaign;
 use App\Models\BulkMailRecipient;
 use Illuminate\Http\Request;
@@ -10,13 +9,12 @@ use Illuminate\Http\Request;
 class BulkMailController extends Controller
 {
     /**
-     * Handle the incoming request.
+     * One recipient's email of a campaign, as it was (or will be) sent — for whoever may see the campaign, and
+     * only a recipient of that campaign (as its PDF, bulk-mail.pdf).
      */
     public function __invoke(Request $request, BulkMailCampaign $campaign, BulkMailRecipient $recipient)
     {
-        $mailable = new BulkMailMessage($campaign, $recipient);
-
-        // Build the mailable to get the Symfony message
+        abort_unless($recipient->campaign?->is($campaign) && $request->user()->can('view', $campaign), 403);
 
         $subject = $campaign->renderSubject($recipient);
         $html = $campaign->renderBody($recipient);

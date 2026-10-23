@@ -62,6 +62,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('matter:confirm-receiving')->everyMinute()->withoutOverlapping();
         $schedule->command('mail:send-bulk-campaigns')->everyMinute()->withoutOverlapping();
         $schedule->command('pms:flag-overdue-installments')->everyMinute()->withoutOverlapping();
+        // Active leases past their last day: Expired.
+        $schedule->command('pms:expire-leases')->hourly()->withoutOverlapping();
         $schedule->command('license:verify')->daily()->withoutOverlapping();
         // The Performance page's records: the last 14 days kept.
         $schedule->call(fn () => PerformanceSample::prune())->daily()->name('performance:prune');

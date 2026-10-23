@@ -22,6 +22,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\URL;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -216,6 +217,42 @@ class MatterRequestTest extends TestCase
 
         $this->actingAs($superAdmin);
         $this->assertTrue($service->canBeApproved($superAdmin));
+    }
+
+    public function test_a_disputed_received_date_is_announced_and_decided_by_an_admin(): void
+    {
+        $matter = $this->makeMatter();
+        $assistant = User::factory()->create();
+        $admin = User::factory()->create();
+        $admin->assignRole('super-admin');
+
+        $request = MatterRequest::create([
+            'matter_id' => $matter->id,
+            'request_by' => $assistant->id,
+            'type' => RequestType::CHANGE_DISTRIBUTED_DATE,
+            'status' => 'pending',
+            'comment' => 'x',
+        ]);
+
+        // The assistant disputes it from their email.
+        $this->post(URL::signedRoute('matter.received.dispute.submit', ['matter' => $matter->id, 'matterRequest' => $request->id]), [
+            'proposed_distributed_at' => '2026-05-01',
+            'comment' => 'It reached me a week later.',
+        ])->assertOk();
+        $this->assertSame(RequestStatus::DISPUTED, $request->fresh()->status);
+
+        // The admins are told.
+        $this->assertSame(__('Received date disputed'), $admin->notifications()->latest()->first()?->data['title'] ?? null);
+
+        // An admin decides it — not the assistant who disputed it — and approving takes the proposed date.
+        $service = RequestServiceFactory::make($request->fresh());
+        $this->actingAs($assistant);
+        $this->assertFalse($service->canBeApproved($assistant));
+        $this->actingAs($admin);
+        $this->assertTrue($service->canBeApproved($admin));
+
+        $service->approve(['approved_comment' => null, 'attachments' => []]);
+        $this->assertSame([RequestStatus::APPROVED, '2026-05-01'], [$request->fresh()->status, $matter->fresh()->distributed_at?->toDateString()]);
     }
 
     public function test_confirm_report_approve_sets_final_report_memo_date_and_requires_attachments_on_reject(): void

@@ -139,6 +139,13 @@ class PaymentServiceTest extends TestCase
         $this->assertSame('0.00', $installment->paid_amount);
         $this->assertSame('150.00', $installment->admin_penalty_amount);
         $this->assertSame('10150.00', $installment->balance_due);
+
+        // The bounced payment stays in the ledger, marked, and no longer counts: the next payment is all that was paid.
+        $this->assertNotNull($installment->payments()->sole()->bounced_at);
+        $this->payments->recordPayment($installment, ['amount' => 6100]);
+
+        $installment = $installment->fresh();
+        $this->assertSame(['6100.00', '4050.00', InstallmentPaymentStatus::PARTIAL], [$installment->paid_amount, $installment->balance_due, $installment->payment_status]);
     }
 
     public function test_flagging_overdue_only_applies_past_the_grace_period(): void

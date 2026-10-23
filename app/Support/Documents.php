@@ -12,8 +12,9 @@ use Illuminate\Support\Facades\Storage;
  * Azure. Everything else on the public disk stays here: logos, letterheads, fonts, pictures in texts and
  * bulk mail's files are read from disk by the PDF and Word makers.
  *
- * A document here opens at /storage/<path> from the web server itself; one in Azure at the same address
- * through Wakeel (LegacyAttachmentPathController), for a signed-in user.
+ * Each opens at /storage/<path> through Wakeel (LegacyAttachmentPathController), for whoever may see it —
+ * here or in Azure: the web server sends their folders to Wakeel (public/.htaccess) rather than serving the
+ * file itself, which let anyone with the address open it.
  */
 final class Documents
 {

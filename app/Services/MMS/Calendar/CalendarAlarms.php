@@ -181,20 +181,35 @@ class CalendarAlarms
         return $done;
     }
 
-    /** Its reminder item made in the person's calendar, or moved to its new time. */
+    /**
+     * Its reminder item made in the person's calendar, or rewritten as the event is now: moved to its new time,
+     * or saying its new title, time or place (changed in Wakeel or in Outlook).
+     */
     private function placeItem(CalendarEventAlert $alert, CalendarEvent $event, bool $moved): bool
     {
-        if (blank($alert->mailbox) || ! $this->outlook->isConfigured() || (filled($alert->outlook_item_id) && ! $moved) || ! $alert->mayTry()) {
+        $subject = self::subject($event, $alert);
+        $body = self::body($event);
+        $hash = sha1($subject."\n".$body);
+
+        // One made before what it says was kept: taken to say what it should.
+        if (filled($alert->outlook_item_id) && $alert->item_hash === null) {
+            $alert->forceFill(['item_hash' => $hash])->save();
+        }
+
+        $current = filled($alert->outlook_item_id) && ! $moved && $alert->item_hash === $hash;
+
+        if (blank($alert->mailbox) || ! $this->outlook->isConfigured() || $current || ! $alert->mayTry()) {
             return false;
         }
 
         try {
             if (filled($alert->outlook_item_id)) {
-                $this->outlook->moveReminderItem($alert->mailbox, $alert->outlook_item_id, $alert->alarm_at);
+                $this->outlook->updateReminderItem($alert->mailbox, $alert->outlook_item_id, $alert->alarm_at, $subject, $body);
             } else {
-                $alert->outlook_item_id = $this->outlook->createReminderItem($alert->mailbox, self::subject($event, $alert), self::body($event), $alert->alarm_at);
+                $alert->outlook_item_id = $this->outlook->createReminderItem($alert->mailbox, $subject, $body, $alert->alarm_at);
             }
 
+            $alert->item_hash = $hash;
             $this->succeeded($alert);
 
             return true;

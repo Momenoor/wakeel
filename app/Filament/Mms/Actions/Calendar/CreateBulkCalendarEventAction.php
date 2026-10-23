@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Actions\Calendar;
 
+use App\Filament\Mms\Resources\CalendarEvents\Schemas\CalendarEventForm;
 use App\Filament\Support\OverlapConfirmation;
 use App\Filament\Support\SameDayMeetings;
 use App\Models\CalendarEvent;
@@ -117,20 +118,8 @@ class CreateBulkCalendarEventAction extends Action
                     ->label(__('Location')),
                 Placeholder::make('generated_title')
                     ->label(__('Generated Title'))
-                    ->content(function (callable $get) {
-                        $matterIds = $get('matter_ids');
-                        $typeId = $get('matter_type_id');
-
-                        if (empty($matterIds) || ! $typeId) {
-                            return '—';
-                        }
-
-                        $matters = Matter::whereIn('id', $matterIds)->get();
-                        $matterNumbers = $matters->map(fn ($m) => "{$m->number}/{$m->year}")->join(', ');
-                        $typeName = Type::find($typeId)?->name;
-
-                        return " د.رضا {$matterNumbers} ({$typeName}) (جلسات المحكمة)";
-                    }),
+                    // The title it will be given: the same as saved (CalendarEventForm::titleFor()).
+                    ->content(fn (callable $get): string => CalendarEventForm::titleFor(CalendarEventForm::mattersInOrder($get('matter_ids')), sessions: true) ?? '—'),
                 // Only with Microsoft 365 set up (Settings → Integrations).
                 Toggle::make('sync_to_outlook')
                     ->label(__('Sync to Outlook Calendar'))
@@ -153,15 +142,9 @@ class CreateBulkCalendarEventAction extends Action
 
                 $toOutlook = ! empty($data['sync_to_outlook']) && $outlookService->isConfigured();
                 $teams = $toOutlook && ! empty($data['is_teams_meeting']);
-                $matters = Matter::whereIn('id', $data['matter_ids'])->get();
-                $matterNumbers = $matters->map(fn ($m) => "{$m->number}/{$m->year}")->join(', ');
-                $courtName = Court::find($data['court_id'])?->name;
-                $typeName = Type::find($data['matter_type_id'])?->name;
-
-                $title = "{$matterNumbers} ({$courtName}) ({$typeName}) (جلسات المحكمة)";
-
                 $event = CalendarEvent::create([
-                    'title' => $title,
+                    // From its matters, as when they are changed later (CalendarEventForm::titleFor()).
+                    'title' => CalendarEventForm::titleFor(CalendarEventForm::mattersInOrder($data['matter_ids']), sessions: true),
                     'start_datetime' => $data['start_datetime'],
                     'end_datetime' => $data['end_datetime'] ?? null,
                     'location' => $data['location'] ?? null,

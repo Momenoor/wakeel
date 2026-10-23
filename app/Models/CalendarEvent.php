@@ -27,6 +27,12 @@ class CalendarEvent extends Model
         return LogOptions::defaults()->logOnly(['matter_id', 'title', 'start_datetime', 'location'])->logOnlyDirty()->dontLogEmptyChanges();
     }
 
+    /** What an event changed in Wakeel puts on Outlook (CalendarEventObserver::updated()). */
+    public const OUTLOOK_FIELDS = ['title', 'start_datetime', 'end_datetime', 'location', 'description'];
+
+    /** This save brings Outlook's own values (OutlookCalendarSync): nothing to send back. Not a column. */
+    public bool $fromOutlook = false;
+
     protected $fillable = [
         'matter_id',
         'outlook_event_id',

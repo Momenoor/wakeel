@@ -15,6 +15,7 @@ use App\Observers\LeaveRequestObserver;
 use App\Services\Notifications\NotificationPreferences;
 use App\Services\Notifications\Notifier;
 use App\Support\Addresses;
+use Carbon\CarbonImmutable;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -229,12 +230,48 @@ class LeaveRequestService
             return $this->balances->suggestSplit($request);
         }
 
+        // Sick leave falls across its pay bands in order (full, half, unpaid, then ordinary unpaid) from what
+        // is left of them this service year — as the email's one-click approve books it too.
+        if (in_array($type, [LeaveType::SICK_FULL, LeaveType::SICK_HALF, LeaveType::SICK_UNPAID], true) && $request->party) {
+            return $this->sickSplit($request);
+        }
+
         return [[
             'leave_type' => $type->value,
             'start_date' => $request->getAttribute('start_date')->toDateString(),
             'end_date' => $request->getAttribute('end_date')->toDateString(),
             'day_count' => $request->requestedDays(),
         ]];
+    }
+
+    /**
+     * The sick days requested, band by band, each its own run of days in order; the last ends on the request's
+     * last day.
+     *
+     * @return list<array{leave_type: string, start_date: string, end_date: string, day_count: float}>
+     */
+    private function sickSplit(LeaveRequest $request): array
+    {
+        $start = CarbonImmutable::parse($request->getAttribute('start_date'))->startOfDay();
+        $end = CarbonImmutable::parse($request->getAttribute('end_date'))->startOfDay();
+        $bands = $this->entitlements->splitSickDays($this->entitlements->forDate($request->party, $start), $request->requestedDays());
+        $split = [];
+
+        foreach ($bands as $i => $band) {
+            $last = $i === array_key_last($bands);
+            $until = $last ? $end : $start->addDays((int) ceil($band['day_count']) - 1);
+
+            $split[] = [
+                'leave_type' => $band['leave_type']->value,
+                'start_date' => $start->toDateString(),
+                'end_date' => $until->toDateString(),
+                'day_count' => (float) $band['day_count'],
+            ];
+
+            $start = $until->addDay();
+        }
+
+        return $split;
     }
 
     /**

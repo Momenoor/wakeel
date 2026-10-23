@@ -155,6 +155,31 @@ class CalendarAlarmsTest extends TestCase
         $this->assertSame(0, CalendarEventAlert::count());
     }
 
+    public function test_an_event_renamed_in_wakeel_is_renamed_in_outlook_and_in_its_reminders(): void
+    {
+        $event = $this->event('2026-11-05 10:00:00');
+        $event->update(['outlook_event_id' => 'shared-1']);
+        app(CalendarAlarms::class)->run();
+        $this->assertCount(0, $this->calls('PATCH'));
+
+        // Renamed here: Outlook's event gets the new title (only what changed).
+        $event->update(['title' => 'Site visit — moved to the warehouse']);
+        $shared = collect($this->calls('PATCH'))->filter(fn (array $call): bool => str_contains($call['url'], 'events/shared-1'))->values();
+        $this->assertCount(1, $shared);
+        $this->assertSame(['subject' => 'Site visit — moved to the warehouse'], $shared[0]['data']);
+
+        // Its reminder items say so on the next run, not only when moved.
+        app(CalendarAlarms::class)->run();
+        $items = collect($this->calls('PATCH'))->reject(fn (array $call): bool => str_contains($call['url'], 'events/shared-1'));
+        $this->assertCount(4, $items);
+        $this->assertTrue($items->every(fn (array $call): bool => str_contains($call['data']['subject'], 'moved to the warehouse')));
+
+        // What comes from Outlook is not sent back to it.
+        $event->fromOutlook = true;
+        $event->update(['title' => 'Renamed in Outlook']);
+        $this->assertCount(1, collect($this->calls('PATCH'))->filter(fn (array $call): bool => str_contains($call['url'], 'events/shared-1')));
+    }
+
     public function test_an_event_made_a_few_hours_ahead_rings_only_the_hour_before_and_a_late_one_is_not_sent(): void
     {
         $this->event('2026-11-01 13:00:00');

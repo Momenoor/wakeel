@@ -6,9 +6,11 @@ use App\Enums\FeeType;
 use App\Enums\MatterDifficulty;
 use App\Enums\MatterLevel;
 use App\Filament\Mms\Resources\Parties\Schemas\PartyForm;
-use App\Models\Party;
 use App\Filament\Support\CustomFieldInput;
+use App\Models\Fee;
+use App\Models\Party;
 use App\Models\Type;
+use App\Services\MMS\IncentiveReversals;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
@@ -557,7 +559,13 @@ class MatterForm
                                                     ->default(fn () => (string) Str::uuid()),
                                             ])
                                             ->columns(1)
-                                            ->addActionLabel(__('Add Fee')),
+                                            ->addActionLabel(__('Add Fee'))
+                                            // A fee whose incentive was already paid says so before it goes (IncentiveReversals).
+                                            ->deleteAction(fn (Action $action) => $action
+                                                ->requiresConfirmation()
+                                                ->modalDescription(fn (array $arguments): string => IncentiveReversals::deleteWarning(
+                                                    str_starts_with((string) ($arguments['item'] ?? ''), 'record-') ? Fee::find((int) substr($arguments['item'], 7)) : null
+                                                ))),
                                     ]),
                             ])
                             ->columnSpan(2),

@@ -158,17 +158,11 @@ class MatterResource extends Resource
             ])
             ->orderByRaw('COALESCE(parent_id, id) ASC, id ASC');
 
-        $user = auth()->user();
-
         // Fail CLOSED. canViewAny() admits anyone holding ViewOwn:Matter, so a
         // user restricted to their own matters whose Party link is missing must
         // see nothing — previously the scoping clause additionally required
         // $user->party, and without it the query was left completely unscoped,
         // exposing every matter in the office.
-        if (! $user->can('ViewAny:Matter') && $user->can('ViewOwn:Matter')) {
-            $query->ownedBy($user);
-        }
-
-        return $query;
+        return $query->visibleTo(auth()->user());
     }
 }

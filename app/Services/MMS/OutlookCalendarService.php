@@ -310,6 +310,49 @@ class OutlookCalendarService
         return $response->json();
     }
 
+    /**
+     * An event changed in Wakeel, its changes put on Outlook — and so in the calendars of everyone invited to it,
+     * phones too. Only what changed is sent: its title, times, place or text (the text as it came: HTML for one
+     * made in Outlook). Its Teams meeting is left as it is.
+     *
+     * @param  list<string>  $changed  its changed columns
+     *
+     * @throws \RuntimeException when Outlook refuses
+     */
+    public function pushChanges(CalendarEvent $event, array $changed): void
+    {
+        $payload = [];
+
+        if (in_array('title', $changed, true)) {
+            $payload['subject'] = $event->title;
+        }
+
+        if (array_intersect(['start_datetime', 'end_datetime'], $changed)) {
+            $times = $this->eventPayload(['title' => $event->title, 'start_datetime' => $event->start_datetime, 'end_datetime' => $event->end_datetime]);
+            $payload['start'] = $times['start'];
+            $payload['end'] = $times['end'];
+        }
+
+        if (in_array('location', $changed, true)) {
+            $payload['location'] = ['displayName' => (string) $event->location];
+        }
+
+        if (in_array('description', $changed, true)) {
+            $payload['body'] = ['contentType' => $event->imported_from_outlook ? 'html' : 'text', 'content' => (string) $event->description];
+        }
+
+        if ($payload === [] || blank($event->outlook_event_id)) {
+            return;
+        }
+
+        $response = Http::withToken($this->getAccessToken())
+            ->patch("https://graph.microsoft.com/v1.0/users/{$this->getUserEmail()}/events/{$event->outlook_event_id}", $payload);
+
+        if ($response->failed()) {
+            throw new \RuntimeException((string) $response->json('error.message', $response->body()));
+        }
+    }
+
     public function updateEvent(string $outlookEventId, array $eventData): array
     {
         $response = Http::withToken($this->getAccessToken())
@@ -378,14 +421,18 @@ class OutlookCalendarService
         return (string) $response->json('id');
     }
 
-    /** The reminder item moved to ring at another time (its event was moved). */
-    public function moveReminderItem(string $mailbox, string $itemId, Carbon $at): void
+    /** The reminder item as its event is now: its time, subject and text (the event moved, renamed or relocated). */
+    public function updateReminderItem(string $mailbox, string $itemId, Carbon $at, string $subject, string $body): void
     {
         $response = Http::withToken($this->getAccessToken())
-            ->patch('https://graph.microsoft.com/v1.0/users/'.rawurlencode($mailbox).'/events/'.$itemId, $this->reminderTimes($at));
+            ->patch('https://graph.microsoft.com/v1.0/users/'.rawurlencode($mailbox).'/events/'.$itemId, [
+                'subject' => $subject,
+                'body' => ['contentType' => 'text', 'content' => $body],
+                ...$this->reminderTimes($at),
+            ]);
 
         if ($response->failed()) {
-            throw new \RuntimeException('Failed to move the reminder in '.$mailbox.': '.$response->json('error.message', $response->body()));
+            throw new \RuntimeException('Failed to update the reminder in '.$mailbox.': '.$response->json('error.message', $response->body()));
         }
     }
 

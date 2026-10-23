@@ -244,6 +244,11 @@ class MyIncentiveReport extends Page implements HasTable
 
     private function feeTotalFor(IncentiveAssistantLine $record): float
     {
+        // A share taken back has no fee of its own.
+        if ($record->incentive_reversal_id) {
+            return 0.0;
+        }
+
         $line = $record->incentiveLine;
 
         return (float) ($this->matterTotals()->get($line?->getAttribute('matter_id'))?->total_fee_amount
@@ -344,7 +349,7 @@ class MyIncentiveReport extends Page implements HasTable
         $calculationId = $this->selectedCalculationId();
 
         $query = IncentiveAssistantLine::query()
-            ->with(['incentiveLine.matter.court', 'incentiveLine.matter.type', 'incentiveLine.deductions']);
+            ->with(['incentiveLine.matter.court', 'incentiveLine.matter.type', 'incentiveLine.deductions', 'reversal.matter', 'reversal.paidCalculation', 'reversal.deletedBy']);
 
         // Fails closed: no party link, or no finalized calculation to show, and
         // the page returns nothing rather than everything.
@@ -373,6 +378,8 @@ class MyIncentiveReport extends Page implements HasTable
                     ->url(fn (IncentiveAssistantLine $record) => ($matter = $this->matterOf($record))
                         ? MatterResource::getUrl('view', ['record' => $matter])
                         : null)
+                    // A paid incentive taken back (a fee deleted after it was paid): what it is, in full.
+                    ->description(fn (IncentiveAssistantLine $record): ?string => $record->reversal?->description())
                     ->weight('bold')
                     ->wrap(),
 

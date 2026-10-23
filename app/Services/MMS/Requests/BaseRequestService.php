@@ -220,7 +220,7 @@ abstract class BaseRequestService
      *
      * @param  Collection<int, User>  $recipients
      */
-    private function notify(NotificationType $type, string $title, string $body, Collection $recipients): void
+    protected function notify(NotificationType $type, string $title, string $body, Collection $recipients): void
     {
         Notifier::bell(
             $type,
@@ -232,7 +232,7 @@ abstract class BaseRequestService
         );
     }
 
-    private function requestUrl(): string
+    protected function requestUrl(): string
     {
         return route('filament.mms.resources.matter-requests.view', $this->request);
     }
@@ -244,7 +244,7 @@ abstract class BaseRequestService
      * @param  Collection<int, User>  $recipients
      * @param  Closure(): Mailable  $mail
      */
-    private function mailEach(NotificationType $type, Collection $recipients, Closure $mail): void
+    protected function mailEach(NotificationType $type, Collection $recipients, Closure $mail): void
     {
         $wanting = NotificationPreferences::wanting($type, $recipients, NotificationChannel::MAIL)
             ->filter(fn (User $user): bool => filled($user->email));
@@ -271,6 +271,17 @@ abstract class BaseRequestService
         Notifier::whatsapp(NotificationPreferences::wanting($type, $assistants, NotificationChannel::WHATSAPP), $title, $body, $this->requestUrl());
     }
 
+    /**
+     * Those told of a request to decide: the admins and super admins.
+     *
+     * @return Collection<int, User>
+     */
+    protected static function admins(): Collection
+    {
+        // By name rather than User::role(), which throws for a role an installation does not have.
+        return User::query()->whereHas('roles', fn ($query) => $query->whereIn('name', ['admin', Utils::getSuperAdminName()]))->get();
+    }
+
     public function onCreateNotify(bool $again = false): void
     {
         try {
@@ -278,7 +289,7 @@ abstract class BaseRequestService
             // about "which users hold this role" — so this still names the
             // role, but through Shield's own configured name rather than a
             // hardcoded literal that has to be kept in sync with it by hand.
-            $users = User::role(['admin', Utils::getSuperAdminName()])->get();
+            $users = self::admins();
 
             // The assistant's reviewers (Parties → the assistant): the report on WhatsApp, to answer there. One who
             // got it is not also told of a new request, by bell, email or WhatsApp: it is the same thing.

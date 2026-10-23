@@ -16,11 +16,12 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * An address under /storage/ that the web server found nothing at, so Laravel answers it:
  *  - the old address of a file attached before the private disk existed — once `php artisan attachments:move`
  *    has taken it away, a signed-in user who may see the file is sent to its new address;
- *  - a document of the system's now in Azure (App\Support\Documents) — sent from there, to whoever may see
+ *  - a document of the system's (App\Support\Documents), here or in Azure — sent, to whoever may see
  *    it: the people of its attachment (deleted or not — the file of a deleted one stays); with no attachment,
  *    an email not filed yet (email-unfiled/) to those who file emails, a campaign's reply of no matter
  *    (email-replies/) to those who see campaigns, and nothing else to anyone.
- * (A file still on the public disk is served by the web server itself and never gets here.)
+ * A document of the system's still on this server comes here too: the web server sends its folders to Wakeel
+ * (public/.htaccess) instead of serving the file to anyone with its address.
  */
 class LegacyAttachmentPathController extends Controller
 {

@@ -192,6 +192,8 @@ class InstallmentsRelationManager extends RelationManager
                     TextEntry::make('payment_method')->label(__('Method'))->placeholder('—'),
                     TextEntry::make('transaction_reference')->label(__('Cheque / Ref.'))->color('gray')->placeholder('—'),
                     TextEntry::make('bank_name')->label(__('Bank'))->color('gray')->placeholder('—'),
+                    // Its cheque bounced: kept here, not counted in what was paid.
+                    TextEntry::make('bounced_at')->label(__('Bounced'))->date('d/m/Y')->badge()->color('danger')->placeholder('—'),
                 ])
                     ->state($record->payments()->orderByDesc('paid_date')->get())
                     ->placeholder(__('No payments recorded yet.')),

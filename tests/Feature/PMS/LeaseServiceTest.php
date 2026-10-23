@@ -240,6 +240,37 @@ class LeaseServiceTest extends TestCase
         $this->assertSame(LeaseStatus::RENEWED, $lease->fresh()->status);
     }
 
+    public function test_a_renewal_keeps_each_guarantor_tied_to_the_tenant_they_guarantee(): void
+    {
+        $lease = $this->leases->createFromQuotation($this->acceptedQuotation());
+        $this->leases->attest($lease, ['attestation_system' => 'ejari_dubai', 'attestation_serial_number' => 'EJ-1']);
+        $guarantor = LeaseParty::create(['lease_id' => $lease->id, 'party_id' => $this->tenant()->id, 'role' => LeasePartyRole::GUARANTOR->value, 'parent_id' => $lease->primaryTenant()->id]);
+
+        $renewal = $this->leases->renew($lease->fresh());
+
+        // The renewal's guarantor points at the renewal's own tenant row, not the old lease's.
+        $renewedGuarantor = $renewal->leaseParties->firstWhere('party_id', $guarantor->party_id);
+        $this->assertSame($renewal->primaryTenant()->id, $renewedGuarantor->parent_id);
+
+        // Renewed, the old lease cannot be terminated: its units are the renewal's.
+        $this->expectException(RuntimeException::class);
+        $this->leases->terminate($lease->fresh());
+    }
+
+    public function test_active_leases_past_their_last_day_expire(): void
+    {
+        $lease = $this->leases->createFromQuotation($this->acceptedQuotation());
+        $this->leases->attest($lease, ['attestation_system' => 'ejari_dubai', 'attestation_serial_number' => 'EJ-2']);
+        $draft = $this->leases->createFromQuotation($this->acceptedQuotation());
+
+        $this->assertSame(0, $this->leases->expireEnded($lease->fresh()->end_date));
+        $this->artisan('pms:expire-leases')->assertExitCode(0);
+        $this->assertSame(LeaseStatus::ACTIVE, $lease->fresh()->status);
+
+        $this->assertSame(1, $this->leases->expireEnded($lease->fresh()->end_date->addDay()));
+        $this->assertSame([LeaseStatus::EXPIRED, LeaseStatus::DRAFT], [$lease->fresh()->status, $draft->fresh()->status]);
+    }
+
     public function test_a_lease_pending_attestation_cannot_be_renewed(): void
     {
         $quotation = $this->acceptedQuotation();

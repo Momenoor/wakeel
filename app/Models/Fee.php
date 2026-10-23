@@ -9,6 +9,7 @@ use App\Models\Concerns\AnnouncesChanges;
 use App\Models\Concerns\HasAttachments;
 use App\Models\Contracts\AttachmentOwner;
 use App\Services\MMS\FeeChangeNotifier;
+use App\Services\MMS\IncentiveReversals;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -56,6 +57,10 @@ class Fee extends Model implements AttachmentOwner
 
         static::deleting(function (Fee $fee) {
             $fee->allocations()->delete();
+
+            // Its incentive already paid: the paid calculation stays as it was, and each assistant's share of
+            // it is taken back in the next calculation (IncentiveReversals). In a draft it simply goes.
+            app(IncentiveReversals::class)->record($fee);
         });
 
         static::saving(function (Fee $fee) {

@@ -95,7 +95,13 @@
         <tbody>
         @foreach($assistantSummary['matters'] as $m)
             <tr class="{{ $loop->even ? 'bg-blue-50' : 'bg-white' }} border-b border-gray-200">
-                <td class="px-3 py-2 font-semibold">{{ $m['matter_reference'] }}</td>
+                <td class="px-3 py-2 font-semibold">
+                    {{ $m['matter_reference'] }}
+                    {{-- A paid incentive taken back: what it is, in full. --}}
+                    @if($m['description'] ?? null)
+                        <div class="font-normal text-red-600">{{ $m['description'] }}</div>
+                    @endif
+                </td>
                 <td class="px-3 py-2 text-gray-600">
                     {{ $m['type_name'] ?? '—' }}
                     @if($m['court_name'])

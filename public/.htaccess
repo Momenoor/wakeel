@@ -27,6 +27,11 @@
     # stops PHP when the caller goes away, unless told not to (ignore_user_abort() is not enough).
     RewriteRule ^cron/run - [E=noabort:1,E=noconntimeout:1]
 
+    # The system's documents — emails' PDFs and files, minutes and their signed copies — open only through
+    # Wakeel, which asks who may see them (LegacyAttachmentPathController): never straight from the disk, even
+    # while they are kept on this server.
+    RewriteRule ^storage/(attachments|email-unfiled|email-replies)/ index.php [L]
+
     # Send Requests To Front Controller...
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_FILENAME} !-f

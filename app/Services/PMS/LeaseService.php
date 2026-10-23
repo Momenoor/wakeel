@@ -14,6 +14,7 @@ use App\Models\Lease;
 use App\Models\LeaseParty;
 use App\Models\Quotation;
 use App\Models\Unit;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -100,13 +101,14 @@ class LeaseService
             throw new RuntimeException('Only an active or expired lease can be renewed.');
         }
 
-        $tenants = $lease->leaseParties->map(fn (LeaseParty $leaseParty): array => [
+        $parties = $lease->leaseParties->sortBy('id')->values();
+        $tenants = $parties->map(fn (LeaseParty $leaseParty): array => [
             'party_id' => $leaseParty->getAttribute('party_id'),
             'role' => $leaseParty->getAttribute('role')->value,
         ])->all();
         $unitIds = $lease->units()->pluck('units.id')->all();
 
-        return DB::transaction(function () use ($lease, $overrides, $tenants, $unitIds): Lease {
+        return DB::transaction(function () use ($lease, $overrides, $parties, $tenants, $unitIds): Lease {
             $renewal = $this->draft([
                 'renewed_from_lease_id' => $lease->getKey(),
                 'start_date' => $overrides['start_date'] ?? $lease->getAttribute('end_date')->addDay()->toDateString(),
@@ -115,9 +117,20 @@ class LeaseService
                 'security_deposit_amount' => $lease->getAttribute('security_deposit_amount'),
             ], $tenants, $unitIds, ContractCategory::RENEWAL);
 
+            // A guarantor stays tied to the tenant they guarantee: their link points at the renewal's own row
+            // of that tenant (made in the same order), not the old lease's.
+            $renewed = $renewal->leaseParties->sortBy('id')->values();
+            $newIdOf = $parties->pluck('id')->combine($renewed->pluck('id'));
+
+            foreach ($parties as $i => $old) {
+                if ($old->getAttribute('parent_id') && $newIdOf->has($old->getAttribute('parent_id'))) {
+                    $renewed[$i]->update(['parent_id' => $newIdOf[$old->getAttribute('parent_id')]]);
+                }
+            }
+
             $lease->forceFill(['status' => LeaseStatus::RENEWED])->save();
 
-            return $renewal;
+            return $renewal->load(['leaseParties.party', 'units']);
         });
     }
 
@@ -302,9 +315,26 @@ class LeaseService
         return $lease;
     }
 
+    /** A lease past which it can no longer be terminated: ended, or carried on by its renewal (whose units they are). */
+    public const ENDED = [LeaseStatus::TERMINATED, LeaseStatus::EXPIRED, LeaseStatus::RENEWED];
+
+    /**
+     * Active leases whose last day has passed: Expired (renewable still). Their units are left as they are — the
+     * tenant may not have left; terminating, or letting a unit again, frees it.
+     *
+     * @return int how many
+     */
+    public function expireEnded(?CarbonInterface $today = null): int
+    {
+        return Lease::query()
+            ->where('status', LeaseStatus::ACTIVE->value)
+            ->whereDate('end_date', '<', ($today ?? now())->toDateString())
+            ->update(['status' => LeaseStatus::EXPIRED->value, 'updated_at' => now()]);
+    }
+
     public function terminate(Lease $lease): Lease
     {
-        if (in_array($lease->getAttribute('status'), [LeaseStatus::TERMINATED, LeaseStatus::EXPIRED], true)) {
+        if (in_array($lease->getAttribute('status'), self::ENDED, true)) {
             throw new RuntimeException('This lease has already ended.');
         }
 

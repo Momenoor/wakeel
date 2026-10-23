@@ -122,6 +122,18 @@ class Matter extends Model implements AttachmentOwner
             : $query->whereHas('matterParties', fn (Builder $q) => $q->whereIn('party_id', $parties));
     }
 
+    /**
+     * The matters someone may see: all of them, or — given only ViewOwn:Matter — their own. Fails closed: a
+     * user kept to their own matters without a party linked sees none (scopeOwnedBy()). The matters list and
+     * every matter picker (MatterSearch) read through it.
+     */
+    public function scopeVisibleTo(Builder $query, ?User $user): void
+    {
+        if ($user && ! $user->can('ViewAny:Matter') && $user->can('ViewOwn:Matter')) {
+            $query->ownedBy($user);
+        }
+    }
+
     /** Whether it is one of someone's own matters (scopeOwnedBy()). */
     public function isOwnedBy(User $user): bool
     {

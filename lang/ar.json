@@ -4665,5 +4665,13 @@
     "Expiry date": "تاريخ الانتهاء",
     "registration number at the court": "رقم القيد لدى المحكمة",
     "Press \"Approve\" to approve it as it is — or first send a comment (text, pictures or files, in as many messages as you like), then press \"Approve\".": "اضغط «اعتماد» لاعتماده كما هو — أو أرسل أولًا تعليقًا (نصًا أو صورًا أو ملفات، في أي عدد من الرسائل) ثم اضغط «اعتماد».",
-    "Your request has been approved. Comment: :comment": "تم اعتماد طلبك. التعليق: :comment"
+    "Your request has been approved. Comment: :comment": "تم اعتماد طلبك. التعليق: :comment",
+    "Received date disputed": "اعتراض على تاريخ الاستلام",
+    "The assistant disputed the received date of matter #:number / :year and proposes :date.": "اعترض المساعد على تاريخ استلام الدعوى رقم :number / :year ويقترح :date.",
+    "This fee's incentive has already been paid. Deleting it deducts the paid incentive from its assistants in the next incentive calculation.": "حافز هذه الأتعاب صُرف بالفعل. حذفها يخصم الحافز المصروف من مساعديها في حساب الحوافز القادم.",
+    "Paid incentive taken back: the :fee fee of :amount (:date) on matter :matter was deleted on :deleted by :user, after its incentive was paid in «:calculation» (:from – :to). Of the :paid paid for the matter, this fee's part is deducted: :deducted.": "استرداد حافز مصروف: حُذفت أتعاب :fee بمبلغ :amount (:date) في الدعوى :matter بتاريخ :deleted بواسطة :user، بعد صرف حافزها في «:calculation» (:from – :to). من :paid المصروفة عن الدعوى يُخصم نصيب هذه الأتعاب: :deducted.",
+    "Taken back": "مسترد",
+    "Saved — leave empty to keep it": "محفوظة — اتركها فارغة للإبقاء عليها",
+    "Leases expired: :count": "العقود المنتهية: :count",
+    "Saved, but Outlook was not updated": "حُفظ، لكن لم يُحدَّث Outlook"
 }

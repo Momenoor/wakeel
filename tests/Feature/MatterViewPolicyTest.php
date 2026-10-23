@@ -7,6 +7,7 @@ use App\Models\Matter;
 use App\Models\MatterParty;
 use App\Models\Party;
 use App\Models\User;
+use App\Support\MatterSearch;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Permission;
@@ -42,6 +43,22 @@ class MatterViewPolicyTest extends TestCase
 
         $this->assertTrue($user->fresh()->can('view', $mine));
         $this->assertFalse($user->fresh()->can('view', Matter::factory()->create()));
+    }
+
+    public function test_a_matter_picker_offers_only_the_matters_the_user_may_see(): void
+    {
+        $user = $this->userWith('ViewOwn:Matter');
+        $party = Party::factory()->create(['user_id' => $user->id]);
+        $mine = Matter::factory()->create(['number' => '771', 'year' => 2026]);
+        $theirs = Matter::factory()->create(['number' => '772', 'year' => 2026]);
+        MatterParty::create(['matter_id' => $mine->id, 'role' => 'expert', 'type' => 'expert', 'party_id' => $party->id]);
+
+        $this->actingAs($user->fresh());
+        $this->assertSame([$mine->id], array_keys(MatterSearch::options('77')));
+
+        // Whoever sees every matter picks among all of them.
+        $this->actingAs($this->userWith('ViewAny:Matter'));
+        $this->assertEqualsCanonicalizing([$mine->id, $theirs->id], array_keys(MatterSearch::options('77')));
     }
 
     public function test_update_alone_does_not_open_a_matter(): void

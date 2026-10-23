@@ -2,7 +2,6 @@
 
 namespace App\Filament\Mms\Widgets;
 
-use App\Support\Currency;
 use App\Enums\MatterCommissiong;
 use App\Enums\MatterDifficulty;
 use App\Filament\Mms\Concerns\HasMultiWordSearch;
@@ -11,6 +10,7 @@ use App\Models\IncentiveAssistantLine;
 use App\Models\IncentiveCalculation;
 use App\Models\IncentiveLine;
 use App\Services\MMS\IncentiveCalculatorService;
+use App\Support\Currency;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
@@ -111,7 +111,7 @@ class IncentiveSummaryTableWidget extends TableWidget
     {
         return IncentiveAssistantLine::query()
             ->whereHas('incentiveLine', fn ($q) => $q->where('incentive_calculation_id', $this->calculationId))
-            ->with(['party', 'incentiveLine.matter.court', 'incentiveLine.matter.type', 'incentiveLine.deductions']);
+            ->with(['party', 'incentiveLine.matter.court', 'incentiveLine.matter.type', 'incentiveLine.deductions', 'reversal.matter', 'reversal.paidCalculation', 'reversal.deletedBy']);
     }
 
     /**
@@ -170,6 +170,8 @@ class IncentiveSummaryTableWidget extends TableWidget
 
                         return static::applyMultiWordSearch($query, $search, ['incentiveLine.matter.year', 'incentiveLine.matter.number']);
                     })
+                    // A paid incentive taken back (a fee deleted after it was paid): what it is, in full.
+                    ->description(fn ($record): ?string => $record->reversal?->description())
                     ->weight('bold'),
                 TextColumn::make('difficulty')
                     ->label(__('Difficulty'))
@@ -230,8 +232,9 @@ class IncentiveSummaryTableWidget extends TableWidget
                     ->searchable(),
                 TextColumn::make('incentiveLine.fee_amount_excl_vat')
                     ->label(__('Fee'))
-                    ->getStateUsing(fn ($record) => $this->matterFeeTotals()->get($record->incentiveLine?->matter_id)?->total_fee_amount
-                        ?? $record->incentiveLine?->fee_amount_excl_vat)
+                    // A share taken back has no fee of its own here, whatever else of the matter's is.
+                    ->getStateUsing(fn ($record) => $record->incentive_reversal_id ? 0 : ($this->matterFeeTotals()->get($record->incentiveLine?->matter_id)?->total_fee_amount
+                        ?? $record->incentiveLine?->fee_amount_excl_vat))
                     ->aed()
                     ->searchable(),
                 TextColumn::make('incentiveLine.effective_percentage')
@@ -241,8 +244,8 @@ class IncentiveSummaryTableWidget extends TableWidget
                     ->searchable(),
                 TextColumn::make('incentiveLine.base_amount')
                     ->label(__('Base Amount'))
-                    ->getStateUsing(fn ($record) => $this->matterFeeTotals()->get($record->incentiveLine?->matter_id)?->total_base_amount
-                        ?? $record->incentiveLine?->base_amount)
+                    ->getStateUsing(fn ($record) => $record->incentive_reversal_id ? 0 : ($this->matterFeeTotals()->get($record->incentiveLine?->matter_id)?->total_base_amount
+                        ?? $record->incentiveLine?->base_amount))
                     ->aed()
                     ->searchable(),
                 TextColumn::make('incentiveLine.total_deduction_pct')

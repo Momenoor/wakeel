@@ -364,6 +364,20 @@ class LeaveRequestTest extends TestCase
         );
     }
 
+    public function test_sick_leave_approved_as_suggested_falls_across_the_pay_bands(): void
+    {
+        $request = $this->request($this->employee(), '2026-06-01', '2026-06-20');
+        $request->update(['requested_leave_type' => LeaveType::SICK_FULL]);
+
+        // As the email's one-click approve does: the suggestion, booked as it is.
+        $this->service->approve($request, null, $this->service->suggestSplit($request->fresh()), 'Approved by email.');
+
+        $this->assertSame([
+            [LeaveType::SICK_FULL, '2026-06-01', '2026-06-15', '15.0'],
+            [LeaveType::SICK_HALF, '2026-06-16', '2026-06-20', '5.0'],
+        ], $request->periods()->orderBy('start_date')->get()->map(fn ($p) => [$p->leave_type, $p->start_date->toDateString(), $p->end_date->toDateString(), (string) $p->day_count])->all());
+    }
+
     public function test_sick_days_past_ninety_in_a_service_year_become_ordinary_unpaid_leave(): void
     {
         $party = $this->employee();

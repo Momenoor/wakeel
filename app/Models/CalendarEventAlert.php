@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * One alarm of a calendar event for one person: its reminder item in their Outlook calendar (made, then taken
  * away once it has rung) and its system notification. App\Services\MMS\Calendar\CalendarAlarms keeps them.
  */
-#[Fillable('calendar_event_id', 'party_id', 'user_id', 'minutes_before', 'alarm_at', 'mailbox', 'outlook_item_id', 'notified_at', 'removed_at', 'error', 'attempts', 'retry_at', 'gave_up_at')]
+#[Fillable('calendar_event_id', 'party_id', 'user_id', 'minutes_before', 'alarm_at', 'mailbox', 'outlook_item_id', 'item_hash', 'notified_at', 'removed_at', 'error', 'attempts', 'retry_at', 'gave_up_at')]
 class CalendarEventAlert extends Model
 {
     /** A day before, and an hour before. */

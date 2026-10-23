@@ -48,7 +48,8 @@ class MailServerSettings extends SettingsFormPage
             'mail_host' => Setting::get('mail_host', config('mail.mailers.smtp.host', '')),
             'mail_port' => Setting::get('mail_port', config('mail.mailers.smtp.port', 587)),
             'mail_username' => Setting::get('mail_username', config('mail.mailers.smtp.username', '')),
-            'mail_password' => Setting::get('mail_password', config('mail.mailers.smtp.password', '')),
+            // Kept on the server, encrypted: never sent back to the page (a blank field keeps it).
+            'mail_password' => null,
             'mail_encryption' => Setting::get('mail_encryption', config('mail.mailers.smtp.encryption', 'tls')),
             'mail_from_address' => Setting::get('mail_from_address', config('mail.from.address', '')),
             'mail_from_name' => Setting::get('mail_from_name', config('mail.from.name', '')),
@@ -61,6 +62,24 @@ class MailServerSettings extends SettingsFormPage
             'mail_sender_key', 'mail_mailer', 'mail_host', 'mail_port', 'mail_username',
             'mail_password', 'mail_encryption', 'mail_from_address', 'mail_from_name',
         ], 'mail');
+    }
+
+    /**
+     * The password kept encrypted, and kept as it is when its field is left empty.
+     *
+     * @param  array<string, mixed>  $state
+     */
+    protected function persist(array $state): void
+    {
+        if (array_key_exists('mail_password', $state)) {
+            if (blank($state['mail_password'])) {
+                unset($state['mail_password']);
+            } else {
+                $state['mail_password'] = encrypt((string) $state['mail_password']);
+            }
+        }
+
+        parent::persist($state);
     }
 
     protected function fields(): array
@@ -129,7 +148,8 @@ class MailServerSettings extends SettingsFormPage
                         ->visible(fn (Get $get): bool => blank($get('mail_sender_key')))
                         ->label(__('SMTP Password'))
                         ->password()
-                        ->revealable(),
+                        ->revealable()
+                        ->placeholder(fn (): ?string => filled(Setting::get('mail_password')) ? __('Saved — leave empty to keep it') : null),
 
                     TextInput::make('mail_from_address')
                         ->visible(fn (Get $get): bool => blank($get('mail_sender_key')))

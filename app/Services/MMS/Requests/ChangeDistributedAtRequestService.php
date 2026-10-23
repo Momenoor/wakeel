@@ -2,9 +2,15 @@
 
 namespace App\Services\MMS\Requests;
 
+use App\Enums\NotificationChannel;
+use App\Enums\NotificationType;
 use App\Enums\RequestStatus;
+use App\Mail\NewRequestNotificationMail;
 use App\Models\Matter;
 use App\Models\User;
+use App\Services\Notifications\NotificationPreferences;
+use App\Services\Notifications\Notifier;
+use Carbon\Carbon;
 use Filament\Forms\Components\DatePicker;
 
 class ChangeDistributedAtRequestService extends BaseRequestService
@@ -30,6 +36,12 @@ class ChangeDistributedAtRequestService extends BaseRequestService
 
     public function canBeApproved(User $user): bool
     {
+        // Disputed by the assistant (from their email): decided by whoever decides requests, not by the
+        // assistant themselves — approving takes their proposed date, rejecting keeps the one set.
+        if ($this->request->status === RequestStatus::DISPUTED) {
+            return $user->can('Update:MatterRequest');
+        }
+
         // Update:MatterRequest rather than a role check — the sibling
         // BaseRequestService::canBeActedOnBy() already treats that permission
         // as the elevated-approval ability for ordinary requests, and Shield's
@@ -59,6 +71,23 @@ class ChangeDistributedAtRequestService extends BaseRequestService
 
         $this->onApproveNotify();
         $this->refresh($component);
+    }
+
+    /** The assistant disputed the received date: the admins are told, to decide it. */
+    public function onDisputeNotify(): void
+    {
+        $users = self::admins();
+        $type = NotificationType::REQUEST_CREATED;
+        $title = __('Received date disputed');
+        $body = __('The assistant disputed the received date of matter #:number / :year and proposes :date.', [
+            'number' => $this->request->matter->number,
+            'year' => $this->request->matter->year,
+            'date' => Carbon::parse($this->request->extra['proposed_distributed_at'])->format('d/m/Y'),
+        ]);
+
+        $this->notify($type, $title, $body, $users);
+        Notifier::whatsapp(NotificationPreferences::wanting($type, $users, NotificationChannel::WHATSAPP), $title, $body, $this->requestUrl());
+        $this->mailEach($type, $users, fn () => new NewRequestNotificationMail($this->request->matter, $this->request));
     }
 
     public function reject(array $data = [], $component = null): void

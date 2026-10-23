@@ -212,11 +212,7 @@ class ViewLease extends ViewRecord
             ->icon('heroicon-o-x-circle')
             ->color('danger')
             ->requiresConfirmation()
-            ->visible(fn (): bool => ! in_array(
-                $this->lease()->status,
-                [LeaseStatus::TERMINATED, LeaseStatus::EXPIRED],
-                true,
-            ))
+            ->visible(fn (): bool => ! in_array($this->lease()->status, LeaseService::ENDED, true))
             ->action(fn () => $this->runLeaseStep(
                 fn (LeaseService $service) => $service->terminate($this->lease()),
                 __('Lease terminated.'),

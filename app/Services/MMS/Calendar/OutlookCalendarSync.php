@@ -6,6 +6,7 @@ use App\Models\CalendarEvent;
 use App\Services\MMS\OutlookCalendarService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Keeps Wakeel's calendar in step with the shared Outlook calendar for a
@@ -94,6 +95,8 @@ class OutlookCalendarSync
                 $local->fill($values);
 
                 if ($local->isDirty()) {
+                    // From Outlook: not sent back to it (CalendarEventObserver::updated()).
+                    $local->fromOutlook = true;
                     $local->save();
                     $counts['updated']++;
                 }
@@ -116,6 +119,14 @@ class OutlookCalendarSync
             ->whereBetween('start_datetime', [$from, $to])
             ->whereNotIn('outlook_event_id', $seen)
             ->each(function (CalendarEvent $event) use (&$counts) {
+                // Quietly, as Outlook has it gone already (the observer would delete it there again) — but its
+                // reminder items in the people's calendars go too, or they would still ring for it.
+                try {
+                    app(CalendarAlarms::class)->forget($event);
+                } catch (\Throwable $e) {
+                    Log::warning('Failed to take the reminders of calendar event '.$event->id.' away: '.$e->getMessage());
+                }
+
                 $event->deleteQuietly();
                 $counts['removed']++;
             });

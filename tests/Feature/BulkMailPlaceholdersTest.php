@@ -184,16 +184,26 @@ class BulkMailPlaceholdersTest extends TestCase
 
     public function test_the_preview_page_renders_a_recipient_with_several_emails(): void
     {
-        $this->actingAs(User::factory()->create());
         $campaign = $this->campaign($this->matter(), 'Notice {{matter.reference}}', '<p>{{matter.defendants}}</p>');
         $recipient = $this->recipient($campaign);
         $recipient->update(['email' => ['a@example.com', 'b@example.com']]);
+        $url = route('bulk-mail.preview', ['campaign' => $campaign->id, 'recipient' => $recipient->id]);
 
-        $this->get(route('bulk-mail.preview', ['campaign' => $campaign->id, 'recipient' => $recipient->id]))
+        // Only for whoever may see the campaign.
+        $this->actingAs(User::factory()->create())->get($url)->assertForbidden();
+
+        $this->actingAs(User::factory()->create()->assignRole(
+            Role::firstOrCreate(['name' => config('filament-shield.super_admin.name', 'super_admin'), 'guard_name' => 'web'])
+        ));
+        $this->get($url)
             ->assertSuccessful()
             ->assertSee('a@example.com&gt;; &lt;b@example.com', false)
             ->assertSee('Notice 125/2025')
             ->assertSee('Defendant One, Defendant Two');
+
+        // And only a recipient of that campaign.
+        $other = $this->campaign($campaign->matter, 'Other', '<p>x</p>');
+        $this->get(route('bulk-mail.preview', ['campaign' => $other->id, 'recipient' => $recipient->id]))->assertForbidden();
     }
 
     public function test_the_campaign_form_lists_the_chosen_matters_placeholders(): void

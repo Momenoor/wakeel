@@ -14,6 +14,7 @@ class IncentiveAssistantLine extends Model
     protected $fillable = [
         'incentive_line_id',
         'party_id',
+        'incentive_reversal_id',
         'percentage_override',
         'share_amount',
         'extra_percentage',
@@ -52,5 +53,11 @@ class IncentiveAssistantLine extends Model
     public function party(): BelongsTo
     {
         return $this->belongsTo(Party::class);
+    }
+
+    /** A paid incentive taken back (IncentiveReversals): what this negative line is. */
+    public function reversal(): BelongsTo
+    {
+        return $this->belongsTo(IncentiveReversal::class, 'incentive_reversal_id');
     }
 }

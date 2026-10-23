@@ -35,6 +35,7 @@ use App\Models\Party;
 use App\Models\Type;
 use App\Services\MMS\Calendar\EventMatterLinker;
 use App\Services\MMS\IncentiveCalculatorService;
+use App\Services\MMS\IncentiveReversals;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\OneDriveFolderLinker;
 use App\Services\MMS\Requests\RequestHistory;
@@ -1310,6 +1311,8 @@ class MatterInfolist
             ->color('danger')
             ->visible(fn ($record) => auth()->user()->can('DeleteFee:Matter'))
             ->requiresConfirmation()
+            // Its incentive already paid: said before it goes (IncentiveReversals).
+            ->modalDescription(fn ($record): string => IncentiveReversals::deleteWarning($record))
             ->action(function ($record, $component) {
                 $record->delete();
                 static::refreshRecord($component);

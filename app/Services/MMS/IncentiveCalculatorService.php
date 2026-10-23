@@ -93,8 +93,13 @@ class IncentiveCalculatorService
             // Clear previous assistant extras
             IncentiveAssistantExtra::where('incentive_calculation_id', $calculation->id)->delete();
 
+            // Fees deleted after their incentive was paid: each assistant's share of them taken back here, a
+            // negative line of their own (IncentiveReversals) — rebuilt on every run, never calculated as a fee.
+            app(IncentiveReversals::class)->apply($calculation);
+
             $lines = IncentiveLine::with(['fee', 'matter.type.incentiveConfig', 'matter.metas'])
                 ->where('incentive_calculation_id', $calculation->id)
+                ->where('is_reversal', false)
                 ->get();
 
             if ($lines->isEmpty()) {
@@ -597,7 +602,7 @@ class IncentiveCalculatorService
             ->get()
             ->keyBy('matter_id');
 
-        $assistantLines = IncentiveAssistantLine::with('party', 'incentiveLine.matter.court', 'incentiveLine.matter.type', 'incentiveLine.deductions')
+        $assistantLines = IncentiveAssistantLine::with('party', 'incentiveLine.matter.court', 'incentiveLine.matter.type', 'incentiveLine.deductions', 'reversal.matter', 'reversal.paidCalculation', 'reversal.deletedBy')
             ->whereHas('incentiveLine', fn ($q) => $q->where('incentive_calculation_id', $calculation->id))
             ->get();
 
@@ -605,6 +610,7 @@ class IncentiveCalculatorService
         // before grouping by party, since a party's own rows cannot see who
         // else worked the matter.
         $assistantCountByMatter = $assistantLines
+            ->reject(fn (IncentiveAssistantLine $line): bool => $line->incentive_reversal_id !== null)
             ->groupBy('incentiveLine.matter_id')
             ->map(fn (Collection $lines) => $lines->pluck('party_id')->unique()->count());
 
@@ -616,12 +622,14 @@ class IncentiveCalculatorService
                     ->first();
 
                 $matters = $this->buildAssistantMatterRows($lines, $matterFeeTotals, $assistantCountByMatter);
+                // The matters worked: not a share taken back.
+                $worked = $lines->whereNull('incentive_reversal_id');
 
                 return [
                     'party' => $lines->first()->party,
-                    'matter_count' => $lines->pluck('incentiveLine.matter_id')->unique()->count(),
+                    'matter_count' => $worked->pluck('incentiveLine.matter_id')->unique()->count(),
                     'completed_matter_count' => $extra?->completed_matter_count ?? 0,
-                    'count_for_incentive' => $lines->pluck('incentiveLine.matter')
+                    'count_for_incentive' => $worked->pluck('incentiveLine.matter')
                         ->unique('id')
                         ->filter(fn ($m) => ! ($m->type?->exclude_from_incentive_count ?? false))
                         ->count(),
@@ -655,11 +663,13 @@ class IncentiveCalculatorService
      */
     private function buildAssistantMatterRows(Collection $lines, Collection $matterFeeTotals, Collection $assistantCountByMatter): Collection
     {
-        return $lines->groupBy('incentiveLine.matter_id')
+        // A share taken back (a fee deleted after its incentive was paid) is its own row, apart from the matter's.
+        return $lines->groupBy(fn (IncentiveAssistantLine $line): string => $line->incentive_reversal_id ? 'reversal-'.$line->incentive_reversal_id : (string) $line->incentiveLine->matter_id)
             ->map(function (Collection $matterLines) use ($matterFeeTotals, $assistantCountByMatter) {
+                $reversal = $matterLines->first()->reversal;
                 $incentiveLine = $matterLines->first()->incentiveLine;
                 $matter = $incentiveLine->matter;
-                $feeTotals = $matterFeeTotals->get($matter->id);
+                $feeTotals = $reversal ? null : $matterFeeTotals->get($matter->id);
                 $extraPct = (float) $matterLines->first()->extra_percentage;
                 $penaltyPct = (float) $matterLines->first()->minimum_penalty_pct;
 
@@ -671,6 +681,9 @@ class IncentiveCalculatorService
                 return [
                     'matter_id' => $matter->id,
                     'matter_reference' => $matter->reference,
+                    // A share taken back: what it is, in full.
+                    'reversal' => $reversal !== null,
+                    'description' => $reversal?->description(),
                     // The matter's own difficulty is the source of truth —
                     // incentiveLine->difficulty is a denormalized copy that
                     // predates the current MatterDifficulty enum values.

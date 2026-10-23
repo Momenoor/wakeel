@@ -2,7 +2,6 @@
 
 namespace App\Filament\Mms\Resources\Incentive\IncentiveCalculations\Pages;
 
-use App\Support\Currency;
 use App\Filament\Mms\Resources\Incentive\IncentiveCalculations\IncentiveCalculationResource;
 use App\Filament\Mms\Widgets\IncentiveSummaryTableWidget;
 use App\Models\IncentiveAssistantExtra;
@@ -11,6 +10,7 @@ use App\Models\Matter;
 use App\Models\Party;
 use App\Services\MMS\IncentiveCalculatorService;
 use App\Services\MMS\IncentiveService;
+use App\Support\Currency;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Checkbox;
@@ -234,7 +234,7 @@ class ViewIncentiveCalculation extends ViewRecord
                         $this->refreshFormData([]);
                         $this->dispatch('incentiveCalculationUpdated');
 
-                        $lineCount = $this->record->lines()->count();
+                        $lineCount = $this->record->lines()->where('is_reversal', false)->count();
                         Notification::make()
                             ->title(__('Calculation Complete'))
                             ->body(__('Calculated').' '.$lineCount.' '.__('fee lines.'))

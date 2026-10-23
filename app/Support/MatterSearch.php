@@ -30,7 +30,8 @@ class MatterSearch
 
         $refs = MatterReferenceMatcher::references($search);
 
-        $query = Matter::query()->with(self::WITH)->latest('id')->limit($limit);
+        // Only the matters the user may see: one kept to their own matters picks among those.
+        $query = Matter::query()->visibleTo(auth()->user())->with(self::WITH)->latest('id')->limit($limit);
 
         if ($refs !== []) {
             $query->where(function (Builder $q) use ($refs) {

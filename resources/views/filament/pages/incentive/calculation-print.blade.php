@@ -150,7 +150,13 @@
                         <tbody>
                         @foreach($row['matters'] as $m)
                             <tr class="border-t border-gray-100">
-                                <td class="px-2 py-1">{{ $m['matter_reference'] }}</td>
+                                <td class="px-2 py-1">
+                                    {{ $m['matter_reference'] }}
+                                    {{-- A paid incentive taken back: what it is, in full. --}}
+                                    @if($m['description'] ?? null)
+                                        <div class="text-red-600">{{ $m['description'] }}</div>
+                                    @endif
+                                </td>
                                 <td class="px-2 py-1">{{ $m['difficulty']?->getLabel() ?? '—' }}</td>
                                 <td class="px-2 py-1 text-right text-gray-400">{{ $m['completion_days'] ?? '—' }}</td>
                                 <td class="px-2 py-1 text-right">{{ number_format($m['fee_amount_excl_vat'], 2) }}</td>
@@ -253,6 +259,10 @@
             <tr class="{{ $loop->even ? 'bg-blue-50' : 'bg-white' }} border-b border-gray-200">
                 <td class="px-3 py-2 font-semibold">
                     {{ $line->matter->year }}/{{ $line->matter->number }}
+                    {{-- A paid incentive taken back: its assistants' rows say what it is. --}}
+                    @if($line->is_reversal)
+                        <div class="text-xs font-normal text-red-600">{{ __('Taken back') }}</div>
+                    @endif
                 </td>
                 <td class="px-3 py-2">
                     @php $diffClass = match($line->matter->difficulty) {

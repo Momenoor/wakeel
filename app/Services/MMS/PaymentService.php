@@ -7,6 +7,7 @@ use App\Models\Installment;
 use App\Models\InstallmentPayment;
 use App\Models\Setting;
 use App\Support\ChequeNumber;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
@@ -55,8 +56,9 @@ class PaymentService
         ]);
 
         // `paid_amount` is always the sum of the ledger, not a running
-        // total kept in sync by hand — the ledger is the source of truth.
-        $paidAmount = round((float) $installment->payments()->sum('amount'), 2);
+        // total kept in sync by hand — the ledger is the source of truth;
+        // a payment whose cheque bounced no longer counts.
+        $paidAmount = round((float) $installment->payments()->cleared()->sum('amount'), 2);
         $totalDue = round(
             (float) $installment->getAttribute('total_due_amount') + (float) $installment->getAttribute('admin_penalty_amount'),
             2,
@@ -92,12 +94,17 @@ class PaymentService
         $penalty = round((float) Setting::get('pms_bounced_cheque_penalty', 100.0), 2);
         $balance = round((float) $installment->getAttribute('total_due_amount') + $penalty, 2);
 
-        $installment->forceFill([
-            'payment_status' => InstallmentPaymentStatus::BOUNCED,
-            'paid_amount' => 0,
-            'admin_penalty_amount' => $penalty,
-            'balance_due' => $balance,
-        ])->save();
+        DB::transaction(function () use ($installment, $penalty, $balance): void {
+            // What it had received bounced with it: kept in the ledger, no longer counted.
+            $installment->payments()->cleared()->update(['bounced_at' => now()]);
+
+            $installment->forceFill([
+                'payment_status' => InstallmentPaymentStatus::BOUNCED,
+                'paid_amount' => 0,
+                'admin_penalty_amount' => $penalty,
+                'balance_due' => $balance,
+            ])->save();
+        });
 
         return $installment;
     }
