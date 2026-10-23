@@ -8,6 +8,7 @@ use App\Models\ExpertiseArea;
 use App\Models\Party;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\TextEntry;
@@ -69,12 +70,7 @@ class PartyForm
             ->icon('heroicon-o-phone')
             ->columnSpan(1)
             ->schema([
-                ContactFields::phone()
-                    ->nestedRecursiveRules([
-                        'min:9',
-                        'max:10',
-                        'starts_with:050,052,053,054,055,056,057,058,02,03,04,06,07,08,09',
-                    ]),
+                self::phone(),
                 ContactFields::email()
                     ->placeholder(__('Enter email addresses separated by comma')),
                 TextInput::make('fax')
@@ -82,6 +78,17 @@ class PartyForm
                 Textarea::make('address')
                     ->label(__('Address'))
                     ->rows(2),
+            ]);
+    }
+
+    /** A party's phones: UAE numbers, mobile or landline (a matter's contacts are edited with it too). */
+    public static function phone(): TagsInput
+    {
+        return ContactFields::phone()
+            ->nestedRecursiveRules([
+                'min:9',
+                'max:10',
+                'starts_with:050,052,053,054,055,056,057,058,02,03,04,06,07,08,09',
             ]);
     }
 

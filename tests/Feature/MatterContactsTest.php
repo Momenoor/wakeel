@@ -18,6 +18,7 @@ use App\Models\User;
 use App\Services\MMS\MatterContactsExport;
 use App\Services\MMS\MatterReplyCollector;
 use App\Services\MMS\SentFolder;
+use App\Support\MatterEvents;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -27,6 +28,7 @@ use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Mockery;
 use Spatie\Permission\Models\Role;
+use Tests\Support\MailSenders;
 use Tests\TestCase;
 
 /**
@@ -52,7 +54,7 @@ class MatterContactsTest extends TestCase
         Storage::fake('public');
         $this->withoutDefer();
         Http::fake();
-        \Tests\Support\MailSenders::add('iflas', ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
+        MailSenders::add('iflas', ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
         $this->app->instance(SentFolder::class, Mockery::spy(SentFolder::class));
         Gate::before(fn () => true);
         Filament::setCurrentPanel(Filament::getPanel('mms'));
@@ -158,6 +160,34 @@ class MatterContactsTest extends TestCase
         $this->assertEqualsCanonicalizing(['ccc@ccc.ae', 'new@mmm-legal.ae'], $this->matter->contacts()->pluck('email')->all());
         $this->assertEqualsCanonicalizing(['ccc@ccc.ae', 'new@mmm-legal.ae'], MatterContact::copiedFor($this->matter->id, ['mmm@mmm.ae']));
         $tab->callTableAction('export')->assertFileDownloaded();
+    }
+
+    public function test_a_partys_name_phones_and_emails_are_edited_there_on_the_party(): void
+    {
+        Party::factory()->create(['name' => 'Taken']);
+        // Someone only emailed: no party to change.
+        MatterEmail::create(['matter_id' => $this->matter->id, 'direction' => MatterEmail::SENT, 'sender_key' => 'iflas', 'message_id' => 's2@jpa.ae',
+            'subject' => 'إخطار', 'to' => ['other@other.ae'], 'at' => now(), 'user_id' => $this->user->id]);
+
+        $tab = Livewire::test(MatterContacts::class, ['matter' => $this->matter])
+            ->assertTableActionHidden('edit', 'e:other@other.ae')
+            ->assertTableActionVisible('edit', 'p:'.$this->mmmm->id)
+            ->mountTableAction('edit', 'p:'.$this->mmmm->id)
+            ->assertTableActionDataSet(['name' => 'MMMM', 'phone' => ['0501112222'], 'email' => ['mmm@mmm.ae']])
+            // Another party's name; not a UAE number.
+            ->setTableActionData(['name' => 'Taken', 'phone' => ['123']])
+            ->callMountedTableAction()
+            ->assertHasTableActionErrors(['name', 'phone.0']);
+
+        $tab->setTableActionData(['name' => 'MMMM Legal', 'phone' => ['0501112222', '0559998888'], 'email' => ['info@mmm.ae']])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors()
+            // Drawn again as the matter's page tells it.
+            ->dispatch(MatterEvents::CHANGED)
+            ->assertSee('MMMM Legal')
+            ->assertSee('info@mmm.ae');
+
+        $this->assertSame(['MMMM Legal', ['0501112222', '0559998888'], ['info@mmm.ae']], [$this->mmmm->fresh()->name, $this->mmmm->fresh()->phone, $this->mmmm->fresh()->email]);
     }
 
     public function test_the_bulk_mail_tab_lists_the_matters_campaigns_and_starts_a_new_one_with_it(): void

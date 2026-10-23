@@ -3,13 +3,17 @@
 namespace App\Livewire;
 
 use App\Filament\Concerns\RefreshesMatterPage;
+use App\Filament\Mms\Resources\Parties\Schemas\PartyForm;
+use App\Filament\Support\ContactFields;
 use App\Models\Matter;
 use App\Models\MatterContact;
+use App\Models\Party;
 use App\Services\MMS\MatterContactsExport;
 use Filament\Actions\Action;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
 use Filament\Forms\Components\TagsInput;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Concerns\InteractsWithSchemas;
 use Filament\Schemas\Contracts\HasSchemas;
@@ -19,6 +23,7 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Collection;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
 
@@ -27,7 +32,8 @@ use Livewire\Component;
  * representatives, attendees, external entities, letters', minutes' and
  * bulk mail's recipients (creditors …) — once each, with their phones and
  * emails and the others they brought in by replying (which can be
- * corrected here). The same as its Excel export.
+ * corrected here, as can a party's name, phones and emails). The same as
+ * its Excel export.
  */
 class MatterContacts extends Component implements HasActions, HasSchemas, HasTable
 {
@@ -45,6 +51,9 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
 
     /** @var array<string, array<string, mixed>>|null */
     private ?array $rowsRead = null;
+
+    /** @var Collection<int, Party>|null */
+    private ?Collection $partiesRead = null;
 
     public function mount(Matter $matter): void
     {
@@ -68,6 +77,14 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
     private function rows(): array
     {
         return $this->rowsRead ??= collect((new MatterContactsExport($this->matter()))->rows())->keyBy('key')->all();
+    }
+
+    /** A line's party, if it is one — all of the lines' parties read at once. */
+    private function party(array $record): ?Party
+    {
+        $this->partiesRead ??= Party::query()->whereKey(array_filter(array_column($this->rows(), 'party_id')))->get()->keyBy('id');
+
+        return $record['party_id'] ? $this->partiesRead->get($record['party_id']) : null;
     }
 
     public function table(Table $table): Table
@@ -115,6 +132,36 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                     ->action(fn () => MatterContactsExport::download($this->matter())),
             ])
             ->recordActions([
+                // A party's name, phones and emails — on the party, so wherever they appear.
+                Action::make('edit')
+                    ->label(__('Edit'))
+                    ->icon('heroicon-o-pencil-square')
+                    ->color('gray')
+                    ->visible(fn (array $record): bool => ($party = $this->party($record)) !== null && (auth()->user()?->can('update', $party) ?? false))
+                    ->modalHeading(fn (array $record): string => __('Edit contact').': '.$record['name'])
+                    ->modalDescription(__('Saved on the party: changed wherever they appear, not on this matter only.'))
+                    ->modalWidth('lg')
+                    ->modalSubmitActionLabel(__('Save'))
+                    ->fillForm(fn (array $record): array => [
+                        'name' => $this->party($record)->name,
+                        'phone' => Party::values($this->party($record)->phone),
+                        'email' => Party::values($this->party($record)->email),
+                    ])
+                    ->schema(fn (array $record): array => [
+                        TextInput::make('name')
+                            ->label(__('Name'))
+                            ->required()
+                            ->maxLength(255)
+                            ->unique(Party::class, 'name', ignorable: $this->party($record)),
+                        PartyForm::phone(),
+                        ContactFields::email(),
+                    ])
+                    ->action(function (array $record, array $data): void {
+                        $this->party($record)->update($data);
+                        $this->rowsRead = $this->partiesRead = null;
+
+                        Notification::make()->success()->title(__('Saved'))->send();
+                    }),
                 // The addresses they brought in — kept on this matter only.
                 Action::make('otherEmails')
                     ->label(__('Other emails'))
