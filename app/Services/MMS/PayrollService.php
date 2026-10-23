@@ -71,6 +71,7 @@ class PayrollService
                 ->pluck('incentive_amount', 'party_id');
 
             $imported = $this->incentivesForPeriod($run);
+            $fromSalary = $this->incentiveDeductionsForPeriod($run);
 
             $this->clear($run);
 
@@ -86,6 +87,7 @@ class PayrollService
                     (float) ($manual[$party->getKey()] ?? 0),
                     (float) ($overridden[$party->getKey()] ?? $imported[$party->getKey()] ?? 0),
                     $overridden->has($party->getKey()),
+                    (float) ($fromSalary[$party->getKey()] ?? 0),
                 ))
                 ->values();
         });
@@ -119,6 +121,28 @@ class PayrollService
                 // correction run — are both owed, so they add rather than
                 // replace one another.
                 foreach ($calculator->payableByParty($calculation) as $partyId => $amount) {
+                    $carry[$partyId] = round(($carry[$partyId] ?? 0) + $amount, 2);
+                }
+
+                return $carry;
+            }, collect());
+    }
+
+    /**
+     * The incentive deductions each employee's incentive did not cover (paid shares taken back, a fixed
+     * deduction), from the finalised calculations closing in this period: taken from the salary, once — the
+     * month a calculation closes in is the one payslip that sees it.
+     *
+     * @return Collection<int, float>
+     */
+    public function incentiveDeductionsForPeriod(PayrollRun $run): Collection
+    {
+        $calculator = app(IncentiveCalculatorService::class);
+
+        return $this->calculationsEndingIn($run)
+            ->filter(fn (IncentiveCalculation $calculation): bool => $calculation->isFinalized())
+            ->reduce(function (Collection $carry, IncentiveCalculation $calculation) use ($calculator): Collection {
+                foreach ($calculator->fromSalaryByParty($calculation) as $partyId => $amount) {
                     $carry[$partyId] = round(($carry[$partyId] ?? 0) + $amount, 2);
                 }
 
@@ -274,6 +298,7 @@ class PayrollService
         float $manualDeduction,
         float $incentive,
         bool $incentiveOverridden = false,
+        float $incentiveDeduction = 0.0,
     ): Payslip {
         $salary = $this->salaryAt($party->getKey(), $periodEnd);
 
@@ -299,7 +324,7 @@ class PayrollService
         $ticketAmount = round((float) $tickets->sum('amount'), 2);
 
         $gross = round($basic + $allowances + $incentive + $ticketAmount, 2);
-        $totalDeductions = round($unpaidDeduction + $loanDeduction + $manualDeduction, 2);
+        $totalDeductions = round($unpaidDeduction + $loanDeduction + $manualDeduction + $incentiveDeduction, 2);
         $net = round($gross - $totalDeductions, 2);
 
         $profile = $party->employeeProfile;
@@ -317,6 +342,7 @@ class PayrollService
             'unpaid_deduction' => $unpaidDeduction,
             'loan_deduction' => $loanDeduction,
             'manual_deduction' => $manualDeduction,
+            'incentive_deduction' => $incentiveDeduction,
             'total_deductions' => $totalDeductions,
             'net_pay' => $net,
             'eosg_accrued' => $this->accrueGratuity($party, $periodStart, $periodEnd, $basic, $unpaidDays),
@@ -335,7 +361,7 @@ class PayrollService
         $tickets->each(fn (FlightTicket $ticket) => $ticket
             ->forceFill(['payslip_id' => $payslip->getKey()])->save());
 
-        $this->writeLines($payslip, $salary, $incentive, $unpaidDeduction, $installments, $manualDeduction, $tickets);
+        $this->writeLines($payslip, $salary, $incentive, $unpaidDeduction, $installments, $manualDeduction, $tickets, $incentiveDeduction);
 
         return $payslip;
     }
@@ -352,6 +378,7 @@ class PayrollService
         Collection $installments,
         float $manualDeduction,
         ?Collection $tickets = null,
+        float $incentiveDeduction = 0.0,
     ): void {
         $lines = [];
 
@@ -405,6 +432,16 @@ class PayrollService
                 'label' => $kind->getLabel(),
                 'amount' => (float) $installment->getAttribute('amount'),
                 'gl_account' => $kind->glAccount(),
+            ];
+        }
+
+        // Incentive deductions its incentive did not cover: back against the incentive expense.
+        if ($incentiveDeduction > 0) {
+            $lines[] = [
+                'kind' => PayslipLineKind::DEDUCTION,
+                'label' => __('Incentive deductions not covered by the incentive'),
+                'amount' => $incentiveDeduction,
+                'gl_account' => self::GL_INCENTIVE,
             ];
         }
 

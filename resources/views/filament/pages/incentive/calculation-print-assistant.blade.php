@@ -66,6 +66,10 @@
     <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
         <p class="text-xs text-gray-500 mb-1">{{ __('Total') }}</p>
         <p class="text-base font-bold text-blue-900">{{ \App\Support\Currency::format($assistantSummary['total']) }}</p>
+        {{-- Deductions beyond the incentive: taken from the salary of the month it closes in. --}}
+        @if(($assistantSummary['from_salary'] ?? 0) > 0)
+            <p class="text-[10px] text-red-600 mt-0.5">{{ __('Deducted from salary') }}: {{ \App\Support\Currency::format($assistantSummary['from_salary']) }}</p>
+        @endif
     </div>
 </div>
 

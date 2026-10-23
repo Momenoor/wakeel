@@ -4675,5 +4675,8 @@
     "Leases expired: :count": "العقود المنتهية: :count",
     "Saved, but Outlook was not updated": "حُفظ، لكن لم يُحدَّث Outlook",
     "Court sessions' titles start with": "عناوين جلسات المحكمة تبدأ بـ",
-    "Before the matter numbers of a bulk (court sessions) event: \"د.رضا 639/2025, 640/2025 (court) (type) (جلسات المحكمة)\". Empty: the numbers first.": "قبل أرقام الدعاوى في حدث جماعي (جلسات المحكمة): «د.رضا 639/2025, 640/2025 (المحكمة) (النوع) (جلسات المحكمة)». فارغ: الأرقام أولًا."
+    "Before the matter numbers of a bulk (court sessions) event: \"د.رضا 639/2025, 640/2025 (court) (type) (جلسات المحكمة)\". Empty: the numbers first.": "قبل أرقام الدعاوى في حدث جماعي (جلسات المحكمة): «د.رضا 639/2025, 640/2025 (المحكمة) (النوع) (جلسات المحكمة)». فارغ: الأرقام أولًا.",
+    "Deducted from salary": "يُخصم من الراتب",
+    "Incentive deductions not covered by the incentive": "خصومات حوافز لم يغطّها الحافز",
+    "Incentive deductions": "خصومات الحوافز"
 }

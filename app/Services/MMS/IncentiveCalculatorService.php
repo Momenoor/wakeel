@@ -527,6 +527,33 @@ class IncentiveCalculatorService
      */
     public function payableByParty(Model $calculation): Collection
     {
+        return $this->netByParty($calculation)
+            ->filter(fn (array $net): bool => $net['lines'])
+            ->map(fn (array $net): float => max(0.0, $net['net']));
+    }
+
+    /**
+     * What each assistant's deductions in a calculation (paid shares taken back, their fixed deduction) come to
+     * beyond what it earned them: taken from their salary, once, in the payroll month the calculation closes in
+     * (PayrollService). Only those with something to take.
+     *
+     * @return Collection<int, float>
+     */
+    public function fromSalaryByParty(Model $calculation): Collection
+    {
+        return $this->netByParty($calculation)
+            ->map(fn (array $net): float => max(0.0, -1 * $net['net']))
+            ->filter(fn (float $amount): bool => $amount > 0);
+    }
+
+    /**
+     * Each assistant's earnings in a calculation less their fixed deduction — negative when its deductions are
+     * more than it earned — keyed by party id; `lines`: whether they have any line in it.
+     *
+     * @return Collection<int, array{net: float, lines: bool}>
+     */
+    private function netByParty(Model $calculation): Collection
+    {
         // Aliased rather than plucked straight off a raw expression: pluck reads
         // the column by name from the result row, and an unaliased SUM() has no
         // name to read.
@@ -542,10 +569,12 @@ class IncentiveCalculatorService
             ->where('incentive_calculation_id', $calculation->getKey())
             ->pluck('fixed_deduction', 'party_id');
 
-        return $earned->map(fn ($total, $partyId): float => max(
-            0.0,
-            round((float) $total - (float) ($deductions[$partyId] ?? 0), 2),
-        ));
+        return $earned->keys()->merge($deductions->keys())->unique()->mapWithKeys(fn ($partyId): array => [
+            (int) $partyId => [
+                'net' => round((float) ($earned[$partyId] ?? 0) - (float) ($deductions[$partyId] ?? 0), 2),
+                'lines' => $earned->has($partyId),
+            ],
+        ]);
     }
 
     /**
@@ -648,6 +677,8 @@ class IncentiveCalculatorService
                     'fixed_deduction' => $extra?->fixed_deduction ?? 0,
                     'fixed_deduction_reason' => $extra?->fixed_deduction_reason,
                     'total' => max(0.0, $lines->sum('total_amount') - ($extra?->fixed_deduction ?? 0)),
+                    // Its deductions beyond what it earned: from the salary (fromSalaryByParty()).
+                    'from_salary' => max(0.0, round(($extra?->fixed_deduction ?? 0) - $lines->sum('total_amount'), 2)),
                     'matters' => $matters,
                 ];
             })

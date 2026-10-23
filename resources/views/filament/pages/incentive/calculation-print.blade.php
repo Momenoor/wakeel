@@ -128,6 +128,10 @@
                 </td>
                 <td class="px-3 py-2 text-right font-bold text-green-800">
                     {{ \App\Support\Currency::format($row['total']) }}
+                    {{-- Deductions beyond the incentive: taken from the salary. --}}
+                    @if(($row['from_salary'] ?? 0) > 0)
+                        <div class="text-[10px] font-normal text-red-600">{{ __('Deducted from salary') }}: {{ \App\Support\Currency::format($row['from_salary']) }}</div>
+                    @endif
                 </td>
             </tr>
             <tr class="{{ $loop->even ? 'bg-blue-50' : 'bg-white' }} border-b border-gray-200">

@@ -123,6 +123,11 @@ class PayslipsRelationManager extends RelationManager
                 TextColumn::make('manual_deduction')
                     ->label(__('Other Deduction'))
                     ->aed(),
+                // Incentive deductions the period's incentive did not cover.
+                TextColumn::make('incentive_deduction')
+                    ->label(__('Incentive deductions'))
+                    ->aed()
+                    ->toggleable(),
                 TextColumn::make('net_pay')
                     ->label(__('Net Pay'))
                     ->aed()
@@ -269,7 +274,7 @@ class PayslipsRelationManager extends RelationManager
         );
 
         $deductions = round(
-            (float) $record->unpaid_deduction + (float) $record->loan_deduction + $manual,
+            (float) $record->unpaid_deduction + (float) $record->loan_deduction + $manual + (float) $record->incentive_deduction,
             2,
         );
 

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\PayrollRunStatus;
+use App\Enums\PayslipLineKind;
 use App\Enums\SalaryComponent;
 use App\Models\EmployeeProfile;
 use App\Models\EmployeeSalaryComponent;
@@ -120,6 +121,27 @@ class PayrollIncentiveImportTest extends TestCase
         $this->assertFalse($payslip->incentive_overridden);
     }
 
+    public function test_deductions_beyond_the_incentive_are_taken_from_the_salary_once(): void
+    {
+        $party = $this->employee();
+        // Earned 400, with 1,000 to deduct (a fixed deduction here; a paid share taken back is a negative line).
+        $calculation = $this->calculation($party, 400, fixedDeduction: 1000);
+        $calculator = app(IncentiveCalculatorService::class);
+
+        // From the incentive first — nothing paid — and the 600 it does not cover from the salary.
+        $this->assertSame(0.0, $calculator->payableByParty($calculation)[$party->id]);
+        $this->assertSame(600.0, $calculator->fromSalaryByParty($calculation)[$party->id]);
+        $this->assertSame(600.0, $calculator->getAssistantSummary($calculation)->sole()['from_salary']);
+
+        $payslip = $this->payroll->generate($this->payrollRun('2026-08'))->first();
+        $this->assertSame(['0.00', '600.00', '5400.00'], [$payslip->incentive_amount, $payslip->incentive_deduction, $payslip->net_pay]);
+        $line = $payslip->lines()->where('kind', PayslipLineKind::DEDUCTION)->where('gl_account', PayrollService::GL_INCENTIVE)->sole();
+        $this->assertSame('600.00', $line->amount);
+
+        // Once: the next month's payslip does not see it again.
+        $this->assertSame('0.00', $this->payroll->generate($this->payrollRun('2026-09'))->first()->incentive_deduction);
+    }
+
     public function test_the_incentive_appears_as_its_own_payslip_line(): void
     {
         $party = $this->employee();
@@ -199,16 +221,17 @@ class PayrollIncentiveImportTest extends TestCase
         $this->assertSame('1300.00', $payslip->incentive_amount);
     }
 
-    public function test_a_deduction_larger_than_the_earnings_pays_zero_not_a_negative(): void
+    public function test_a_deduction_larger_than_the_earnings_pays_zero_and_the_rest_comes_off_the_salary(): void
     {
         $party = $this->employee();
         $this->calculation($party, 500, fixedDeduction: 900);
 
         $payslip = $this->payroll->generate($this->payrollRun('2026-08'))->first();
 
-        // An incentive cannot be negative; a shortfall is not a salary deduction.
+        // An incentive cannot be negative: it pays nothing, and the 400 it does not cover comes off the salary.
         $this->assertSame('0.00', $payslip->incentive_amount);
-        $this->assertSame('6000.00', $payslip->net_pay);
+        $this->assertSame('400.00', $payslip->incentive_deduction);
+        $this->assertSame('5600.00', $payslip->net_pay);
     }
 
     public function test_an_employee_with_no_incentive_lines_gets_nothing(): void
