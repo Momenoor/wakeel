@@ -208,7 +208,7 @@ class CalendarEventCreationTest extends TestCase
 
         $this->assertFalse($this->created[0]['isOnlineMeeting']);
         $event = CalendarEvent::sole();
-        $this->assertSame('11/2026 (Court A) ('.$type->name.') (جلسات المحكمة)', $event->title);
+        $this->assertSame('د.رضا 11/2026 (Court A) ('.$type->name.') (جلسات المحكمة)', $event->title);
         $this->assertFalse($event->is_teams_meeting);
         $this->assertNull($event->online_meeting_url);
         $this->assertNotContains($elsewhere->id, $event->matters()->pluck('matters.id')->all());

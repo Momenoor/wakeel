@@ -6,6 +6,7 @@ use App\Filament\Mms\Actions\Calendar\CalendarMatterActions;
 use App\Filament\Support\SameDayMeetings;
 use App\Models\CalendarEvent;
 use App\Models\Matter;
+use App\Models\Setting;
 use App\Services\MMS\Calendar\EventMatterLinker;
 use App\Services\MMS\OutlookCalendarService;
 use App\Support\MatterSearch;
@@ -284,8 +285,19 @@ class CalendarEventForm
 
         $names = fn (string $of): string => $matters->map(fn (Matter $matter): ?string => $matter->{$of}?->name)->filter()->unique()->join('، ');
 
-        return $matters->map(fn (Matter $matter): string => $matter->number.'/'.$matter->year)->join(', ')
+        $prefix = self::sessionsPrefix();
+
+        return ($prefix !== '' ? $prefix.' ' : '')
+            .$matters->map(fn (Matter $matter): string => $matter->number.'/'.$matter->year)->join(', ')
             .' ('.$names('court').') ('.$names('type').') (جلسات المحكمة)';
+    }
+
+    /** Setting (Settings → General → Calendar): what a court sessions event's title starts with. */
+    public const SESSIONS_PREFIX = 'calendar_sessions_title_prefix';
+
+    public static function sessionsPrefix(): string
+    {
+        return trim((string) Setting::get(self::SESSIONS_PREFIX, 'د.رضا'));
     }
 
     /**

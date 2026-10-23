@@ -266,12 +266,12 @@ class CalendarMatterLinkingTest extends TestCase
             ->assertTableActionDataSet(fn (array $data) => collect($data['matters'] ?? [])->map(fn ($id) => (int) $id)->sort()->values()->all() === collect([$a->id, $b->id])->sort()->values()->all())
             // Its title follows the matters chosen.
             ->set('mountedActions.0.data.matters', [$b->id, $c->id])
-            ->assertTableActionDataSet(['title' => '15/2024, 16/2024 ('.$b->court->name.($b->court_id === $c->court_id ? '' : '، '.$c->court->name).') ('.$b->type->name.($b->type_id === $c->type_id ? '' : '، '.$c->type->name).') (جلسات المحكمة)'])
+            ->assertTableActionDataSet(['title' => 'د.رضا 15/2024, 16/2024 ('.$b->court->name.($b->court_id === $c->court_id ? '' : '، '.$c->court->name).') ('.$b->type->name.($b->type_id === $c->type_id ? '' : '، '.$c->type->name).') (جلسات المحكمة)'])
             ->callMountedTableAction()
             ->assertHasNoTableActionErrors();
 
         $this->assertEqualsCanonicalizing([$b->id, $c->id], $event->matters()->pluck('matters.id')->all());
-        $this->assertStringStartsWith('15/2024, 16/2024 (', $event->fresh()->title);
+        $this->assertStringStartsWith('د.رضا 15/2024, 16/2024 (', $event->fresh()->title);
         $this->assertSame('bulk', $event->fresh()->type);
     }
 

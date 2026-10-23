@@ -121,6 +121,26 @@ class IncentiveFeeReversalTest extends TestCase
         $this->assertNull($reversal->fresh()->applied_calculation_id);
     }
 
+    public function test_a_share_taken_back_on_a_matter_also_in_the_next_calculation_is_not_changed_by_its_month(): void
+    {
+        $matter = $this->matter('504');
+        $deleted = $this->fee($matter, 5000);
+        $june = $this->calculation('June', [$this->fee($matter, 10000), $deleted]);
+        $this->calculator->finalize($june);
+        $deleted->delete();
+
+        // The matter now counts toward the monthly quota (not fixed-rate), with a new fee in July: below the
+        // minimum, its month's penalty is applied to the assistant's lines of it.
+        $this->type->incentiveConfig->update(['calculation_type' => 'tiered']);
+        Setting::set('incentive_enable_below_minimum_penalty', true);
+        $july = $this->calculation('July', [$this->fee($matter, 8000)]);
+
+        // The share taken back stays what it is — never given the month's penalty, nor raised to 0 with it.
+        $reversal = IncentiveReversal::sole();
+        $line = $july->lines()->where('is_reversal', true)->sole()->assistantLines()->sole();
+        $this->assertSame([-1 * (float) $reversal->amount, 0.0], [(float) $line->total_amount, (float) $line->minimum_penalty_amount]);
+    }
+
     public function test_a_fee_deleted_from_a_draft_simply_goes(): void
     {
         $fee = $this->fee($this->matter('503'), 5000);

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Shared\Pages;
 
+use App\Filament\Mms\Resources\CalendarEvents\Schemas\CalendarEventForm;
 use App\Filament\Schemas\BrandingSettingsSection;
 use App\Models\Setting;
 use App\Services\Installer\EnvironmentFileWriter;
@@ -56,6 +57,7 @@ class GeneralSettings extends SettingsFormPage
             'records_per_page' => Setting::get('records_per_page', 25),
             ...collect(Branding::KEYS)->mapWithKeys(fn (string $key): array => [$key => Setting::get($key)])->all(),
             OutlookCalendarService::INVITES => OutlookCalendarService::invitesPeople(),
+            CalendarEventForm::SESSIONS_PREFIX => CalendarEventForm::sessionsPrefix(),
         ];
     }
 
@@ -172,6 +174,10 @@ class GeneralSettings extends SettingsFormPage
                     Toggle::make(OutlookCalendarService::INVITES)
                         ->label(__('Invite the matter\'s assistant and expert to its events'))
                         ->helperText(__('An event put on Outlook is added to their own calendars, with an invitation email to each. Off: no invitation is sent; their reminders (24 hours and 1 hour before) still come.')),
+                    TextInput::make(CalendarEventForm::SESSIONS_PREFIX)
+                        ->label(__('Court sessions\' titles start with'))
+                        ->helperText(__('Before the matter numbers of a bulk (court sessions) event: "د.رضا 639/2025, 640/2025 (court) (type) (جلسات المحكمة)". Empty: the numbers first.'))
+                        ->maxLength(60),
                 ]),
         ];
     }

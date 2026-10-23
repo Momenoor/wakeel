@@ -197,6 +197,11 @@ class MyIncentiveReport extends Page implements HasTable
 
     public function netFor(IncentiveAssistantLine $record): float
     {
+        // A paid share taken back is what it takes: negative.
+        if ($record->incentive_reversal_id) {
+            return round((float) $record->total_amount, 2);
+        }
+
         return max(0.0, round((float) $record->total_amount - $this->fixedDeductionFor($record), 2));
     }
 

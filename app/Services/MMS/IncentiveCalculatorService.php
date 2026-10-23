@@ -441,9 +441,12 @@ class IncentiveCalculatorService
                     // not pooled and redistributed by overall weight across the
                     // whole calculation period.
                     $monthMatterIds = $monthMatters->pluck('matter_id')->all();
+                    // Not a paid share taken back (IncentiveReversals): it is taken back as it is, never
+                    // given a bonus or a penalty (nor raised to 0 with them).
                     $monthAssistantLines = IncentiveAssistantLine::with('incentiveLine')
                         ->whereHas('line', function ($q) use ($calculation, $monthMatterIds) {
                             $q->where('incentive_calculation_id', $calculation->id)
+                                ->where('is_reversal', false)
                                 ->whereIn('matter_id', $monthMatterIds);
                         })->where('party_id', $partyId)->get();
 
@@ -561,8 +564,10 @@ class IncentiveCalculatorService
             ->where('party_id', $partyId)
             ->value('fixed_deduction'), 2);
 
+        // Over the matters worked — not a paid share taken back (IncentiveReversals).
         $lines = IncentiveAssistantLine::query()
             ->where('party_id', $partyId)
+            ->whereNull('incentive_reversal_id')
             ->whereHas('incentiveLine', fn ($q) => $q->where('incentive_calculation_id', $calculationId))
             ->orderBy('id')
             ->get(['id', 'total_amount']);
