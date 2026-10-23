@@ -15,10 +15,10 @@ trait SyncsEventToOutlook
     /**
      * @return bool whether the event reached Outlook
      */
-    protected function pushToOutlook(OutlookCalendarService $outlook, CalendarEvent $event): bool
+    protected function pushToOutlook(OutlookCalendarService $outlook, CalendarEvent $event, ?bool $invite = null): bool
     {
         try {
-            $outlook->pushEvent($event);
+            $outlook->pushEvent($event, $invite);
 
             return true;
         } catch (\Exception $e) {

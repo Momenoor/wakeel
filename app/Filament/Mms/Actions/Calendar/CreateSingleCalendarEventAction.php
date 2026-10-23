@@ -49,7 +49,7 @@ class CreateSingleCalendarEventAction extends Action
                 $teams = $toOutlook && ! empty($data['is_teams_meeting']);
 
                 $event = CalendarEvent::create([
-                    ...Arr::except($data, ['sync_to_outlook', 'online_meeting_url']),
+                    ...Arr::except($data, ['sync_to_outlook', 'online_meeting_url', 'invite_people']),
                     'type' => 'single',
                     'created_by' => Auth::id(),
                     'is_teams_meeting' => $teams,
@@ -62,7 +62,7 @@ class CreateSingleCalendarEventAction extends Action
                 }
 
                 if ($toOutlook) {
-                    $this->pushToOutlook($outlookService, $event);
+                    $this->pushToOutlook($outlookService, $event, ! empty($data['invite_people']));
                 }
 
                 Notification::make()

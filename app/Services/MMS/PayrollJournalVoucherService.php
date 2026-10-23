@@ -100,9 +100,11 @@ class PayrollJournalVoucherService
         // well, but nobody can then tell whose advance it settled — and the loan
         // ledger is per person, so reconciling it against one lump sum means
         // recomputing the split by hand every month.
-        $grouped = $lines->groupBy(fn (PayslipLine $line): string => in_array($line->gl_account, $loanAccounts, true)
+        // By kind as well: one account can be both — Staff Incentive Expense is debited for the incentives paid
+        // and credited for the incentive deductions taken from salaries — and each kind is its own side.
+        $grouped = $lines->groupBy(fn (PayslipLine $line): string => (in_array($line->gl_account, $loanAccounts, true)
             ? $line->gl_account."\0".$line->payslip->party->name
-            : (string) $line->gl_account);
+            : (string) $line->gl_account)."\0".$line->kind->value);
 
         foreach ($grouped as $group) {
             $amount = round((float) $group->sum('amount'), 2);

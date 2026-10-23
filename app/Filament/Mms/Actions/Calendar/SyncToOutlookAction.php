@@ -21,10 +21,12 @@ class SyncToOutlookAction extends Action
     {
         parent::setUp();
 
+        // An event: put on Outlook, or — already there — sent again as it is here (its title, time, place and
+        // text), when a change did not reach it. A matter: its latest event not on Outlook yet.
         $this->label(__('Sync to Outlook'))
             ->icon('heroicon-o-arrow-path')
             ->visible(fn ($record) => app(OutlookCalendarService::class)->isConfigured()
-                && (($record instanceof CalendarEvent && ! $record->synced_to_outlook) || ($record instanceof Matter && $record->calendarEvents()->where('synced_to_outlook', false)->exists())))
+                && ($record instanceof CalendarEvent || ($record instanceof Matter && $record->calendarEvents()->where('synced_to_outlook', false)->exists())))
             ->action(function ($record, OutlookCalendarService $outlookService) {
                 if ($record instanceof Matter) {
                     $record = $record->calendarEvents()->where('synced_to_outlook', false)->latest()->first();
@@ -33,6 +35,18 @@ class SyncToOutlookAction extends Action
                 if (! $record instanceof CalendarEvent) {
                     return;
                 }
+
+                if (filled($record->outlook_event_id)) {
+                    try {
+                        $outlookService->pushChanges($record, CalendarEvent::OUTLOOK_FIELDS);
+                        Notification::make()->title(__('Updated in Outlook'))->success()->send();
+                    } catch (\Throwable $e) {
+                        Notification::make()->title(__('Outlook Sync Failed'))->body($e->getMessage())->danger()->send();
+                    }
+
+                    return;
+                }
+
                 if ($this->pushToOutlook($outlookService, $record)) {
                     Notification::make()
                         ->title(__('Synced to Outlook Successfully'))

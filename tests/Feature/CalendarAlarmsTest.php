@@ -194,11 +194,16 @@ class CalendarAlarmsTest extends TestCase
         $this->assertSame(0, CalendarEventAlert::query()->whereNull('notified_at')->count());
     }
 
-    public function test_an_event_put_on_outlook_invites_the_assistant_and_the_expert(): void
+    public function test_an_event_put_on_outlook_invites_the_assistant_and_the_expert_when_asked(): void
     {
         $event = $this->event('2026-11-05 10:00:00');
 
+        // Not unless asked for: off by default.
         app(OutlookCalendarService::class)->pushEvent($event);
+        $this->assertEmpty(collect($this->calls('POST'))->first(fn (array $call): bool => str_contains($call['url'], 'users/calendar@jpa.ae/events'))['data']['attendees'] ?? []);
+        $this->calls = [];
+
+        app(OutlookCalendarService::class)->pushEvent($event, invite: true);
 
         $created = collect($this->calls('POST'))->first(fn (array $call): bool => str_contains($call['url'], 'users/calendar@jpa.ae/events'));
         $this->assertEqualsCanonicalizing(

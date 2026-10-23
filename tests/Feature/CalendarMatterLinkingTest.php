@@ -300,6 +300,25 @@ class CalendarMatterLinkingTest extends TestCase
         $this->assertTrue($b->fresh()->next_session_date->equalTo($event->start_datetime));
     }
 
+    public function test_an_event_already_on_outlook_can_be_sent_to_it_again(): void
+    {
+        $this->signIn();
+        $this->fakeOutlook([]);
+        $event = $this->event('Site visit', ['outlook_event_id' => 'shared-9', 'synced_to_outlook' => true, 'location' => 'Dubai Courts']);
+
+        Livewire::test(ListCalendarEvents::class)
+            ->assertTableActionVisible('syncToOutlook', $event)
+            ->callTableAction('syncToOutlook', $event)
+            ->assertNotified(__('Updated in Outlook'));
+
+        // Its title, time, place and text, as they are here.
+        Http::assertSent(fn ($request): bool => $request->method() === 'PATCH'
+            && str_contains($request->url(), 'events/shared-9')
+            && $request['subject'] === 'Site visit'
+            && $request['location']['displayName'] === 'Dubai Courts'
+            && isset($request['start'], $request['end'], $request['body']));
+    }
+
     public function test_letters_are_a_tab_on_the_matter_page(): void
     {
         $this->signIn();

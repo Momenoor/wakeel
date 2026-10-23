@@ -130,6 +130,8 @@ class CreateBulkCalendarEventAction extends Action
                     ->label(__('Create Teams Meeting'))
                     ->default(false)
                     ->visible(fn (callable $get) => app(OutlookCalendarService::class)->isConfigured() && $get('sync_to_outlook')),
+                // Asked for each time: off unless Settings → General says otherwise.
+                CalendarEventForm::inviteToggle(fn (callable $get): bool => ! app(OutlookCalendarService::class)->isConfigured() || ! $get('sync_to_outlook')),
             ])
             ->action(function (array $data, OutlookCalendarService $outlookService) {
                 // A meeting running during another asks first.
@@ -162,7 +164,7 @@ class CreateBulkCalendarEventAction extends Action
                 Matter::whereIn('id', $data['matter_ids'])->update(['next_session_date' => $data['start_datetime']]);
 
                 if ($toOutlook) {
-                    $this->pushToOutlook($outlookService, $event);
+                    $this->pushToOutlook($outlookService, $event, ! empty($data['invite_people']));
                 }
 
                 Notification::make()

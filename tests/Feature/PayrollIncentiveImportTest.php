@@ -15,6 +15,7 @@ use App\Models\Matter;
 use App\Models\Party;
 use App\Models\PayrollRun;
 use App\Services\MMS\IncentiveCalculatorService;
+use App\Services\MMS\PayrollJournalVoucherService;
 use App\Services\MMS\PayrollService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -140,6 +141,23 @@ class PayrollIncentiveImportTest extends TestCase
 
         // Once: the next month's payslip does not see it again.
         $this->assertSame('0.00', $this->payroll->generate($this->payrollRun('2026-09'))->first()->incentive_deduction);
+    }
+
+    public function test_the_journal_voucher_balances_with_incentives_paid_and_taken_from_salaries(): void
+    {
+        $earner = $this->employee();
+        $owing = $this->employee();
+        $this->calculation($earner, 1000);
+        $this->calculation($owing, 400, fixedDeduction: 1000);
+        $run = $this->payrollRun('2026-08');
+        $this->payroll->generate($run);
+
+        $voucher = app(PayrollJournalVoucherService::class)->forRun($run);
+
+        // One account on both sides: the incentive paid a debit, the deduction from the salary a credit.
+        $this->assertTrue($voucher['balanced']);
+        $this->assertSame([1000.0], array_column(array_filter($voucher['debits'], fn (array $row): bool => $row['account'] === PayrollService::GL_INCENTIVE), 'amount'));
+        $this->assertSame([600.0], array_column(array_filter($voucher['credits'], fn (array $row): bool => $row['account'] === PayrollService::GL_INCENTIVE), 'amount'));
     }
 
     public function test_the_incentive_appears_as_its_own_payslip_line(): void

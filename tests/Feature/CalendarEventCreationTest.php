@@ -82,6 +82,17 @@ class CalendarEventCreationTest extends TestCase
             ->assertHasNoFormErrors();
     }
 
+    public function test_invitations_are_asked_for_and_off_by_default(): void
+    {
+        Livewire::test(ListCalendarEvents::class)
+            ->mountAction(TestAction::make('createSingle')->table())
+            ->assertFormSet(['invite_people' => false]);
+
+        Livewire::test(ListCalendarEvents::class)
+            ->mountAction(TestAction::make('createBulk')->table())
+            ->assertFormSet(['invite_people' => false]);
+    }
+
     public function test_with_teams_off_outlook_is_told_no_meeting_and_no_link_is_kept(): void
     {
         $this->createSingle(['sync_to_outlook' => true, 'is_teams_meeting' => false]);

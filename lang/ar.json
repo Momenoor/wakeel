@@ -4678,5 +4678,10 @@
     "Before the matter numbers of a bulk (court sessions) event: \"د.رضا 639/2025, 640/2025 (court) (type) (جلسات المحكمة)\". Empty: the numbers first.": "قبل أرقام الدعاوى في حدث جماعي (جلسات المحكمة): «د.رضا 639/2025, 640/2025 (المحكمة) (النوع) (جلسات المحكمة)». فارغ: الأرقام أولًا.",
     "Deducted from salary": "يُخصم من الراتب",
     "Incentive deductions not covered by the incentive": "خصومات حوافز لم يغطّها الحافز",
-    "Incentive deductions": "خصومات الحوافز"
+    "Incentive deductions": "خصومات الحوافز",
+    "Updated in Outlook": "حُدِّث في Outlook",
+    "Send invitations to the matter's assistant and expert": "إرسال دعوة لمساعد الدعوى وخبيرها",
+    "An invitation email to each, and the event in their own calendars. Their reminders come either way.": "بريد دعوة لكل منهما، والحدث في تقويمه. التذكيرات تصلهما في الحالتين.",
+    "\"Send invitations\" on when an event is made": "«إرسال دعوة» مفعّل عند إنشاء الحدث",
+    "Each new event put on Outlook asks whether to invite the matter's assistant and expert (an invitation email to each, and the event in their own calendars). This is what it starts as; off unless turned on here. Their reminders (24 hours and 1 hour before) come either way.": "كل حدث جديد يُرسل إلى Outlook يسأل هل يُدعى مساعد الدعوى وخبيرها (بريد دعوة لكل منهما، والحدث في تقويمه). هذا ما يبدأ به السؤال؛ غير مفعّل ما لم يُفعَّل هنا. التذكيرات (قبل 24 ساعة وقبل ساعة) تصلهما في الحالتين."
 }

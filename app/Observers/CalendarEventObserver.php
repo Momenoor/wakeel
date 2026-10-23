@@ -50,6 +50,8 @@ class CalendarEventObserver
 
         try {
             $outlook->pushChanges($event, $changed);
+            // Said, so whoever saved it knows it reached Outlook (and its invitees' calendars).
+            Notification::make()->title(__('Updated in Outlook'))->success()->send();
         } catch (\Throwable $e) {
             Log::warning('Calendar event '.$event->id.' changed here, not in Outlook: '.$e->getMessage());
             Notification::make()

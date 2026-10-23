@@ -11,6 +11,7 @@ use App\Services\MMS\Calendar\EventMatterLinker;
 use App\Services\MMS\OutlookCalendarService;
 use App\Support\MatterSearch;
 use Carbon\Carbon;
+use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\RichEditor;
@@ -186,7 +187,12 @@ class CalendarEventForm
                         ->default(fn (): bool => self::outlookOn())
                         ->hidden(fn ($record) => $record instanceof CalendarEvent || ! self::outlookOn())
                         ->live()
-                        ->afterStateUpdated(fn (Get $get, Set $set) => self::teamsLocation($get, $set)), ])->columns(2),
+                        ->afterStateUpdated(fn (Get $get, Set $set) => self::teamsLocation($get, $set)),
+
+                    // Asked for each time: off unless Settings → General says otherwise.
+                    self::inviteToggle(
+                        fn ($record, Get $get): bool => $record instanceof CalendarEvent || ! self::outlookOn() || ! $get('sync_to_outlook'),
+                    ), ])->columns(2),
 
             Section::make(__('Online Meeting'))->schema([Toggle::make('is_teams_meeting')
                 ->label(__('Create Teams Meeting'))
@@ -244,6 +250,7 @@ class CalendarEventForm
             'is_all_day' => false,
             'update_next_session_date' => true,
             'sync_to_outlook' => self::outlookOn(),
+            'invite_people' => OutlookCalendarService::invitesPeople(),
             'is_teams_meeting' => true,
         ];
     }
@@ -312,6 +319,16 @@ class CalendarEventForm
         $found = Matter::query()->with(['court', 'type'])->whereIn('id', $ids)->get()->keyBy('id');
 
         return collect($ids)->map(fn (int $id): ?Matter => $found->get($id))->filter()->values();
+    }
+
+    /** "Send invitations": the matter's assistant and expert invited to the event put on Outlook (an email to each). */
+    public static function inviteToggle(Closure $hidden): Toggle
+    {
+        return Toggle::make('invite_people')
+            ->label(__('Send invitations to the matter\'s assistant and expert'))
+            ->helperText(__('An invitation email to each, and the event in their own calendars. Their reminders come either way.'))
+            ->default(fn (): bool => OutlookCalendarService::invitesPeople())
+            ->hidden($hidden);
     }
 
     private static function outlookOn(): bool

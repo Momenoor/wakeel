@@ -172,8 +172,8 @@ class GeneralSettings extends SettingsFormPage
                 ->icon(Heroicon::CalendarDays)
                 ->schema([
                     Toggle::make(OutlookCalendarService::INVITES)
-                        ->label(__('Invite the matter\'s assistant and expert to its events'))
-                        ->helperText(__('An event put on Outlook is added to their own calendars, with an invitation email to each. Off: no invitation is sent; their reminders (24 hours and 1 hour before) still come.')),
+                        ->label(__('"Send invitations" on when an event is made'))
+                        ->helperText(__('Each new event put on Outlook asks whether to invite the matter\'s assistant and expert (an invitation email to each, and the event in their own calendars). This is what it starts as; off unless turned on here. Their reminders (24 hours and 1 hour before) come either way.')),
                     TextInput::make(CalendarEventForm::SESSIONS_PREFIX)
                         ->label(__('Court sessions\' titles start with'))
                         ->helperText(__('Before the matter numbers of a bulk (court sessions) event: "د.رضا 639/2025, 640/2025 (court) (type) (جلسات المحكمة)". Empty: the numbers first.'))

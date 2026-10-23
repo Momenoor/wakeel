@@ -98,12 +98,15 @@ class OutlookCalendarService
         ];
     }
 
-    /** Setting: whether an event put on Outlook invites the matter's assistant and expert (an email to each). */
-    public const INVITES = 'calendar_invites_people';
+    /**
+     * Setting (Settings → General → Calendar): whether "Send invitations" is on when an event is made — the matter's
+     * assistant and expert invited, an email to each. Off unless set. (A new key: the one before was on by default.)
+     */
+    public const INVITES = 'calendar_invite_by_default';
 
     public static function invitesPeople(): bool
     {
-        return (bool) Setting::get(self::INVITES, true);
+        return (bool) Setting::get(self::INVITES, false);
     }
 
     /**
@@ -112,7 +115,7 @@ class OutlookCalendarService
      *
      * @throws \RuntimeException when Outlook refuses
      */
-    public function pushEvent(CalendarEvent $event): void
+    public function pushEvent(CalendarEvent $event, ?bool $invite = null): void
     {
         $outlookEvent = $this->createEvent([
             'title' => $event->title,
@@ -121,9 +124,10 @@ class OutlookCalendarService
             'end_datetime' => $event->end_datetime,
             'location' => $event->location,
             'is_teams_meeting' => $event->is_teams_meeting,
-            // Invited: the event in the matter's assistant's and expert's own calendars (Outlook, Teams, phone) —
-            // an invitation email to each. Unless switched off (General settings): their reminders come all the same.
-            'attendees' => self::invitesPeople() ? CalendarAlarms::attendees($event) : [],
+            // Invited, when asked for ("Send invitations", off unless the setting says otherwise): the event in the
+            // matter's assistant's and expert's own calendars (Outlook, Teams, phone) — an invitation email to each.
+            // Their reminders come all the same.
+            'attendees' => ($invite ?? self::invitesPeople()) ? CalendarAlarms::attendees($event) : [],
         ]);
 
         $event->update([

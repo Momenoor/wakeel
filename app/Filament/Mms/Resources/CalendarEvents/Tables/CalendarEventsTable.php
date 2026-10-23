@@ -164,7 +164,8 @@ class CalendarEventsTable
             ])
             ->recordActions([
                 SyncToOutlookAction::make()
-                    ->visible(fn ($record) => $record instanceof CalendarEvent && auth()->user()->can('SyncToOutlook:CalendarEvent') && ! $record->synced_to_outlook),
+                    // On Outlook already too: sent again as it is here (SyncToOutlookAction).
+                    ->visible(fn ($record) => $record instanceof CalendarEvent && auth()->user()->can('SyncToOutlook:CalendarEvent') && app(OutlookCalendarService::class)->isConfigured()),
                 CalendarMatterActions::linkMatters()
                     ->visible(fn ($record) => auth()->user()->can('update', $record)),
                 CalendarMatterActions::ignoreReferences(),
