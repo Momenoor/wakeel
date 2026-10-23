@@ -7,6 +7,7 @@ use App\Filament\Mms\Resources\Parties\Schemas\PartyForm;
 use App\Filament\Support\ContactFields;
 use App\Models\Matter;
 use App\Models\MatterContact;
+use App\Models\MatterContactDetail;
 use App\Models\Party;
 use App\Services\MMS\MatterContactsExport;
 use Filament\Actions\Action;
@@ -32,8 +33,8 @@ use Livewire\Component;
  * representatives, attendees, external entities, letters', minutes' and
  * bulk mail's recipients (creditors …) — once each, with their phones and
  * emails and the others they brought in by replying (which can be
- * corrected here, as can a party's name, phones and emails). The same as
- * its Excel export.
+ * corrected here, as can their name and phones: a party's on the party,
+ * anyone else's on this matter). The same as its Excel export.
  */
 class MatterContacts extends Component implements HasActions, HasSchemas, HasTable
 {
@@ -132,32 +133,55 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                     ->action(fn () => MatterContactsExport::download($this->matter())),
             ])
             ->recordActions([
-                // A party's name, phones and emails — on the party, so wherever they appear.
+                // A party's name, phones and emails — on the party, so wherever they appear; anyone
+                // else's (emailed, on its bulk mail, in a letter) name, capacity and phones — on this
+                // matter only, by their address.
                 Action::make('edit')
                     ->label(__('Edit'))
                     ->icon('heroicon-o-pencil-square')
                     ->color('gray')
-                    ->visible(fn (array $record): bool => ($party = $this->party($record)) !== null && (auth()->user()?->can('update', $party) ?? false))
+                    ->visible(fn (array $record): bool => ($party = $this->party($record)) !== null
+                        ? (auth()->user()?->can('update', $party) ?? false)
+                        : ! $record['party_id'] && $record['own'] !== [] && (auth()->user()?->can('update', $this->matter()) ?? false))
                     ->modalHeading(fn (array $record): string => __('Edit contact').': '.$record['name'])
-                    ->modalDescription(__('Saved on the party: changed wherever they appear, not on this matter only.'))
+                    ->modalDescription(fn (array $record): string => $this->party($record)
+                        ? __('Saved on the party: changed wherever they appear, not on this matter only.')
+                        : __('Kept on this matter only, for :email.', ['email' => $record['own'][0]]))
                     ->modalWidth('lg')
                     ->modalSubmitActionLabel(__('Save'))
-                    ->fillForm(fn (array $record): array => [
-                        'name' => $this->party($record)->name,
-                        'phone' => Party::values($this->party($record)->phone),
-                        'email' => Party::values($this->party($record)->email),
-                    ])
-                    ->schema(fn (array $record): array => [
-                        TextInput::make('name')
-                            ->label(__('Name'))
-                            ->required()
-                            ->maxLength(255)
-                            ->unique(Party::class, 'name', ignorable: $this->party($record)),
-                        PartyForm::phone(),
-                        ContactFields::email(),
-                    ])
+                    ->fillForm(fn (array $record): array => ($party = $this->party($record))
+                        ? ['name' => $party->name, 'phone' => Party::values($party->phone), 'email' => Party::values($party->email)]
+                        : ['name' => $record['name'], 'capacity' => $record['capacity'], 'phone' => Party::values(explode(',', $record['phones']))])
+                    ->schema(fn (array $record): array => ($party = $this->party($record))
+                        ? [
+                            TextInput::make('name')
+                                ->label(__('Name'))
+                                ->required()
+                                ->maxLength(255)
+                                ->unique(Party::class, 'name', ignorable: $party),
+                            PartyForm::phone(),
+                            ContactFields::email(),
+                        ]
+                        : [
+                            TextInput::make('name')
+                                ->label(__('Name'))
+                                ->required()
+                                ->maxLength(191),
+                            TextInput::make('capacity')
+                                ->label(__('Capacity'))
+                                ->maxLength(191),
+                            // Anywhere in the world: not checked as a party's UAE number.
+                            ContactFields::phone(),
+                        ])
                     ->action(function (array $record, array $data): void {
-                        $this->party($record)->update($data);
+                        if ($party = $this->party($record)) {
+                            $party->update($data);
+                        } else {
+                            MatterContactDetail::updateOrCreate(
+                                ['matter_id' => $this->matterId, 'email' => mb_strtolower($record['own'][0])],
+                                ['name' => $data['name'], 'capacity' => $data['capacity'] ?: null, 'phones' => array_values((array) ($data['phone'] ?? []))],
+                            );
+                        }
                         $this->rowsRead = $this->partiesRead = null;
 
                         Notification::make()->success()->title(__('Saved'))->send();

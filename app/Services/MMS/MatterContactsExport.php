@@ -5,6 +5,7 @@ namespace App\Services\MMS;
 use App\Models\BulkMailCampaign;
 use App\Models\Matter;
 use App\Models\MatterContact;
+use App\Models\MatterContactDetail;
 use App\Models\MatterEmail;
 use App\Models\MatterParty;
 use App\Models\Party;
@@ -23,7 +24,8 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
  * entities, its letters' and minutes' recipients, its bulk mail's
  * recipients (creditors …), anyone else its emails went to or came from —
  * each once, however many of these they are —
- * with the addresses they brought in by replying (MatterContact).
+ * with the addresses they brought in by replying (MatterContact) and,
+ * for those who are no party, their details as corrected (MatterContactDetail).
  */
 class MatterContactsExport
 {
@@ -87,6 +89,7 @@ class MatterContactsExport
         $this->bulkMail();
         $this->emailed();
         $this->theirs();
+        $this->corrected();
 
         return array_values(array_map(fn (string $key, array $row): array => [
             'key' => $key,
@@ -193,6 +196,23 @@ class MatterContactsExport
             $key ??= $this->add(null, (string) ($contact->owner_name ?: $contact->owner_email), [$contact->owner_email], [], __('Reply'), '');
 
             $this->rows[$key]['theirs'][] = $contact->email;
+        }
+    }
+
+    /** Those who are no party, as corrected on the matter's Contacts tab: their name, capacity and phones. */
+    private function corrected(): void
+    {
+        foreach ($this->matter->contactDetails()->get() as $detail) {
+            /** @var MatterContactDetail $detail */
+            $key = $this->byEmail[$detail->email] ?? null;
+
+            if ($key === null || str_starts_with($key, 'p:')) {
+                continue;
+            }
+
+            $this->rows[$key]['name'] = $detail->name ?: $this->rows[$key]['name'];
+            $this->rows[$key]['capacity'] = array_values(array_filter([trim((string) $detail->capacity)]));
+            $this->rows[$key]['phones'] = Party::values($detail->phones);
         }
     }
 

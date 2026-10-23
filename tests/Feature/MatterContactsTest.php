@@ -165,12 +165,8 @@ class MatterContactsTest extends TestCase
     public function test_a_partys_name_phones_and_emails_are_edited_there_on_the_party(): void
     {
         Party::factory()->create(['name' => 'Taken']);
-        // Someone only emailed: no party to change.
-        MatterEmail::create(['matter_id' => $this->matter->id, 'direction' => MatterEmail::SENT, 'sender_key' => 'iflas', 'message_id' => 's2@jpa.ae',
-            'subject' => 'إخطار', 'to' => ['other@other.ae'], 'at' => now(), 'user_id' => $this->user->id]);
 
         $tab = Livewire::test(MatterContacts::class, ['matter' => $this->matter])
-            ->assertTableActionHidden('edit', 'e:other@other.ae')
             ->assertTableActionVisible('edit', 'p:'.$this->mmmm->id)
             ->mountTableAction('edit', 'p:'.$this->mmmm->id)
             ->assertTableActionDataSet(['name' => 'MMMM', 'phone' => ['0501112222'], 'email' => ['mmm@mmm.ae']])
@@ -188,6 +184,34 @@ class MatterContactsTest extends TestCase
             ->assertSee('info@mmm.ae');
 
         $this->assertSame(['MMMM Legal', ['0501112222', '0559998888'], ['info@mmm.ae']], [$this->mmmm->fresh()->name, $this->mmmm->fresh()->phone, $this->mmmm->fresh()->email]);
+    }
+
+    public function test_someone_only_emailed_is_edited_there_on_this_matter_only(): void
+    {
+        MatterEmail::create(['matter_id' => $this->matter->id, 'direction' => MatterEmail::SENT, 'sender_key' => 'iflas', 'message_id' => 's2@jpa.ae',
+            'subject' => 'إخطار', 'to' => ['Other@other.ae'], 'at' => now(), 'user_id' => $this->user->id]);
+        $parties = Party::count();
+
+        Livewire::test(MatterContacts::class, ['matter' => $this->matter])
+            ->mountTableAction('edit', 'e:other@other.ae')
+            ->assertTableActionDataSet(['name' => 'Other@other.ae', 'capacity' => '', 'phone' => []])
+            // A phone anywhere in the world.
+            ->setTableActionData(['name' => 'Other Legal LLP', 'capacity' => 'Creditor', 'phone' => ['+44 20 7946 0000']])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors()
+            ->dispatch(MatterEvents::CHANGED)
+            ->assertSee('Other Legal LLP')
+            ->assertSee('Creditor');
+
+        // On this matter, by their address; no party made.
+        $this->assertSame($parties, Party::count());
+        $row = collect((new MatterContactsExport($this->matter))->rows())->firstWhere('key', 'e:other@other.ae');
+        $this->assertSame(['Other Legal LLP', 'Creditor', '+44 20 7946 0000', 'Other@other.ae'], [$row['name'], $row['capacity'], $row['phones'], $row['emails']]);
+
+        $other = Matter::factory()->create();
+        MatterEmail::create(['matter_id' => $other->id, 'direction' => MatterEmail::SENT, 'sender_key' => 'iflas', 'message_id' => 's3@jpa.ae',
+            'subject' => 'إخطار', 'to' => ['other@other.ae'], 'at' => now(), 'user_id' => $this->user->id]);
+        $this->assertSame('other@other.ae', collect((new MatterContactsExport($other))->rows())->firstWhere('key', 'e:other@other.ae')['name']);
     }
 
     public function test_the_bulk_mail_tab_lists_the_matters_campaigns_and_starts_a_new_one_with_it(): void

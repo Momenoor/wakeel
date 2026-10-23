@@ -262,6 +262,16 @@ class Matter extends Model implements AttachmentOwner
     }
 
     /**
+     * Its contacts who are no party, as corrected on its Contacts tab.
+     *
+     * @return HasMany<MatterContactDetail, $this>
+     */
+    public function contactDetails(): HasMany
+    {
+        return $this->hasMany(MatterContactDetail::class);
+    }
+
+    /**
      * The steps of its progress — letters, meetings, emails, reports …
      *
      * @return HasMany<MatterProgress, $this>

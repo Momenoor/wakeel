@@ -3858,6 +3858,7 @@
     "No contacts yet": "لا توجد جهات اتصال بعد",
     "Edit contact": "تعديل جهة الاتصال",
     "Saved on the party: changed wherever they appear, not on this matter only.": "يُحفظ في بيانات الطرف: يتغيّر أينما ظهر، لا في هذه القضية وحدها.",
+    "Kept on this matter only, for :email.": "يُحفظ في هذه القضية وحدها، للعنوان :email.",
     "The matter's parties, and everyone its letters, minutes and emails reach, appear here.": "يظهر هنا أطراف القضية وكل من وصلتهم خطاباتها ومحاضرها ورسائلها.",
     "Bulk Mail Campaign": "حملة بريد جماعي",
     "Link existing folder": "ربط مجلد موجود",
