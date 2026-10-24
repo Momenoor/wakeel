@@ -74,6 +74,23 @@ class PerformanceTrackingTest extends TestCase
         $this->assertSame(0, PerformanceSample::where('name', 'like', '%checkForNewMessages%')->count());
     }
 
+    public function test_an_action_is_named_as_it_is_opened_and_run(): void
+    {
+        $this->actingAs(User::factory()->create());
+        // Livewire's snapshot: each array as [value, meta]; a modal opened in another, innermost last.
+        $mounted = [[[['name' => 'sendEmail', 'arguments' => [[], ['s' => 'arr']], 'context' => [[], ['s' => 'arr']]], ['s' => 'arr']],
+            [['name' => 'attach', 'arguments' => [[], ['s' => 'arr']], 'context' => [['name' => 'x'], ['s' => 'arr']]], ['s' => 'arr']]], ['s' => 'arr']];
+        $snapshot = json_encode(['memo' => ['name' => 'App\Filament\Mms\Resources\Matters\Pages\ViewMatter'], 'data' => ['mountedActions' => $mounted]]);
+
+        $this->post(route('default-livewire.update'), ['components' => [['snapshot' => $snapshot, 'calls' => [['method' => 'callMountedAction', 'params' => []]]]]]);
+        $this->post(route('default-livewire.update'), ['components' => [['snapshot' => $snapshot, 'calls' => [['method' => 'mountTableAction', 'params' => ['edit', '12']]]]]]);
+
+        $this->assertEqualsCanonicalizing(
+            ['livewire: ViewMatter@callMountedAction(sendEmail>attach)', 'livewire: ViewMatter@mountTableAction(edit)'],
+            PerformanceSample::pluck('name')->all(),
+        );
+    }
+
     public function test_a_failed_request_is_kept_and_reported_seen_by_the_server_or_only_by_the_browser(): void
     {
         // A background check that failed: kept, however fast.

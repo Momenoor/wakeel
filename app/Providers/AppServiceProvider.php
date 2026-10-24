@@ -29,6 +29,7 @@ use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Auth\Http\Controllers\LogoutController as FilamentLogoutController;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Support\Assets\Css;
 use Filament\Support\Enums\Width;
 use Filament\Support\Facades\FilamentAsset;
 use Filament\Support\Facades\FilamentView;
@@ -144,6 +145,7 @@ class AppServiceProvider extends ServiceProvider
         // The package it comes with would put TinyMCE from a CDN, its own
         // editor script and its styles on every page: they are taken off.
         self::withoutTinyEditorAssets();
+        self::withTourStylesFollowingTheTheme();
 
         // The font that draws the Dirham sign, on every panel page.
         FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): string => (string) Currency::fontLink());
@@ -323,6 +325,24 @@ class AppServiceProvider extends ServiceProvider
                 if (property_exists($this, $assets)) {
                     unset($this->{$assets}[$package]);
                 }
+            }
+        })->call(FilamentAsset::getFacadeRoot());
+    }
+
+    /**
+     * The jibaymcs/filament-tour package's styles, in the copy whose dark: rules follow Wakeel's dark mode, not
+     * the computer's (resources/css/vendor/filament-tour.css): its own turned every dark:text-white field white
+     * on white when Wakeel is light on a computer set to dark. In its place, under a name of its own: a browser
+     * keeping the old file (its address carries only the package's version) fetches this one afresh.
+     */
+    private static function withTourStylesFollowingTheTheme(): void
+    {
+        $package = 'jibaymcs/filament-tour';
+        $styles = Css::make('filament-tour-styles-themed', resource_path('css/vendor/filament-tour.css'))->package($package);
+
+        (function () use ($package, $styles): void {
+            if (isset($this->styles[$package])) {
+                $this->styles[$package] = [$styles];
             }
         })->call(FilamentAsset::getFacadeRoot());
     }

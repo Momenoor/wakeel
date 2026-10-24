@@ -20,6 +20,7 @@ use App\Services\Attachments\CopyToAzure;
 use App\Services\MMS\SentEmailArchive;
 use App\Support\Documents;
 use App\Support\Integrations;
+use App\Support\StoredFile;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -198,6 +199,30 @@ class AzureStorageTest extends TestCase
         $this->get('/storage/'.$path)->assertOk();
         $this->actingAs(User::factory()->create()->givePermissionTo(Permission::findOrCreate('View:UnfiledEmails')));
         $this->get('/storage/'.$path)->assertForbidden();
+    }
+
+    public function test_opened_by_the_browser_a_file_in_azure_goes_straight_there_by_a_short_link(): void
+    {
+        // Azure itself (not faked): the link is signed here, nothing asked of Azure.
+        Integrations::save([Integrations::AZURE_ACCOUNT => 'wakeelfiles', Integrations::AZURE_KEY => base64_encode('key'), Integrations::AZURE_CONTAINER => 'wakeel']);
+        Integrations::apply();
+        $file = Attachment::create(['matter_id' => Matter::factory()->create()->id, 'user_id' => auth()->id(), 'disk' => Integrations::AZURE_DISK,
+            'path' => 'matters/1/محضر.pdf', 'name' => 'محضر الاجتماع.pdf', 'size' => '10', 'extension' => 'pdf']);
+
+        $link = $this->withHeader('Sec-Fetch-Dest', 'iframe')->get(route('attachment.download', ['attachment' => $file, 'inline' => 1]))
+            ->assertRedirect()
+            ->headers->get('Location');
+
+        // To that file, for a few minutes, read only, shown as this server would show it.
+        $this->assertStringStartsWith('https://wakeelfiles.blob.core.windows.net/wakeel/matters/1/', $link);
+        parse_str((string) parse_url($link, PHP_URL_QUERY), $query);
+        $this->assertSame(['r', 'application/pdf'], [$query['sp'], $query['rsct']]);
+        $this->assertStringStartsWith('inline;', $query['rscd']);
+        $this->assertStringContainsString("filename*=utf-8''".rawurlencode('محضر الاجتماع.pdf'), $query['rscd']);
+        $this->assertEqualsWithDelta(now()->addMinutes(StoredFile::LINK_MINUTES)->getTimestamp(), strtotime($query['se']), 60);
+
+        // Still only for who may see it.
+        $this->actingAs(User::factory()->create())->withHeader('Sec-Fetch-Dest', 'document')->get(route('attachment.download', $file))->assertForbidden();
     }
 
     public function test_asked_to_it_deletes_each_original_once_copied(): void

@@ -20,6 +20,7 @@ use App\Services\MMS\Requests\RequestServiceFactory;
 use App\Services\MMS\SenderMailer;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -108,6 +109,47 @@ class WorkAccountsTest extends TestCase
         $this->assertSame(['user-'.$sara->id], array_keys(SenderMailer::options($sara->fresh())));
         // The settings' defaults: the shared ones only.
         $this->assertSame(['iflas'], array_keys(SenderMailer::options(sharedOnly: true)));
+    }
+
+    public function test_the_shared_mailboxes_ticked_for_someone_are_the_only_ones_they_send_from_and_see(): void
+    {
+        MailSenders::add('court', ['address' => 'court@jpa.ae', 'username' => 'court@jpa.ae', 'name' => 'Court Mail', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
+        $amr = $this->assistant();
+        $amr->givePermissionTo(Permission::findOrCreate('View:UnfiledEmails'));
+        $amr->update(['unfiled_all' => true]);
+
+        // As before until chosen: all of them, ticked.
+        $this->assertNull($amr->shared_mailboxes);
+        $this->assertSame(['court', 'iflas'], array_keys(SenderMailer::options($amr)));
+        Livewire::test(EditUser::class, ['record' => $amr->getKey()])
+            ->assertSchemaStateSet(['shared_mailboxes' => ['court', 'iflas']])
+            ->fillForm(['display_name' => 'Amr', 'shared_mailboxes' => ['iflas']])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $amr = $amr->fresh();
+        $this->assertSame(['iflas'], $amr->shared_mailboxes);
+        $this->assertSame(['iflas'], array_keys(SenderMailer::options($amr)));
+        Livewire::test(ViewUser::class, ['record' => $amr->getKey()])->assertSee('JPA Iflas <iflas@jpa.ae>')->assertDontSee('Court Mail <court@jpa.ae>');
+
+        // The unfiled emails of that one only — not its tab, not its files.
+        $email = fn (string $key, string $id): MatterEmail => MatterEmail::create(['direction' => MatterEmail::RECEIVED, 'status' => MatterEmail::PENDING, 'sender_key' => $key,
+            'subject' => 'مستندات', 'from' => 'x@y.ae', 'at' => now(), 'message_id' => $id]);
+        [$iflas, $court] = [$email('iflas', 'p-1@y.ae'), $email('court', 'p-2@y.ae')];
+        Storage::fake('public');
+        Storage::disk('public')->put('email-unfiled/'.$court->id.'/email.pdf', '%PDF');
+        Storage::disk('public')->put('email-unfiled/'.$iflas->id.'/email.pdf', '%PDF');
+
+        $this->actingAs($amr);
+        $page = Livewire::test(UnfiledEmails::class)->assertCanSeeTableRecords([$iflas])->assertCanNotSeeTableRecords([$court]);
+        $this->assertArrayNotHasKey('court', $page->instance()->mailboxTabs());
+        $this->get('/storage/email-unfiled/'.$court->id.'/email.pdf')->assertForbidden();
+        $this->get('/storage/email-unfiled/'.$iflas->id.'/email.pdf')->assertOk();
+
+        // All ticked again: all of them, one added later too.
+        $this->actingAs($this->admin);
+        Livewire::test(EditUser::class, ['record' => $amr->getKey()])->fillForm(['display_name' => 'Amr', 'shared_mailboxes' => ['court', 'iflas']])->call('save')->assertHasNoFormErrors();
+        $this->assertNull($amr->fresh()->shared_mailboxes);
     }
 
     public function test_what_waits_in_someones_own_mailbox_is_theirs_alone_to_file(): void

@@ -8,8 +8,9 @@
 import { createPad, fitPad, trimmedDataUrl, undoStroke } from './pdf-signer/drawing.js';
 import { stampPdf } from './pdf-signer/embed.js';
 import { center, clamp, keepOnPage, mmToPoints, resized, rotated } from './pdf-signer/geometry.js';
-import { loadImage, textImage } from './pdf-signer/images.js';
+import { LINE, TEXT_PADDING, loadImage, textImage } from './pdf-signer/images.js';
 import { isPdf, openPdf, renderPage } from './pdf-signer/render.js';
+import { colorsOf, fontOf, textLines } from './pdf-signer/text-lines.js';
 
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 4;
@@ -27,6 +28,8 @@ export default function pdfSigner(config) {
     let nextKey = 1;
     const visible = new Set();
     const rendered = new Map();
+    // Each page drawn once off the screen, for a line's colours (and its fonts loaded) when changing its text.
+    const samples = new Map();
     const listeners = [];
 
     const listen = (target, type, handler, options) => {
@@ -58,6 +61,9 @@ export default function pdfSigner(config) {
         drawName: '',
         drawKind: 'signature',
         drawColor: '#0b1f66',
+        // Changing the PDF's own text: its lines shown to be clicked, each page's as found.
+        editingText: false,
+        textLinesOf: {},
 
         async init() {
             listen(window, 'keydown', (event) => this.keydown(event));
@@ -144,6 +150,8 @@ export default function pdfSigner(config) {
                 this.history = [];
                 this.selectedId = null;
                 this.dirty = false;
+                this.editingText = false;
+                this.textLinesOf = {};
                 this.pages = pdf.viewports.map((viewport, index) => ({ index, w: viewport.width, h: viewport.height }));
                 await this.$nextTick();
                 this.fitWidth();
@@ -161,6 +169,7 @@ export default function pdfSigner(config) {
             visible.clear();
             rendered.forEach(({ task }) => task.cancel());
             rendered.clear();
+            samples.clear();
             pdf?.doc.destroy();
             pdf = null;
         },
@@ -451,7 +460,8 @@ export default function pdfSigner(config) {
         everyPage() {
             const item = this.selected;
 
-            if (! item || this.pages.length < 2) {
+            // A changed line of the PDF belongs to its own page.
+            if (! item || item.cover || this.pages.length < 2) {
                 return;
             }
 
@@ -476,7 +486,8 @@ export default function pdfSigner(config) {
 
         // ── Text boxes ─────────────────────────────────────────────────────
 
-        // Redrawn as typed: the line height stays, the width follows the text, the centre does not move.
+        // Redrawn as typed: the line height stays, the width follows the text, the centre does not move — or,
+        // for a line of the PDF being changed, the edge it starts from and its top.
         updateText(value, color = null) {
             const item = this.selected;
 
@@ -485,8 +496,9 @@ export default function pdfSigner(config) {
             }
 
             const lineHeight = item.h / item.lines;
-            const image = textImage(value, { color: color ?? item.color });
+            const image = textImage(value, { color: color ?? item.color, font: item.font ?? null, style: item.fontStyle ?? '' });
             const { x, y } = center(item);
+            const before = { left: item.x, right: item.x + item.w, top: item.y };
 
             item.text = value;
             item.color = color ?? item.color;
@@ -496,7 +508,99 @@ export default function pdfSigner(config) {
             item.w = item.h * image.aspect;
             item.x = x - item.w / 2;
             item.y = y - item.h / 2;
+
+            if (item.anchor) {
+                item.x = item.anchor === 'left' ? before.left : before.right - item.w;
+                item.y = before.top;
+            }
+
             this.dirty = true;
+        },
+
+        // ── The PDF's own text ─────────────────────────────────────────────
+
+        // On: every line of text on the pages shown to be clicked; off: back to placing things.
+        async toggleEditText() {
+            this.editingText = ! this.editingText;
+            this.armed = null;
+
+            if (! this.editingText || ! pdf) {
+                return;
+            }
+
+            for (const [index, page] of pdf.pages.entries()) {
+                this.textLinesOf[index] ??= await textLines(page, pdf.viewports[index]).catch(() => []);
+            }
+        },
+
+        linesOn(index) {
+            return this.editingText ? (this.textLinesOf[index] ?? []) : [];
+        },
+
+        lineStyle(line) {
+            const z = this.zoom;
+
+            return `left: ${line.x * z}px; top: ${line.y * z}px; width: ${line.w * z}px; height: ${line.h * z}px;`;
+        },
+
+        // A line clicked: a text box over it with its words, in its font, size and colour, its place covered
+        // in its background colour — written from where it starts (the left, or the right for Arabic).
+        async editLine(line, index) {
+            const key = `${index}-${line.id}`;
+            const already = this.items.find((item) => item.lineKey === key);
+
+            if (already) {
+                this.selectedId = already.id;
+
+                return this.$nextTick(() => this.$refs.text?.focus());
+            }
+
+            const sample = await this.sampleOf(index);
+            const font = fontOf(pdf.pages[index], line.font);
+            const margin = line.size * 0.15;
+            const cover = { x: line.x - margin, y: line.y - margin, w: line.w + margin * 2, h: line.h + margin * 2 };
+            const colors = colorsOf(sample, this.pages[index].w, cover);
+            const image = textImage(line.str, { color: colors.text, font: font.family, style: font.style });
+            const h = line.size * LINE;
+            const w = h * image.aspect;
+            const padding = line.size * TEXT_PADDING;
+
+            this.remember();
+            const item = {
+                id: nextId++, kind: 'text', page: index, rot: 0, stampId: null,
+                text: line.str, color: colors.text, src: image.src, lines: 1, w, h,
+                x: line.rtl ? line.x + line.w + padding - w : line.x - padding,
+                // Drawn about the middle of its type, which sits about a third of the type above the baseline.
+                y: line.baseline - line.size * 0.33 - h / 2,
+                font: font.family, fontStyle: font.style, fontLabel: `${font.label} · ${Math.round(line.size * 10) / 10} pt`,
+                anchor: line.rtl ? 'right' : 'left', cover: { ...cover, color: colors.background }, lineKey: key,
+            };
+
+            this.items.push(item);
+            this.selectedId = item.id;
+            this.$nextTick(() => this.$refs.text?.focus());
+        },
+
+        // The page drawn off the screen, once: its colours read there — what is shown may not be drawn yet — and
+        // its fonts loaded by the drawing.
+        sampleOf(index) {
+            if (! samples.has(index)) {
+                const { canvas, task } = renderPage(pdf.pages[index], 2, 'print');
+                samples.set(index, task.promise.then(() => canvas, () => null));
+            }
+
+            return samples.get(index);
+        },
+
+        coversOn(index) {
+            return this.items.filter((item) => item.page === index && item.cover);
+        },
+
+        coverStyle(item) {
+            const z = this.zoom;
+            const { x, y, w, h, color } = item.cover;
+
+            return `left: ${x * z}px; top: ${y * z}px; width: ${w * z}px; height: ${h * z}px; background: ${color};`;
         },
 
         // ── Undo ───────────────────────────────────────────────────────────

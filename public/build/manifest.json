@@ -7,8 +7,8 @@
     "file": "assets/is-pdf-rCPWVA7f.js",
     "name": "is-pdf"
   },
-  "_pdf-lib-CGrX5hqQ.js": {
-    "file": "assets/pdf-lib-CGrX5hqQ.js",
+  "_pdf-lib-Ca_Gp1lA.js": {
+    "file": "assets/pdf-lib-Ca_Gp1lA.js",
     "name": "pdf-lib"
   },
   "node_modules/pdfjs-dist/build/pdf.worker.min.mjs": {
@@ -84,7 +84,7 @@
     "src": "node_modules/pdfjs-dist/wasm/qcms_bg.wasm"
   },
   "resources/css/app.css": {
-    "file": "assets/app-CQETqeH3.css",
+    "file": "assets/app-DUvZ03Zf.css",
     "src": "resources/css/app.css",
     "isEntry": true,
     "name": "app",
@@ -93,7 +93,7 @@
     ]
   },
   "resources/css/filament/admin/theme.css": {
-    "file": "assets/theme-DfMnE6DI.css",
+    "file": "assets/theme-B8oeMb9t.css",
     "src": "resources/css/filament/admin/theme.css",
     "isEntry": true,
     "name": "theme",
@@ -102,7 +102,7 @@
     ]
   },
   "resources/css/print.css": {
-    "file": "assets/print-B7NJKLxY.css",
+    "file": "assets/print-DM0RbZdK.css",
     "src": "resources/css/print.css",
     "isEntry": true,
     "name": "print",
@@ -111,22 +111,22 @@
     ]
   },
   "resources/js/app.js": {
-    "file": "assets/app-DPPRcYx9.js",
+    "file": "assets/app-BPidbtfT.js",
     "name": "app",
     "src": "resources/js/app.js",
     "isEntry": true,
     "imports": [
-      "_pdf-lib-CGrX5hqQ.js"
+      "_pdf-lib-Ca_Gp1lA.js"
     ]
   },
   "resources/js/pdf-signer.js": {
-    "file": "assets/pdf-signer-DkwjtAX3.js",
+    "file": "assets/pdf-signer-s1dT0MUt.js",
     "name": "pdf-signer",
     "src": "resources/js/pdf-signer.js",
     "isEntry": true,
     "imports": [
       "_drawing-hXHplTkP.js",
-      "_pdf-lib-CGrX5hqQ.js",
+      "_pdf-lib-Ca_Gp1lA.js",
       "_is-pdf-rCPWVA7f.js"
     ],
     "assets": [
@@ -151,13 +151,13 @@
     ]
   },
   "resources/js/pdf-splitter.js": {
-    "file": "assets/pdf-splitter-BBI0eKq9.js",
+    "file": "assets/pdf-splitter-CSw-sBc2.js",
     "name": "pdf-splitter",
     "src": "resources/js/pdf-splitter.js",
     "isEntry": true,
     "imports": [
       "_is-pdf-rCPWVA7f.js",
-      "_pdf-lib-CGrX5hqQ.js"
+      "_pdf-lib-Ca_Gp1lA.js"
     ]
   },
   "resources/js/rich-text-field.js": {

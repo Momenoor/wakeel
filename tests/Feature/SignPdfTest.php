@@ -92,9 +92,16 @@ class SignPdfTest extends TestCase
         $this->actingAs($me = $this->userWith([ScreenPermissions::SIGN_PDF]));
         $mine = $this->stamp($me);
 
-        $this->get(SignPdf::getUrl())->assertOk()->assertSee('pdfSigner', false);
+        $this->get(SignPdf::getUrl())->assertOk()->assertSee('pdfSigner', false)
+            // Every button's code as written for the browser: a Blade directive left in one ("@js(…)") was a
+            // script error, and the Text button did nothing.
+            ->assertDontSee('@js(', false)
+            ->assertSee('textTemplate(labels.text)', false)
+            // The PDF's own text, to be changed.
+            ->assertSee(__('Edit the PDF\'s text'));
 
         $config = $this->editor();
+        $this->assertSame(__('Text'), $config['labels']['text']);
         $this->assertSame([$mine->toEditor()], $config['stamps']);
         // On its own nothing is saved on the server: no PDF to fetch, no address to send it to.
         $this->assertNull($config['pdfUrl']);

@@ -49,7 +49,7 @@ class LegacyAttachmentPathController extends Controller
 
         return match (true) {
             $attachments->isNotEmpty() => $attachments->contains(fn (Attachment $attachment): bool => Gate::allows('view', $attachment)),
-            Str::startsWith($path, 'email-unfiled/') => UnfiledEmails::canAccess(),
+            Str::startsWith($path, 'email-unfiled/') => UnfiledEmails::canAccess() && UnfiledEmails::mayOpenFilesOf((int) (explode('/', $path)[1] ?? 0)),
             Str::startsWith($path, 'email-replies/') => Gate::allows('viewAny', BulkMailCampaign::class),
             default => false,
         };

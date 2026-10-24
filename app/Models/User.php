@@ -65,6 +65,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         'mailbox_keeps_all',
         'mailbox_sends',
         'shared_senders',
+        'shared_mailboxes',
         'unfiled_all',
         'mail_signature',
     ];
@@ -107,6 +108,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         'mailbox_keeps_all' => 'boolean',
         'mailbox_sends' => 'boolean',
         'shared_senders' => 'boolean',
+        'shared_mailboxes' => 'array',
         'unfiled_all' => 'boolean',
     ];
 
@@ -176,6 +178,15 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     public function seesAllUnfiled(): bool
     {
         return $this->shared_senders && ($this->unfiled_all ?? $this->can('ViewAny:Matter'));
+    }
+
+    /**
+     * Whether they may use this shared mailbox of the office — send from it, see its unfiled emails: one of those
+     * ticked on their page (none ticked ever: all of them, any added later too); none when kept from them.
+     */
+    public function mayUseSharedMailbox(?string $key): bool
+    {
+        return $this->shared_senders && ($this->shared_mailboxes === null || in_array((string) $key, $this->shared_mailboxes, true));
     }
 
     public const WORK_ACCOUNT = ['email', 'ms_account', 'mailbox_reads', 'mailbox_keeps_all', 'mailbox_sends', 'mail_signature', 'display_name', 'name'];

@@ -55,12 +55,21 @@
                     <x-filament::button size="sm" color="gray" icon="heroicon-o-calendar" :loading-indicator="false" class="touch-none" x-on:pointerdown="startLibraryDrag($event, () => dateTemplate())" x-bind:disabled="! hasPdf">
                         {{ __('Date') }}
                     </x-filament::button>
-                    <x-filament::button size="sm" color="gray" icon="heroicon-o-language" :loading-indicator="false" class="touch-none" x-on:pointerdown="startLibraryDrag($event, () => textTemplate(@js(__('Text'))))" x-bind:disabled="! hasPdf">
+                    <x-filament::button size="sm" color="gray" icon="heroicon-o-language" :loading-indicator="false" class="touch-none" x-on:pointerdown="startLibraryDrag($event, () => textTemplate(labels.text))" x-bind:disabled="! hasPdf">
                         {{ __('Text') }}
                     </x-filament::button>
                 </div>
 
-                <p class="mt-3 text-xs text-gray-500 dark:text-gray-400" x-show="hasPdf && ! armed">
+                {{-- The PDF's own text: its lines shown to be clicked and changed. --}}
+                <x-filament::button size="sm" color="gray" icon="heroicon-o-pencil-square" :loading-indicator="false" class="mt-2 w-full" x-on:click="toggleEditText()" x-bind:disabled="! hasPdf" x-bind:class="editingText ? 'ring-2 ring-primary-500' : ''">
+                    {{ __('Edit the PDF\'s text') }}
+                </x-filament::button>
+
+                <p class="mt-3 flex items-center justify-between gap-2 text-xs font-medium text-primary-600 dark:text-primary-400" x-show="editingText" x-cloak>
+                    <span>{{ __('Click a line of the PDF\'s text to change it: its font, size and colours are taken from the PDF.') }}</span>
+                    <button type="button" class="shrink-0 underline" x-on:click="toggleEditText()">{{ __('Finish editing') }}</button>
+                </p>
+                <p class="mt-3 text-xs text-gray-500 dark:text-gray-400" x-show="hasPdf && ! armed && ! editingText">
                     {{ __('Tap one and then tap the page, or drag it onto the page.') }}
                 </p>
                 <p class="mt-3 flex items-center justify-between gap-2 text-xs font-medium text-primary-600 dark:text-primary-400" x-show="armed" x-cloak>
@@ -90,6 +99,10 @@
                                     x-on:click="remember(); updateText(selected.text, @js($color))"></button>
                             @endforeach
                         </div>
+                        {{-- A line of the PDF: the font it was found in. --}}
+                        <p x-show="selected?.fontLabel" class="text-xs text-gray-500 dark:text-gray-400">
+                            <span>{{ __('Font found') }}:</span> <span dir="ltr" x-text="selected?.fontLabel"></span>
+                        </p>
                     </div>
                 </template>
 
@@ -97,7 +110,7 @@
                     <x-filament::button size="sm" color="gray" icon="heroicon-o-arrow-path" :loading-indicator="false" x-on:click="rotateSelected(90)">
                         {{ __('Rotate') }}
                     </x-filament::button>
-                    <x-filament::button size="sm" color="gray" icon="heroicon-o-document-duplicate" :loading-indicator="false" x-on:click="everyPage()" x-bind:disabled="pages.length < 2">
+                    <x-filament::button size="sm" color="gray" icon="heroicon-o-document-duplicate" :loading-indicator="false" x-on:click="everyPage()" x-bind:disabled="pages.length < 2 || selected?.cover">
                         {{ __('Put on every page') }}
                     </x-filament::button>
                     <x-filament::button size="sm" color="danger" icon="heroicon-o-trash" :loading-indicator="false" x-on:click="remove()">
@@ -172,13 +185,25 @@
                 <template x-for="page in pages" :key="page.index">
                     <div
                         class="relative mx-auto mb-4 bg-white shadow-md"
-                        x-bind:class="armed ? 'cursor-crosshair' : ''"
+                        x-bind:class="armed ? 'cursor-crosshair' : (editingText ? 'cursor-text' : '')"
                         x-bind:data-page="page.index"
                         x-bind:style="pageStyle(page)"
                         x-init="watchPage($el)"
                         x-on:click="pageClick($event, page.index)"
                     >
                         <canvas class="pointer-events-none absolute inset-0 h-full w-full"></canvas>
+
+                        {{-- A changed line's place, covered as it will be in the PDF. --}}
+                        <template x-for="item in coversOn(page.index)" :key="'cover-' + item.id">
+                            <div class="pointer-events-none absolute" x-bind:style="coverStyle(item)"></div>
+                        </template>
+
+                        {{-- Changing the PDF's text: each line, to be clicked. --}}
+                        <template x-for="line in linesOn(page.index)" :key="'line-' + line.id">
+                            <button type="button" class="absolute rounded-sm outline-1 outline-primary-400/60 outline-dashed hover:bg-primary-500/15 hover:outline-primary-500"
+                                x-bind:style="lineStyle(line)" x-bind:title="line.str"
+                                x-on:click.stop="editLine(line, page.index)"></button>
+                        </template>
 
                         <template x-for="item in itemsOn(page.index)" :key="item.id">
                             <div

@@ -5,6 +5,8 @@ namespace App\Filament\Shared\Users;
 use App\Filament\Forms\Components\RichText;
 use App\Filament\Support\AssistantSettingsFields;
 use App\Models\User;
+use App\Services\MMS\SenderMailer;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -85,6 +87,18 @@ class UserForm extends PluginUserForm
                     ->label(__('May send from the office\'s shared mailboxes'))
                     ->default(true)
                     ->live()
+                    ->columnSpanFull(),
+                // Which of them: sent from, and their unfiled emails seen. All ticked is kept as "all" — one added later too.
+                CheckboxList::make('shared_mailboxes')
+                    ->label(__('Shared mailboxes they may use'))
+                    ->helperText(__('They send from these only, and see only their unfiled emails. With all ticked, a shared mailbox added later is theirs too.'))
+                    ->options(fn (): array => SenderMailer::sharedOptions())
+                    ->bulkToggleable()
+                    ->columns(2)
+                    // From the record: none chosen yet is all of them (the list's own default would be none).
+                    ->afterStateHydrated(fn (CheckboxList $component, ?User $record) => $component->state($record?->shared_mailboxes ?? array_keys(SenderMailer::sharedOptions())))
+                    ->dehydrateStateUsing(fn ($state): ?array => array_diff(array_keys(SenderMailer::sharedOptions()), (array) $state) === [] ? null : array_values((array) $state))
+                    ->visible(fn (Get $get): bool => (bool) $get('shared_senders') && SenderMailer::sharedOptions() !== [])
                     ->columnSpanFull(),
                 // Which unfiled emails of the shared mailboxes they see (Unfiled emails).
                 Radio::make('unfiled_all')

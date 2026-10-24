@@ -9,6 +9,7 @@ use App\Jobs\EmailJob;
 use App\Jobs\FileUnfiledEmail;
 use App\Models\Matter;
 use App\Models\MatterEmail;
+use App\Models\User;
 use App\Services\MMS\Calendar\MatterReferenceMatcher;
 use App\Services\MMS\MatterReplyCollector;
 use App\Services\MMS\SenderMailer;
@@ -104,6 +105,8 @@ class UnfiledEmails extends Page implements HasTable
             ->partition(fn (array $sender): bool => $sender['owner'] === $user?->getKey())
             ->map(fn ($mailboxes): array => array_map('strval', $mailboxes->keys()->all()))
             ->all();
+        // And a shared mailbox they may not use (Users → Edit): nothing of it shown either.
+        $others = [...$others, ...self::sharedHiddenFrom($user)];
 
         // All of them, or those that may be about their own matters (and their own mailbox's): as set for them (User::seesAllUnfiled).
         $query = ! $user || $user->seesAllUnfiled()
@@ -111,6 +114,31 @@ class UnfiledEmails extends Page implements HasTable
             : MatterEmail::pending(Matter::query()->ownedBy($user)->pluck('id')->map(fn ($id) => (int) $id)->all(), $own);
 
         return $query->when($others !== [], fn (Builder $q) => $q->where(fn (Builder $q) => $q->whereNull('sender_key')->orWhereNotIn('sender_key', $others)));
+    }
+
+    /**
+     * The office's shared mailboxes left unticked for someone who may use some of them: their unfiled emails are
+     * not theirs to see. One kept from them all still sees those that may be about their own matters.
+     *
+     * @return list<string>
+     */
+    private static function sharedHiddenFrom(?User $user): array
+    {
+        return ! $user?->shared_senders ? [] : collect(SenderMailer::all())
+            ->filter(fn (array $sender, $key): bool => $sender['owner'] === null && ! $user->mayUseSharedMailbox((string) $key))
+            ->keys()->map(fn ($key): string => (string) $key)->values()->all();
+    }
+
+    /**
+     * Whether the files kept of an unfiled email (email-unfiled/{id}/…) open for the user: not when it came to a
+     * colleague's own mailbox, or to a shared one they may not use.
+     */
+    public static function mayOpenFilesOf(int $emailId): bool
+    {
+        $key = MatterEmail::query()->whereKey($emailId)->value('sender_key');
+        $owner = SenderMailer::ownerOf($key);
+
+        return ($owner === null || $owner === auth()->id()) && ! in_array((string) $key, self::sharedHiddenFrom(auth()->user()), true);
     }
 
     /** Whether it waits in the user's own mailbox: theirs to file on any matter it may be about. */
@@ -181,9 +209,10 @@ class UnfiledEmails extends Page implements HasTable
         $counts = self::waiting()->reorder()->selectRaw('sender_key, count(*) as total')->groupBy('sender_key')->pluck('total', 'sender_key');
         $tabs = [self::ALL => ['label' => __('All'), 'count' => (int) $counts->sum()]];
 
-        // The shared mailboxes and the user's own — never a colleague's.
+        // The shared mailboxes they may use and their own — never a colleague's.
+        $hidden = self::sharedHiddenFrom(auth()->user());
         foreach (SenderMailer::all() as $key => $sender) {
-            if ($sender['owner'] !== null && $sender['owner'] !== auth()->id()) {
+            if ($sender['owner'] !== null && $sender['owner'] !== auth()->id() || in_array((string) $key, $hidden, true)) {
                 continue;
             }
 

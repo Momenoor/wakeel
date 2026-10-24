@@ -24,7 +24,7 @@ class SenderMailer
 {
     /**
      * The mailboxes someone may send from, for the "Send from" lists: their own first, then the office's shared
-     * ones — unless they are kept to their own (Users → Edit). Without a user (the settings' defaults, a job):
+     * ones they may use (Users → Edit: those ticked, or none). Without a user (the settings' defaults, a job):
      * the shared ones.
      *
      * @return array<string, string> key => display name
@@ -37,9 +37,22 @@ class SenderMailer
 
         $senders = collect(self::all())->filter(fn (array $sender): bool => $sender['sends']);
         $own = $user ? $senders->filter(fn (array $sender): bool => $sender['owner'] === (int) $user->getKey()) : collect();
-        $shared = ($user === null || $user->shared_senders) ? $senders->filter(fn (array $sender): bool => $sender['owner'] === null) : collect();
+        $shared = $senders->filter(fn (array $sender, $key): bool => $sender['owner'] === null && ($user === null || $user->mayUseSharedMailbox((string) $key)));
 
         return $own->union($shared)->map($label)->all();
+    }
+
+    /**
+     * The office's shared mailboxes, each as "Name <address>" — for choosing which a user may use.
+     *
+     * @return array<string, string> key => name and address
+     */
+    public static function sharedOptions(): array
+    {
+        return collect(self::all())
+            ->filter(fn (array $sender): bool => $sender['owner'] === null)
+            ->map(fn (array $sender, $key): string => ($sender['name'] ?? (string) $key).' <'.($sender['address'] ?? '').'>')
+            ->all();
     }
 
     /**

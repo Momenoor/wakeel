@@ -37,24 +37,31 @@ export async function pngBytes(src) {
     return new Uint8Array(await blob.arrayBuffer());
 }
 
+// A text box's line, as a share of its type size; and the room at each side, as a share of the type.
+export const LINE = 1.3;
+export const TEXT_PADDING = 0.25;
+
 const ARABIC = /[֐-ࣿיִ-﷿ﹰ-﻿]/;
 
-// A text box as a transparent PNG: each line centred, in the page's own font. Returns its data URL and
-// its aspect (width ÷ height) — the box keeps its line height when the text changes.
-export function textImage(text, { color = '#111827', font = null } = {}) {
+// A text box as a transparent PNG: each line centred, in the page's own font (or one given — a PDF's line
+// being changed: its family list and "bold"/"italic"). Returns its data URL and its aspect (width ÷ height)
+// — the box keeps its line height when the text changes. The type is a 1.3th of the line, its sides a
+// quarter of the type: TEXT_PADDING.
+export function textImage(text, { color = '#111827', font = null, style = '' } = {}) {
     const lines = String(text || ' ').split(/\r?\n/);
     const size = 64;
-    const lineHeight = Math.round(size * 1.3);
+    const lineHeight = Math.round(size * LINE);
     const family = font || getComputedStyle(document.body).fontFamily || 'sans-serif';
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
+    const css = `${style} ${size}px ${family}`.trim();
 
-    context.font = `${size}px ${family}`;
-    const width = Math.ceil(Math.max(...lines.map((line) => context.measureText(line || ' ').width), size)) + size / 2;
+    context.font = css;
+    const width = Math.ceil(Math.max(...lines.map((line) => context.measureText(line || ' ').width), size)) + size * TEXT_PADDING * 2;
 
     canvas.width = width;
     canvas.height = lineHeight * lines.length;
-    context.font = `${size}px ${family}`;
+    context.font = css;
     context.fillStyle = color;
     context.textAlign = 'center';
     context.textBaseline = 'middle';

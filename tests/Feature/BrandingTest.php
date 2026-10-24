@@ -58,6 +58,19 @@ class BrandingTest extends TestCase
         $this->assertStringEndsWith('branding/dark.png', Branding::logoUrl(dark: true));
     }
 
+    public function test_the_logo_opens_for_anyone_and_signing_in_goes_on_to_the_panel_not_to_it(): void
+    {
+        Storage::disk('public')->put('branding/01M3BA4D6RGPJY2EQ1FH3HDJEE.png', 'png');
+
+        // As the sign-in page asks for it, where the web server does not find it itself.
+        $this->get('/storage/branding/01M3BA4D6RGPJY2EQ1FH3HDJEE.png')->assertOk()->assertHeader('X-Content-Type-Options', 'nosniff');
+        $this->assertNull(session('url.intended'));
+        $this->get('/storage/branding/missing.png')->assertNotFound();
+
+        // Any other stored file still only for the signed in.
+        $this->get('/storage/attachments/emails/1/a.pdf')->assertRedirect();
+    }
+
     public function test_an_uploaded_favicon_is_the_panels_favicon(): void
     {
         Storage::disk('public')->put('branding/icon.png', 'png');

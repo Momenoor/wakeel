@@ -23,6 +23,7 @@ use App\Services\MMS\Letters\LetterDocx;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterPdf;
 use App\Services\MMS\Letters\MinutesService;
+use App\Support\Branding;
 use App\Support\EditorFonts;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
@@ -39,6 +40,22 @@ Route::get('/mail/unsubscribe/{token}', function ($token) {
 Route::get('/mms/templates/{path?}', fn (?string $path = null) => redirect('/mms/settings/'.$path.(request()->getQueryString() ? '?'.request()->getQueryString() : ''), 301))
     ->where('path', '.*')
     ->name('templates.moved');
+
+// The office's logos and icon (Settings → Branding): shown on the sign-in page and in emails, so to anyone — at
+// their own address even where the web server does not find the file itself (no storage link, the file moved).
+// Ahead of /storage/ below, which is for the signed in: its sign-in, asked for a logo, made the logo the page
+// to go on to once signed in — and refused it.
+Route::get('storage/'.Branding::DIRECTORY.'/{file}', function (string $file) {
+    $path = Branding::DIRECTORY.'/'.$file;
+    abort_unless(Storage::disk('public')->exists($path), 404);
+
+    return Storage::disk('public')->response($path, $file, [
+        'Cache-Control' => 'public, max-age=86400',
+        'X-Content-Type-Options' => 'nosniff',
+        // An SVG logo shown, never run.
+        'Content-Security-Policy' => "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+    ]);
+})->where('file', '[A-Za-z0-9_-]+\.(png|jpe?g|gif|webp|svg|ico)')->name('branding.file');
 
 Route::middleware('auth')->group(function () {
     Route::get('bulk-mail/preview/{campaign}/{recipient}', [BulkMailController::class, '__invoke'])

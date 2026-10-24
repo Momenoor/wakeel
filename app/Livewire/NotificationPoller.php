@@ -46,6 +46,7 @@ class NotificationPoller extends Component
         }
 
         $user = Auth::user();
+        $shown = [];
 
         foreach ($user->unreadNotifications as $notification) {
             // A chat entry stays unread in the bell, counting up — the chat
@@ -93,7 +94,12 @@ class NotificationPoller extends Component
                 url: collect($data['actions'] ?? [])->pluck('url')->filter()->first(),
             );
 
-            $notification->markAsRead();
+            $shown[] = $notification->getKey();
+        }
+
+        // Read, all at once — a pile of them after being away was an update each.
+        if ($shown !== []) {
+            $user->notifications()->whereKey($shown)->whereNull('read_at')->update(['read_at' => now()]);
         }
     }
 

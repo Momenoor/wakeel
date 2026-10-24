@@ -78,3 +78,14 @@ export function pdfPlacement(viewport, item) {
         angle,
     };
 }
+
+/**
+ * Where pdf-lib draws an upright box of the page's display space (a changed line's cover): its two corners
+ * taken back through the viewport, so a CropBox offset or a /Rotate is undone as for an item.
+ */
+export function pdfRectangle(viewport, box) {
+    const [x1, y1] = viewport.convertToPdfPoint(box.x, box.y);
+    const [x2, y2] = viewport.convertToPdfPoint(box.x + box.w, box.y + box.h);
+
+    return { x: Math.min(x1, x2), y: Math.min(y1, y2), width: Math.abs(x2 - x1), height: Math.abs(y2 - y1) };
+}

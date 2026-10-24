@@ -55,7 +55,9 @@ export async function openPdf(bytes) {
 const MAX_PIXELS = 16_000_000;
 
 // A page drawn on a new canvas at this zoom (sharp on high-density screens): put it in place once ready.
-export function renderPage(page, zoom) {
+// Intent "print": drawn without waiting for the screen's frames — for one only read, never shown, which is
+// then drawn even in a tab out of sight.
+export function renderPage(page, zoom, intent = 'display') {
     const ratio = window.devicePixelRatio || 1;
     const base = page.getViewport({ scale: 1 });
     const scale = Math.min(zoom * ratio, Math.sqrt(MAX_PIXELS / (base.width * base.height)));
@@ -66,7 +68,7 @@ export function renderPage(page, zoom) {
     canvas.height = Math.floor(viewport.height);
     canvas.className = 'pointer-events-none absolute inset-0 h-full w-full';
 
-    return { canvas, task: page.render({ canvas, viewport }) };
+    return { canvas, task: page.render({ canvas, viewport, intent }) };
 }
 
 export { isPdf } from '../pdf/is-pdf.js';

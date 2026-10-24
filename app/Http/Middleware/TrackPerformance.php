@@ -141,10 +141,12 @@ class TrackPerformance
         if ($request->isMethod('post') && is_array($components)) {
             $parts = [];
             foreach ($components as $component) {
-                $memo = json_decode((string) ($component['snapshot'] ?? ''), true)['memo'] ?? [];
-                $calls = array_column((array) ($component['calls'] ?? []), 'method');
-                $component = class_basename(str_replace('.', '\\', (string) ($memo['name'] ?? 'livewire')));
-                $parts[] = $component.($calls ? '@'.implode(',', array_unique($calls)) : '@update');
+                $snapshot = json_decode((string) ($component['snapshot'] ?? ''), true);
+                $calls = (array) ($component['calls'] ?? []);
+                $methods = array_column($calls, 'method');
+                $actions = self::actions($calls, $snapshot['data']['mountedActions'] ?? null);
+                $name = class_basename(str_replace('.', '\\', (string) ($snapshot['memo']['name'] ?? 'livewire')));
+                $parts[] = $name.($methods ? '@'.implode(',', array_unique($methods)) : '@update').($actions ? '('.implode(',', $actions).')' : '');
             }
 
             return 'livewire: '.implode(' + ', array_unique($parts));
@@ -153,5 +155,55 @@ class TrackPerformance
         $route = (string) $request->route()?->getName();
 
         return $route !== '' ? (string) preg_replace('/^filament\.(mms|pms)\./', '$1: ', $route) : '/'.ltrim($request->path(), '/');
+    }
+
+    /**
+     * Which actions a Livewire request opened or ran ("sendEmail"): named in the
+     * call when one is opened, kept in the component (its mountedActions, the
+     * innermost last) when it is run — else every action of a page reads alike.
+     *
+     * @param  array<int, mixed>  $calls
+     * @return list<string>
+     */
+    private static function actions(array $calls, mixed $mounted): array
+    {
+        $names = [];
+
+        foreach ($calls as $call) {
+            $method = (string) ($call['method'] ?? '');
+
+            if (str_starts_with($method, 'mount') && str_ends_with($method, 'Action') && is_string($call['params'][0] ?? null)) {
+                $names[] = $call['params'][0];
+            } elseif (str_starts_with($method, 'callMounted') && ($open = self::mountedNames($mounted)) !== []) {
+                $names[] = implode('>', $open);
+            }
+        }
+
+        return array_values(array_unique($names));
+    }
+
+    /**
+     * The mounted actions' names, outermost first, from Livewire's snapshot of
+     * them (each an array with a name and its arguments or context, wrapped in
+     * Livewire's [value, meta] pairs).
+     *
+     * @return list<string>
+     */
+    private static function mountedNames(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        if (is_string($value['name'] ?? null) && (array_key_exists('arguments', $value) || array_key_exists('context', $value))) {
+            return [$value['name']];
+        }
+
+        $names = [];
+        foreach ($value as $item) {
+            $names = [...$names, ...self::mountedNames($item)];
+        }
+
+        return $names;
     }
 }

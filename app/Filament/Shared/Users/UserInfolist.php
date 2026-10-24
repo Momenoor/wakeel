@@ -3,6 +3,7 @@
 namespace App\Filament\Shared\Users;
 
 use App\Models\User;
+use App\Services\MMS\SenderMailer;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
@@ -62,6 +63,12 @@ class UserInfolist extends PluginUserInfolist
                                 ->visible(fn (User $record): bool => $record->mailbox_reads),
                             IconEntry::make('mailbox_sends')->label(__('Send from it'))->boolean(),
                             IconEntry::make('shared_senders')->label(__('May send from the office\'s shared mailboxes'))->boolean(),
+                            TextEntry::make('shared_mailboxes')
+                                ->label(__('Shared mailboxes they may use'))
+                                ->state(fn (User $record): array => array_values(array_filter(SenderMailer::sharedOptions(), fn ($key): bool => $record->mayUseSharedMailbox((string) $key), ARRAY_FILTER_USE_KEY)))
+                                ->badge()
+                                ->visible(fn (User $record): bool => (bool) $record->shared_senders)
+                                ->columnSpanFull(),
                             TextEntry::make('unfiled_all')
                                 ->label(__('In Unfiled emails, from the shared mailboxes'))
                                 ->state(fn (User $record): string => $record->seesAllUnfiled() ? __('All of them') : __('Those that may be about their matters'))

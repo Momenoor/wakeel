@@ -121,6 +121,8 @@ class SignPdf extends Page
                 'imageFailed' => __('The image could not be loaded.'),
                 'nothingPlaced' => __('Put a signature, a stamp or text on the document first.'),
                 'drawing' => __('My drawing'),
+                // A new text box's words (a Blade component's attribute takes no @js: the button had "@js(…)" as its code).
+                'text' => __('Text'),
             ],
         ];
     }
