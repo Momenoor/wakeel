@@ -254,7 +254,7 @@ class EmailsRelationManager extends RelationManager
     {
         $sent = $email->direction === MatterEmail::SENT;
         $folder = ((array) $email->onedrive)['folder'] ?? null;
-        $files = self::fileLinks($email);
+        $files = $email->fileLinks();
 
         $rows = array_filter([
             'at' => [__('Date'), $email->at?->format(Dates::dateTimeFormat())],
@@ -296,20 +296,5 @@ class EmailsRelationManager extends RelationManager
                 ->color('gray')
                 ->visible($files === [] && ! $sent),
         ];
-    }
-
-    /**
-     * The files kept for an email, each with a link: the PDF first, then the
-     * files it came with.
-     *
-     * @return list<array{name: string, url: string, kind: ?string}>
-     */
-    private static function fileLinks(MatterEmail $email): array
-    {
-        return collect((array) $email->files)
-            ->filter(fn ($file): bool => Documents::linkable($file['path'] ?? null))
-            ->map(fn (array $file): array => ['name' => (string) $file['name'], 'url' => MatterEmail::fileUrl($file['path']), 'kind' => $file['kind'] ?? null])
-            ->values()
-            ->all();
     }
 }

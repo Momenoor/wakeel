@@ -20,6 +20,7 @@ use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Forms\Components\Select;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Resources\Concerns\HasTabs;
@@ -268,6 +269,28 @@ class UnfiledEmails extends Page implements HasTable
                     ->icon('heroicon-o-document-text')
                     ->color('gray')
                     ->url(fn (MatterEmail $record): ?string => filled($path = $record->files[0]['path'] ?? null) ? MatterEmail::fileUrl($path) : null, shouldOpenInNewTab: true),
+
+                // The files it came with, each to open — to tell what it is about before filing it.
+                Action::make('attachments')
+                    ->label(fn (MatterEmail $record): string => __('Attachments').' ('.count($record->attachmentFiles()).')')
+                    ->icon('heroicon-o-paper-clip')
+                    ->color('gray')
+                    ->visible(fn (MatterEmail $record): bool => $record->attachmentFiles() !== [])
+                    ->modalHeading(fn (MatterEmail $record): string => __('Attachments').': '.$record->subject)
+                    ->modalWidth('lg')
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel(__('Close'))
+                    ->schema(fn (MatterEmail $record): array => [
+                        TextEntry::make('attachments')
+                            ->hiddenLabel()
+                            ->state($record->fileLinks(attachmentsOnly: true))
+                            ->formatStateUsing(fn (array $state): string => $state['name'])
+                            ->url(fn (array $state): string => $state['url'], shouldOpenInNewTab: true)
+                            ->color('primary')
+                            ->icon('heroicon-o-paper-clip')
+                            ->listWithLineBreaks()
+                            ->extraAttributes(['dir' => 'auto']),
+                    ]),
 
                 Action::make('file')
                     ->label(__('File to matter'))

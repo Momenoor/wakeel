@@ -4700,5 +4700,18 @@
     "Date format": "صيغة التاريخ",
     "Time format": "صيغة الوقت",
     "Used everywhere a date or time is shown: tables, pages, date pickers, emails and PDFs.": "تُستعمل في كل مكان يظهر فيه تاريخ أو وقت: الجداول والصفحات ومنتقيات التاريخ ورسائل البريد وملفات PDF.",
-    "Court registration": "قيد لدى محكمة"
+    "Court registration": "قيد لدى محكمة",
+    "Filing mailbox": "بريد الأرشفة",
+    "For emails whose matter cannot be told: someone in the office forwards the email here with the matter number (1200/2026) in the subject or first line, or in the address (name+1200-2026@…), and the original is filed on that matter as it came from its own sender. Keep it for this alone.": "للرسائل التي لا يمكن تحديد قضيتها: يعيد أحد موظفي المكتب توجيه البريد إلى هنا مع رقم القضية (1200/2026) في الموضوع أو في أول سطر، أو في العنوان (name+1200-2026@…)، فيُؤرشف البريد الأصلي على تلك القضية كأنه وصل من مرسله نفسه. خصّص هذا البريد لهذا الغرض فقط.",
+    "An email I forwarded to the filing mailbox was not filed": "بريد أعدت توجيهه إلى بريد الأرشفة ولم تتم أرشفته",
+    "forwarded to the filing mailbox": "إعادة توجيه إلى بريد الأرشفة",
+    "The email you forwarded to be filed was not filed: it could not be confirmed that it was sent by you.": "لم تتم أرشفة البريد الذي أعدت توجيهه: تعذّر التأكد من أنه أُرسل منك.",
+    "The email you forwarded to be filed was not filed: no matter in the system was found in its subject, first line or address.": "لم تتم أرشفة البريد الذي أعدت توجيهه: لم يُعثر على قضية في النظام في موضوعه أو أول سطر فيه أو في العنوان.",
+    "The email you forwarded to be filed was not filed: you may not work on matter :matter.": "لم تتم أرشفة البريد الذي أعدت توجيهه: ليست لديك صلاحية العمل على القضية :matter.",
+    "The email you forwarded to be filed was not filed: the email in it could not be read. Forward it as an attachment instead.": "لم تتم أرشفة البريد الذي أعدت توجيهه: تعذّرت قراءة البريد الأصلي بداخله. أعد توجيهه كمرفق بدلاً من ذلك.",
+    "The email you forwarded is already filed on matter :matter.": "البريد الذي أعدت توجيهه مؤرشف مسبقاً على القضية :matter.",
+    "The email you forwarded to be filed could not be filed just now. Forward it again in a while.": "تعذّرت أرشفة البريد الذي أعدت توجيهه الآن. أعد توجيهه بعد قليل.",
+    "The email you forwarded to be filed was not filed.": "لم تتم أرشفة البريد الذي أعدت توجيهه.",
+    "Write the matter number (e.g. 1200/2026) in the subject or the first line, or send it to the filing address with +1200-2026 before the @.": "اكتب رقم القضية (مثل 1200/2026) في الموضوع أو في أول سطر، أو أرسله إلى بريد الأرشفة مع ‎+1200-2026 قبل علامة @.",
+    "The email you forwarded names more than one matter: it is waiting in Unfiled emails for its matter to be chosen.": "البريد الذي أعدت توجيهه يذكر أكثر من قضية: وُضع في «رسائل بلا قضية» لاختيار قضيته."
 }

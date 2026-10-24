@@ -27,6 +27,7 @@ class MailSenders
             'signature' => $sender['signature'] ?? null,
             'is_active' => true,
             'keep_all_inbox' => $sender['keep_all_inbox'] ?? false,
+            'files_forwards' => $sender['files_forwards'] ?? false,
         ]);
     }
 }

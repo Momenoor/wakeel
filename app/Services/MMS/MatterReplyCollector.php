@@ -313,6 +313,7 @@ class MatterReplyCollector
         $own = array_map(fn (array $s): string => mb_strtolower((string) ($s['address'] ?? '')), SenderMailer::all());
         $progress = ['reached' => null, 'stopped' => false];
         $keepAll = self::keepsAll($senderKey);
+        $filing = self::isFilingInbox($senderKey);
         $ignored = self::ignoredSenders();
 
         foreach ($messages as $message) {
@@ -333,6 +334,16 @@ class MatterReplyCollector
             // A Date header in the future (a wrong clock) or an unreadable one must not move it past the rest.
             if ($at !== null && $at->lte($startedAt) && $at->year > 1971 && ($progress['reached'] === null || $at->gt($progress['reached']))) {
                 $progress['reached'] = $at;
+            }
+
+            // The filing mailbox: each email in it is an instruction to file another (ForwardedEmailFiler), never
+            // correspondence — read once, then marked read.
+            if ($filing) {
+                if ($id !== null && app(ForwardedEmailFiler::class)->handle($message, $id, (string) $senderKey, $this) !== null) {
+                    $this->markRead($message);
+                }
+
+                continue;
             }
 
             // From an address on the ignore list: not read at all — not kept, not told, left unread.
@@ -432,6 +443,12 @@ class MatterReplyCollector
         return $senderKey !== null
             ? (bool) ($senders[$senderKey]['keep_all'] ?? false)
             : collect($senders)->contains(fn (array $sender): bool => (bool) ($sender['keep_all'] ?? false));
+    }
+
+    /** Whether this is the filing mailbox (Mail senders): what the office forwards to it is filed as its original. */
+    public static function isFilingInbox(?string $senderKey): bool
+    {
+        return $senderKey !== null && (bool) (SenderMailer::all()[$senderKey]['forwards'] ?? false);
     }
 
     /** Setting: addresses (or "@domain" for a whole domain) whose emails are never read. */
@@ -841,16 +858,33 @@ class MatterReplyCollector
      *
      * @param  array<string, mixed>  $message
      */
-    private function keepIncoming(Matter $matter, array $message, string $id, string $senderKey, ?string $by): void
+    private function keepIncoming(Matter $matter, array $message, string $id, string $senderKey, ?string $by, ?int $userId = null): MatterEmail
     {
         $email = $this->record($message, $id, $senderKey, ['matter_id' => $matter->getKey(), 'status' => MatterEmail::FILED, 'matched_by' => $by]);
         [$pdf, $files, $name, $source] = $this->rendered($message, $senderKey, false);
 
-        $kept = $this->keepOnMatter($matter, $pdf, $files, $name, null, $source, $oneDrive, self::arrivedAt($message));
+        $kept = $this->keepOnMatter($matter, $pdf, $files, $name, $userId, $source, $oneDrive, self::arrivedAt($message));
         $email->update(['files' => $kept, 'onedrive' => $oneDrive]);
-        MatterProgressRecorder::emailReceived($email);
+        MatterProgressRecorder::emailReceived($email, $userId);
         MatterContact::learn($email);
-        $this->tellMatter($email, $matter, count($files), $this->noteUnlinked($matter, $kept));
+        // Forwarded by someone: they are told too, unread — it answers what they did.
+        $this->tellMatter($email, $matter, count($files), $this->noteUnlinked($matter, $kept), $userId, filerReads: false);
+
+        return $email;
+    }
+
+    /**
+     * An email forwarded to the filing mailbox (ForwardedEmailFiler), kept on the matter named as it came from
+     * its own sender: its PDF and files — and, forwarded as an attachment, the email itself (.eml).
+     *
+     * @param  array<string, mixed>  $original
+     */
+    public function keepForwarded(Matter $matter, array $original, string $senderKey, int $userId, string $forwardId): MatterEmail
+    {
+        // Its own Message-ID when it came whole; one made of the forward's when only quoted.
+        $id = MatterEmail::messageId($original['message_id'] ?? null) ?? 'forwarded.'.$forwardId;
+
+        return $this->keepIncoming($matter, $original, $id, $senderKey, MatterEmail::BY_FORWARD, $userId);
     }
 
     /**
@@ -860,13 +894,41 @@ class MatterReplyCollector
      * @param  array<string, mixed>  $message
      * @param  list<int>  $candidates
      */
-    private function hold(array $message, string $id, string $senderKey, array $candidates): void
+    private function hold(array $message, string $id, string $senderKey, array $candidates): MatterEmail
     {
         $email = $this->record($message, $id, $senderKey, ['status' => MatterEmail::PENDING, 'candidates' => $candidates]);
         [$pdf, $files, $name, $source] = $this->rendered($message, $senderKey, false);
 
         $email->update(['files' => $this->keepLoose('email-unfiled/'.$email->getKey(), $pdf, $files, $name, $source)]);
         $this->tellUnfiled($email);
+
+        return $email;
+    }
+
+    /**
+     * An email forwarded to the filing mailbox naming more than one matter (ForwardedEmailFiler): kept aside as
+     * it came from its own sender, those matters' people asked which.
+     *
+     * @param  array<string, mixed>  $original
+     * @param  list<int>  $candidates
+     */
+    public function holdForwarded(array $original, string $senderKey, array $candidates, string $forwardId): MatterEmail
+    {
+        return $this->hold($original, MatterEmail::messageId($original['message_id'] ?? null) ?? 'forwarded.'.$forwardId, $senderKey, $candidates);
+    }
+
+    /**
+     * One waiting in Unfiled emails, now said to be about these matters (a forward naming them): their people
+     * asked which.
+     *
+     * @param  list<int>  $candidates
+     */
+    public function askAbout(MatterEmail $email, array $candidates): MatterEmail
+    {
+        $email->update(['candidates' => array_values(array_map('intval', $candidates))]);
+        $this->tellUnfiled($email);
+
+        return $email;
     }
 
     /**
@@ -1263,7 +1325,7 @@ class MatterReplyCollector
      * @param  list<array{name: string, url: string}>  $downloads  when the matter has no OneDrive folder: the email's files, to download and put there by hand
      * @param  int|null  $filedBy  whoever filed or moved it by hand
      */
-    private function tellMatter(MatterEmail $email, Matter $matter, int $files, array $downloads = [], ?int $filedBy = null): void
+    private function tellMatter(MatterEmail $email, Matter $matter, int $files, array $downloads = [], ?int $filedBy = null, bool $filerReads = true): void
     {
         $notInOneDrive = $downloads !== [];
         $downloads = array_values(array_filter($downloads, fn (array $file) => filled($file['url'])));
@@ -1300,7 +1362,10 @@ class MatterReplyCollector
 
             if ($filer) {
                 Notifier::bell($type, collect([$filer]), $title, null, $url, $configure);
-                $filer->unreadNotifications()->where('data->viewData->'.self::EMAIL_KEY, $email->getKey())->update(['read_at' => now()]);
+
+                if ($filerReads) {
+                    $filer->unreadNotifications()->where('data->viewData->'.self::EMAIL_KEY, $email->getKey())->update(['read_at' => now()]);
+                }
             }
         } catch (Throwable $e) {
             Log::info('Email notification not sent: '.$e->getMessage());
@@ -1435,6 +1500,7 @@ class MatterReplyCollector
                 // (An unreadable Date header comes back as 1970: read as now instead.)
                 'at' => $date->year < 1971 ? now()->toIso8601String() : $date->toIso8601String(),
                 'was_read' => $header->hasFlag('seen'),
+                'headers' => fn (): array => self::headerLines((string) ($header->getHeader()?->raw ?? '')),
                 // The whole message, fetched once however many of these are asked for.
                 'body' => fn (): string => Tolerant::run(function () use ($whole): string {
                     $message = $whole();
@@ -1475,6 +1541,25 @@ class MatterReplyCollector
                 },
             ];
         }
+    }
+
+    /**
+     * An email's header lines, by name (lower case): a name given more than once, its values joined.
+     *
+     * @return array<string, string>
+     */
+    private static function headerLines(string $raw): array
+    {
+        $lines = [];
+
+        foreach (explode("\n", preg_replace("/\r?\n[ \t]+/", ' ', str_replace("\r\n", "\n", $raw)) ?? '') as $line) {
+            if (preg_match('/^([^:\s]+):\s*(.*)$/', $line, $m)) {
+                $name = mb_strtolower($m[1]);
+                $lines[$name] = isset($lines[$name]) ? $lines[$name].'; '.trim($m[2]) : trim($m[2]);
+            }
+        }
+
+        return $lines;
     }
 
     /**
@@ -1546,6 +1631,7 @@ class MatterReplyCollector
             'to' => array_values(array_filter(array_map(fn ($r) => $r['emailAddress']['address'] ?? null, $item['toRecipients'] ?? []))),
             'cc' => array_values(array_filter(array_map(fn ($r) => $r['emailAddress']['address'] ?? null, $item['ccRecipients'] ?? []))),
             'at' => (string) ($item['receivedDateTime'] ?? now()->toIso8601String()),
+            'headers' => $headers->all(),
             'was_read' => isset($item['isRead']) ? (bool) $item['isRead'] : null,
             'body' => ($item['body']['contentType'] ?? 'html') === 'html' ? (string) ($item['body']['content'] ?? '') : nl2br(e((string) ($item['body']['content'] ?? ''))),
             // The email as it came (MIME).
@@ -1570,13 +1656,38 @@ class MatterReplyCollector
                 $response = Http::withToken($this->graph->getAccessToken())->timeout(120)->get($base.'/messages/'.rawurlencode($graphId).'/attachments');
 
                 return collect($response->successful() ? ($response->json()['value'] ?? []) : [])
-                    ->filter(fn ($a) => isset($a['contentBytes'])
-                        && ! (($a['isInline'] ?? false) && self::isShownInText((string) ($a['contentType'] ?? ''), (string) ($a['contentId'] ?? ''), (string) ($item['body']['content'] ?? ''))))
-                    ->map(fn ($a): array => ['name' => (string) ($a['name'] ?? 'attachment'), 'contents' => (string) base64_decode($a['contentBytes']), 'mime' => (string) ($a['contentType'] ?? 'application/octet-stream')])
+                    ->filter(fn ($a) => isset($a['contentBytes']) || ($a['@odata.type'] ?? '') === '#microsoft.graph.itemAttachment')
+                    ->reject(fn ($a) => ($a['isInline'] ?? false) && self::isShownInText((string) ($a['contentType'] ?? ''), (string) ($a['contentId'] ?? ''), (string) ($item['body']['content'] ?? '')))
+                    ->map(fn ($a): ?array => isset($a['contentBytes'])
+                        ? ['name' => (string) ($a['name'] ?? 'attachment'), 'contents' => (string) base64_decode($a['contentBytes']), 'mime' => (string) ($a['contentType'] ?? 'application/octet-stream')]
+                        // An email attached to the email (forwarded as an attachment): no bytes in the list — the
+                        // email itself (MIME) asked for, kept as the .eml it is.
+                        : $this->attachedEmail($base, $graphId, $a))
+                    ->filter()
                     ->values()
                     ->all();
             },
         ];
+    }
+
+    /**
+     * An email attached to a Microsoft 365 email, as the .eml it is — null when it cannot be read.
+     *
+     * @param  array<string, mixed>  $attachment
+     * @return array{name: string, contents: string, mime: string}|null
+     */
+    private function attachedEmail(string $base, string $graphId, array $attachment): ?array
+    {
+        $response = Http::withToken($this->graph->getAccessToken())->timeout(120)
+            ->get($base.'/messages/'.rawurlencode($graphId).'/attachments/'.rawurlencode((string) ($attachment['id'] ?? '')).'/$value');
+
+        if (! $response->successful() || $response->body() === '') {
+            return null;
+        }
+
+        $name = trim((string) ($attachment['name'] ?? '')) ?: 'email';
+
+        return ['name' => str_ends_with(mb_strtolower($name), '.eml') ? $name : $name.'.eml', 'contents' => $response->body(), 'mime' => 'message/rfc822'];
     }
 
     public static function checkedKey(string $senderKey): string

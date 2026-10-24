@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\AnnouncesChanges;
 use App\Services\MMS\MatterEmailSentNotifier;
+use App\Support\Documents;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -57,6 +58,9 @@ class MatterEmail extends Model
     public const BY_ADDRESS = 'address';
 
     public const BY_HAND = 'hand';
+
+    /** Forwarded to the filing mailbox by someone in the office, naming its matter (ForwardedEmailFiler). */
+    public const BY_FORWARD = 'forward';
 
     protected $fillable = ['matter_id', 'direction', 'status', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'cc', 'files', 'onedrive', 'candidates', 'matched_by', 'at', 'user_id', 'was_unread'];
 
@@ -131,6 +135,21 @@ class MatterEmail extends Model
         return collect((array) ($this->files ?? []))
             ->skip(1)
             ->filter(fn ($file): bool => ($file['kind'] ?? null) !== self::SOURCE)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * The files kept for it, each with a link — the PDF first, then the files it came with (and the original
+     * .eml while it waits unfiled); or only those it came with.
+     *
+     * @return list<array{name: string, url: string, kind: ?string}>
+     */
+    public function fileLinks(bool $attachmentsOnly = false): array
+    {
+        return collect($attachmentsOnly ? $this->attachmentFiles() : (array) $this->files)
+            ->filter(fn ($file): bool => Documents::linkable($file['path'] ?? null))
+            ->map(fn (array $file): array => ['name' => (string) $file['name'], 'url' => self::fileUrl($file['path']), 'kind' => $file['kind'] ?? null])
             ->values()
             ->all();
     }
@@ -233,6 +252,7 @@ class MatterEmail extends Model
             self::BY_PARTY_NAME => __("a party's name in it"),
             self::BY_ADDRESS => __("the sender's only matter"),
             self::BY_HAND => __('chosen by hand'),
+            self::BY_FORWARD => __('forwarded to the filing mailbox'),
             default => '—',
         };
     }

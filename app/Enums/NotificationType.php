@@ -24,6 +24,7 @@ enum NotificationType: string
     case MATTER_EMAIL_RECEIVED = 'matter.email_received';
     case MATTER_EMAIL_UNFILED = 'matter.email_unfiled';
     case MATTER_EMAIL_SENT = 'matter.email_sent';
+    case MATTER_EMAIL_FORWARDED = 'matter.email_forwarded';
     case MINUTES_REPLY = 'minutes.reply_received';
     case ONEDRIVE_FOLDER_REVIEW = 'onedrive.folder_review';
 
@@ -60,6 +61,7 @@ enum NotificationType: string
             self::MATTER_EMAIL_RECEIVED => __('An email from a matter\'s party was kept'),
             self::MATTER_EMAIL_UNFILED => __('An email waiting for its matter to be chosen'),
             self::MATTER_EMAIL_SENT => __('Someone else sent an email on my matter'),
+            self::MATTER_EMAIL_FORWARDED => __('An email I forwarded to the filing mailbox was not filed'),
             self::MINUTES_REPLY => __('A reply to minutes I sent for signature'),
             self::ONEDRIVE_FOLDER_REVIEW => __('A OneDrive folder to review'),
             self::LEAVE_SUBMITTED => __('A leave request to decide'),
@@ -82,7 +84,7 @@ enum NotificationType: string
     {
         return match ($this) {
             self::REQUEST_CREATED, self::REQUEST_DECIDED, self::REQUEST_CHANGES => __('Requests'),
-            self::MATTER_ASSIGNED, self::MATTER_REPLY_RECEIVED, self::MATTER_EMAIL_RECEIVED, self::MATTER_EMAIL_UNFILED, self::MATTER_EMAIL_SENT,
+            self::MATTER_ASSIGNED, self::MATTER_REPLY_RECEIVED, self::MATTER_EMAIL_RECEIVED, self::MATTER_EMAIL_UNFILED, self::MATTER_EMAIL_SENT, self::MATTER_EMAIL_FORWARDED,
             self::MINUTES_REPLY, self::ONEDRIVE_FOLDER_REVIEW => __('Matters'),
             self::LEAVE_SUBMITTED, self::LEAVE_DECIDED => __('Leave'),
             self::EMPLOYEE_REQUEST_SUBMITTED, self::EMPLOYEE_REQUEST_DECIDED, self::EMPLOYEE_REQUEST_TO_PAY => __('Employee requests'),
@@ -154,7 +156,7 @@ enum NotificationType: string
      */
     public static function aboutEmails(): array
     {
-        return [self::MATTER_REPLY_RECEIVED, self::MATTER_EMAIL_RECEIVED, self::MATTER_EMAIL_UNFILED, self::MATTER_EMAIL_SENT];
+        return [self::MATTER_REPLY_RECEIVED, self::MATTER_EMAIL_RECEIVED, self::MATTER_EMAIL_UNFILED, self::MATTER_EMAIL_SENT, self::MATTER_EMAIL_FORWARDED];
     }
 
     public function supports(NotificationChannel $channel): bool

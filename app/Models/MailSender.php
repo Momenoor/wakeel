@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * through Microsoft Graph with the app registration in .env
  * (MICROSOFT_GRAPH_TENANT_ID / CLIENT_ID / CLIENT_SECRET) — no password.
  */
-#[Fillable('user_id', 'key', 'name', 'address', 'driver', 'host', 'port', 'encryption', 'username', 'password', 'signature', 'is_active', 'collects', 'sends', 'keep_all_inbox')]
+#[Fillable('user_id', 'key', 'name', 'address', 'driver', 'host', 'port', 'encryption', 'username', 'password', 'signature', 'is_active', 'collects', 'sends', 'keep_all_inbox', 'files_forwards')]
 class MailSender extends Model
 {
     public const SMTP = 'smtp';
@@ -30,6 +30,7 @@ class MailSender extends Model
             'port' => 'integer',
             'is_active' => 'boolean',
             'keep_all_inbox' => 'boolean',
+            'files_forwards' => 'boolean',
             'collects' => 'boolean',
             'sends' => 'boolean',
         ];
@@ -100,6 +101,8 @@ class MailSender extends Model
             'signature' => self::leftToRight($this->signature),
             // Every email of this mailbox kept, not only those concerning a matter (MatterReplyCollector).
             'keep_all' => (bool) $this->keep_all_inbox,
+            // The filing mailbox: what the office forwards to it, naming a matter, is filed as its original (ForwardedEmailFiler).
+            'forwards' => (bool) ($this->files_forwards ?? false),
             // A user's own (none: the office's shared one), and whether it is read and filed, and sent from.
             'owner' => $this->user_id !== null ? (int) $this->user_id : null,
             'collects' => (bool) ($this->collects ?? true),

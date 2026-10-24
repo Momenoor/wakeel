@@ -145,6 +145,12 @@ class MailSenderResource extends Resource
                         ->default(false)
                         ->inline(false)
                         ->helperText(__("Off: only replies and emails from a matter's parties are kept from this mailbox. On: every other email too (except the office's own) goes to Unfiled emails, to file on a matter or set aside.")),
+                    // Only for this: everything in it is an instruction to file, never correspondence.
+                    Toggle::make('files_forwards')
+                        ->label(__('Filing mailbox'))
+                        ->default(false)
+                        ->inline(false)
+                        ->helperText(__('For emails whose matter cannot be told: someone in the office forwards the email here with the matter number (1200/2026) in the subject or first line, or in the address (name+1200-2026@…), and the original is filed on that matter as it came from its own sender. Keep it for this alone.')),
 
                     TextEntry::make('graph_status')
                         ->hiddenLabel()
@@ -211,6 +217,7 @@ class MailSenderResource extends Resource
                 TextColumn::make('key')->label(__('Code')),
                 IconColumn::make('is_active')->label(__('Active'))->boolean(),
                 IconColumn::make('keep_all_inbox')->label(__('Keeps every email'))->boolean(),
+                IconColumn::make('files_forwards')->label(__('Filing mailbox'))->boolean(),
             ])
             ->recordActions([
                 Action::make('test')
