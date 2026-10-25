@@ -15,14 +15,14 @@ use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
- * A fee entered "including VAT" splits into the fee and a VAT row — typed
- * as VAT, so it is saved and counted as VAT.
+ * A fee entered "including VAT" on the matter form is one fee carrying its VAT — its basic amount and its VAT
+ * on it — never a fee and a VAT row beside it, as before.
  */
 class MatterFeeVatTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_a_fee_including_vat_adds_a_vat_row_with_the_vat_type(): void
+    public function test_a_fee_including_vat_carries_its_vat_and_adds_no_vat_row(): void
     {
         Gate::before(fn () => true);
         Filament::setCurrentPanel('mms');
@@ -31,20 +31,10 @@ class MatterFeeVatTest extends TestCase
         $matter = Matter::factory()->create();
 
         $page = Livewire::test(EditMatter::class, ['record' => $matter->getRouteKey()])
-            ->set('data.fees', ['first' => [
-                'type' => FeeType::EXPERT_FEE->value,
-                'amount' => 1050,
-                'including_vat' => false,
-                'row_id' => 'row-1',
-            ]])
-            ->set('data.fees.first.including_vat', true);
+            ->set('data.fees', ['first' => ['type' => FeeType::EXPERT_FEE->value, 'amount' => 1050, 'is_vat_included' => true]]);
 
-        $rows = array_values($page->get('data.fees'));
-
-        $this->assertCount(2, $rows);
-        $this->assertEquals(1000, $rows[0]['amount']);
-        $this->assertTrue(FeeType::isVat($rows[1]['type']));
-        $this->assertEquals(50, $rows[1]['amount']);
+        // Still one row, as entered.
+        $this->assertCount(1, $page->get('data.fees'));
 
         // Fields the form requires, unrelated to fees.
         $page->set('data.next_session_date', now()->addWeek()->toDateString())
@@ -52,18 +42,8 @@ class MatterFeeVatTest extends TestCase
             ->call('save')
             ->assertHasNoFormErrors();
 
-        $vat = Fee::where('matter_id', $matter->id)->where('type', FeeType::VAT->value)->get();
-
-        $this->assertCount(1, $vat);
-        $this->assertEquals(50, $vat->first()->amount);
-    }
-
-    public function test_is_vat_reads_the_enum_or_its_value(): void
-    {
-        $this->assertTrue(FeeType::isVat(FeeType::VAT));
-        $this->assertTrue(FeeType::isVat('VAT'));
-        $this->assertFalse(FeeType::isVat('vat'));
-        $this->assertFalse(FeeType::isVat(FeeType::EXPERT_FEE));
-        $this->assertFalse(FeeType::isVat(null));
+        $fee = Fee::where('matter_id', $matter->id)->sole();
+        $this->assertSame([FeeType::EXPERT_FEE, 1000.0, 50.0, true, 1050.0], [$fee->type, (float) $fee->amount, (float) $fee->vat, $fee->is_vat_included, $fee->total]);
+        $this->assertSame(0, Fee::where('type', FeeType::VAT->value)->count());
     }
 }

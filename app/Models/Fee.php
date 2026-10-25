@@ -39,6 +39,8 @@ class Fee extends Model implements AttachmentOwner
         'user_id',
         'type',
         'amount',
+        'vat',
+        'is_vat_included',
         'date',
         'description',
         'status',
@@ -47,7 +49,10 @@ class Fee extends Model implements AttachmentOwner
     protected $casts = [
         'date' => 'date',
         'status' => FeeStatus::class,
+        // Its basic amount (VAT-exclusive); its VAT beside it, its total the two (App\Support\Vat).
         'amount' => 'decimal:2',
+        'vat' => 'decimal:2',
+        'is_vat_included' => 'boolean',
         'type' => FeeType::class,
     ];
 
@@ -134,9 +139,24 @@ class Fee extends Model implements AttachmentOwner
         return (float) $this->allocations()->sum('amount');
     }
 
+    /**
+     * What it comes to, VAT included: its basic amount and its VAT — what is billed and collected. (A query of
+     * fees naming a sum "total" is read through this by pluck(): name it otherwise.)
+     */
+    public function getTotalAttribute(): float
+    {
+        return round((float) $this->amount + (float) $this->vat, 2);
+    }
+
+    /** Its amount as entered: the total when entered VAT included, else the basic (App\Filament\Support\FeeVatFields). */
+    public function getEnteredAmountAttribute(): float
+    {
+        return $this->is_vat_included ? $this->total : (float) $this->amount;
+    }
+
     public function getBalanceAttribute(): float
     {
-        return (float) ($this->amount - $this->total_allocated);
+        return (float) ($this->total - $this->total_allocated);
     }
 
     /**
@@ -169,8 +189,9 @@ class Fee extends Model implements AttachmentOwner
             ->whereIn('type', FeeType::deductionTypeValues())
             ->whereNotNull('matter_id')
             ->groupBy('matter_id')
-            ->selectRaw('matter_id, SUM(ABS(amount)) as total')
-            ->pluck('total', 'matter_id')
+            // Not "total": pluck() would read the fee's own total (getTotalAttribute) instead.
+            ->selectRaw('matter_id, SUM(ABS(amount)) as deductions')
+            ->pluck('deductions', 'matter_id')
             ->map(fn ($total) => (float) $total)
             ->all();
 
@@ -234,7 +255,8 @@ class Fee extends Model implements AttachmentOwner
             ? $this->allocations->sum('amount')
             : $this->allocations()->sum('amount')));
 
-        $total = abs((float) $this->amount);
+        // What is collected is the total, VAT included.
+        $total = abs($this->total);
         $allowance = $this->offsetAllowance();
 
         // Money is decimal(15,2); compare with a cent of tolerance rather than

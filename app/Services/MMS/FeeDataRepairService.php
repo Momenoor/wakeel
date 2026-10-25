@@ -223,11 +223,12 @@ class FeeDataRepairService
         // Epsilon inlined for the same reason as in unsettledNonOwnerFees():
         // a bound float becomes a string and SQLite compares it as text.
         return collect(DB::select(
-            'SELECT f.id, f.amount, t.allocated
+            // Its total, VAT included: what is collected on it (named amount, as the rest reads it).
+            'SELECT f.id, (f.amount + f.vat) AS amount, t.allocated
              FROM fees f
              JOIN (SELECT fee_id, SUM(amount) AS allocated FROM allocations GROUP BY fee_id) t
                ON t.fee_id = f.id
-             WHERE ABS(t.allocated) > ABS(f.amount) + '.self::EPSILON
+             WHERE ABS(t.allocated) > ABS(f.amount + f.vat) + '.self::EPSILON
         ));
     }
 
@@ -338,14 +339,15 @@ class FeeDataRepairService
                 '=',
                 'fees.id'
             )
-            ->select('fees.id', 'fees.amount', 'fees.matter_id')
+            // Its total, VAT included: what is collected on it (named amount, as the rest reads it).
+            ->select('fees.id', DB::raw('(fees.amount + fees.vat) as amount'), 'fees.matter_id')
             ->selectRaw('COALESCE(paid.allocated, 0) AS allocated')
             // Epsilon inlined, not bound. Laravel binds PHP floats as strings,
             // and SQLite's type affinity sorts every number before every text
             // value, so `3000 > '0.005'` is FALSE and this matched nothing at
             // all under the test database while behaving correctly on MySQL.
             // It is a hardcoded constant, so there is nothing to parameterise.
-            ->whereRaw('ABS(COALESCE(paid.allocated, 0) - fees.amount) > '.self::EPSILON)
+            ->whereRaw('ABS(COALESCE(paid.allocated, 0) - (fees.amount + fees.vat)) > '.self::EPSILON)
             ->get();
     }
 

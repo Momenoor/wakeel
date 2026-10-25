@@ -5,6 +5,7 @@ namespace App\Services\MMS;
 use App\Models\PayrollRun;
 use App\Models\Payslip;
 use App\Models\Setting;
+use App\Support\Vat;
 use Illuminate\Support\Carbon;
 
 /**
@@ -18,14 +19,6 @@ use Illuminate\Support\Carbon;
  */
 class SalaryAuthorizationFormService
 {
-    /**
-     * UAE's standard rate. `payroll_bank_fee_amount` (Payroll Settings) is
-     * quoted VAT-inclusive by the bank, so this is only used to split that one
-     * figure back into a charge and a VAT line for the form — it is not an
-     * independent setting of its own.
-     */
-    private const VAT_RATE = 0.05;
-
     /**
      * @return array{
      *     company_name: string,
@@ -67,10 +60,11 @@ class SalaryAuthorizationFormService
 
         $totalSalary = round(array_sum(array_column($lines, 'salary')), 2);
 
-        // Quoted VAT-inclusive by the bank; split back out so the form's own
-        // two rows (charge, then VAT) add up to what it will actually charge.
+        // Quoted VAT-inclusive by the bank; split back out (at the VAT rate of
+        // Settings → Financial Settings → VAT) so the form's own two rows
+        // (charge, then VAT) add up to what it will actually charge.
         $feeInclusiveOfVat = round((float) Setting::get('payroll_bank_fee_amount', 0.0), 2);
-        $serviceCharge = round($feeInclusiveOfVat / (1 + self::VAT_RATE), 2);
+        $serviceCharge = Vat::split($feeInclusiveOfVat, included: true)['basic'];
         $vat = round($feeInclusiveOfVat - $serviceCharge, 2);
 
         return [

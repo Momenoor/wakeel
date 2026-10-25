@@ -114,9 +114,10 @@ class IncentiveCalculatorService
             $matterIds = $lines->pluck('matter_id')->unique();
             $matterDeductionTotals = Fee::whereIn('matter_id', $matterIds)
                 ->whereIn('type', FeeType::deductionTypeValues())
-                ->selectRaw('matter_id, SUM(ABS(amount)) as total')
+                // Not "total": pluck() would read the fee's own total (Fee::getTotalAttribute) instead.
+                ->selectRaw('matter_id, SUM(ABS(amount)) as deductions')
                 ->groupBy('matter_id')
-                ->pluck('total', 'matter_id');
+                ->pluck('deductions', 'matter_id');
             $matterGrossRevenueTotals = $lines->groupBy('matter_id')
                 ->map(fn ($group) => $group->sum(fn ($l) => (float) ($l->fee?->amount ?? 0)));
 

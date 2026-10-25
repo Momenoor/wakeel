@@ -3,17 +3,21 @@
 namespace App\Models;
 
 use App\Enums\AttachmentCategory;
+use App\Enums\FeeType;
 use App\Models\Concerns\AnnouncesChanges;
 use App\Models\Concerns\HasAttachments;
 use App\Models\Contracts\AttachmentOwner;
 use App\Services\MMS\FeeChangeNotifier;
 use App\Support\Dates;
 use Filament\Notifications\Notification;
+use Illuminate\Contracts\Database\Query\Expression;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
@@ -124,6 +128,25 @@ class Allocation extends Model implements AttachmentOwner
     /**
      * @return BelongsTo<Fee, $this>
      */
+    /**
+     * For sums of payments "excl. VAT": each payment joined to its fee, the VAT rows of before left out — with
+     * exclVatAmount() the part of each payment that is its fee's basic amount.
+     */
+    public function scopeExclVat(Builder $query): void
+    {
+        $query->join('fees as paid_fee', 'paid_fee.id', '=', 'allocations.fee_id')
+            ->where('paid_fee.type', '!=', FeeType::VAT->value);
+    }
+
+    /**
+     * A payment's part that is its fee's basic amount: a payment pays a fee's basic amount and its VAT alike
+     * (Fee::total = amount + vat). Read with exclVat(). A fee with no VAT: the whole of it.
+     */
+    public static function exclVatAmount(): Expression
+    {
+        return DB::raw('allocations.amount * COALESCE(paid_fee.amount / NULLIF(paid_fee.amount + paid_fee.vat, 0), 1)');
+    }
+
     public function fee(): BelongsTo
     {
         return $this->belongsTo(Fee::class);

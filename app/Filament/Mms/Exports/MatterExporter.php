@@ -64,11 +64,12 @@ class MatterExporter extends MatterSpreadsheetExporter
 
             ExportColumn::make('total_vat')
                 ->label(__('Total VAT'))
-                ->getStateUsing(fn ($record) => number_format($record->fees->filter(fn ($fee) => $fee->type === FeeType::VAT)->sum('amount'))),
+                // The VAT rows of before, and each fee's own VAT.
+                ->getStateUsing(fn ($record) => number_format($record->fees->sum(fn ($fee) => $fee->type === FeeType::VAT ? (float) $fee->amount : (float) $fee->vat))),
 
             ExportColumn::make('total_fees')
                 ->label(__('Total'))
-                ->getStateUsing(fn ($record) => number_format($record->fees->sum('amount'))),
+                ->getStateUsing(fn ($record) => number_format($record->fees->sum('total'))),
 
             ExportColumn::make('total_allocations')
                 ->label(__('Sum Allocations'))
@@ -76,7 +77,7 @@ class MatterExporter extends MatterSpreadsheetExporter
 
             ExportColumn::make('unpaid_amount')
                 ->label(__('Unpaid'))
-                ->getStateUsing(fn ($record) => number_format($record->fees->sum('amount') - $record->allocations->sum('amount'))),
+                ->getStateUsing(fn ($record) => number_format($record->fees->sum('total') - $record->allocations->sum('amount'))),
 
             ExportColumn::make('notes')
                 ->label(__('Notes'))

@@ -73,7 +73,8 @@ class DeductionsReconciliationReport extends Page implements HasTable
      */
     private function billedSql(): string
     {
-        return '(SELECT COALESCE(SUM(f.amount), 0) FROM fees f
+        // Each fee's total, VAT included: what the payments across those lines pay.
+        return '(SELECT COALESCE(SUM(f.amount + f.vat), 0) FROM fees f
                     WHERE f.matter_id = matters.id)';
     }
 

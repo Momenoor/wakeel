@@ -178,14 +178,15 @@ class MattersTable
                     ->toggleable(),
 
                 // ── Fees ───────────────────────────────────────────────────────
+                // What is billed, VAT included (Fee::total) — the collected under it.
                 TextColumn::make('fees_summary')
-                    ->label(__('Fees'))
-                    ->getStateUsing(fn ($record) => number_format($record->fees->sum('amount'), 2))
+                    ->label(__('Fees (incl. VAT)'))
+                    ->getStateUsing(fn ($record) => number_format($record->fees->sum('total'), 2))
                     ->description(fn ($record) => number_format(
                         $record->fees->sum(fn ($fee) => $fee->allocations->sum('amount')), 2
                     ))
                     ->color(function ($record) {
-                        $total = (float) $record->fees->sum('amount');
+                        $total = (float) $record->fees->sum('total');
                         $collected = (float) $record->fees->sum(fn ($fee) => $fee->allocations->sum('amount'));
                         if ($total <= 0) {
                             return 'gray';
@@ -454,11 +455,11 @@ class MattersTable
                     ])
                     ->query(function (Builder $query, array $data) {
                         return $query
-                            ->when($data['fees_from'], fn ($q, $v) => $q->whereHas('fees', fn ($f) => $f->havingRaw('SUM(amount) >= ?', [(float) $v])
+                            ->when($data['fees_from'], fn ($q, $v) => $q->whereHas('fees', fn ($f) => $f->havingRaw('SUM(amount + vat) >= ?', [(float) $v])
                                 ->groupBy('matter_id')
                                 ->select('matter_id')
                             ))
-                            ->when($data['fees_until'], fn ($q, $v) => $q->whereHas('fees', fn ($f) => $f->havingRaw('SUM(amount) <= ?', [(float) $v])
+                            ->when($data['fees_until'], fn ($q, $v) => $q->whereHas('fees', fn ($f) => $f->havingRaw('SUM(amount + vat) <= ?', [(float) $v])
                                 ->groupBy('matter_id')
                                 ->select('matter_id')
                             ));
@@ -636,12 +637,12 @@ class MattersTable
             return '<tr>'
                 .'<td style="'.$cell.'">'.e($fee->type?->getLabel() ?? '—').$note.'</td>'
                 .'<td style="'.$cell.'">'.e($fee->date?->format(Dates::dateFormat()) ?? '—').'</td>'
-                .'<td style="'.$cell.';text-align:end;font-weight:600">'.number_format((float) $fee->amount, 2).'</td>'
+                .'<td style="'.$cell.';text-align:end;font-weight:600">'.number_format($fee->total, 2).'</td>'
                 .'<td style="'.$cell.';text-align:end;opacity:.8">'.number_format($collected, 2).'</td>'
                 .'</tr>';
         })->implode('');
 
-        $total = (float) $record->fees->sum('amount');
+        $total = (float) $record->fees->sum('total');
         $collected = (float) $record->fees->sum(fn ($fee) => $fee->allocations->sum('amount'));
         $head = 'padding:2px 6px;font-weight:600;opacity:.7;font-size:11px';
 

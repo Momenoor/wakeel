@@ -7,6 +7,7 @@ use App\Filament\Concerns\PrintableReport;
 use App\Filament\Mms\Clusters\Reports;
 use App\Filament\Mms\Exports\AssistantMattersExporter;
 use App\Filament\Mms\Resources\Matters\MatterResource;
+use App\Models\Allocation;
 use App\Models\MatterParty;
 use App\Models\Party;
 use App\Models\Type;
@@ -294,11 +295,8 @@ class AssistantMattersReport extends Page implements HasTable
             ->withSum(['matter_fees as total_fees' => function ($q) {
                 $q->where('type', '!=', FeeType::VAT->value);
             }], 'amount')
-            ->withSum(['matter_allocations as total_allocations' => function ($q) {
-                $q->whereHas('fee', function ($f) {
-                    $f->where('type', '!=', FeeType::VAT->value);
-                });
-            }], 'amount')
+            // Collected excl. VAT: of each payment, its fee's basic part.
+            ->withSum(['matter_allocations as total_allocations' => fn ($q) => $q->exclVat()], Allocation::exclVatAmount())
             // Everything the columns show, loaded for all rows at once — the
             // Experts and Parties columns used to query once per row.
             // Dotted, not a nested closure on 'matter': Filament adds its own

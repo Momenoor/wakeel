@@ -92,7 +92,8 @@ class FeeCollectionAgingReport extends Page implements HasTable
         // VAT adds to what is owed and deduction lines subtract from it, and a
         // fully settled matter lands on exactly zero.
         $owed = DB::table('fees')
-            ->selectRaw('matter_id, SUM(amount) as owed, MIN(date) as first_billed')
+            // Each fee's total, VAT included (its own VAT beside it, or a VAT row of before).
+            ->selectRaw('matter_id, SUM(amount + vat) as owed, MIN(date) as first_billed')
             ->groupBy('matter_id');
 
         $received = DB::table('allocations')

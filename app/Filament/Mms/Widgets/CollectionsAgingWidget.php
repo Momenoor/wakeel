@@ -69,7 +69,8 @@ class CollectionsAgingWidget extends ChartWidget
         // each paid VAT or office-share line read as over-collection of exactly
         // its own amount.
         $owed = DB::table('fees')
-            ->selectRaw('matter_id, SUM(amount) as owed, MIN(date) as first_billed')
+            // Each fee's total, VAT included (its own VAT beside it, or a VAT row of before).
+            ->selectRaw('matter_id, SUM(amount + vat) as owed, MIN(date) as first_billed')
             ->whereNotNull('date')
             ->groupBy('matter_id');
 

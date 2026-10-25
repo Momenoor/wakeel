@@ -23,6 +23,7 @@ use App\Filament\Support\AttachFilesAction;
 use App\Filament\Support\AttachmentFields;
 use App\Filament\Support\AttachmentList;
 use App\Filament\Support\EntryTable;
+use App\Filament\Support\FeeVatFields;
 use App\Filament\Support\SignPdfAction;
 use App\Livewire\MatterContacts;
 use App\Livewire\MatterHistoryTab;
@@ -69,6 +70,7 @@ use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\HtmlString;
 
 class MatterInfolist
 {
@@ -789,16 +791,18 @@ class MatterInfolist
                     ->schema([
                         Select::make('type')
                             ->label(__('Type'))
-                            ->options(FeeType::class)
-                            ->afterStateUpdated(fn ($state, $component) => $state?->isNegative() ? $component->getLivewire()->refresh() : null)
-                            ->live(onBlur: true)
+                            ->options(FeeType::newFeeOptions())
+                            ->afterStateUpdated(FeeVatFields::typeChosen())
+                            ->live()
                             ->required(),
                         TextInput::make('amount')
                             ->label(__('Amount'))
                             ->numeric()
-                            ->prefix(fn (Get $get) => $get('type')?->isNegative() ? '-' : '+')
-                            ->live()
+                            ->prefix(fn (Get $get) => FeeType::of($get('type'))?->isNegative() ? '-' : '+')
+                            ->live(debounce: 400)
                             ->required(),
+                        FeeVatFields::toggle(),
+                        FeeVatFields::preview(),
                         // Optional: today when left empty (Fee).
                         DatePicker::make('date')
                             ->label(__('Date'))
@@ -808,7 +812,7 @@ class MatterInfolist
                         // The invoice, the contract … with it, if there is one.
                         ...AttachmentFields::given(new Fee),
                     ])->action(function (array $data, $record, $component) {
-                        $fee = $record->fees()->create(Arr::except($data, AttachmentFields::GIVEN));
+                        $fee = $record->fees()->create([...Arr::except($data, [...AttachmentFields::GIVEN, 'is_vat_included']), ...FeeVatFields::attributes($data)]);
                         AttachmentFields::saveGiven($fee, $data);
                         $record->updateCollectionStatus();
                         $record->refresh();
@@ -816,25 +820,42 @@ class MatterInfolist
                     }),
             ])
             ->schema([
+                // The matter's fees in all — deductions taken off: what they come to before VAT, the VAT, and the
+                // total billed.
+                Grid::make(['default' => 3])
+                    ->visible(fn (Matter $record): bool => $record->fees->isNotEmpty())
+                    ->schema([
+                        TextEntry::make('fees_basic')->label(__('Basic amount'))->aed()
+                            ->state(fn (Matter $record): float => (float) $record->fees->sum(fn (Fee $fee): float => $fee->type === FeeType::VAT ? 0.0 : (float) $fee->amount)),
+                        TextEntry::make('fees_vat')->label(__('VAT amount'))->aed()
+                            // The VAT rows of before (FeeType::VAT) are VAT too.
+                            ->state(fn (Matter $record): float => (float) $record->fees->sum(fn (Fee $fee): float => $fee->type === FeeType::VAT ? (float) $fee->amount : (float) $fee->vat)),
+                        TextEntry::make('fees_total')->label(__('Total amount'))->aed()->weight(FontWeight::Bold)
+                            ->state(fn (Matter $record): float => (float) $record->fees->sum(fn (Fee $fee): float => $fee->total)),
+                    ]),
                 RepeatableEntry::make('fees')
                     // Newest first: by its date, then by when it was added.
                     ->state(fn (Matter $record) => $record->fees->sortBy([['date', 'desc'], ['id', 'desc']])->values())
                     ->columns(5)
                     ->columnSpanFull()
                     ->schema([
-                        TextEntry::make('amount')
+                        TextEntry::make('total')
                             ->label(__('Fee Amount'))
                             ->aed()
                             ->weight(FontWeight::SemiBold)
                             ->icon('heroicon-o-banknotes')
-                            ->color(fn ($state, Get $get) => $get('type')?->isNegative() ? 'danger' : null),
+                            ->color(fn ($state, Get $get) => $get('type')?->isNegative() ? 'danger' : null)
+                            // Its VAT, when it has any: "Basic ⃁ 1,000.00 · VAT ⃁ 50.00".
+                            ->helperText(fn (Fee $record): ?HtmlString => (float) $record->vat !== 0.0
+                                ? new HtmlString(e(__('Basic')).' '.Currency::format((float) $record->amount).' · '.e(__('VAT')).' '.Currency::format((float) $record->vat))
+                                : null),
                         TextEntry::make('collected_amount')
                             ->label(__('Collected'))
                             ->aed()
                             ->icon('heroicon-o-check-circle')
                             ->getStateUsing(fn ($record) => $record?->allocations?->sum('amount') ?? 0)
                             ->color(fn ($state, $record) => match (true) {
-                                (float) $state >= (float) ($record?->amount ?? 0) => 'success',
+                                (float) $state >= (float) ($record?->total ?? 0) => 'success',
                                 (float) $state > 0 => 'warning',
                                 default => 'danger',
                             }),
@@ -1282,19 +1303,21 @@ class MatterInfolist
             ->modalHeading(__('Edit Fee'))
             ->schema([
                 TextInput::make('amount')->label(__('Fee Amount'))
-                    ->numeric()->required()->prefix(Currency::symbol()),
+                    ->numeric()->required()->prefix(Currency::symbol())->live(debounce: 400),
+                FeeVatFields::toggle(),
+                FeeVatFields::preview(),
                 // Both optional; a fee left without a date is dated today (Fee).
                 DatePicker::make('date')->label(__('Date')),
                 Textarea::make('description')->label(__('Description'))->rows(2),
             ])
             ->fillForm(fn ($record) => [
-                'amount' => $record->amount,
+                ...FeeVatFields::fill($record),
                 'date' => $record->date,
                 'description' => $record->description,
             ])
             ->action(function (array $data, $record, $component) {
                 $record->update([
-                    'amount' => $data['amount'],
+                    ...FeeVatFields::attributes($data, $record),
                     'date' => $data['date'] ?? null,
                     'description' => $data['description'] ?? null,
                 ]);

@@ -423,7 +423,8 @@ class Matter extends Model implements AttachmentOwner
         if ($fees->isEmpty()) {
             $this->collection_status = MatterCollectionStatus::NO_FEES;
         } else {
-            $totalAmount = (float) $fees->sum(fn ($fee) => abs($fee->amount));
+            // What is collected: each fee's total, VAT included.
+            $totalAmount = (float) $fees->sum(fn ($fee) => abs($fee->total));
 
             $totalAllocated = (float) $this->allocations->sum(fn ($allocation) => abs($allocation->amount));
 

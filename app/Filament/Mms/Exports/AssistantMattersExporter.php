@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Exports;
 
 use App\Enums\FeeType;
+use App\Models\Allocation;
 use App\Models\Matter;
 use Filament\Actions\Exports\ExportColumn;
 use Filament\Actions\Exports\Models\Export;
@@ -150,11 +151,8 @@ class AssistantMattersExporter extends MatterSpreadsheetExporter
             ->withSum(['fees as total_fees' => function ($q) {
                 $q->where('type', '!=', FeeType::VAT->value);
             }], 'amount')
-            ->withSum(['allocations as total_allocations' => function ($q) {
-                $q->whereHas('fee', function ($f) {
-                    $f->where('type', '!=', FeeType::VAT->value);
-                });
-            }], 'amount')
+            // Collected excl. VAT: of each payment, its fee's basic part.
+            ->withSum(['allocations as total_allocations' => fn ($q) => $q->exclVat()], Allocation::exclVatAmount())
             ->withCount(['assistantsOnly as assistants_count'])
             ->with([
                 'court',

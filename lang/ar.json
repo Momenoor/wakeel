@@ -4713,5 +4713,15 @@
     "The email you forwarded to be filed could not be filed just now. Forward it again in a while.": "تعذّرت أرشفة البريد الذي أعدت توجيهه الآن. أعد توجيهه بعد قليل.",
     "The email you forwarded to be filed was not filed.": "لم تتم أرشفة البريد الذي أعدت توجيهه.",
     "Write the matter number (e.g. 1200/2026) in the subject or the first line, or send it to the filing address with +1200-2026 before the @.": "اكتب رقم القضية (مثل 1200/2026) في الموضوع أو في أول سطر، أو أرسله إلى بريد الأرشفة مع ‎+1200-2026 قبل علامة @.",
-    "The email you forwarded names more than one matter: it is waiting in Unfiled emails for its matter to be chosen.": "البريد الذي أعدت توجيهه يذكر أكثر من قضية: وُضع في «رسائل بلا قضية» لاختيار قضيته."
+    "The email you forwarded names more than one matter: it is waiting in Unfiled emails for its matter to be chosen.": "البريد الذي أعدت توجيهه يذكر أكثر من قضية: وُضع في «رسائل بلا قضية» لاختيار قضيته.",
+    "Basic amount": "المبلغ الأساسي",
+    "VAT amount": "مبلغ ضريبة القيمة المضافة",
+    "Total amount": "المبلغ الإجمالي",
+    "Fees (incl. VAT)": "الأتعاب (شاملة الضريبة)",
+    "Basic · VAT · Total": "الأساسي · الضريبة · الإجمالي",
+    "VAT rate": "نسبة ضريبة القيمة المضافة",
+    "Added to a fee entered without VAT, and taken out of one entered with it (Including VAT). A fee already saved keeps its VAT.": "تُضاف إلى الأتعاب المدخلة دون الضريبة، وتُستخرج من الأتعاب المدخلة شاملةً لها (شامل ضريبة القيمة المضافة). الأتعاب المحفوظة سابقاً تحتفظ بضريبتها.",
+    "No fee on its matter that VAT could belong to.": "لا توجد أتعاب في قضيتها يمكن أن تكون هذه ضريبتها.",
+    "Not :rate% of any fee on its matter (:amounts).": "لا تساوي :rate% من أي أتعاب في قضيتها (:amounts).",
+    "More than one fee on its matter it could be the VAT of.": "في قضيتها أكثر من أتعاب يمكن أن تكون هذه ضريبتها."
 }

@@ -54,6 +54,42 @@ enum FeeType: string implements HasColor, HasLabel
         return ($type instanceof self ? $type : self::tryFrom((string) $type)) === self::VAT;
     }
 
+    /**
+     * Whether VAT is charged on it (App\Support\Vat): the office's fees — not a deduction, nor the VAT rows of
+     * before, which were the VAT itself.
+     */
+    public function carriesVat(): bool
+    {
+        return ! $this->isNegative() && $this !== self::VAT;
+    }
+
+    /**
+     * Whether its amount is entered as the total, VAT included, until changed: an expert fee, as courts order it.
+     */
+    public function vatIncludedByDefault(): bool
+    {
+        return $this === self::EXPERT_FEE;
+    }
+
+    /**
+     * The types a new fee can be: all but VAT — a fee carries its own VAT now; the VAT rows of before are kept
+     * as they were.
+     *
+     * @return array<string, string>
+     */
+    public static function newFeeOptions(): array
+    {
+        return collect(self::cases())->reject(fn (self $type): bool => $type === self::VAT)
+            ->mapWithKeys(fn (self $type): array => [$type->value => (string) $type->getLabel()])
+            ->all();
+    }
+
+    /** A type from the enum, its stored value, or a form's state; null when none. */
+    public static function of(mixed $type): ?self
+    {
+        return $type instanceof self ? $type : self::tryFrom((string) $type);
+    }
+
     public function isNegative(): bool
     {
         return match ($this) {

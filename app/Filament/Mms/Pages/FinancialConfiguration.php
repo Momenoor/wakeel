@@ -11,8 +11,10 @@ use App\Filament\Shared\Clusters\Settings;
 use App\Filament\Support\SettingsForm;
 use App\Models\Setting;
 use App\Support\ScreenPermissions;
+use App\Support\Vat;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions;
@@ -41,6 +43,8 @@ class FinancialConfiguration extends Page
     public ?array $incentiveData = [];
 
     public ?array $payrollData = [];
+
+    public ?array $vatData = [];
 
     public static function getNavigationLabel(): string
     {
@@ -80,6 +84,8 @@ class FinancialConfiguration extends Page
 
     public function mount(): void
     {
+        $this->vatForm->fill([Vat::SETTING => Vat::rate()]);
+
         if ($this->canViewIncentiveCluster()) {
             $this->incentiveForm->fill([
                 'incentive_minimum_matters_per_month' => Setting::get('incentive_minimum_matters_per_month', 3),
@@ -131,6 +137,23 @@ class FinancialConfiguration extends Page
     {
         return PayrollSettingsForm::configure($schema)
             ->statePath('payrollData');
+    }
+
+    /** The VAT rate: every fee's VAT (App\Support\Vat), and the bank charge of the salary authorization form. */
+    public function vatForm(Schema $schema): Schema
+    {
+        return $schema
+            ->components([
+                TextInput::make(Vat::SETTING)
+                    ->label(__('VAT rate'))
+                    ->helperText(__('Added to a fee entered without VAT, and taken out of one entered with it (Including VAT). A fee already saved keeps its VAT.'))
+                    ->numeric()
+                    ->minValue(0)
+                    ->maxValue(100)
+                    ->suffix('%')
+                    ->required(),
+            ])
+            ->statePath('vatData');
     }
 
     public function content(Schema $schema): Schema
@@ -199,6 +222,21 @@ class FinancialConfiguration extends Page
                 ]);
         }
 
+        // Whoever may open the page: the rate is the office's, as charged.
+        $clusters[] = Tabs\Tab::make(__('VAT'))
+            ->icon(Heroicon::ReceiptPercent)
+            ->schema([
+                Form::make([
+                    EmbeddedSchema::make('vatForm'),
+                ])
+                    ->id('vatForm')
+                    ->livewireSubmitHandler('saveVat')
+                    ->footer([
+                        Actions::make([SettingsForm::saveAction('saveVat')])
+                            ->key('vat-form-actions'),
+                    ]),
+            ]);
+
         return $schema->components([
             Tabs::make('financial-configuration-clusters')
                 ->contained(false)
@@ -235,6 +273,18 @@ class FinancialConfiguration extends Page
         foreach ($state as $key => $value) {
             Setting::set($key, $value, 'incentive');
         }
+
+        Notification::make()
+            ->title(__('Settings saved successfully'))
+            ->success()
+            ->send();
+    }
+
+    public function saveVat(): void
+    {
+        abort_unless(static::canAccess(), 403);
+
+        Setting::set(Vat::SETTING, (float) $this->vatForm->getState()[Vat::SETTING], 'financial');
 
         Notification::make()
             ->title(__('Settings saved successfully'))

@@ -12,6 +12,9 @@ use Filament\Forms\Components\TextInput;
 use Filament\Support\Enums\Size;
 use Illuminate\Support\HtmlString;
 
+/**
+ * A payment collected on a fee — measured against its total, VAT included (Fee::total): what the client pays.
+ */
 class CollectFeeAction extends Action
 {
     public static function getDefaultName(): ?string
@@ -36,7 +39,7 @@ class CollectFeeAction extends Action
 
     private static function modalHeadingLabel($record): HtmlString
     {
-        return self::withAmount($record->type?->isNegative() ? __('Pay Fee') : __('Collect Payment — Fee'), abs((float) $record?->amount));
+        return self::withAmount($record->type?->isNegative() ? __('Pay Fee') : __('Collect Payment — Fee'), abs((float) $record?->total));
     }
 
     /** "Label: ⃁ 1,234.00" — the amount with its sign. */
@@ -58,7 +61,7 @@ class CollectFeeAction extends Action
         $this
             ->label(function ($record) {
                 $absCollected = abs(static::collectedAmount($record));
-                $absAmount = abs((float) ($record?->amount ?? 0));
+                $absAmount = abs((float) ($record?->total ?? 0));
 
                 return match (true) {
                     $absCollected > $absAmount => __('Overpaid'),
@@ -67,18 +70,18 @@ class CollectFeeAction extends Action
                 };
             })
             ->size(Size::Large)
-            ->icon(fn ($record) => abs(static::collectedAmount($record)) >= abs((float) ($record?->amount ?? 0))
+            ->icon(fn ($record) => abs(static::collectedAmount($record)) >= abs((float) ($record?->total ?? 0))
                 ? 'heroicon-o-check-badge'
                 : 'heroicon-o-plus-circle'
             )
-            ->color(fn ($record) => abs(static::collectedAmount($record)) > abs((float) ($record?->amount ?? 0))
+            ->color(fn ($record) => abs(static::collectedAmount($record)) > abs((float) ($record?->total ?? 0))
                 ? 'warning' : ($record->type?->isNegative() ? 'danger' : 'success')
             )
             ->visible(fn ($record) => auth()->user()->can('CollectFee:Matter'))
-            ->disabled(fn ($record) => abs(static::collectedAmount($record)) >= abs((float) ($record?->amount ?? 0)))
+            ->disabled(fn ($record) => abs(static::collectedAmount($record)) >= abs((float) ($record?->total ?? 0)))
             ->tooltip(fn ($record) => match (true) {
-                abs(static::collectedAmount($record)) > abs((float) ($record?->amount ?? 0)) => __('Overpaid by').' '.number_format(abs(static::collectedAmount($record)) - abs((float) $record->amount), 2),
-                abs(static::collectedAmount($record)) === abs((float) ($record?->amount ?? 0)) => __('This fee is fully paid'),
+                abs(static::collectedAmount($record)) > abs((float) ($record?->total ?? 0)) => __('Overpaid by').' '.number_format(abs(static::collectedAmount($record)) - abs((float) $record->total), 2),
+                abs(static::collectedAmount($record)) === abs((float) ($record?->total ?? 0)) => __('This fee is fully paid'),
                 default => __('Remaining balance').': '.number_format(abs(static::feeBalance($record)), 2),
             })
             ->modalHeading(fn ($record) => static::modalHeadingLabel($record))   // ✅ Pay Fee / Collect Payment
@@ -141,6 +144,6 @@ class CollectFeeAction extends Action
 
     private static function feeBalance($record): float
     {
-        return (float) ($record?->amount ?? 0) - static::collectedAmount($record);
+        return (float) ($record?->total ?? 0) - static::collectedAmount($record);
     }
 }

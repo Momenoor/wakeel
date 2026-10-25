@@ -7,6 +7,7 @@ use App\Enums\MatterDifficulty;
 use App\Enums\MatterLevel;
 use App\Filament\Mms\Resources\Parties\Schemas\PartyForm;
 use App\Filament\Support\CustomFieldInput;
+use App\Filament\Support\FeeVatFields;
 use App\Models\Fee;
 use App\Models\Party;
 use App\Models\Type;
@@ -26,7 +27,6 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\Alignment;
-use Illuminate\Support\Str;
 
 class MatterForm
 {
@@ -429,134 +429,38 @@ class MatterForm
                                                 Repeater\TableColumn::make(__('Amount')),
                                                 Repeater\TableColumn::make(__('Including VAT'))
                                                     ->alignment(Alignment::Center),
+                                                Repeater\TableColumn::make(__('Basic · VAT · Total')),
                                             ])
                                             ->compact()
+                                            // Each fee's VAT on the fee itself (FeeVatFields): shown as entered, kept split.
+                                            ->mutateRelationshipDataBeforeFillUsing(fn (array $data): array => [
+                                                ...$data,
+                                                'amount' => ($data['is_vat_included'] ?? false) ? round((float) $data['amount'] + (float) ($data['vat'] ?? 0), 2) : $data['amount'],
+                                            ])
+                                            ->mutateRelationshipDataBeforeCreateUsing(fn (array $data): array => [...$data, ...FeeVatFields::attributes($data)])
+                                            ->mutateRelationshipDataBeforeSaveUsing(fn (array $data, Fee $record): array => [...$data, ...FeeVatFields::attributes($data, $record)])
                                             ->schema([
                                                 Select::make('type')
                                                     ->label(__('Type'))
-                                                    ->options(FeeType::class)
+                                                    // A VAT row of before keeps its type; a new fee carries its own VAT.
+                                                    ->options(fn ($state): array => FeeType::isVat($state) ? [FeeType::VAT->value => FeeType::VAT->getLabel(), ...FeeType::newFeeOptions()] : FeeType::newFeeOptions())
+                                                    ->disabled(fn ($state): bool => FeeType::isVat($state))
+                                                    ->dehydrated()
+                                                    ->afterStateUpdated(FeeVatFields::typeChosen())
+                                                    ->live()
                                                     ->required(),
 
                                                 TextInput::make('amount')
                                                     ->label(__('Amount'))
                                                     ->numeric()
                                                     ->required()
-                                                    ->prefix(fn (Get $get) => $get('type')?->isNegative() ? '-' : '+')
-                                                    ->live(onBlur: true)
-                                                    ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                                                        if (! $get('including_vat')) {
-                                                            return;
-                                                        }
+                                                    ->prefix(fn (Get $get) => FeeType::of($get('type'))?->isNegative() ? '-' : '+')
+                                                    ->live(debounce: 400),
 
-                                                        $amount = (float) $state;
-                                                        if ($amount <= 0) {
-                                                            return;
-                                                        }
+                                                FeeVatFields::toggle()
+                                                    ->extraAttributes(['class' => 'mx-4']),
 
-                                                        $rowId = $get('row_id');
-                                                        $fees = $get('../../fees') ?? [];
-
-                                                        $currentKey = null;
-                                                        foreach ($fees as $key => $fee) {
-                                                            if (($fee['row_id'] ?? null) === $rowId) {
-                                                                $currentKey = $key;
-                                                                break;
-                                                            }
-                                                        }
-                                                        if ($currentKey === null) {
-                                                            return;
-                                                        }
-
-                                                        $keys = array_keys($fees);
-                                                        $currentPos = array_search($currentKey, $keys, true);
-                                                        $nextKey = $keys[$currentPos + 1] ?? null;
-
-                                                        if (! $nextKey || ! FeeType::isVat($fees[$nextKey]['type'] ?? null)) {
-                                                            return;
-                                                        }
-
-                                                        $basic = round($amount / 1.05, 2);
-                                                        $vat = round($amount - $basic, 2);
-
-                                                        $set('amount', $basic);
-                                                        $fees[$currentKey]['amount'] = $basic;
-                                                        $fees[$nextKey]['amount'] = $vat;
-
-                                                        $set('../../fees', $fees);
-                                                    }),
-
-                                                Toggle::make('including_vat')
-                                                    ->label(__('Including VAT'))
-                                                    ->live()
-                                                    ->inline(false)
-                                                    ->extraAttributes(['class' => 'mx-4'])
-                                                    ->disabled(fn (Get $get) => FeeType::isVat($get('type')))
-                                                    ->afterStateUpdated(function (bool $state, Set $set, Get $get) {
-                                                        $amount = (float) $get('amount');
-                                                        $rowId = $get('row_id');
-                                                        $fees = $get('../../fees') ?? [];
-
-                                                        $currentKey = null;
-                                                        foreach ($fees as $key => $fee) {
-                                                            if (($fee['row_id'] ?? null) === $rowId) {
-                                                                $currentKey = $key;
-                                                                break;
-                                                            }
-                                                        }
-                                                        if ($currentKey === null) {
-                                                            return;
-                                                        }
-
-                                                        $keys = array_keys($fees);
-                                                        $currentPos = array_search($currentKey, $keys, true);
-
-                                                        if ($state) {
-                                                            if ($amount <= 0) {
-                                                                return;
-                                                            }
-
-                                                            $basic = round($amount / 1.05, 2);
-                                                            $vat = round($amount - $basic, 2);
-
-                                                            $set('amount', $basic);
-                                                            $fees[$currentKey]['amount'] = $basic;
-                                                            $fees[$currentKey]['including_vat'] = true;
-
-                                                            $vatRow = [
-                                                                'row_id' => (string) Str::uuid(),
-                                                                'type' => FeeType::VAT->value,
-                                                                'amount' => $vat,
-                                                                'including_vat' => false,
-                                                            ];
-
-                                                            $newFees = [];
-                                                            foreach ($fees as $k => $fee) {
-                                                                $newFees[$k] = $fee;
-                                                                if ($k === $currentKey) {
-                                                                    $newFees[(string) Str::uuid()] = $vatRow;
-                                                                }
-                                                            }
-                                                            $set('../../fees', $newFees);
-
-                                                        } else {
-                                                            $nextKey = $keys[$currentPos + 1] ?? null;
-
-                                                            if ($nextKey && FeeType::isVat($fees[$nextKey]['type'] ?? null)) {
-                                                                $vatAmount = (float) $fees[$nextKey]['amount'];
-                                                                $restored = round($amount + $vatAmount, 2);
-
-                                                                $set('amount', $restored);
-                                                                $fees[$currentKey]['amount'] = $restored;
-                                                                $fees[$currentKey]['including_vat'] = false;
-
-                                                                unset($fees[$nextKey]);
-                                                                $set('../../fees', $fees);
-                                                            }
-                                                        }
-                                                    }),
-
-                                                Hidden::make('row_id')
-                                                    ->default(fn () => (string) Str::uuid()),
+                                                FeeVatFields::preview(),
                                             ])
                                             ->columns(1)
                                             ->addActionLabel(__('Add Fee'))

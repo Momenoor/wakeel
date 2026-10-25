@@ -59,13 +59,34 @@ class VatSummaryReport extends Page implements HasTable
         return __('fees');
     }
 
+    /**
+     * The VAT a fee row charges: a VAT row of before is all VAT; a fee carries its own (Fee::vat).
+     */
+    private static function charged(): string
+    {
+        return "CASE WHEN fees.type = '".FeeType::VAT->value."' THEN fees.amount ELSE fees.vat END";
+    }
+
+    /**
+     * The VAT collected on it: a VAT row's payments; of a fee's, the part that is its VAT (each payment pays the
+     * basic and the VAT alike).
+     */
+    private static function collected(): string
+    {
+        return '(SELECT COALESCE(SUM(a.amount), 0) FROM allocations a WHERE a.fee_id = fees.id)'
+            ." * CASE WHEN fees.type = '".FeeType::VAT->value."' THEN 1 ELSE COALESCE(fees.vat / NULLIF(fees.amount + fees.vat, 0), 0) END";
+    }
+
     protected function getTableQuery(): Builder
     {
+        // The VAT rows of before, and every fee that carries VAT of its own.
         return Fee::query()
-            ->where('fees.type', FeeType::VAT->value)
+            ->where(fn (Builder $query) => $query->where('fees.type', FeeType::VAT->value)->orWhere('fees.vat', '<>', 0))
             ->whereHas('matter')
             ->with(['matter.court', 'matter.type'])
-            ->withSum('allocations as vat_collected', 'amount');
+            ->select('fees.*')
+            ->selectRaw(self::charged().' as vat_charged')
+            ->selectRaw(self::collected().' as vat_collected');
     }
 
     public function table(Table $table): Table
@@ -106,7 +127,7 @@ class VatSummaryReport extends Page implements HasTable
                     ->description(fn (Fee $record) => $record->matter?->type?->name)
                     ->wrap(),
 
-                TextColumn::make('amount')
+                TextColumn::make('vat_charged')
                     ->label(__('VAT Charged'))
                     ->aed()
                     ->alignEnd()
@@ -122,7 +143,7 @@ class VatSummaryReport extends Page implements HasTable
 
                 TextColumn::make('vat_outstanding')
                     ->label(__('Not Yet Collected'))
-                    ->getStateUsing(fn (Fee $record) => (float) $record->amount - (float) ($record->vat_collected ?? 0))
+                    ->getStateUsing(fn (Fee $record) => (float) $record->vat_charged - (float) ($record->vat_collected ?? 0))
                     ->aed()
                     ->alignEnd()
                     ->color(fn ($state) => (float) $state > 0.005 ? 'warning' : 'success'),
@@ -140,9 +161,7 @@ class VatSummaryReport extends Page implements HasTable
 
                 Filter::make('uncollected_only')
                     ->label(__('Not fully collected'))
-                    ->query(fn (Builder $query) => $query->whereRaw(
-                        'fees.amount > COALESCE((SELECT SUM(a.amount) FROM allocations a WHERE a.fee_id = fees.id), 0) + 0.005'
-                    )),
+                    ->query(fn (Builder $query) => $query->whereRaw('('.self::charged().') > ('.self::collected().') + 0.005')),
             ])
             ->filtersLayout(FiltersLayout::AboveContent)
             ->filtersFormWidth(Width::ExtraLarge)
