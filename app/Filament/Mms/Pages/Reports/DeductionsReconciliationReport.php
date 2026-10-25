@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Pages\Reports;
 use App\Enums\FeeType;
 use App\Filament\Concerns\PrintableReport;
 use App\Filament\Mms\Clusters\Reports;
+use App\Models\Fee;
 use App\Models\Matter;
 use App\Support\ReportDateRangeFilter;
 use App\Support\ReportMatterColumns;
@@ -74,7 +75,7 @@ class DeductionsReconciliationReport extends Page implements HasTable
     private function billedSql(): string
     {
         // Each fee's total, VAT included: what the payments across those lines pay.
-        return '(SELECT COALESCE(SUM(f.amount + f.vat), 0) FROM fees f
+        return '(SELECT COALESCE(SUM('.Fee::totalSql('f').'), 0) FROM fees f
                     WHERE f.matter_id = matters.id)';
     }
 

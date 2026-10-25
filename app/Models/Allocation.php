@@ -144,7 +144,7 @@ class Allocation extends Model implements AttachmentOwner
      */
     public static function exclVatAmount(): Expression
     {
-        return DB::raw('allocations.amount * COALESCE(paid_fee.amount / NULLIF(paid_fee.amount + paid_fee.vat, 0), 1)');
+        return DB::raw('allocations.amount * '.Fee::shareSql('paid_fee', vat: false));
     }
 
     public function fee(): BelongsTo

@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Resources\Matters\Tables;
 use App\Enums\MatterCollectionStatus;
 use App\Filament\Mms\Concerns\HasMultiWordSearch;
 use App\Models\Court;
+use App\Models\Fee;
 use App\Models\Matter;
 use App\Models\Party;
 use App\Models\Type;
@@ -455,11 +456,11 @@ class MattersTable
                     ])
                     ->query(function (Builder $query, array $data) {
                         return $query
-                            ->when($data['fees_from'], fn ($q, $v) => $q->whereHas('fees', fn ($f) => $f->havingRaw('SUM(amount + vat) >= ?', [(float) $v])
+                            ->when($data['fees_from'], fn ($q, $v) => $q->whereHas('fees', fn ($f) => $f->havingRaw('SUM('.Fee::totalSql().') >= ?', [(float) $v])
                                 ->groupBy('matter_id')
                                 ->select('matter_id')
                             ))
-                            ->when($data['fees_until'], fn ($q, $v) => $q->whereHas('fees', fn ($f) => $f->havingRaw('SUM(amount + vat) <= ?', [(float) $v])
+                            ->when($data['fees_until'], fn ($q, $v) => $q->whereHas('fees', fn ($f) => $f->havingRaw('SUM('.Fee::totalSql().') <= ?', [(float) $v])
                                 ->groupBy('matter_id')
                                 ->select('matter_id')
                             ));

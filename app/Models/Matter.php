@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Collection;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
@@ -416,9 +417,10 @@ class Matter extends Model implements AttachmentOwner
     /**
      * Update the matter's collection status based on its fees.
      */
-    public function updateCollectionStatus(): void
+    public function updateCollectionStatus(?Collection $fees = null): void
     {
-        $fees = $this->fees()->get();
+        // Read afresh, unless given — its fees read already, with many matters' at once (VatRowMerger).
+        $fees ??= $this->fees()->get();
 
         if ($fees->isEmpty()) {
             $this->collection_status = MatterCollectionStatus::NO_FEES;

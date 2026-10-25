@@ -24,6 +24,7 @@ use App\Support\Vat;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -195,6 +196,37 @@ class FeeVatTest extends TestCase
         $this->assertSame([1587.30, 79.36, true, 1666.66, 2, FeeStatus::PAID], [(float) $fee->amount, (float) $fee->vat, $fee->is_vat_included, $fee->total, $fee->allocations()->count(), $fee->status]);
         $this->assertNull(Fee::find($row->id));
         $this->assertNotNull(Fee::find($odd->id));
+    }
+
+    public function test_merging_reads_as_much_for_many_pairs_as_for_one(): void
+    {
+        $pair = function (): void {
+            $matter = Matter::factory()->create();
+            $fee = $matter->fees()->create(['type' => FeeType::EXPERT_FEE, 'amount' => 1000]);
+            $row = $matter->fees()->create(['type' => FeeType::VAT, 'amount' => 50]);
+            Allocation::create(['fee_id' => $row->id, 'matter_id' => $matter->id, 'amount' => 50, 'date' => '2026-06-01']);
+        };
+        // The reads (SELECTs) of one merge; the writes are each pair's own.
+        $selects = 0;
+        DB::listen(function ($query) use (&$selects): void {
+            $selects += str_starts_with(strtolower(ltrim($query->sql)), 'select') ? 1 : 0;
+        });
+        $reads = function () use (&$selects): int {
+            $selects = 0;
+            app(VatRowMerger::class)->apply();
+
+            return $selects;
+        };
+
+        $pair();
+        $one = $reads();
+        $pair();
+        $pair();
+        $pair();
+
+        // Every fee, its payments and its matter read at once: not once a pair.
+        $this->assertSame($one, $reads());
+        $this->assertSame(0, Fee::where('type', FeeType::VAT->value)->count());
     }
 
     public function test_the_vat_summary_reads_each_fees_own_vat_and_the_rows_of_before(): void

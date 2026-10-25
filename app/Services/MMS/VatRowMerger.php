@@ -78,9 +78,10 @@ class VatRowMerger
      */
     public function apply(): int
     {
-        $merged = 0;
+        $pairs = $this->plan()['merge'];
 
-        foreach ($this->plan()['merge'] as ['vat' => $row, 'fee' => $fee]) {
+        // Each pair in one transaction: its writes are its own.
+        foreach ($pairs as ['vat' => $row, 'fee' => $fee]) {
             DB::transaction(function () use ($row, $fee): void {
                 // Entered VAT included, as the toggle that made the pair had it.
                 DB::table('fees')->where('id', $fee->id)->update(['vat' => $row->amount, 'is_vat_included' => true, 'updated_at' => now()]);
@@ -88,20 +89,35 @@ class VatRowMerger
                 DB::table('allocations')->where('fee_id', $row->id)->update(['fee_id' => $fee->id, 'updated_at' => now()]);
                 DB::table('attachments')->where('attachable_type', Fee::class)->where('attachable_id', $row->id)->update(['attachable_id' => $fee->id]);
                 DB::table('fees')->where('id', $row->id)->delete();
-
-                // Paid as before, now on the one fee — set without saving it as a person would (whose name it keeps).
-                $merged = Fee::query()->with('allocations')->findOrFail($fee->id);
-                $merged->syncStatus();
-                DB::table('fees')->where('id', $merged->id)->update(['status' => $merged->status->value]);
-
-                activity()->performedOn($merged)->withProperties(['vat_row' => $row->id, 'vat' => (float) $row->amount])
-                    ->log('VAT row merged into the fee');
             });
-
-            Matter::find($fee->matter_id)?->updateCollectionStatus();
-            $merged++;
         }
 
-        return $merged;
+        if ($pairs->isEmpty()) {
+            return 0;
+        }
+
+        // Then each fee's paid status, and its matter's, as they now are — every fee with its payments, and every
+        // matter with its fees, read at once.
+        // Every matter's offset allowance read at once too (Fee::syncStatus() reads one a fee otherwise).
+        Fee::withOffsetAllowances(function () use ($pairs): void {
+            foreach (Fee::query()->with('allocations')->whereKey($pairs->pluck('fee.id'))->get() as $merged) {
+                // Set without saving it as a person would (whose name it keeps).
+                $merged->syncStatus();
+                DB::table('fees')->where('id', $merged->id)->update(['status' => $merged->status->value]);
+            }
+        });
+
+        // One line in the activity log for the whole merge, every pair in it — an entry a pair read the user and
+        // the entry back each time.
+        activity()->withProperties(['merged' => $pairs->map(fn (array $pair): array => [
+            'fee' => $pair['fee']->id, 'vat_row' => $pair['vat']->id, 'vat' => (float) $pair['vat']->amount,
+        ])->values()->all()])->log('VAT rows merged into their fees');
+
+        $matterIds = $pairs->pluck('fee.matter_id')->unique()->values();
+        $fees = Fee::query()->whereIn('matter_id', $matterIds)->get()->groupBy('matter_id');
+        Matter::query()->with('allocations')->whereKey($matterIds)->get()
+            ->each(fn (Matter $matter) => $matter->updateCollectionStatus($fees->get($matter->id, collect())));
+
+        return $pairs->count();
     }
 }

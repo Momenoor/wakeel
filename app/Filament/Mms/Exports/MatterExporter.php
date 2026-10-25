@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Exports;
 
 use App\Enums\FeeType;
+use App\Models\Fee;
 use App\Models\Matter;
 use Filament\Actions\Exports\ExportColumn;
 use Illuminate\Database\Eloquent\Builder;
@@ -65,7 +66,7 @@ class MatterExporter extends MatterSpreadsheetExporter
             ExportColumn::make('total_vat')
                 ->label(__('Total VAT'))
                 // The VAT rows of before, and each fee's own VAT.
-                ->getStateUsing(fn ($record) => number_format($record->fees->sum(fn ($fee) => $fee->type === FeeType::VAT ? (float) $fee->amount : (float) $fee->vat))),
+                ->getStateUsing(fn ($record) => number_format($record->fees->sum(fn (Fee $fee) => $fee->vatCharged()))),
 
             ExportColumn::make('total_fees')
                 ->label(__('Total'))

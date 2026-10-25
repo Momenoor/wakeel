@@ -826,10 +826,10 @@ class MatterInfolist
                     ->visible(fn (Matter $record): bool => $record->fees->isNotEmpty())
                     ->schema([
                         TextEntry::make('fees_basic')->label(__('Basic amount'))->aed()
-                            ->state(fn (Matter $record): float => (float) $record->fees->sum(fn (Fee $fee): float => $fee->type === FeeType::VAT ? 0.0 : (float) $fee->amount)),
+                            ->state(fn (Matter $record): float => (float) $record->fees->sum(fn (Fee $fee): float => $fee->basicCharged())),
                         TextEntry::make('fees_vat')->label(__('VAT amount'))->aed()
                             // The VAT rows of before (FeeType::VAT) are VAT too.
-                            ->state(fn (Matter $record): float => (float) $record->fees->sum(fn (Fee $fee): float => $fee->type === FeeType::VAT ? (float) $fee->amount : (float) $fee->vat)),
+                            ->state(fn (Matter $record): float => (float) $record->fees->sum(fn (Fee $fee): float => $fee->vatCharged())),
                         TextEntry::make('fees_total')->label(__('Total amount'))->aed()->weight(FontWeight::Bold)
                             ->state(fn (Matter $record): float => (float) $record->fees->sum(fn (Fee $fee): float => $fee->total)),
                     ]),

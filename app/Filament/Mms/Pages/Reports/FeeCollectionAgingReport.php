@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Pages\Reports;
 
 use App\Filament\Concerns\PrintableReport;
 use App\Filament\Mms\Clusters\Reports;
+use App\Models\Fee;
 use App\Models\Matter;
 use App\Support\ReportDateRangeFilter;
 use App\Support\ReportMatterColumns;
@@ -93,7 +94,7 @@ class FeeCollectionAgingReport extends Page implements HasTable
         // fully settled matter lands on exactly zero.
         $owed = DB::table('fees')
             // Each fee's total, VAT included (its own VAT beside it, or a VAT row of before).
-            ->selectRaw('matter_id, SUM(amount + vat) as owed, MIN(date) as first_billed')
+            ->selectRaw('matter_id, SUM('.Fee::totalSql().') as owed, MIN(date) as first_billed')
             ->groupBy('matter_id');
 
         $received = DB::table('allocations')

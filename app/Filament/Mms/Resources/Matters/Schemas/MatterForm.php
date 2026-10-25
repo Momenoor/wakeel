@@ -435,7 +435,7 @@ class MatterForm
                                             // Each fee's VAT on the fee itself (FeeVatFields): shown as entered, kept split.
                                             ->mutateRelationshipDataBeforeFillUsing(fn (array $data): array => [
                                                 ...$data,
-                                                'amount' => ($data['is_vat_included'] ?? false) ? round((float) $data['amount'] + (float) ($data['vat'] ?? 0), 2) : $data['amount'],
+                                                'amount' => Fee::entered((float) $data['amount'], (float) ($data['vat'] ?? 0), (bool) ($data['is_vat_included'] ?? false)),
                                             ])
                                             ->mutateRelationshipDataBeforeCreateUsing(fn (array $data): array => [...$data, ...FeeVatFields::attributes($data)])
                                             ->mutateRelationshipDataBeforeSaveUsing(fn (array $data, Fee $record): array => [...$data, ...FeeVatFields::attributes($data, $record)])

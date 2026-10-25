@@ -59,22 +59,17 @@ class VatSummaryReport extends Page implements HasTable
         return __('fees');
     }
 
-    /**
-     * The VAT a fee row charges: a VAT row of before is all VAT; a fee carries its own (Fee::vat).
-     */
+    /** The VAT a fee row charges (Fee::vatChargedSql()). */
     private static function charged(): string
     {
-        return "CASE WHEN fees.type = '".FeeType::VAT->value."' THEN fees.amount ELSE fees.vat END";
+        return Fee::vatChargedSql();
     }
 
-    /**
-     * The VAT collected on it: a VAT row's payments; of a fee's, the part that is its VAT (each payment pays the
-     * basic and the VAT alike).
-     */
+    /** The VAT collected on it: a VAT row's payments; of a fee's, the part that is its VAT (Fee::shareSql()). */
     private static function collected(): string
     {
         return '(SELECT COALESCE(SUM(a.amount), 0) FROM allocations a WHERE a.fee_id = fees.id)'
-            ." * CASE WHEN fees.type = '".FeeType::VAT->value."' THEN 1 ELSE COALESCE(fees.vat / NULLIF(fees.amount + fees.vat, 0), 0) END";
+            ." * CASE WHEN fees.type = '".FeeType::VAT->value."' THEN 1 ELSE ".Fee::shareSql('fees', vat: true).' END';
     }
 
     protected function getTableQuery(): Builder

@@ -151,7 +151,48 @@ class Fee extends Model implements AttachmentOwner
     /** Its amount as entered: the total when entered VAT included, else the basic (App\Filament\Support\FeeVatFields). */
     public function getEnteredAmountAttribute(): float
     {
-        return $this->is_vat_included ? $this->total : (float) $this->amount;
+        return self::entered((float) $this->amount, (float) $this->vat, (bool) $this->is_vat_included);
+    }
+
+    /** An amount as entered, from its basic and VAT: their total when entered VAT included, else the basic. */
+    public static function entered(float $basic, float $vat, bool $included): float
+    {
+        return $included ? round($basic + $vat, 2) : $basic;
+    }
+
+    /** The VAT it charges: a VAT row of before is all VAT; a fee its own. */
+    public function vatCharged(): float
+    {
+        return $this->type === FeeType::VAT ? (float) $this->amount : (float) $this->vat;
+    }
+
+    /** Its basic amount: a VAT row of before has none (it is all VAT). */
+    public function basicCharged(): float
+    {
+        return $this->type === FeeType::VAT ? 0.0 : (float) $this->amount;
+    }
+
+    /** SQL: a fee row's total, VAT included — "SUM(".Fee::totalSql('f').")". */
+    public static function totalSql(string $table = 'fees'): string
+    {
+        return "({$table}.amount + {$table}.vat)";
+    }
+
+    /** SQL: the VAT a fee row charges, as vatCharged(). */
+    public static function vatChargedSql(string $table = 'fees'): string
+    {
+        return "CASE WHEN {$table}.type = '".FeeType::VAT->value."' THEN {$table}.amount ELSE {$table}.vat END";
+    }
+
+    /**
+     * SQL: the share of a payment on a fee row that is its basic amount, or its VAT — a payment pays the basic
+     * and the VAT alike; a fee of no VAT, all basic.
+     */
+    public static function shareSql(string $table, bool $vat): string
+    {
+        return $vat
+            ? "COALESCE({$table}.vat / NULLIF(".self::totalSql($table).', 0), 0)'
+            : "COALESCE({$table}.amount / NULLIF(".self::totalSql($table).', 0), 1)';
     }
 
     public function getBalanceAttribute(): float

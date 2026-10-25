@@ -6,6 +6,7 @@ use App\Enums\MatterCollectionStatus;
 use App\Filament\Concerns\PrintableReport;
 use App\Filament\Mms\Clusters\Reports;
 use App\Filament\Mms\Exports\MatterExporter;
+use App\Models\Fee;
 use App\Models\Matter;
 use App\Models\Party;
 use App\Support\ReportDateRangeFilter;
@@ -263,7 +264,7 @@ class MattersMonthlyReport extends Page implements HasTable
         $feesSub = DB::table('fees')
             ->join('matters', 'fees.matter_id', '=', 'matters.id')
             // Each fee's total, VAT included.
-            ->selectRaw('COALESCE(SUM(fees.amount + fees.vat), 0)')
+            ->selectRaw('COALESCE(SUM('.Fee::totalSql().'), 0)')
             ->whereRaw(Sql::yearMonth('matters.distributed_at').' = months.period')
             ->whereNull('matters.deleted_at') // Protect the join from deleted matters
             ->when($filters['year']['value'] ?? null, fn ($q, $year) => $q->where('matters.year', $year))

@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Widgets;
 
 use App\Filament\Concerns\RefreshesLive;
+use App\Models\Fee;
 use App\Support\Currency;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Widgets\ChartWidget;
@@ -70,7 +71,7 @@ class CollectionsAgingWidget extends ChartWidget
         // its own amount.
         $owed = DB::table('fees')
             // Each fee's total, VAT included (its own VAT beside it, or a VAT row of before).
-            ->selectRaw('matter_id, SUM(amount + vat) as owed, MIN(date) as first_billed')
+            ->selectRaw('matter_id, SUM('.Fee::totalSql().') as owed, MIN(date) as first_billed')
             ->whereNotNull('date')
             ->groupBy('matter_id');
 
