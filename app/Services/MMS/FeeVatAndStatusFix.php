@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\DB;
  * (VatRowMerger), then every fee's status and every matter's collection status as they now are — what is
  * collected measured against each fee's total, VAT included. Each change written in a log, line by line; nothing
  * changed but the log for a preview. Statuses are written as they are worked out: grouped, and never through a
- * fee's own save — which would make whoever runs it the one who entered each fee.
+ * fee's own save — which would write them one at a time, each with an activity entry of its own.
  */
 class FeeVatAndStatusFix
 {

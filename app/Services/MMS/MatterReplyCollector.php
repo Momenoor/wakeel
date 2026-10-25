@@ -125,11 +125,12 @@ class MatterReplyCollector
             ->groupBy('sender_key');
 
         // Every mailbox read for its emails that anything has been sent from, every one set to keep every
-        // email (one never sent from still receives), and every user's own (theirs to file from).
+        // email (one never sent from still receives), every user's own (theirs to file from), and the filing
+        // mailbox (never sent from: only forwarded to).
         $sentFrom = MatterEmail::query()->where('direction', MatterEmail::SENT)->distinct()->pluck('sender_key')->map(fn ($key) => (string) $key)->all();
         $mailboxes = array_values(array_filter(
             array_map('strval', array_keys(SenderMailer::collected())),
-            fn (string $key): bool => in_array($key, $sentFrom, true) || self::keepsAll($key) || SenderMailer::ownerOf($key) !== null,
+            fn (string $key): bool => in_array($key, $sentFrom, true) || self::keepsAll($key) || self::isFilingInbox($key) || SenderMailer::ownerOf($key) !== null,
         ));
 
         // The mailbox read longest ago first: one a short run did not reach goes first next time, so a
@@ -1546,7 +1547,8 @@ class MatterReplyCollector
     }
 
     /**
-     * An email's header lines, by name (lower case): a name given more than once, its values joined.
+     * An email's header lines, by name (lower case): a name given more than once, each value on a line of its own,
+     * the topmost first — the one the receiving server added, above any the sender wrote (ForwardedEmailFiler).
      *
      * @return array<string, string>
      */
@@ -1557,7 +1559,7 @@ class MatterReplyCollector
         foreach (explode("\n", preg_replace("/\r?\n[ \t]+/", ' ', str_replace("\r\n", "\n", $raw)) ?? '') as $line) {
             if (preg_match('/^([^:\s]+):\s*(.*)$/', $line, $m)) {
                 $name = mb_strtolower($m[1]);
-                $lines[$name] = isset($lines[$name]) ? $lines[$name].'; '.trim($m[2]) : trim($m[2]);
+                $lines[$name] = isset($lines[$name]) ? $lines[$name]."\n".trim($m[2]) : trim($m[2]);
             }
         }
 
@@ -1621,7 +1623,10 @@ class MatterReplyCollector
      */
     private function graphMessage(string $base, string $mailbox, array $item): array
     {
-        $headers = collect($item['internetMessageHeaders'] ?? [])->mapWithKeys(fn ($h) => [mb_strtolower((string) ($h['name'] ?? '')) => (string) ($h['value'] ?? '')]);
+        // As headerLines(): a name given more than once, each value on a line of its own, the topmost first.
+        $headers = collect($item['internetMessageHeaders'] ?? [])
+            ->groupBy(fn ($h) => mb_strtolower((string) ($h['name'] ?? '')))
+            ->map(fn ($values) => $values->pluck('value')->map(fn ($value) => (string) $value)->implode("\n"));
         $graphId = (string) $item['id'];
 
         return [

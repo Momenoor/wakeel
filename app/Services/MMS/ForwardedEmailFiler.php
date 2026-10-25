@@ -2,6 +2,7 @@
 
 namespace App\Services\MMS;
 
+use App\Enums\NotificationChannel;
 use App\Enums\NotificationType;
 use App\Filament\Mms\Pages\UnfiledEmails;
 use App\Filament\Mms\Resources\Matters\MatterResource;
@@ -50,8 +51,14 @@ class ForwardedEmailFiler
 
     public const FAILED = 'failed';
 
+    /** Being read: a run has it. */
+    public const READING = 'reading';
+
     /** How far apart the time quoted in a forward and the one an email was kept with may be, and still be one email. */
     private const SAME_EMAIL_MINUTES = 15;
+
+    /** Still being read this long after: the run that had it died — another reads it again. */
+    private const STUCK_MINUTES = 30;
 
     /**
      * A forward read in the filing mailbox, once: what came of it — null when it was read before.
@@ -62,9 +69,15 @@ class ForwardedEmailFiler
     {
         try {
             // Read once, whichever run reaches it first.
-            $forward = EmailForward::create(['sender_key' => $senderKey, 'message_id' => mb_substr($id, 0, 191), 'outcome' => 'reading', 'subject' => mb_substr((string) ($message['subject'] ?? ''), 0, 500)]);
+            $forward = EmailForward::create(['sender_key' => $senderKey, 'message_id' => mb_substr($id, 0, 191), 'outcome' => self::READING, 'subject' => mb_substr((string) ($message['subject'] ?? ''), 0, 500)]);
         } catch (UniqueConstraintViolationException) {
-            return null;
+            // Read before — unless the run reading it died (still reading long after): this run takes it over.
+            $stuck = EmailForward::query()->where('sender_key', $senderKey)->where('message_id', mb_substr($id, 0, 191))
+                ->where('outcome', self::READING)->where('updated_at', '<', now()->subMinutes(self::STUCK_MINUTES));
+            if ((clone $stuck)->update(['updated_at' => now()]) === 0) {
+                return null;
+            }
+            $forward = EmailForward::query()->where('sender_key', $senderKey)->where('message_id', mb_substr($id, 0, 191))->sole();
         }
 
         $user = self::userOf((string) ($message['from'] ?? ''));
@@ -92,7 +105,7 @@ class ForwardedEmailFiler
             return self::NOT_A_USER;
         }
 
-        if (! self::sentByThem($message)) {
+        if (! self::sentByThem($message, SenderMailer::isMicrosoft(SenderMailer::all()[$senderKey] ?? []))) {
             return self::UNVERIFIED;
         }
 
@@ -129,8 +142,13 @@ class ForwardedEmailFiler
         }
 
         // Set aside (its files gone): kept again from the forward.
-        if ($kept !== null && $kept->status !== MatterEmail::PENDING) {
+        if ($kept?->status === MatterEmail::DISMISSED) {
             $kept->delete();
+            $kept = null;
+        }
+
+        // A reply to a bulk mail of no matter (no status): left as it is, for its campaign — kept anew on the matter.
+        if ($kept !== null && $kept->status !== MatterEmail::PENDING) {
             $kept = null;
         }
 
@@ -169,35 +187,65 @@ class ForwardedEmailFiler
     }
 
     /**
-     * Whether the forward was sent by the person whose address it bears, not by someone using it: from inside
-     * the office's Microsoft 365, or passed by the domain's own checks (DMARC, DKIM or SPF), or sent through the
-     * mail server signed in as them (cPanel).
+     * Whether the forward was sent by the person whose address it bears, not by someone using it — read only from
+     * what the receiving server wrote, never from what the sender could:
+     *  - a Microsoft 365 filing mailbox: sent from inside the office (Exchange strips its own X-MS-Exchange-
+     *    Organization headers from any email that comes from outside, so one there is its own);
+     *  - the topmost Authentication-Results (the receiving server's, above any the sender wrote): DMARC passed for
+     *    the address's own domain, or DKIM or SPF passed for that domain (not merely for some domain);
+     *  - a cPanel filing mailbox: sent through the server signed in as them (the topmost header the server adds).
      *
      * @param  array<string, mixed>  $message
      */
-    public static function sentByThem(array $message): bool
+    public static function sentByThem(array $message, bool $microsoft = false): bool
     {
         $headers = ($message['headers'] ?? null) instanceof Closure ? ($message['headers'])() : (array) ($message['headers'] ?? []);
         $headers = array_change_key_case($headers);
+        // A header given more than once: its topmost.
+        $top = fn (string $name): string => trim(strtok((string) ($headers[$name] ?? ''), "\n") ?: '');
         $from = mb_strtolower(trim((string) ($message['from'] ?? '')));
+        $domain = str_contains($from, '@') ? substr($from, strrpos($from, '@') + 1) : '';
 
-        if (strcasecmp(trim((string) ($headers['x-ms-exchange-organization-authas'] ?? '')), 'Internal') === 0) {
+        if ($from === '' || $domain === '') {
+            return false;
+        }
+
+        if ($microsoft && strcasecmp($top('x-ms-exchange-organization-authas'), 'Internal') === 0) {
             return true;
         }
 
-        $results = (string) ($headers['authentication-results'] ?? '');
-        if (preg_match('/\b(?:dmarc|dkim|spf)=pass\b/i', $results) && ! preg_match('/\bdmarc=fail\b/i', $results)) {
-            return true;
+        $results = mb_strtolower($top('authentication-results'));
+        if (! preg_match('/\bdmarc=fail\b/', $results)) {
+            // The domain each check passed for, as it names it.
+            $passed = fn (string $check, string $property): array => preg_match_all('/\b'.$check.'=pass\b[^;]*?\b'.preg_quote($property, '/').'=([^\s;]+)/', $results, $m) ? $m[1] : [];
+            $ours = fn (string $value): bool => self::sameDomain(ltrim(str_contains($value, '@') ? substr($value, strrpos($value, '@') + 1) : $value, '@'), $domain);
+
+            foreach ([['dmarc', 'header.from'], ['dkim', 'header.d'], ['dkim', 'header.i'], ['spf', 'smtp.mailfrom']] as [$check, $property]) {
+                if (collect($passed($check, $property))->contains($ours)) {
+                    return true;
+                }
+            }
         }
 
         // cPanel: sent through the server signed in as that address.
-        foreach (['x-authenticated-sender', 'x-get-message-sender-via', 'x-sender'] as $header) {
-            if ($from !== '' && str_contains(mb_strtolower((string) ($headers[$header] ?? '')), $from)) {
-                return true;
+        if (! $microsoft) {
+            foreach (['x-authenticated-sender', 'x-get-message-sender-via'] as $header) {
+                if (str_contains(mb_strtolower($top($header)), $from)) {
+                    return true;
+                }
             }
         }
 
         return false;
+    }
+
+    /** One domain, or one a subdomain of the other (mail.jpa.ae and jpa.ae) — DMARC's relaxed alignment. */
+    private static function sameDomain(string $a, string $b): bool
+    {
+        $a = trim(mb_strtolower($a), '. ');
+        $b = trim(mb_strtolower($b), '. ');
+
+        return $a !== '' && ($a === $b || str_ends_with($a, '.'.$b) || str_ends_with($b, '.'.$a));
     }
 
     /**
@@ -262,11 +310,12 @@ class ForwardedEmailFiler
         };
 
         try {
-            Notifier::bell(NotificationType::MATTER_EMAIL_FORWARDED, collect([$user]), $title, null, $url, fn (Notification $notification) => $notification
+            // In the bell, as they chose for this kind (Profile → My notifications).
+            Notifier::send(NotificationType::MATTER_EMAIL_FORWARDED, [$user], $title, null, $url, fn (Notification $notification) => $notification
                 ->{in_array($outcome, [self::ALREADY_FILED, self::HELD], true) ? 'info' : 'warning'}()
                 ->icon('heroicon-o-arrow-uturn-right')
                 ->body(MatterReplyCollector::bullets([trim((string) $forward->subject), $hint]))
-                ->actions($url ? [Action::make('view')->label(__('View'))->url($url)->markAsRead()] : []));
+                ->actions($url ? [Action::make('view')->label(__('View'))->url($url)->markAsRead()] : []), only: [NotificationChannel::BELL]);
         } catch (Throwable $e) {
             Log::info('Forwarded email notification not sent: '.$e->getMessage());
         }

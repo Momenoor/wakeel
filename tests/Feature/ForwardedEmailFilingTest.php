@@ -5,11 +5,13 @@ namespace Tests\Feature;
 use App\Enums\NotificationType;
 use App\Filament\Mms\Pages\UnfiledEmails;
 use App\Models\EmailForward;
+use App\Models\MailSender;
 use App\Models\Matter;
 use App\Models\MatterEmail;
 use App\Models\MatterOneDriveFolder;
 use App\Models\MatterParty;
 use App\Models\Party;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\MMS\ForwardedEmail;
 use App\Services\MMS\ForwardedEmailFiler;
@@ -50,7 +52,8 @@ class ForwardedEmailFilingTest extends TestCase
         Storage::fake('public');
         $this->withoutDefer();
         MailSenders::add('iflas', ['address' => 'iflas@jpa.ae', 'name' => 'JPA']);
-        MailSenders::add('files', ['address' => 'files@jpa.ae', 'name' => 'Filing', 'files_forwards' => true]);
+        // In the office's Microsoft 365: an email from inside it is told by Exchange's own header.
+        MailSenders::add('files', ['address' => 'files@jpa.ae', 'name' => 'Filing', 'files_forwards' => true, 'driver' => MailSender::MICROSOFT]);
         config(['services.outlook' => ['tenant_id' => 'tenant', 'client_id' => 'client', 'client_secret' => 'secret']]);
         $this->app->instance(SentFolder::class, Mockery::spy(SentFolder::class));
         Filament::setCurrentPanel(Filament::getPanel('mms'));
@@ -213,6 +216,54 @@ class ForwardedEmailFilingTest extends TestCase
         $this->read($this->forward(['from' => 'sara@jpa.ae', 'headers' => ['authentication-results' => 'mx.jpa.ae; spf=pass smtp.mailfrom=jpa.ae; dkim=pass']]));
         $this->assertSame(0, MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->count());
         $this->assertStringContainsString('986/2026', (string) $this->told($colleague));
+    }
+
+    public function test_who_sent_a_forward_is_read_only_from_what_the_receiving_server_wrote(): void
+    {
+        $sent = fn (array $headers, bool $microsoft = false): bool => ForwardedEmailFiler::sentByThem(['from' => 'momen@jpa.ae', 'headers' => $headers], $microsoft);
+
+        // Exchange's own header: only in a Microsoft 365 mailbox, which strips it from any email from outside.
+        $this->assertTrue($sent(['x-ms-exchange-organization-authas' => 'Internal'], microsoft: true));
+        $this->assertFalse($sent(['x-ms-exchange-organization-authas' => 'Internal']));
+
+        // A check passed for the address's own domain (or its subdomain) — not for any domain.
+        $this->assertTrue($sent(['authentication-results' => 'mx.jpa.ae; dmarc=pass action=none header.from=jpa.ae']));
+        $this->assertTrue($sent(['authentication-results' => 'mx.jpa.ae; dkim=pass header.d=mail.jpa.ae; spf=none']));
+        $this->assertTrue($sent(['authentication-results' => 'mx.jpa.ae; spf=pass smtp.mailfrom=momen@jpa.ae']));
+        $this->assertFalse($sent(['authentication-results' => 'mx.jpa.ae; dkim=pass header.d=gmail.com; spf=pass smtp.mailfrom=someone@gmail.com']));
+        $this->assertFalse($sent(['authentication-results' => 'mx.jpa.ae; dkim=pass header.d=jpa.ae; dmarc=fail header.from=jpa.ae']));
+        // Only the topmost (the receiving server's): one the sender wrote below it says nothing.
+        $this->assertFalse($sent(['authentication-results' => "mx.jpa.ae; spf=fail smtp.mailfrom=jpa.ae\nforged; dmarc=pass header.from=jpa.ae"]));
+
+        // cPanel: sent signed in as them — the topmost such header; X-Sender is anyone's to write.
+        $this->assertTrue($sent(['x-get-message-sender-via' => 'server.jpa.ae: authenticated_id: momen@jpa.ae']));
+        $this->assertFalse($sent(['x-get-message-sender-via' => "server.jpa.ae: none\nserver.jpa.ae: authenticated_id: momen@jpa.ae"]));
+        $this->assertFalse($sent(['x-sender' => 'momen@jpa.ae']));
+        $this->assertFalse($sent(['x-get-message-sender-via' => 'authenticated_id: momen@jpa.ae'], microsoft: true));
+    }
+
+    public function test_the_filing_mailbox_is_read_by_the_scheduled_run_though_never_sent_from(): void
+    {
+        app(MatterReplyCollector::class)->collect();
+
+        $this->assertNotNull(Setting::get(MatterReplyCollector::checkedKey('files')));
+    }
+
+    public function test_a_forward_whose_reading_died_is_read_again_by_a_later_run(): void
+    {
+        $forward = $this->forward();
+        $stuck = EmailForward::create(['sender_key' => 'files', 'message_id' => MatterEmail::messageId($forward['message_id']), 'outcome' => ForwardedEmailFiler::READING, 'subject' => 'x']);
+
+        // Being read just now: another run leaves it.
+        $this->read($forward);
+        $this->assertSame(ForwardedEmailFiler::READING, $stuck->fresh()->outcome);
+
+        // Still reading long after: the run that had it died.
+        EmailForward::query()->whereKey($stuck->id)->update(['updated_at' => now()->subHour()]);
+        $this->read($forward);
+
+        $this->assertSame(ForwardedEmailFiler::FILED, $stuck->fresh()->outcome);
+        $this->assertSame(1, EmailForward::count());
     }
 
     public function test_only_the_filing_mailbox_reads_forwards(): void

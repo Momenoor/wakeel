@@ -17,6 +17,7 @@ use App\Models\MatterRequest;
 use App\Models\Note;
 use App\Models\Party;
 use App\Models\Type;
+use App\Support\Dates;
 use BackedEnum;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -61,7 +62,7 @@ final class MatterHistory
         ],
         MatterParty::class => ['party_id' => 'Name', 'type' => 'Type', 'commission_percentage' => 'Commission %'],
         MatterRequest::class => ['status' => 'Status', 'comment' => 'Comment', 'approved_comment' => 'Reviewer Comment'],
-        Fee::class => ['type' => 'Type', 'amount' => 'Amount', 'date' => 'Date', 'status' => 'Status', 'description' => 'Description'],
+        Fee::class => ['type' => 'Type', 'amount' => 'Amount', 'vat' => 'VAT', 'is_vat_included' => 'Including VAT', 'date' => 'Date', 'status' => 'Status', 'description' => 'Description'],
         Allocation::class => ['amount' => 'Amount', 'date' => 'Date', 'description' => 'Description'],
         Note::class => ['text' => 'Note'],
         Attachment::class => ['name' => 'Name', 'category' => 'Category'],
@@ -238,7 +239,7 @@ final class MatterHistory
 
         return match (true) {
             $value instanceof BackedEnum => method_exists($value, 'getLabel') ? (string) $value->getLabel() : (string) $value->value,
-            $value instanceof CarbonInterface => $value->format($value->format('H:i') === '00:00' ? 'd/m/Y' : 'd/m/Y H:i'),
+            $value instanceof CarbonInterface => $value->format($value->format('H:i') === '00:00' ? Dates::dateFormat() : Dates::dateTimeFormat()),
             is_bool($value) => $value ? __('Yes') : __('No'),
             is_array($value) => implode('، ', array_map('strval', array_filter($value, 'is_scalar'))),
             default => Str::limit((string) $value, 120),

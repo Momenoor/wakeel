@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Resources\Matters\Schemas;
 
+use App\Enums\FeeStatus;
 use App\Enums\FeeType;
 use App\Enums\RequestStatus;
 use App\Filament\Mms\Actions\Fee\CollectFeeAction;
@@ -834,6 +835,7 @@ class MatterInfolist
                             ->state(fn (Matter $record): float => (float) $record->fees->sum(fn (Fee $fee): float => $fee->total)),
                     ]),
                 RepeatableEntry::make('fees')
+                    ->label(__('Fees'))
                     // Newest first: by its date, then by when it was added.
                     ->state(fn (Matter $record) => $record->fees->sortBy([['date', 'desc'], ['id', 'desc']])->values())
                     ->columns(5)
@@ -854,12 +856,13 @@ class MatterInfolist
                             ->aed()
                             ->icon('heroicon-o-check-circle')
                             ->getStateUsing(fn ($record) => $record?->allocations?->sum('amount') ?? 0)
-                            ->color(fn ($state, $record) => match (true) {
-                                (float) $state >= (float) ($record?->total ?? 0) => 'success',
-                                (float) $state > 0 => 'warning',
+                            // As its status reads it: within a dirham of its total, paid.
+                            ->color(fn ($state, Fee $record): string => match (Fee::statusOf((float) $record->total, (float) $state)) {
+                                FeeStatus::PAID, FeeStatus::OVERPAID => 'success',
+                                FeeStatus::PARTIAL => 'warning',
                                 default => 'danger',
                             }),
-                        TextEntry::make('type')->badge(),
+                        TextEntry::make('type')->label(__('Type'))->badge(),
 
                         TextEntry::make('date')->label(__('Date'))
                             ->date()->icon('heroicon-o-calendar'),

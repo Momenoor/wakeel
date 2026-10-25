@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
  * total is amount + vat; `is_vat_included` whether the amount was entered as that total (App\Support\Vat).
  *
  * Every fee before this keeps exactly what it was: vat 0, not included — its total its amount. The separate VAT
- * rows of before are merged into their fees only when asked (php artisan fees:merge-vat-rows), never here.
+ * rows of before are merged into their fees only when asked (Fee Data Maintenance, or php artisan fees:fix-vat), never here.
  * Two plain added columns with defaults: an instant change on MySQL, nothing for the queue.
  */
 return new class extends Migration

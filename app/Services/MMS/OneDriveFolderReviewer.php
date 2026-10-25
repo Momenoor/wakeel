@@ -6,6 +6,7 @@ use App\Models\Matter;
 use App\Models\MatterOneDriveFolder;
 use App\Models\OneDriveFolderReview;
 use App\Models\Party;
+use App\Support\MatterSearch;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use RuntimeException;
@@ -28,8 +29,6 @@ use RuntimeException;
  */
 class OneDriveFolderReviewer
 {
-    private const DIGITS = ['٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4', '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9'];
-
     public function __construct(
         private readonly OneDriveClient $client,
         private readonly MatterOneDriveFolders $folders,
@@ -42,7 +41,7 @@ class OneDriveFolderReviewer
      */
     public static function matches(string $name, int|string $number, int|string $year): bool
     {
-        $name = strtr($name, self::DIGITS);
+        $name = strtr($name, MatterSearch::DIGITS);
         $number = ltrim((string) $number, '0');
         $year = (string) $year;
 
@@ -375,7 +374,7 @@ class OneDriveFolderReviewer
     /** A name's words without its numbering: "02 - المستندات" → "المستندات". */
     private static function core(string $name): string
     {
-        $name = strtr($name, self::DIGITS);
+        $name = strtr($name, MatterSearch::DIGITS);
         $name = preg_replace('/^[\d\s.\-_)(]+/u', '', $name) ?? '';
 
         return mb_strtolower(trim(preg_replace('/\s+/u', ' ', $name) ?? ''));

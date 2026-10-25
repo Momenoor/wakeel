@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Resources\Matters\Tables;
 
+use App\Enums\FeeStatus;
 use App\Enums\MatterCollectionStatus;
 use App\Filament\Mms\Concerns\HasMultiWordSearch;
 use App\Models\Court;
@@ -10,6 +11,7 @@ use App\Models\Matter;
 use App\Models\Party;
 use App\Models\Type;
 use App\Support\Dates;
+use App\Support\MatterSearch;
 use Carbon\Carbon;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -35,8 +37,6 @@ use Illuminate\Support\Str;
 class MattersTable
 {
     use HasMultiWordSearch;
-
-    private const DIGITS = ['٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4', '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9'];
 
     public static function configure(Table $table): Table
     {
@@ -186,20 +186,16 @@ class MattersTable
                     ->description(fn ($record) => number_format(
                         $record->fees->sum(fn ($fee) => $fee->allocations->sum('amount')), 2
                     ))
+                    // As the matter's collection status reads it: in whole fils, within a dirham paid.
                     ->color(function ($record) {
                         $total = (float) $record->fees->sum('total');
                         $collected = (float) $record->fees->sum(fn ($fee) => $fee->allocations->sum('amount'));
-                        if ($total <= 0) {
-                            return 'gray';
-                        }
-                        if ($collected >= $total) {
-                            return 'success';
-                        }
-                        if ($collected > 0) {
-                            return 'warning';
-                        }
 
-                        return 'danger';
+                        return $total <= 0 ? 'gray' : match (Fee::statusOf($total, $collected)) {
+                            FeeStatus::UNPAID => 'danger',
+                            FeeStatus::PARTIAL => 'warning',
+                            default => 'success',
+                        };
                     })
                     // Hovered: each fee that makes up the total.
                     ->tooltip(fn ($record) => self::feesBreakdown($record))
@@ -614,7 +610,7 @@ class MattersTable
      */
     public static function searchWords(string $search): array
     {
-        $words = preg_split('~[\s/\-:_\\\\|+–]+~u', strtr($search, self::DIGITS), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $words = preg_split('~[\s/\-:_\\\\|+–]+~u', strtr($search, MatterSearch::DIGITS), -1, PREG_SPLIT_NO_EMPTY) ?: [];
 
         return array_values(array_filter($words, fn (string $word): bool => ! in_array(mb_strtolower($word), ['لسنة', 'لعام', 'سنة', 'of'], true)));
     }
