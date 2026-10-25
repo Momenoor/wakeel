@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\FeeStatus;
 use App\Enums\FeeType;
+use App\Enums\MatterCollectionStatus;
 use App\Filament\Mms\Pages\Reports\VatSummaryReport;
 use App\Filament\Mms\Resources\Matters\Pages\EditMatter;
 use App\Filament\Mms\Resources\Matters\Pages\ListMatters;
@@ -268,6 +269,57 @@ class FeeVatTest extends TestCase
         // Run again: nothing left to do.
         $again = $fix->run(apply: true);
         $this->assertSame([0, 0, 0], [$again['merged'], $again['fees'], $again['matters']]);
+    }
+
+    public function test_a_fee_and_a_matter_are_paid_in_whole_fils_and_within_a_dirham_either_way(): void
+    {
+        // In whole fils: payments that add up, as floats, a hair short of the total.
+        $this->assertSame(FeeStatus::PAID, Fee::statusOf(2000, 1619.05 + 285.71 + 80.95 + 14.29));
+        // Within a dirham short, or over: paid.
+        $this->assertSame(FeeStatus::PAID, Fee::statusOf(1050, 1049.01));
+        $this->assertSame(FeeStatus::PAID, Fee::statusOf(1050, 1050.99));
+        // A dirham or more either way.
+        $this->assertSame(FeeStatus::PARTIAL, Fee::statusOf(1050, 1049));
+        $this->assertSame(FeeStatus::OVERPAID, Fee::statusOf(1050, 1051));
+        // Nothing collected: unpaid, however small the fee.
+        $this->assertSame(FeeStatus::UNPAID, Fee::statusOf(0.5, 0));
+
+        // A matter the same: its fee 1,666.66 in two payments, half a dirham short.
+        $fee = $this->matter->fees()->create(['type' => FeeType::EXPERT_FEE, 'amount' => 1587.30, 'vat' => 79.36, 'is_vat_included' => true]);
+        Allocation::create(['fee_id' => $fee->id, 'matter_id' => $this->matter->id, 'amount' => 1587.30, 'date' => '2026-06-01']);
+        Allocation::create(['fee_id' => $fee->id, 'matter_id' => $this->matter->id, 'amount' => 78.86, 'date' => '2026-06-01']);
+        $fee->refresh()->updateStatus();
+
+        $this->assertSame([FeeStatus::PAID, MatterCollectionStatus::PAID], [$fee->status, $this->matter->fresh()->collection_status]);
+    }
+
+    public function test_a_fee_paid_but_for_its_unpaid_vat_row_is_shown_going_partial_in_the_preview_and_the_log(): void
+    {
+        Storage::fake('local');
+        $fee = $this->matter->fees()->create(['type' => FeeType::EXPERT_FEE, 'amount' => 1000]);
+        $row = $this->matter->fees()->create(['type' => FeeType::VAT, 'amount' => 50]);
+        Allocation::create(['fee_id' => $fee->id, 'matter_id' => $this->matter->id, 'amount' => 1000, 'date' => '2026-06-01']);
+        $this->assertSame(FeeStatus::PAID, $fee->fresh()->status);
+        // Its matter marked paid, out of date (its VAT row unpaid) — the merge sets it, the log still tells it.
+        DB::table('matters')->where('id', $this->matter->id)->update(['collection_status' => MatterCollectionStatus::PAID->value]);
+
+        $line = "Fee #{$fee->id} (matter 1200/2026, ".FeeType::EXPERT_FEE->getLabel().'): paid → partial — total 1,050.00, collected 1,000.00';
+        $fix = app(FeeVatAndStatusFix::class);
+
+        // The preview: the fee as the merge will leave it (its VAT row, unpaid, not a fee of its own).
+        $preview = $fix->run(apply: false);
+        $this->assertSame([1, 1, 1], [$preview['merged'], $preview['fees'], $preview['matters']]);
+        $this->assertStringContainsString($line, Storage::disk('local')->get($preview['file']));
+        $this->assertSame(FeeStatus::PAID, $fee->fresh()->status);
+        $this->assertNotNull(Fee::find($row->id));
+
+        // Applied: the same change, though the merge itself set it.
+        $applied = $fix->run(apply: true);
+        $this->assertSame([1, 1, 1], [$applied['merged'], $applied['fees'], $applied['matters']]);
+        $log = Storage::disk('local')->get($applied['file']);
+        $this->assertStringContainsString($line, $log);
+        $this->assertStringContainsString('Matter 1200/2026: paid → partial — fees 1,050.00, collected 1,000.00', $log);
+        $this->assertSame([FeeStatus::PARTIAL, MatterCollectionStatus::PARTIAL], [$fee->fresh()->status, $this->matter->fresh()->collection_status]);
     }
 
     public function test_the_vat_summary_reads_each_fees_own_vat_and_the_rows_of_before(): void

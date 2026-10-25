@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\AttachmentCategory;
+use App\Enums\FeeStatus;
 use App\Enums\MatterCollectionStatus;
 use App\Enums\MatterCommissiong;
 use App\Enums\MatterDifficulty;
@@ -441,9 +442,10 @@ class Matter extends Model implements AttachmentOwner
         $totalAmount = (float) $fees->sum(fn ($fee) => abs($fee->total));
         $totalAllocated = (float) $this->allocations->sum(fn ($allocation) => abs($allocation->amount));
 
-        return match (true) {
-            $totalAllocated <= 0 => MatterCollectionStatus::UNPAID,
-            $totalAllocated < $totalAmount => MatterCollectionStatus::PARTIAL,
+        // As a fee's: in whole fils, within a dirham paid — and paid over, paid.
+        return match (Fee::statusOf($totalAmount, $totalAllocated)) {
+            FeeStatus::UNPAID => MatterCollectionStatus::UNPAID,
+            FeeStatus::PARTIAL => MatterCollectionStatus::PARTIAL,
             default => MatterCollectionStatus::PAID,
         };
     }

@@ -28,6 +28,9 @@ class Fee extends Model implements AttachmentOwner
     use HasFactory;
     use LogsActivity;
 
+    /** Short of its total, or over it, by less than this (a dirham), a fee or a matter is paid. */
+    public const PAID_WITHIN = 1.0;
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
@@ -300,17 +303,23 @@ class Fee extends Model implements AttachmentOwner
             : $this->allocations()->sum('amount')));
 
         // What is collected is the total, VAT included.
-        $total = abs($this->total);
-        $allowance = $this->offsetAllowance();
+        $this->status = self::statusOf($this->total, $allocated, $this->offsetAllowance());
+    }
 
-        // Money is decimal(15,2); compare with a cent of tolerance rather than
-        // ==, which could never reliably be true for a float sum.
-        $epsilon = 0.005;
+    /**
+     * Paid, partly, over or not at all — what is collected against the total, both in whole fils (a float sum of
+     * payments is never exactly its total), within a dirham either way paid: what a VAT split and rounding leave.
+     * A matter's collection status reads the same (Matter::collectionStatusFor()).
+     */
+    public static function statusOf(float $total, float $collected, float $allowance = 0.0): FeeStatus
+    {
+        $total = round(abs($total), 2);
+        $collected = round(abs($collected), 2);
 
-        $this->status = match (true) {
-            $allocated < $epsilon => FeeStatus::UNPAID,
-            $allocated < $total - $epsilon => FeeStatus::PARTIAL,
-            $allocated <= $total + $allowance + $epsilon => FeeStatus::PAID,
+        return match (true) {
+            $collected <= 0 => FeeStatus::UNPAID,
+            round($total - $collected, 2) >= self::PAID_WITHIN => FeeStatus::PARTIAL,
+            round($collected - $total - $allowance, 2) < self::PAID_WITHIN => FeeStatus::PAID,
             default => FeeStatus::OVERPAID,
         };
     }
