@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -17,6 +18,7 @@ class IncentiveLine extends Model
         'matter_id',
         'fee_id',
         'is_reversal',
+        'is_adjustment',
         'completion_days',
         'difficulty',
         'fee_amount_excl_vat',
@@ -32,6 +34,7 @@ class IncentiveLine extends Model
 
     protected $casts = [
         'is_reversal' => 'boolean',
+        'is_adjustment' => 'boolean',
         'completion_days' => 'integer',
         'fee_amount_excl_vat' => 'decimal:2',
         'base_percentage' => 'decimal:2',
@@ -53,6 +56,17 @@ class IncentiveLine extends Model
     public function calculation(): BelongsTo
     {
         return $this->belongsTo(IncentiveCalculation::class, 'incentive_calculation_id');
+    }
+
+    /**
+     * The lines calculated from a matter's fees: not a paid share taken back (IncentiveReversals) nor an amount
+     * entered by hand (IncentiveAdjustments).
+     *
+     * @param  Builder<IncentiveLine>  $query
+     */
+    public function scopeFromFees(Builder $query): void
+    {
+        $query->where('is_reversal', false)->where('is_adjustment', false);
     }
 
     public function matter(): BelongsTo

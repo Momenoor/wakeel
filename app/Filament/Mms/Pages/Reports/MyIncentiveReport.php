@@ -198,8 +198,8 @@ class MyIncentiveReport extends Page implements HasTable
 
     public function netFor(IncentiveAssistantLine $record): float
     {
-        // A paid share taken back is what it takes: negative.
-        if ($record->incentive_reversal_id) {
+        // A paid share taken back, or an amount entered by hand, is what it is: a deduction negative.
+        if (! $record->isMatterShare()) {
             return round((float) $record->total_amount, 2);
         }
 
@@ -250,8 +250,8 @@ class MyIncentiveReport extends Page implements HasTable
 
     private function feeTotalFor(IncentiveAssistantLine $record): float
     {
-        // A share taken back has no fee of its own.
-        if ($record->incentive_reversal_id) {
+        // A share taken back has no fee of its own, nor an amount entered by hand.
+        if (! $record->isMatterShare()) {
             return 0.0;
         }
 
@@ -355,7 +355,7 @@ class MyIncentiveReport extends Page implements HasTable
         $calculationId = $this->selectedCalculationId();
 
         $query = IncentiveAssistantLine::query()
-            ->with(['incentiveLine.matter.court', 'incentiveLine.matter.type', 'incentiveLine.deductions', 'reversal.matter', 'reversal.paidCalculation', 'reversal.deletedBy']);
+            ->with(['incentiveLine.matter.court', 'incentiveLine.matter.type', 'incentiveLine.deductions', 'reversal.matter', 'reversal.paidCalculation', 'reversal.deletedBy', 'adjustment.createdBy']);
 
         // Fails closed: no party link, or no finalized calculation to show, and
         // the page returns nothing rather than everything.
@@ -380,12 +380,14 @@ class MyIncentiveReport extends Page implements HasTable
             ->columns([
                 TextColumn::make('matter_reference')
                     ->label(__('Matter'))
-                    ->getStateUsing(fn (IncentiveAssistantLine $record) => $this->matterOf($record)?->reference ?? '—')
+                    // An amount entered by hand has no matter: added, or deducted.
+                    ->getStateUsing(fn (IncentiveAssistantLine $record) => $this->matterOf($record)?->reference ?? $record->adjustment?->type->getLabel() ?? '—')
                     ->url(fn (IncentiveAssistantLine $record) => ($matter = $this->matterOf($record))
                         ? MatterResource::getUrl('view', ['record' => $matter])
                         : null)
-                    // A paid incentive taken back (a fee deleted after it was paid): what it is, in full.
-                    ->description(fn (IncentiveAssistantLine $record): ?string => $record->reversal?->description())
+                    // A paid incentive taken back (a fee deleted after it was paid), or an amount entered by hand:
+                    // what it is, in full.
+                    ->description(fn (IncentiveAssistantLine $record): ?string => $record->description())
                     ->weight('bold')
                     ->wrap(),
 

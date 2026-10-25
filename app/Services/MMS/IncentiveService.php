@@ -107,7 +107,7 @@ class IncentiveService
         $withFeelessLine = IncentiveLine::query()
             ->whereIn('matter_id', $matters->pluck('id'))
             ->whereNull('fee_id')
-            ->where('is_reversal', false)
+            ->fromFees()
             ->pluck('matter_id')
             ->flip();
 
@@ -289,7 +289,7 @@ class IncentiveService
     {
         // A share taken back (IncentiveReversals) does not bring its matter into the calculation.
         $matterIds = IncentiveLine::where('incentive_calculation_id', $calculation->id)
-            ->where('is_reversal', false)
+            ->fromFees()
             ->whereNotNull('matter_id')
             ->distinct()
             ->pluck('matter_id');

@@ -97,7 +97,12 @@ class MatterObserver
         $matter->allocations()->delete();
         $matter->notes()->delete();
 
-        $matter->attachments->each->delete();
+        // Every file, those already hidden too: deleted with its file, financial evidence only hidden (kept, of
+        // no matter once the matter is gone).
+        // A loop, not each->delete(): deleting a file for good answers false, which would stop each() there.
+        foreach ($matter->attachments()->withTrashed()->get() as $attachment) {
+            $attachment->delete();
+        }
         $matter->requests()->delete();
     }
 }

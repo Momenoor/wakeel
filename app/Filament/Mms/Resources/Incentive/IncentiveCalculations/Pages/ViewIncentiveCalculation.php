@@ -234,7 +234,7 @@ class ViewIncentiveCalculation extends ViewRecord
                         $this->refreshFormData([]);
                         $this->dispatch('incentiveCalculationUpdated');
 
-                        $lineCount = $this->record->lines()->where('is_reversal', false)->count();
+                        $lineCount = $this->record->lines()->fromFees()->count();
                         Notification::make()
                             ->title(__('Calculation Complete'))
                             ->body(__('Calculated').' '.$lineCount.' '.__('fee lines.'))
@@ -263,6 +263,7 @@ class ViewIncentiveCalculation extends ViewRecord
                 ->action(function () {
                     IncentiveLine::where('incentive_calculation_id', $this->record->id)->delete();
                     IncentiveAssistantExtra::where('incentive_calculation_id', $this->record->id)->delete();
+                    $this->record->adjustments()->delete();
 
                     $this->refreshFormData([]);
                     $this->dispatch('incentiveCalculationUpdated');

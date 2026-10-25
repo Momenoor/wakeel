@@ -18,7 +18,9 @@ class IncentiveCalculationPrintController extends Controller
         // My Incentive and the per-assistant print.
         abort_unless(auth()->user()?->can('print', $calculation), 403);
 
+        // The matters' lines; an amount entered by hand is in its assistant's rows.
         $lines = $calculation->lines()
+            ->where('is_adjustment', false)
             ->with(['matter', 'fee', 'deductions', 'assistantLines.party'])
             ->get();
 

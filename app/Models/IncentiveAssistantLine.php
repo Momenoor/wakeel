@@ -15,6 +15,7 @@ class IncentiveAssistantLine extends Model
         'incentive_line_id',
         'party_id',
         'incentive_reversal_id',
+        'incentive_adjustment_id',
         'percentage_override',
         'share_amount',
         'extra_percentage',
@@ -59,5 +60,23 @@ class IncentiveAssistantLine extends Model
     public function reversal(): BelongsTo
     {
         return $this->belongsTo(IncentiveReversal::class, 'incentive_reversal_id');
+    }
+
+    /** An amount added or taken off by hand (IncentiveAdjustments): what this line is. */
+    public function adjustment(): BelongsTo
+    {
+        return $this->belongsTo(IncentiveAdjustment::class, 'incentive_adjustment_id');
+    }
+
+    /** A share of a matter worked: not a paid share taken back nor an amount entered by hand. */
+    public function isMatterShare(): bool
+    {
+        return $this->incentive_reversal_id === null && $this->incentive_adjustment_id === null;
+    }
+
+    /** What a line that is not a share of a matter worked is, in full. */
+    public function description(): ?string
+    {
+        return $this->reversal?->description() ?? $this->adjustment?->description();
     }
 }

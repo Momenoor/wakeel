@@ -4778,5 +4778,13 @@
     "Without attachment, :count download link|Without attachment, :count download links": "بدون مرفق، روابط تحميل: :count|بدون مرفق، روابط تحميل: :count",
     "Its documents came as links to download, not attached — see Details.": "وصلت مستنداته روابطَ للتحميل لا مرفقات — انظر التفاصيل.",
     "Download links": "روابط التحميل",
-    "Not kept in Wakeel: open each to download the document, then add it to the matter.": "غير محفوظة في وكيل: افتح كل رابط لتحميل المستند، ثم أضفه إلى القضية."
+    "Not kept in Wakeel: open each to download the document, then add it to the matter.": "غير محفوظة في وكيل: افتح كل رابط لتحميل المستند، ثم أضفه إلى القضية.",
+    "Deleted At": "تاريخ الحذف",
+    "Additional amount": "مبلغ إضافي",
+    "Add amount or deduction": "إضافة مبلغ أو خصم",
+    "Remove :type": "حذف :type",
+    "Only a draft calculation can be changed.": "لا يمكن تعديل الحساب إلا وهو مسودة.",
+    ":type of :amount: :reason (entered by :user on :date).": ":type بقيمة :amount: :reason (أدخله :user في :date).",
+    "A fixed amount added to the assistant's incentive in this calculation, or taken off it: a line of its own in their calculation, counted in their total and in payroll.": "مبلغ ثابت يُضاف إلى حافز المساعد في هذا الحساب أو يُخصم منه: سطر مستقل في حسابه، يدخل في إجماليه وفي الرواتب.",
+    "Add amount or deduction for :name": "إضافة مبلغ أو خصم لـ:name"
 }

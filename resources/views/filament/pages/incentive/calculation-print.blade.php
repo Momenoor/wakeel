@@ -156,9 +156,9 @@
                             <tr class="border-t border-gray-100">
                                 <td class="px-2 py-1">
                                     {{ $m['matter_reference'] }}
-                                    {{-- A paid incentive taken back: what it is, in full. --}}
+                                    {{-- A paid incentive taken back, or an amount entered by hand: what it is, in full. --}}
                                     @if($m['description'] ?? null)
-                                        <div class="text-red-600">{{ $m['description'] }}</div>
+                                        <div class="{{ ($m['adjustment'] ?? null) === \App\Enums\IncentiveAdjustmentType::ADDITION ? 'text-green-700' : 'text-red-600' }}">{{ $m['description'] }}</div>
                                     @endif
                                 </td>
                                 <td class="px-2 py-1">{{ $m['difficulty']?->getLabel() ?? '—' }}</td>

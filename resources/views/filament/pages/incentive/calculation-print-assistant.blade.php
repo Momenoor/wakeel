@@ -101,9 +101,9 @@
             <tr class="{{ $loop->even ? 'bg-blue-50' : 'bg-white' }} border-b border-gray-200">
                 <td class="px-3 py-2 font-semibold">
                     {{ $m['matter_reference'] }}
-                    {{-- A paid incentive taken back: what it is, in full. --}}
+                    {{-- A paid incentive taken back, or an amount entered by hand: what it is, in full. --}}
                     @if($m['description'] ?? null)
-                        <div class="font-normal text-red-600">{{ $m['description'] }}</div>
+                        <div class="font-normal {{ ($m['adjustment'] ?? null) === \App\Enums\IncentiveAdjustmentType::ADDITION ? 'text-green-700' : 'text-red-600' }}">{{ $m['description'] }}</div>
                     @endif
                 </td>
                 <td class="px-3 py-2 text-gray-600">

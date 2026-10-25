@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Exports;
 use App\Enums\FeeType;
 use App\Models\Fee;
 use App\Models\Matter;
+use App\Support\Dates;
 use Filament\Actions\Exports\ExportColumn;
 use Illuminate\Database\Eloquent\Builder;
 use OpenSpout\Writer\XLSX\Options;
@@ -34,6 +35,8 @@ class MatterExporter extends MatterSpreadsheetExporter
             ExportColumn::make('matter_level')
                 ->label(__('Level'))
                 ->getStateUsing(fn ($record) => $record->level?->getLabel()),
+
+            ...self::dateColumns(),
 
             ExportColumn::make('parties')
                 ->label(__('Parties'))
@@ -98,23 +101,43 @@ class MatterExporter extends MatterSpreadsheetExporter
         ];
     }
 
+    /**
+     * Every date the matter keeps, written as the system writes dates (Settings → General) — a time only where the
+     * date has one (the next session, the last change, the deletion).
+     *
+     * @return list<ExportColumn>
+     */
+    private static function dateColumns(): array
+    {
+        $dates = [
+            'received_at' => ['Court Assigning Date', false],
+            'distributed_at' => ['Assistant Assigning Date', false],
+            'next_session_date' => ['Next Session Date', true],
+            'initial_report_at' => ['Initial Report Date', false],
+            'final_report_at' => ['Final Report Date', false],
+            'final_report_memo_date' => ['Final Report Memo Date', false],
+            'created_at' => ['Created At', false],
+            'updated_at' => ['Updated At', true],
+            'deleted_at' => ['Deleted At', true],
+        ];
+
+        return array_map(
+            fn (string $column, array $date): ExportColumn => ExportColumn::make($column)
+                ->label(__($date[0]))
+                ->getStateUsing(fn (Matter $record): string => $date[1] ? Dates::dateTime($record->{$column}) : Dates::date($record->{$column})),
+            array_keys($dates),
+            $dates,
+        );
+    }
+
     public function getXlsxWriterOptions(): ?Options
     {
         $options = new Options;
-        $options->setColumnWidth(15, 1);  // Matter
-        $options->setColumnWidth(22, 2);  // Court
-        $options->setColumnWidth(18, 3);  // Type
-        $options->setColumnWidth(18, 4);  // Level
-        $options->setColumnWidth(40, 5);  // Parties
-        $options->setColumnWidth(40, 6);  // Experts
-        $options->setColumnWidth(22, 7);  // Total Fees (Without VAT)
-        $options->setColumnWidth(14, 8);  // Total VAT
-        $options->setColumnWidth(14, 9);  // Total
-        $options->setColumnWidth(18, 10); // Sum Allocations
-        $options->setColumnWidth(14, 11); // Unpaid
-        $options->setColumnWidth(30, 12); // Notes
-        $options->setColumnWidth(14, 13); // Status
-        $options->setColumnWidth(20, 14); // Collection Status
+        // In the order of getColumns(): the matter, then its dates, then the rest.
+        $widths = [15, 22, 18, 18, ...array_fill(0, count(self::dateColumns()), 18), 40, 40, 22, 14, 14, 18, 14, 30, 14, 20];
+        foreach ($widths as $index => $width) {
+            $options->setColumnWidth($width, $index + 1);
+        }
 
         return $options;
     }

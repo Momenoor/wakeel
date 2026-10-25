@@ -49,6 +49,12 @@ class IncentiveCalculation extends Model
         return $this->hasMany(IncentiveAssistantExtra::class);
     }
 
+    /** Amounts added to an assistant's incentive or taken off it by hand (IncentiveAdjustments). */
+    public function adjustments(): HasMany
+    {
+        return $this->hasMany(IncentiveAdjustment::class);
+    }
+
     public function isDraft(): bool
     {
         return $this->status === 'draft';

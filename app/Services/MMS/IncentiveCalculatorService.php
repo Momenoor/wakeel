@@ -96,10 +96,12 @@ class IncentiveCalculatorService
             // Fees deleted after their incentive was paid: each assistant's share of them taken back here, a
             // negative line of their own (IncentiveReversals) — rebuilt on every run, never calculated as a fee.
             app(IncentiveReversals::class)->apply($calculation);
+            // Amounts added or taken off by hand: a line of the assistant's own, built again as they were entered.
+            app(IncentiveAdjustments::class)->apply($calculation);
 
             $lines = IncentiveLine::with(['fee', 'matter.type.incentiveConfig', 'matter.metas'])
                 ->where('incentive_calculation_id', $calculation->id)
-                ->where('is_reversal', false)
+                ->fromFees()
                 ->get();
 
             if ($lines->isEmpty()) {
@@ -447,7 +449,7 @@ class IncentiveCalculatorService
                     $monthAssistantLines = IncentiveAssistantLine::with('incentiveLine')
                         ->whereHas('line', function ($q) use ($calculation, $monthMatterIds) {
                             $q->where('incentive_calculation_id', $calculation->id)
-                                ->where('is_reversal', false)
+                                ->fromFees()
                                 ->whereIn('matter_id', $monthMatterIds);
                         })->where('party_id', $partyId)->get();
 
@@ -598,6 +600,7 @@ class IncentiveCalculatorService
         $lines = IncentiveAssistantLine::query()
             ->where('party_id', $partyId)
             ->whereNull('incentive_reversal_id')
+            ->whereNull('incentive_adjustment_id')
             ->whereHas('incentiveLine', fn ($q) => $q->where('incentive_calculation_id', $calculationId))
             ->orderBy('id')
             ->get(['id', 'total_amount']);
@@ -637,7 +640,7 @@ class IncentiveCalculatorService
             ->get()
             ->keyBy('matter_id');
 
-        $assistantLines = IncentiveAssistantLine::with('party', 'incentiveLine.matter.court', 'incentiveLine.matter.type', 'incentiveLine.deductions', 'reversal.matter', 'reversal.paidCalculation', 'reversal.deletedBy')
+        $assistantLines = IncentiveAssistantLine::with('party', 'incentiveLine.matter.court', 'incentiveLine.matter.type', 'incentiveLine.deductions', 'reversal.matter', 'reversal.paidCalculation', 'reversal.deletedBy', 'adjustment.createdBy')
             ->whereHas('incentiveLine', fn ($q) => $q->where('incentive_calculation_id', $calculation->id))
             ->get();
 
@@ -645,7 +648,7 @@ class IncentiveCalculatorService
         // before grouping by party, since a party's own rows cannot see who
         // else worked the matter.
         $assistantCountByMatter = $assistantLines
-            ->reject(fn (IncentiveAssistantLine $line): bool => $line->incentive_reversal_id !== null)
+            ->filter(fn (IncentiveAssistantLine $line): bool => $line->isMatterShare())
             ->groupBy('incentiveLine.matter_id')
             ->map(fn (Collection $lines) => $lines->pluck('party_id')->unique()->count());
 
@@ -657,8 +660,8 @@ class IncentiveCalculatorService
                     ->first();
 
                 $matters = $this->buildAssistantMatterRows($lines, $matterFeeTotals, $assistantCountByMatter);
-                // The matters worked: not a share taken back.
-                $worked = $lines->whereNull('incentive_reversal_id');
+                // The matters worked: not a share taken back nor an amount entered by hand.
+                $worked = $lines->filter(fn (IncentiveAssistantLine $line): bool => $line->isMatterShare());
 
                 return [
                     'party' => $lines->first()->party,
@@ -700,13 +703,20 @@ class IncentiveCalculatorService
      */
     private function buildAssistantMatterRows(Collection $lines, Collection $matterFeeTotals, Collection $assistantCountByMatter): Collection
     {
-        // A share taken back (a fee deleted after its incentive was paid) is its own row, apart from the matter's.
-        return $lines->groupBy(fn (IncentiveAssistantLine $line): string => $line->incentive_reversal_id ? 'reversal-'.$line->incentive_reversal_id : (string) $line->incentiveLine->matter_id)
+        // A share taken back (a fee deleted after its incentive was paid) and an amount entered by hand are each a
+        // row of their own, apart from the matter's.
+        return $lines->groupBy(fn (IncentiveAssistantLine $line): string => match (true) {
+            $line->incentive_reversal_id !== null => 'reversal-'.$line->incentive_reversal_id,
+            $line->incentive_adjustment_id !== null => 'adjustment-'.$line->incentive_adjustment_id,
+            default => (string) $line->incentiveLine->matter_id,
+        })
             ->map(function (Collection $matterLines) use ($matterFeeTotals, $assistantCountByMatter) {
-                $reversal = $matterLines->first()->reversal;
-                $incentiveLine = $matterLines->first()->incentiveLine;
+                $first = $matterLines->first();
+                $reversal = $first->reversal;
+                $adjustment = $first->adjustment;
+                $incentiveLine = $first->incentiveLine;
                 $matter = $incentiveLine->matter;
-                $feeTotals = $reversal ? null : $matterFeeTotals->get($matter->id);
+                $feeTotals = $first->isMatterShare() ? $matterFeeTotals->get($matter->id) : null;
                 $extraPct = (float) $matterLines->first()->extra_percentage;
                 $penaltyPct = (float) $matterLines->first()->minimum_penalty_pct;
 
@@ -716,18 +726,20 @@ class IncentiveCalculatorService
                 $shareAmount = (float) $matterLines->sum('share_amount');
 
                 return [
-                    'matter_id' => $matter->id,
-                    'matter_reference' => $matter->reference,
-                    // A share taken back: what it is, in full.
+                    'matter_id' => $matter?->id,
+                    // An amount entered by hand has no matter: what it is instead.
+                    'matter_reference' => $matter?->reference ?? $adjustment?->type->getLabel(),
+                    // A share taken back, or an amount entered by hand: what it is, in full.
                     'reversal' => $reversal !== null,
-                    'description' => $reversal?->description(),
+                    'adjustment' => $adjustment?->type,
+                    'description' => $first->description(),
                     // The matter's own difficulty is the source of truth —
                     // incentiveLine->difficulty is a denormalized copy that
                     // predates the current MatterDifficulty enum values.
-                    'difficulty' => $matter->difficulty,
-                    'commissioning' => $matter->commissioning,
-                    'court_name' => $matter->court?->name,
-                    'type_name' => $matter->type?->name,
+                    'difficulty' => $matter?->difficulty,
+                    'commissioning' => $matter?->commissioning,
+                    'court_name' => $matter?->court?->name,
+                    'type_name' => $matter?->type?->name,
                     'completion_days' => $incentiveLine->completion_days,
                     'fee_amount_excl_vat' => $feeAmount,
                     'base_percentage' => $incentiveLine->base_percentage,
@@ -745,7 +757,7 @@ class IncentiveCalculatorService
                     // implies, and nothing on the printed statement said so.
                     // These two make the split visible, matching what the
                     // on-screen summary already shows.
-                    'assistant_count' => $assistantCountByMatter->get($matter->id, 1),
+                    'assistant_count' => $matter ? $assistantCountByMatter->get($matter->id, 1) : 1,
                     'own_percentage' => (float) $feeAmount > 0
                         ? round($shareAmount / (float) $feeAmount * 100, 2)
                         : null,
@@ -757,6 +769,8 @@ class IncentiveCalculatorService
                     'total_amount' => $matterLines->sum('total_amount'),
                 ];
             })
+            // The amounts entered by hand after the matters.
+            ->sortBy(fn (array $row): bool => $row['adjustment'] !== null)
             ->values();
     }
 

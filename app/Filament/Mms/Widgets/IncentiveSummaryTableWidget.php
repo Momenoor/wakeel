@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Widgets;
 
+use App\Enums\IncentiveAdjustmentType;
 use App\Enums\MatterCommissiong;
 use App\Enums\MatterDifficulty;
 use App\Filament\Mms\Concerns\HasMultiWordSearch;
@@ -9,12 +10,16 @@ use App\Models\IncentiveAssistantExtra;
 use App\Models\IncentiveAssistantLine;
 use App\Models\IncentiveCalculation;
 use App\Models\IncentiveLine;
+use App\Models\Party;
+use App\Services\MMS\IncentiveAdjustments;
 use App\Services\MMS\IncentiveCalculatorService;
 use App\Support\Currency;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\ToggleButtons;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Grouping\Group;
@@ -111,7 +116,7 @@ class IncentiveSummaryTableWidget extends TableWidget
     {
         return IncentiveAssistantLine::query()
             ->whereHas('incentiveLine', fn ($q) => $q->where('incentive_calculation_id', $this->calculationId))
-            ->with(['party', 'incentiveLine.matter.court', 'incentiveLine.matter.type', 'incentiveLine.deductions', 'reversal.matter', 'reversal.paidCalculation', 'reversal.deletedBy']);
+            ->with(['party', 'incentiveLine.matter.court', 'incentiveLine.matter.type', 'incentiveLine.deductions', 'reversal.matter', 'reversal.paidCalculation', 'reversal.deletedBy', 'adjustment.createdBy']);
     }
 
     /**
@@ -144,9 +149,15 @@ class IncentiveSummaryTableWidget extends TableWidget
                     ->getDescriptionFromRecordUsing(fn ($record) => $this->describeAssistant($record->party_id)),
             ])
             ->defaultGroup('party_id')
+            // An amount entered by hand after the assistant's matters.
+            ->defaultSort(fn (Builder $query): Builder => $query->orderByRaw('incentive_adjustment_id is not null')->orderBy('id'))
+            ->headerActions([$this->addAdjustmentAction()])
             ->columns([
                 TextColumn::make('incentiveLine.matter.reference')
                     ->label(__('Matter'))
+                    // An amount entered by hand has no matter: added, or deducted.
+                    ->getStateUsing(fn ($record) => $record->incentiveLine?->matter?->reference ?? $record->adjustment?->type->getLabel())
+                    ->color(fn ($record) => $record->adjustment?->type->getColor())
                     ->url(fn ($record) => $record->incentiveLine?->matter_id
                         ? route('filament.mms.resources.matters.view', $record->incentiveLine->matter_id)
                         : null)
@@ -170,8 +181,12 @@ class IncentiveSummaryTableWidget extends TableWidget
 
                         return static::applyMultiWordSearch($query, $search, ['incentiveLine.matter.year', 'incentiveLine.matter.number']);
                     })
-                    // A paid incentive taken back (a fee deleted after it was paid): what it is, in full.
-                    ->description(fn ($record): ?string => $record->reversal?->description())
+                    // A paid incentive taken back (a fee deleted after it was paid), or an amount entered by hand:
+                    // what it is, in full.
+                    ->description(fn ($record): ?string => $record->description())
+                    // Its text wrapped within a set width: a long description no longer widens the table.
+                    ->extraHeaderAttributes(['style' => 'min-width: 11rem'])
+                    ->wrap()
                     ->weight('bold'),
                 TextColumn::make('difficulty')
                     ->label(__('Difficulty'))
@@ -204,14 +219,13 @@ class IncentiveSummaryTableWidget extends TableWidget
                             });
                         });
                     }),
+                // The type, its court beneath it: wrapped, not a second badge that cannot be.
                 TextColumn::make('case_info')
                     ->label(__('Court / Type'))
-                    ->getStateUsing(fn ($record) => collect([
-                        $record->incentiveLine?->matter?->type?->name,
-                        $record->incentiveLine?->matter?->court?->name,
-                    ])->filter()->values()->all())
+                    ->getStateUsing(fn ($record) => $record->incentiveLine?->matter?->type?->name)
+                    ->description(fn ($record) => $record->incentiveLine?->matter?->court?->name)
                     ->badge()
-                    ->listWithLineBreaks()
+                    ->wrap()
                     ->placeholder('—')
                     ->searchable(query: fn (Builder $query, string $search) => static::applyMultiWordSearch(
                         $query, $search, ['incentiveLine.matter.type.name', 'incentiveLine.matter.court.name']
@@ -220,20 +234,21 @@ class IncentiveSummaryTableWidget extends TableWidget
                     ->label(__('Assistant'))
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
+                // The month, its days to finish beneath it.
                 TextColumn::make('month_label')
                     ->label(__('Month'))
                     ->getStateUsing(fn ($record) => $record->incentiveLine?->matter
                         ? app(IncentiveCalculatorService::class)->matterMonthLabel($record->incentiveLine->matter, $this->calculationId)
                         : null)
+                    ->description(fn ($record) => filled($record->incentiveLine?->completion_days)
+                        ? __(':days days', ['days' => $record->incentiveLine->completion_days])
+                        : null)
                     ->placeholder('—'),
-                TextColumn::make('incentiveLine.completion_days')
-                    ->label(__('Days'))
-                    ->placeholder('—')
-                    ->searchable(),
                 TextColumn::make('incentiveLine.fee_amount_excl_vat')
                     ->label(__('Fee'))
-                    // A share taken back has no fee of its own here, whatever else of the matter's is.
-                    ->getStateUsing(fn ($record) => $record->incentive_reversal_id ? 0 : ($this->matterFeeTotals()->get($record->incentiveLine?->matter_id)?->total_fee_amount
+                    // A share taken back has no fee of its own here, whatever else of the matter's is; an amount
+                    // entered by hand has none at all.
+                    ->getStateUsing(fn ($record) => ! $record->isMatterShare() ? 0 : ($this->matterFeeTotals()->get($record->incentiveLine?->matter_id)?->total_fee_amount
                         ?? $record->incentiveLine?->fee_amount_excl_vat))
                     ->aed()
                     ->searchable(),
@@ -241,20 +256,23 @@ class IncentiveSummaryTableWidget extends TableWidget
                     ->label(__('Rate %'))
                     ->suffix('%')
                     ->description(fn ($record) => $this->describeAssistantRate($record))
+                    ->extraHeaderAttributes(['style' => 'min-width: 6rem'])
+                    ->wrap()
                     ->searchable(),
                 TextColumn::make('incentiveLine.base_amount')
                     ->label(__('Base Amount'))
-                    ->getStateUsing(fn ($record) => $record->incentive_reversal_id ? 0 : ($this->matterFeeTotals()->get($record->incentiveLine?->matter_id)?->total_base_amount
+                    ->getStateUsing(fn ($record) => ! $record->isMatterShare() ? 0 : ($this->matterFeeTotals()->get($record->incentiveLine?->matter_id)?->total_base_amount
                         ?? $record->incentiveLine?->base_amount))
                     ->aed()
                     ->searchable(),
                 TextColumn::make('incentiveLine.total_deduction_pct')
                     ->label(__('Deductions'))
                     ->suffix('%')
-                    ->width('1%')
+                    ->extraHeaderAttributes(['style' => 'min-width: 7rem'])
                     ->color('danger')
                     ->placeholder('0%')
-                    ->description(fn ($record) => $this->describeDeductions($record)),
+                    ->description(fn ($record) => $this->describeDeductions($record))
+                    ->wrap(),
                 TextColumn::make('share_amount')
                     ->label(__('Share'))
                     ->aed()
@@ -266,6 +284,7 @@ class IncentiveSummaryTableWidget extends TableWidget
                     ->color('success')
                     ->description(fn ($record) => app(IncentiveCalculatorService::class)
                         ->describeExtraReason((float) $record->extra_percentage))
+                    ->wrap()
                     ->searchable(),
                 TextColumn::make('minimum_penalty_amount')
                     ->label(__('Penalty'))
@@ -274,6 +293,8 @@ class IncentiveSummaryTableWidget extends TableWidget
                     ->color('danger')
                     ->description(fn ($record) => app(IncentiveCalculatorService::class)
                         ->describePenaltyReason((float) $record->minimum_penalty_pct))
+                    ->extraHeaderAttributes(['style' => 'min-width: 7rem'])
+                    ->wrap()
                     ->searchable(),
                 TextColumn::make('total_amount')
                     ->label(__('Total'))
@@ -290,6 +311,7 @@ class IncentiveSummaryTableWidget extends TableWidget
                     ->modalHeading(fn ($record) => __('Override Percentage for :name', ['name' => $record->party?->name ?? '—']))
                     ->modalDescription(__('This becomes this specific assistant\'s final effective percentage of the fee for this matter — it does not affect any other assistant sharing the same matter. Deductions still apply on top. Leave empty to use the automatic calculation. The calculation is reapplied immediately.'))
                     ->disabled(fn () => ! $this->isCalculationDraft())
+                    ->visible(fn ($record) => $record->isMatterShare())
                     ->schema([
                         TextInput::make('percentage_override')
                             ->label(__('Override %'))
@@ -366,6 +388,7 @@ class IncentiveSummaryTableWidget extends TableWidget
 
                         Notification::make()->title(__('Deduction saved'))->success()->send();
                     }),
+                $this->addAdjustmentAction(forRow: true),
                 Action::make('printAssistantReport')
                     ->label(fn ($record) => __('Print Report for :name', ['name' => $record->party?->name ?? '—']))
                     ->icon('heroicon-o-printer')
@@ -377,6 +400,23 @@ class IncentiveSummaryTableWidget extends TableWidget
                         'party' => $record->party_id,
                     ]))
                     ->openUrlInNewTab(),
+                Action::make('removeAdjustment')
+                    ->label(fn ($record) => __('Remove :type', ['type' => $record->adjustment?->type->getLabel()]))
+                    ->icon('heroicon-o-trash')
+                    ->iconButton()
+                    ->color('danger')
+                    ->tooltip(fn ($record) => __('Remove :type', ['type' => $record->adjustment?->type->getLabel()]))
+                    ->visible(fn ($record) => $record->adjustment !== null)
+                    ->disabled(fn () => ! $this->isCalculationDraft())
+                    ->requiresConfirmation()
+                    ->modalDescription(fn ($record) => $record->adjustment?->description())
+                    ->action(function ($record) {
+                        $this->guardMutation();
+
+                        app(IncentiveAdjustments::class)->remove($record->adjustment);
+
+                        Notification::make()->title(__('Removed'))->success()->send();
+                    }),
                 Action::make('deleteMatter')
                     ->label(fn ($record) => __('Remove :matter from Calculation', ['matter' => $record->incentiveLine?->matter?->reference ?? '—']))
                     ->icon('heroicon-o-trash')
@@ -384,6 +424,7 @@ class IncentiveSummaryTableWidget extends TableWidget
                     ->color('danger')
                     ->tooltip(fn ($record) => __('Remove :matter from Calculation', ['matter' => $record->incentiveLine?->matter?->reference ?? '—']))
                     ->disabled(fn () => ! $this->isCalculationDraft())
+                    ->visible(fn ($record) => $record->isMatterShare())
                     ->requiresConfirmation()
                     ->modalHeading(fn ($record) => __('Remove :matter from Calculation', ['matter' => $record->incentiveLine?->matter?->reference ?? '—']))
                     ->modalDescription(__('This removes this matter\'s lines, deductions, and assistant shares from this calculation only — other matters are unaffected. This action cannot be undone.'))
@@ -407,6 +448,69 @@ class IncentiveSummaryTableWidget extends TableWidget
                         Notification::make()->title(__('Matter Removed'))->success()->send();
                     }),
             ]);
+    }
+
+    /**
+     * A fixed amount added to an assistant's incentive or taken off it, with its reason: a line of its own in their
+     * calculation (IncentiveAdjustments). Above the table for any assistant (one with no matter in it too), or on a
+     * row for that row's assistant.
+     */
+    private function addAdjustmentAction(bool $forRow = false): Action
+    {
+        $action = Action::make($forRow ? 'addAdjustmentFor' : 'addAdjustment')
+            ->icon('heroicon-o-plus-circle')
+            ->modalDescription(__('A fixed amount added to the assistant\'s incentive in this calculation, or taken off it: a line of its own in their calculation, counted in their total and in payroll.'));
+
+        $action = $forRow
+            ? $action->label(fn ($record) => __('Add amount or deduction for :name', ['name' => $record->party?->name ?? '—']))
+                ->tooltip(fn ($record) => __('Add amount or deduction for :name', ['name' => $record->party?->name ?? '—']))
+                ->modalHeading(fn ($record) => __('Add amount or deduction for :name', ['name' => $record->party?->name ?? '—']))
+                ->iconButton()
+                ->color('success')
+                ->disabled(fn () => ! $this->isCalculationDraft())
+            : $action->label(__('Add amount or deduction'))
+                ->modalHeading(__('Add amount or deduction'))
+                ->visible(fn () => $this->isCalculationDraft() && auth()->user()?->can('runCalculation', $this->calculation()));
+
+        return $action
+            ->schema([
+                ToggleButtons::make('type')
+                    ->label(__('Type'))
+                    ->options(IncentiveAdjustmentType::class)
+                    ->default(IncentiveAdjustmentType::ADDITION->value)
+                    ->inline()
+                    ->required(),
+                Select::make('party_id')
+                    ->label(__('Assistant'))
+                    ->options(fn () => Party::query()->withRole('expert', 'assistant')->orderBy('name')->pluck('name', 'id'))
+                    ->searchable()
+                    ->required()
+                    // On a row: that row's assistant.
+                    ->visible(! $forRow),
+                TextInput::make('amount')
+                    ->label(__('Amount'))
+                    ->suffix(Currency::symbol())
+                    ->numeric()
+                    ->minValue(0.01)
+                    ->required(),
+                TextInput::make('reason')
+                    ->label(__('Reason'))
+                    ->maxLength(255)
+                    ->required(),
+            ])
+            ->action(function (array $data, $record = null) use ($forRow) {
+                $this->guardMutation();
+
+                app(IncentiveAdjustments::class)->add(
+                    $this->calculation(),
+                    (int) ($forRow ? $record->party_id : $data['party_id']),
+                    IncentiveAdjustmentType::from($data['type'] instanceof IncentiveAdjustmentType ? $data['type']->value : $data['type']),
+                    (float) $data['amount'],
+                    $data['reason'],
+                );
+
+                Notification::make()->title(__('Saved'))->success()->send();
+            });
     }
 
     /**
