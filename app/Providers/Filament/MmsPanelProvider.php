@@ -109,10 +109,10 @@ class MmsPanelProvider extends PanelProvider
         Select::configureUsing(fn (Select $select) => $select->native(false));
         SelectFilter::configureUsing(fn (SelectFilter $select) => $select->native(false));
 
+        // Labels read as the form is shown, in its user's language: boot() runs before that language is set.
         UserForm::register([
-            TextInput::make('display_name')->label(__('Display name'))->required(),
-            Select::make('party')->label(__('Party'))->searchable()->relationship('party', 'name'),
-
+            TextInput::make('display_name')->label(fn (): string => __('Display name'))->required(),
+            Select::make('party')->label(fn (): string => __('Party'))->searchable()->relationship('party', 'name'),
         ]);
         Table::configureUsing(fn (Table $table) => $table->striped()->stackedOnMobile());
         app(FilamentUserServices::class)->register([
