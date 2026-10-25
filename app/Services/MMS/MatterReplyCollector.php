@@ -683,7 +683,9 @@ class MatterReplyCollector
         $message = $this->findMessage($email)
             ?? throw new RuntimeException(__('This email is no longer in the mailbox it came to, so it cannot be made again.'));
 
-        [$pdf, $files, $name, $source] = $this->rendered($message, (string) $email->sender_key, $email->parent_id !== null);
+        [$pdf, $files, $name, $source, $links] = $this->rendered($message, (string) $email->sender_key, $email->parent_id !== null);
+        // Its links read again — one of before read for them for the first time.
+        $email->update(['links' => $links]);
 
         $old = (array) ($email->files ?? []);
         $replace = function (?string $path, string $contents): bool {
@@ -828,7 +830,7 @@ class MatterReplyCollector
             // A reply on a matter is on it (listed in its Emails tab); one to a campaign with no matter is nobody's.
             'status' => $matter ? MatterEmail::FILED : null,
         ]);
-        [$pdf, $files, $name, $source] = $this->rendered($message, (string) $answers->sender_key, true);
+        [$pdf, $files, $name, $source, $links] = $this->rendered($message, (string) $answers->sender_key, true);
         $oneDrive = null;
 
         if ($matter) {
@@ -840,7 +842,7 @@ class MatterReplyCollector
 
         // Where each went — for the campaign's recipients list to open. Written first, so the steps
         // after it are never repeated by a run that keeps the email again.
-        $reply->update(['files' => $kept, 'onedrive' => $oneDrive]);
+        $reply->update(['files' => $kept, 'links' => $links, 'onedrive' => $oneDrive]);
 
         if ($matter) {
             $this->noteUnlinked($matter, $kept);
@@ -861,10 +863,10 @@ class MatterReplyCollector
     private function keepIncoming(Matter $matter, array $message, string $id, string $senderKey, ?string $by, ?int $userId = null): MatterEmail
     {
         $email = $this->record($message, $id, $senderKey, ['matter_id' => $matter->getKey(), 'status' => MatterEmail::FILED, 'matched_by' => $by]);
-        [$pdf, $files, $name, $source] = $this->rendered($message, $senderKey, false);
+        [$pdf, $files, $name, $source, $links] = $this->rendered($message, $senderKey, false);
 
         $kept = $this->keepOnMatter($matter, $pdf, $files, $name, $userId, $source, $oneDrive, self::arrivedAt($message));
-        $email->update(['files' => $kept, 'onedrive' => $oneDrive]);
+        $email->update(['files' => $kept, 'links' => $links, 'onedrive' => $oneDrive]);
         MatterProgressRecorder::emailReceived($email, $userId);
         MatterContact::learn($email);
         // Forwarded by someone: they are told too, unread — it answers what they did.
@@ -897,9 +899,9 @@ class MatterReplyCollector
     private function hold(array $message, string $id, string $senderKey, array $candidates): MatterEmail
     {
         $email = $this->record($message, $id, $senderKey, ['status' => MatterEmail::PENDING, 'candidates' => $candidates]);
-        [$pdf, $files, $name, $source] = $this->rendered($message, $senderKey, false);
+        [$pdf, $files, $name, $source, $links] = $this->rendered($message, $senderKey, false);
 
-        $email->update(['files' => $this->keepLoose('email-unfiled/'.$email->getKey(), $pdf, $files, $name, $source)]);
+        $email->update(['files' => $this->keepLoose('email-unfiled/'.$email->getKey(), $pdf, $files, $name, $source), 'links' => $links]);
         $this->tellUnfiled($email);
 
         return $email;
@@ -1080,7 +1082,7 @@ class MatterReplyCollector
      * for the party who sent it.
      *
      * @param  array<string, mixed>  $message
-     * @return array{0: string, 1: list<array{name: string, contents: string, mime?: string}>, 2: string, 3: ?string} the PDF, the files, the name, and the original email (.eml) when the mailbox gives it
+     * @return array{0: string, 1: list<array{name: string, contents: string, mime?: string}>, 2: string, 3: ?string, 4: list<array{url: string, label: string}>} the PDF, the files, the name, the original email (.eml) when the mailbox gives it, and the links in it to documents to download
      */
     private function rendered(array $message, string $senderKey, bool $reply): array
     {
@@ -1105,7 +1107,7 @@ class MatterReplyCollector
             received: true,
         );
 
-        return [$pdf, $files, SentEmailArchive::emailName(false, self::partyName($from) ?? $fromName, (string) ($message['subject'] ?? ''), $at, $reply), self::original($message)];
+        return [$pdf, $files, SentEmailArchive::emailName(false, self::partyName($from) ?? $fromName, (string) ($message['subject'] ?? ''), $at, $reply), self::original($message), EmailDownloadLinks::in($body)];
     }
 
     /**

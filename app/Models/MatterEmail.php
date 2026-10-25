@@ -62,7 +62,7 @@ class MatterEmail extends Model
     /** Forwarded to the filing mailbox by someone in the office, naming its matter (ForwardedEmailFiler). */
     public const BY_FORWARD = 'forward';
 
-    protected $fillable = ['matter_id', 'direction', 'status', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'cc', 'files', 'onedrive', 'candidates', 'matched_by', 'at', 'user_id', 'was_unread'];
+    protected $fillable = ['matter_id', 'direction', 'status', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'cc', 'files', 'links', 'onedrive', 'candidates', 'matched_by', 'at', 'user_id', 'was_unread'];
 
     protected function casts(): array
     {
@@ -70,6 +70,7 @@ class MatterEmail extends Model
             'to' => 'array',
             'cc' => 'array',
             'files' => 'array',
+            'links' => 'array',
             'onedrive' => 'array',
             'candidates' => 'array',
             'at' => 'datetime',
@@ -177,6 +178,16 @@ class MatterEmail extends Model
         return $value === null ? null : (bool) $value;
     }
 
+    /**
+     * The links it brings documents by, to download (EmailDownloadLinks) — none for one that went out, or of before.
+     *
+     * @return list<array{url: string, label: string}>
+     */
+    public function downloadLinks(): array
+    {
+        return array_values(array_filter((array) ($this->links ?? []), fn ($link): bool => is_array($link) && filled($link['url'] ?? null)));
+    }
+
     /** How many of the files it came with are in the matter's OneDrive — null when never checked. */
     public function attachmentsInOneDrive(): ?int
     {
@@ -228,8 +239,13 @@ class MatterEmail extends Model
         }
 
         if ($what === 'attachments') {
+            $links = count($this->downloadLinks());
+
             return match ($this->attachmentsState()) {
-                'none' => __('Without attachment'),
+                // Its documents sent as links to download, not attached.
+                'none' => $links > 0
+                    ? trans_choice('Without attachment, :count download link|Without attachment, :count download links', $links, ['count' => $links])
+                    : __('Without attachment'),
                 'saved' => __('Saved'),
                 'partly' => __('Partly saved'),
                 'not_saved' => __('Not saved'),

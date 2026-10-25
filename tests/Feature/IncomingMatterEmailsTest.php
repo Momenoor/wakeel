@@ -22,6 +22,7 @@ use App\Models\Setting;
 use App\Models\Type;
 use App\Models\User;
 use App\Services\MMS\CollectedEmailUndo;
+use App\Services\MMS\EmailDownloadLinks;
 use App\Services\MMS\IncomingEmailMatcher;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterReplyCollector;
@@ -566,6 +567,66 @@ class IncomingMatterEmailsTest extends TestCase
             .'.*?EML in OneDrive.*?'.preg_quote((string) $received->oneDriveLabel('eml'), '/')
             .'.*?Attachments in OneDrive.*?'.preg_quote((string) $received->oneDriveLabel('attachments'), '/').'/s', $modal);
         $this->assertStringContainsString('/storage/attachments/emails/'.$this->second->id, Storage::disk('public')->url($received->files[0]['path']));
+    }
+
+    public function test_links_to_documents_are_found_and_never_a_signatures(): void
+    {
+        $signature = '<p>Best regards,<br>Ahmed Ali | <a href="https://albanna.ae">www.albanna.ae</a> | <a href="https://www.linkedin.com/company/albanna">LinkedIn</a>'
+            .' | <a href="https://maps.app.goo.gl/abc">Our office</a> | <a href="https://apps.apple.com/app/id1">Download our app</a>'
+            .' | <a href="https://albanna.ae/privacy-policy.pdf">Privacy policy</a> | <a href="mailto:office@albanna.ae">office@albanna.ae</a>'
+            .' | <a href="'.config('app.url').'/storage/x.pdf">ours</a> | <a href="https://docs.google.com/forms/d/1/viewform">Feedback</a></p>';
+
+        $this->assertSame([], EmailDownloadLinks::in('<p>Please see the attached.</p>'.$signature));
+
+        $links = EmailDownloadLinks::in('<p>The documents:</p><ul>'
+            .'<li><a href="https://drive.google.com/file/d/1AbC/view?usp=sharing">العقد الموقع</a></li>'
+            .'<li><a href="https://eur01.safelinks.protection.outlook.com/?url='.rawurlencode('https://we.tl/t-XyZ').'&amp;data=05">https://we.tl/t-XyZ</a></li>'
+            .'<li><a href="https://court.example.ae/files/%D8%AD%D9%83%D9%85.pdf">https://court.example.ae/files/حكم.pdf</a></li>'
+            .'<li><a href="https://portal.example.ae/case/doc?id=7">اضغط هنا للتحميل</a></li></ul>'
+            .'<p>Also at https://www.dropbox.com/scl/fi/abc/bundle.zip?dl=0.</p>'.$signature);
+
+        $this->assertSame([
+            ['url' => 'https://drive.google.com/file/d/1AbC/view?usp=sharing', 'label' => 'العقد الموقع'],
+            ['url' => 'https://we.tl/t-XyZ', 'label' => 'we.tl'],
+            ['url' => 'https://court.example.ae/files/%D8%AD%D9%83%D9%85.pdf', 'label' => 'حكم.pdf'],
+            ['url' => 'https://portal.example.ae/case/doc?id=7', 'label' => 'اضغط هنا للتحميل'],
+            ['url' => 'https://www.dropbox.com/scl/fi/abc/bundle.zip?dl=0', 'label' => 'bundle.zip'],
+        ], $links);
+    }
+
+    public function test_an_email_with_its_documents_as_links_says_so_on_the_matters_emails_tab(): void
+    {
+        $this->collect(
+            $this->email(['subject' => 'مستندات القضية 987/2026', 'attachments' => [], 'body' => '<p>المستندات: <a href="https://drive.google.com/file/d/1AbC/view">ملف القضية</a></p>'
+                .'<p>Regards, <a href="https://albanna.ae">albanna.ae</a></p>']),
+            // Its signature's links only: no download links.
+            $this->email(['subject' => 'رد القضية 987/2026', 'attachments' => [], 'body' => '<p>تم الاستلام.</p><p><a href="https://albanna.ae">albanna.ae</a> <a href="https://www.instagram.com/albanna">Instagram</a></p>']),
+        );
+        [$linked, $plain] = MatterEmail::where('matter_id', $this->second->id)->orderBy('id')->get()->all();
+
+        $this->assertSame([['url' => 'https://drive.google.com/file/d/1AbC/view', 'label' => 'ملف القضية']], $linked->downloadLinks());
+        $this->assertSame([], $plain->downloadLinks());
+
+        Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->second, 'pageClass' => ViewMatter::class])
+            ->assertTableColumnStateSet('attachments_saved', 'Without attachment, 1 download link', $linked)
+            ->assertTableColumnStateSet('attachments_saved', 'Without attachment', $plain)
+            ->mountTableAction('view', $linked)
+            ->assertMountedActionModalSee(['Download links', 'ملف القضية', 'https://drive.google.com/file/d/1AbC/view']);
+    }
+
+    public function test_an_unfiled_email_shows_its_download_links(): void
+    {
+        // Of no matter it can tell: waiting in Unfiled emails.
+        $this->collect($this->email(['attachments' => [], 'body' => '<p>المستندات: <a href="https://we.tl/t-XyZ">رابط التحميل</a></p><p><a href="https://albanna.ae">albanna.ae</a></p>']));
+        $this->collect($this->email(['attachments' => [], 'body' => '<p>شكراً</p><p><a href="https://albanna.ae">albanna.ae</a></p>']));
+        [$linked, $plain] = MatterEmail::where('status', MatterEmail::PENDING)->orderBy('id')->get()->all();
+
+        Livewire::test(UnfiledEmails::class)
+            ->assertTableActionVisible('downloadLinks', $linked)
+            ->assertTableActionHidden('downloadLinks', $plain)
+            ->assertTableActionHasLabel('downloadLinks', 'Download links (1)', $linked)
+            ->mountTableAction('downloadLinks', $linked)
+            ->assertMountedActionModalSee(['رابط التحميل', 'https://we.tl/t-XyZ']);
     }
 
     public function test_a_collected_email_is_marked_read_in_the_mailbox_and_its_original_is_kept_as_eml(): void

@@ -118,7 +118,10 @@ class EmailsRelationManager extends RelationManager
                     ->label(__('Attachments in OneDrive'))
                     ->badge()
                     ->state(fn (MatterEmail $record): ?string => $record->oneDriveLabel('attachments'))
-                    ->color(fn (?string $state): string => self::color($state)),
+                    // Its documents as links to download, not attached: to be seen, and fetched by hand.
+                    ->color(fn (?string $state, MatterEmail $record): string => self::onlyLinks($record) ? 'warning' : self::color($state))
+                    ->icon(fn (MatterEmail $record): ?string => self::onlyLinks($record) ? 'heroicon-o-link' : null)
+                    ->tooltip(fn (MatterEmail $record): ?string => self::onlyLinks($record) ? __('Its documents came as links to download, not attached — see Details.') : null),
                 TextColumn::make('matched_by')
                     ->label(__('Matter known by'))
                     ->formatStateUsing(fn (?string $state): string => MatterEmail::matchedByLabel($state))
@@ -236,6 +239,12 @@ class EmailsRelationManager extends RelationManager
         };
     }
 
+    /** It came with no file, but with links to documents to download. */
+    private static function onlyLinks(MatterEmail $email): bool
+    {
+        return $email->direction === MatterEmail::RECEIVED && $email->downloadLinks() !== [] && $email->attachmentsState() === 'none';
+    }
+
     /** The URL of the email's PDF (the first file kept), when there is one. */
     private static function pdfUrl(MatterEmail $email): ?string
     {
@@ -255,6 +264,7 @@ class EmailsRelationManager extends RelationManager
         $sent = $email->direction === MatterEmail::SENT;
         $folder = ((array) $email->onedrive)['folder'] ?? null;
         $files = $email->fileLinks();
+        $links = $email->downloadLinks();
 
         $rows = array_filter([
             'at' => [__('Date'), $email->at?->format(Dates::dateTimeFormat())],
@@ -295,6 +305,23 @@ class EmailsRelationManager extends RelationManager
             Text::make(__('No file was kept for this email.'))
                 ->color('gray')
                 ->visible($files === [] && ! $sent),
+            self::downloadLinks($email)->visible($links !== []),
         ];
+    }
+
+    /** Documents it sent as links: not kept — each opened where it is, to download (here, and in Unfiled emails). */
+    public static function downloadLinks(MatterEmail $email): TextEntry
+    {
+        return TextEntry::make('download_links')
+            ->label(__('Download links'))
+            ->helperText(__('Not kept in Wakeel: open each to download the document, then add it to the matter.'))
+            ->state($email->downloadLinks())
+            ->formatStateUsing(fn (array $state): string => $state['label'])
+            ->url(fn (array $state): string => $state['url'], shouldOpenInNewTab: true)
+            ->color('primary')
+            ->icon('heroicon-o-arrow-top-right-on-square')
+            ->listWithLineBreaks()
+            ->bulleted()
+            ->extraAttributes(['dir' => 'auto']);
     }
 }

@@ -4774,5 +4774,9 @@
     "Restore who entered each fee": "استعادة مُدخِل كل أتعاب",
     "A fee showed whoever last changed it or recorded a payment on it as the one who entered it. From the activity log, :fees fee(s) are given back the person who added them; :unknown with no record of who added them (imported, or from before the log) keep what they have. Every change is written in a log.": "كانت الأتعاب تُظهر آخر من عدّلها أو سجّل عليها دفعة على أنه من أدخلها. من سجل النشاط، تُعاد :fees أتعاب إلى الشخص الذي أضافها؛ وتبقى :unknown أتعاب لا سجل لمن أضافها (مستوردة أو أقدم من السجل) كما هي. يُسجَّل كل تغيير في سجل.",
     "Who entered each fee restored": "تمت استعادة مُدخِل كل أتعاب",
-    ":fees fee(s) given back the person who added them.": "أُعيدت :fees أتعاب إلى الشخص الذي أضافها."
+    ":fees fee(s) given back the person who added them.": "أُعيدت :fees أتعاب إلى الشخص الذي أضافها.",
+    "Without attachment, :count download link|Without attachment, :count download links": "بدون مرفق، روابط تحميل: :count|بدون مرفق، روابط تحميل: :count",
+    "Its documents came as links to download, not attached — see Details.": "وصلت مستنداته روابطَ للتحميل لا مرفقات — انظر التفاصيل.",
+    "Download links": "روابط التحميل",
+    "Not kept in Wakeel: open each to download the document, then add it to the matter.": "غير محفوظة في وكيل: افتح كل رابط لتحميل المستند، ثم أضفه إلى القضية."
 }

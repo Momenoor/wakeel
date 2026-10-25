@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Pages;
 
 use App\Filament\Concerns\RendersFreshContent;
 use App\Filament\Mms\Resources\Matters\MatterResource;
+use App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager;
 use App\Filament\Support\RegenerateEmailAction;
 use App\Jobs\EmailJob;
 use App\Jobs\FileUnfiledEmail;
@@ -291,6 +292,18 @@ class UnfiledEmails extends Page implements HasTable
                             ->listWithLineBreaks()
                             ->extraAttributes(['dir' => 'auto']),
                     ]),
+
+                // Its documents sent as links to download — to tell what it is about too.
+                Action::make('downloadLinks')
+                    ->label(fn (MatterEmail $record): string => __('Download links').' ('.count($record->downloadLinks()).')')
+                    ->icon('heroicon-o-link')
+                    ->color('warning')
+                    ->visible(fn (MatterEmail $record): bool => $record->downloadLinks() !== [])
+                    ->modalHeading(fn (MatterEmail $record): string => __('Download links').': '.$record->subject)
+                    ->modalWidth('lg')
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel(__('Close'))
+                    ->schema(fn (MatterEmail $record): array => [EmailsRelationManager::downloadLinks($record)->hiddenLabel()]),
 
                 Action::make('file')
                     ->label(__('File to matter'))
