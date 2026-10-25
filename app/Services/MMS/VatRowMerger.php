@@ -16,7 +16,8 @@ use Illuminate\Support\Facades\DB;
  * no VAT yet, whose VAT at the rate is the row's amount to the fils; any other is listed for a person to decide,
  * never touched. The fee's basic amount — and so every incentive — is not changed.
  *
- * Run by hand: php artisan fees:merge-vat-rows lists, --apply merges.
+ * Run by hand, with the statuses after it and a log of each change: Fee Data Maintenance → "Merge VAT into the
+ * fees and fix statuses", or php artisan fees:fix-vat (--apply) — FeeVatAndStatusFix.
  */
 class VatRowMerger
 {

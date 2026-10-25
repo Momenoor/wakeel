@@ -4,6 +4,7 @@ namespace App\Filament\Shared\Pages;
 
 use App\Filament\Concerns\RendersFreshContent;
 use App\Filament\Shared\Clusters\Settings;
+use App\Filament\Shared\Pages\Concerns\ManagesDatabaseBackups;
 use App\Models\License;
 use App\Services\License\LicenseVerifier;
 use App\Services\Updater\Updater;
@@ -43,7 +44,7 @@ use function Filament\Support\generate_loading_indicator_html;
  */
 class SystemUpdates extends Page
 {
-    use RendersFreshContent;
+    use ManagesDatabaseBackups, RendersFreshContent;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::ArrowPathRoundedSquare;
 
@@ -162,6 +163,9 @@ class SystemUpdates extends Page
                         ->state(fn (): HtmlString => new HtmlString(Str::markdown((string) $notes, ['html_input' => 'escape', 'allow_unsafe_links' => false])))
                         ->prose(),
                 ]),
+
+            // Super admins: the database backed up, downloaded and restored (ManagesDatabaseBackups).
+            ...$this->backupComponents(),
         ];
     }
 

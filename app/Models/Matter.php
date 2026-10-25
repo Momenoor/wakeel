@@ -420,28 +420,32 @@ class Matter extends Model implements AttachmentOwner
     public function updateCollectionStatus(?Collection $fees = null): void
     {
         // Read afresh, unless given — its fees read already, with many matters' at once (VatRowMerger).
-        $fees ??= $this->fees()->get();
-
-        if ($fees->isEmpty()) {
-            $this->collection_status = MatterCollectionStatus::NO_FEES;
-        } else {
-            // What is collected: each fee's total, VAT included.
-            $totalAmount = (float) $fees->sum(fn ($fee) => abs($fee->total));
-
-            $totalAllocated = (float) $this->allocations->sum(fn ($allocation) => abs($allocation->amount));
-
-            if ($totalAllocated <= 0) {
-                $this->collection_status = MatterCollectionStatus::UNPAID;
-            } elseif ($totalAllocated < $totalAmount) {
-                $this->collection_status = MatterCollectionStatus::PARTIAL;
-            } else {
-                $this->collection_status = MatterCollectionStatus::PAID;
-            }
-        }
+        $this->collection_status = $this->collectionStatusFor($fees ?? $this->fees()->get());
 
         if ($this->isDirty('collection_status')) {
             $this->saveQuietly();
         }
+    }
+
+    /**
+     * What its collection status is, from these fees (its own) and its payments — set nowhere (a preview reads it
+     * too: FeeVatAndStatusFix).
+     */
+    public function collectionStatusFor(Collection $fees): MatterCollectionStatus
+    {
+        if ($fees->isEmpty()) {
+            return MatterCollectionStatus::NO_FEES;
+        }
+
+        // What is collected: each fee's total, VAT included.
+        $totalAmount = (float) $fees->sum(fn ($fee) => abs($fee->total));
+        $totalAllocated = (float) $this->allocations->sum(fn ($allocation) => abs($allocation->amount));
+
+        return match (true) {
+            $totalAllocated <= 0 => MatterCollectionStatus::UNPAID,
+            $totalAllocated < $totalAmount => MatterCollectionStatus::PARTIAL,
+            default => MatterCollectionStatus::PAID,
+        };
     }
 
     /**

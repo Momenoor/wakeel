@@ -18,6 +18,7 @@ use App\Models\MatterTypeIncentiveConfig;
 use App\Models\Setting;
 use App\Models\Type;
 use App\Models\User;
+use App\Services\MMS\FeeVatAndStatusFix;
 use App\Services\MMS\IncentiveCalculatorService;
 use App\Services\MMS\VatRowMerger;
 use App\Support\Vat;
@@ -26,6 +27,7 @@ use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -227,6 +229,45 @@ class FeeVatTest extends TestCase
         // Every fee, its payments and its matter read at once: not once a pair.
         $this->assertSame($one, $reads());
         $this->assertSame(0, Fee::where('type', FeeType::VAT->value)->count());
+    }
+
+    public function test_the_fix_previews_then_merges_and_fixes_statuses_with_a_log_of_each_change(): void
+    {
+        Storage::fake('local');
+        $enteredBy = User::factory()->create();
+        $fee = $this->matter->fees()->create(['type' => FeeType::EXPERT_FEE, 'amount' => 1000]);
+        $row = $this->matter->fees()->create(['type' => FeeType::VAT, 'amount' => 50]);
+        Allocation::create(['fee_id' => $fee->id, 'matter_id' => $this->matter->id, 'amount' => 1000, 'date' => '2026-06-01']);
+        Allocation::create(['fee_id' => $row->id, 'matter_id' => $this->matter->id, 'amount' => 50, 'date' => '2026-06-01']);
+        // A status out of date: a fee fully paid, still marked unpaid.
+        $paid = $this->matter->fees()->create(['type' => FeeType::OTHER, 'amount' => 300]);
+        Allocation::create(['fee_id' => $paid->id, 'matter_id' => $this->matter->id, 'amount' => 300, 'date' => '2026-06-01']);
+        DB::table('fees')->where('id', $paid->id)->update(['status' => FeeStatus::UNPAID->value]);
+        // Who entered it (a payment saved the fee as whoever recorded it — set after them).
+        DB::table('fees')->where('id', $fee->id)->update(['user_id' => $enteredBy->id]);
+
+        $fix = app(FeeVatAndStatusFix::class);
+
+        // A preview: nothing changed; its log says what would.
+        $preview = $fix->run(apply: false);
+        $this->assertSame([1, 0, 1], [$preview['merged'], $preview['review'], $preview['fees']]);
+        $this->assertNotNull(Fee::find($row->id));
+        $this->assertSame(FeeStatus::UNPAID, $paid->fresh()->status);
+        $this->assertStringContainsString('Preview — nothing changed', Storage::disk('local')->get($preview['file']));
+
+        $applied = $fix->run(apply: true);
+        $log = Storage::disk('local')->get($applied['file']);
+
+        $this->assertNull(Fee::find($row->id));
+        $this->assertSame([50.0, FeeStatus::PAID, $enteredBy->id], [(float) $fee->fresh()->vat, $fee->fresh()->status, $fee->fresh()->user_id]);
+        $this->assertSame(FeeStatus::PAID, $paid->fresh()->status);
+        // Each change, line by line.
+        $this->assertStringContainsString("Matter 1200/2026 — fee #{$fee->id}: basic 1,000.00 + VAT 50.00 = 1,050.00 (VAT row #{$row->id} removed, 1 payment(s) moved to the fee)", $log);
+        $this->assertStringContainsString("Fee #{$paid->id} (matter 1200/2026, ".FeeType::OTHER->getLabel().'): unpaid → paid — total 300.00, collected 300.00', $log);
+
+        // Run again: nothing left to do.
+        $again = $fix->run(apply: true);
+        $this->assertSame([0, 0, 0], [$again['merged'], $again['fees'], $again['matters']]);
     }
 
     public function test_the_vat_summary_reads_each_fees_own_vat_and_the_rows_of_before(): void

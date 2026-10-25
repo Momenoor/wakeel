@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CronWebhookController;
+use App\Http\Controllers\SystemRestoreController;
 use App\Http\Controllers\WhatsAppWebhookController;
 use App\Http\Middleware\EnsureLicenseIsValid;
 use App\Http\Middleware\RedirectIfInstalled;
@@ -29,6 +30,11 @@ return Application::configure(basePath: dirname(__DIR__))
             // Meta's WhatsApp webhook: signed by Meta, not a signed-in user.
             Route::get('webhooks/whatsapp', [WhatsAppWebhookController::class, 'verify'])->name('webhooks.whatsapp');
             Route::post('webhooks/whatsapp', [WhatsAppWebhookController::class, 'receive'])->middleware('throttle:120,1');
+
+            // A database restore, to its end: its own key, not a login — the sessions' table is dropped under it.
+            Route::get('system-restore/{key}', [SystemRestoreController::class, 'show'])->name('system-restore.show');
+            Route::post('system-restore/{key}/step', [SystemRestoreController::class, 'step'])->middleware('throttle:120,1')->name('system-restore.step');
+            Route::post('system-restore/{key}/restart', [SystemRestoreController::class, 'restart'])->middleware('throttle:10,1')->name('system-restore.restart');
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
@@ -52,7 +58,8 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // The web cron is let through maintenance mode: it carries an update on when the page that started it
         // was closed (CronWebhookRunner). The scheduled tasks themselves still wait for the site to be back.
-        $middleware->preventRequestsDuringMaintenance(except: ['cron/run']);
+        // A database restore runs its steps while the site is offline (it took it offline).
+        $middleware->preventRequestsDuringMaintenance(except: ['cron/run', 'system-restore/*']);
 
         $middleware->alias([
             'installer.guard' => RedirectIfInstalled::class,

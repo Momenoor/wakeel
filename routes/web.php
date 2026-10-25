@@ -1,5 +1,7 @@
 <?php
 
+use App\Filament\Mms\Pages\FeeDataMaintenance;
+use App\Http\Controllers\BackupDownloadController;
 use App\Http\Controllers\ChatAttachmentController;
 use App\Http\Controllers\ChatMessageController;
 use App\Http\Controllers\ClientErrorController;
@@ -8,11 +10,13 @@ use App\Http\Controllers\LicenseController;
 use App\Http\Controllers\PushSubscriptionController;
 use App\Livewire\Installer\InstallWizard;
 use App\Models\Setting;
+use App\Services\MMS\FeeFixLog;
 use App\Services\Updater\Updater;
 use App\Support\AppUpdate;
 use App\Support\Branding;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 
 // Sends a bare visit to the domain root straight into whichever panel is
 // currently the installation's default (MMS unless it's disabled, per
@@ -57,6 +61,20 @@ Route::get('/system-updates/live-output', function () {
         'silent_for' => app(Updater::class)->secondsSinceOutput(),
     ]);
 })->middleware('auth')->name('system-updates.live-output');
+
+// The log of a fees fix (Fee Data Maintenance): each change it made, or would make.
+Route::get('/fee-fixes/{name}', function (string $name) {
+    abort_unless(FeeDataMaintenance::canAccess(), 403);
+    abort_unless(preg_match(FeeFixLog::NAME, $name) === 1 && Storage::disk('local')->exists($path = FeeFixLog::DIRECTORY.'/'.$name), 404);
+
+    return Storage::disk('local')->download($path, $name, ['Content-Type' => 'text/plain; charset=utf-8']);
+})->middleware('auth')->name('fee-fixes.log');
+
+// A database backup, downloaded by a super admin (System Updates → Database backups).
+Route::get('/system-updates/backups/{name}', BackupDownloadController::class)
+    ->where('name', '[A-Za-z0-9._-]+')
+    ->middleware('auth')
+    ->name('system-updates.backup');
 
 // The default panel's own login — MMS isn't registered on a PMS-only install.
 Route::get('/login', fn () => redirect()->to(Filament::getDefaultPanel()->getLoginUrl()))->name('login');

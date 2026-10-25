@@ -69,7 +69,10 @@ class Fee extends Model implements AttachmentOwner
         });
 
         static::saving(function (Fee $fee) {
-            $fee->user_id = auth()->id();
+            // Who entered it: whoever added it — kept when it is changed or a payment is recorded on it later.
+            if (! $fee->exists && $fee->user_id === null) {
+                $fee->user_id = auth()->id();
+            }
             if (! $fee->date) {
                 $fee->date = now();
             }

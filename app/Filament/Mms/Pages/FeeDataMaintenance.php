@@ -7,10 +7,11 @@ use App\Filament\Schemas\MaintenanceNoticeSection;
 use App\Filament\Shared\Clusters\Settings;
 use App\Models\Allocation;
 use App\Models\Fee;
-use App\Models\Matter;
 use App\Models\Party;
 use App\Services\MMS\FeeChangeNotifier;
 use App\Services\MMS\FeeDataRepairService;
+use App\Services\MMS\FeeEnteredByRestore;
+use App\Services\MMS\FeeVatAndStatusFix;
 use App\Support\Currency;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -22,6 +23,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\HtmlString;
 
 /**
  * Operator-driven fee data corrections.
@@ -36,6 +38,12 @@ use Illuminate\Support\Facades\DB;
  */
 class FeeDataMaintenance extends Page
 {
+    /** The VAT fix previewed when its button is pressed: what it would change, and its log. */
+    public ?array $vatPreview = null;
+
+    /** Who entered each fee, previewed when its button is pressed: how many would change, and its log. */
+    public ?array $enteredByPreview = null;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedWrenchScrewdriver;
 
     protected static ?int $navigationSort = 61;
@@ -347,6 +355,44 @@ class FeeDataMaintenance extends Page
                 ->modalSubmitActionLabel(__('Apply correction'))
                 ->action(fn () => $this->correctFeeSigns()),
 
+            // The fees as a fee carrying its own VAT has them: previewed first, each change in a log.
+            Action::make('fixFeesVat')
+                ->label(__('Merge VAT into the fees and fix statuses'))
+                ->icon(Heroicon::OutlinedReceiptPercent)
+                ->color('warning')
+                ->modalHeading(__('Merge VAT into the fees and fix statuses'))
+                ->mountUsing(function (): void {
+                    $this->vatPreview = app(FeeVatAndStatusFix::class)->run(apply: false);
+                })
+                ->modalDescription(fn (): ?HtmlString => $this->vatPreview === null ? null : new HtmlString(e(__(
+                    'Each VAT row of before goes into the fee it is the VAT of (:merged; :review left as they are for you), its payments with it; then every fee\'s status and every matter\'s collection status are worked out again — what is collected against each fee\'s total, VAT included (:fees fee(s) and :matters matter(s) as things are now). Every change is written in a log.',
+                    $this->vatPreview,
+                )).' <a class="underline" href="'.e(route('fee-fixes.log', basename($this->vatPreview['file']))).'">'.e(__('See the preview log')).'</a>'))
+                ->modalSubmitActionLabel(__('Apply'))
+                ->action(function (): void {
+                    $result = app(FeeVatAndStatusFix::class)->run(apply: true);
+                    $this->tellFixed($result['file'], __('VAT merged into the fees and statuses fixed'), __(':merged VAT row(s) merged into their fees, :fees fee status(es) and :matters matter collection status(es) updated.', $result));
+                }),
+
+            // Who entered each fee, put back from the activity log: previewed first, each change in a log.
+            Action::make('restoreEnteredBy')
+                ->label(__('Restore who entered each fee'))
+                ->icon(Heroicon::OutlinedUserCircle)
+                ->color('gray')
+                ->modalHeading(__('Restore who entered each fee'))
+                ->mountUsing(function (): void {
+                    $this->enteredByPreview = app(FeeEnteredByRestore::class)->run(apply: false);
+                })
+                ->modalDescription(fn (): ?HtmlString => $this->enteredByPreview === null ? null : new HtmlString(e(__(
+                    'A fee showed whoever last changed it or recorded a payment on it as the one who entered it. From the activity log, :fees fee(s) are given back the person who added them; :unknown with no record of who added them (imported, or from before the log) keep what they have. Every change is written in a log.',
+                    $this->enteredByPreview,
+                )).' <a class="underline" href="'.e(route('fee-fixes.log', basename($this->enteredByPreview['file']))).'">'.e(__('See the preview log')).'</a>'))
+                ->modalSubmitActionLabel(__('Apply'))
+                ->action(function (): void {
+                    $result = app(FeeEnteredByRestore::class)->run(apply: true);
+                    $this->tellFixed($result['file'], __('Who entered each fee restored'), __(':fees fee(s) given back the person who added them.', $result));
+                }),
+
             Action::make('recalculateStatuses')
                 ->label(__('Recalculate Fee & Collection Statuses'))
                 ->icon(Heroicon::OutlinedArrowPath)
@@ -431,40 +477,19 @@ class FeeDataMaintenance extends Page
 
     private function recalculateStatuses(): void
     {
-        $feesChanged = 0;
-        $mattersChanged = 0;
+        $result = app(FeeVatAndStatusFix::class)->run(apply: true, mergeVat: false);
+        $this->tellFixed($result['file'], __('Statuses recalculated'), __(':fees fee status(es) and :matters matter collection status(es) updated.', $result));
+    }
 
-        // Saving a status leaves the deductions' totals as they were.
-        Fee::withOffsetAllowances(fn () => Fee::query()->with('allocations')->chunkById(500, function ($fees) use (&$feesChanged) {
-            foreach ($fees as $fee) {
-                $original = $fee->status;
-                $fee->syncStatus();
-
-                if ($fee->status !== $original) {
-                    $fee->save();
-                    $feesChanged++;
-                }
-            }
-        }));
-
-        Matter::query()->chunkById(500, function ($matters) use (&$mattersChanged) {
-            foreach ($matters as $matter) {
-                $original = $matter->collection_status;
-                $matter->updateCollectionStatus();
-
-                if ($matter->fresh()->collection_status !== $original) {
-                    $mattersChanged++;
-                }
-            }
-        });
-
+    /** What a fix did — told, with its log (each change) to download. */
+    private function tellFixed(string $file, string $title, string $body): void
+    {
         Notification::make()
-            ->title(__('Statuses recalculated'))
-            ->body(__(':fees fee status(es) and :matters matter collection status(es) updated.', [
-                'fees' => $feesChanged,
-                'matters' => $mattersChanged,
-            ]))
+            ->title($title)
+            ->body($body)
             ->success()
+            ->persistent()
+            ->actions([Action::make('log')->label(__('Download the log'))->url(route('fee-fixes.log', basename($file)))])
             ->send();
     }
 }
