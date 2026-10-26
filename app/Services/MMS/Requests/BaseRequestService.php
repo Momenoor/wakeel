@@ -8,6 +8,7 @@ use App\Enums\NotificationType;
 use App\Enums\RequestStatus;
 use App\Enums\RequestType;
 use App\Filament\Support\AttachmentFields;
+use App\Jobs\SendRequestNotifications;
 use App\Mail\NewRequestNotificationMail;
 use App\Mail\RequestActionNotificationMail;
 use App\Models\Matter;
@@ -258,8 +259,14 @@ abstract class BaseRequestService
         }
     }
 
-    /** Tells the matter's assistants (their users) what was decided on their request. */
+    /** Tells the matter's assistants (their users) what was decided on their request — on the queue. */
     private function onActionNotify(NotificationType $type, string $title, string $body): void
+    {
+        SendRequestNotifications::dispatch($this->request->getKey(), 'decided', type: $type, title: $title, body: $body)->afterCommit();
+    }
+
+    /** What onActionNotify() sends, run by its job. */
+    public function sendActionNotifications(NotificationType $type, string $title, string $body): void
     {
         $statusLabel = $this->request->status->getLabel();
 
@@ -282,7 +289,14 @@ abstract class BaseRequestService
         return User::query()->whereHas('roles', fn ($query) => $query->whereIn('name', ['admin', Utils::getSuperAdminName()]))->get();
     }
 
+    /** Tells the admins and the report's reviewers of a request made (or sent again) — on the queue. */
     public function onCreateNotify(bool $again = false): void
+    {
+        SendRequestNotifications::dispatch($this->request->getKey(), 'created', again: $again)->afterCommit();
+    }
+
+    /** What onCreateNotify() sends, run by its job. */
+    public function sendCreateNotifications(bool $again = false): void
     {
         try {
             // Not an authorization decision — Gate::before has nothing to say

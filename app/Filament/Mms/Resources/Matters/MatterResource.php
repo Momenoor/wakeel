@@ -55,6 +55,9 @@ class MatterResource extends Resource
 
     protected static int $globalSearchResultsLimit = 10;
 
+    /** Matters first in the global search, before every other kind (the rest unsorted, 0). */
+    protected static ?int $globalSearchSort = -1;
+
     /**
      * Each word (a "/" splits too, so "123/2024" works) must match the
      * matter's year or number, a main party, or the court.
@@ -163,8 +166,7 @@ class MatterResource extends Resource
                 'court',
                 'type',
                 'matterParties',
-            ])
-            ->orderByRaw('COALESCE(parent_id, id) ASC, id ASC');
+            ]);
 
         // Fail CLOSED. canViewAny() admits anyone holding ViewOwn:Matter, so a
         // user restricted to their own matters whose Party link is missing must

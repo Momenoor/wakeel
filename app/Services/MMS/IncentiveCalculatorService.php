@@ -16,6 +16,7 @@ use App\Models\MatterParty;
 use App\Models\MatterTypeIncentiveTier;
 use App\Models\PartyLeave;
 use App\Models\Setting;
+use App\Support\ActivityLog;
 use Carbon\Carbon;
 use Carbon\Constants\UnitValue;
 use Illuminate\Database\Eloquent\Model;
@@ -55,7 +56,14 @@ class IncentiveCalculatorService
             throw new \RuntimeException('Cannot recalculate a finalized calculation.');
         }
 
-        DB::transaction(function () use ($calculation) {
+        // Read once for the run: everyone's leave, and each matter's first assistant (the run asked per line
+        // and per assistant-month: hundreds of the same queries).
+        $this->leavesByParty = null;
+        $this->firstAssistantOf = null;
+        $this->metaAdjustments = IncentiveMetaAdjustment::all();
+
+        // Its lines are rebuilt on every run: one entry in the activity log for the run, not one per line.
+        ActivityLog::quietly(fn () => DB::transaction(function () use ($calculation) {
 
             // Pick up any fee registered on a matter already in this
             // calculation since the last run (e.g. a late-arriving fee) so
@@ -114,6 +122,11 @@ class IncentiveCalculatorService
             // matter's net revenue — summed here per matter, independent of
             // the calculation period or whether any of it has been collected.
             $matterIds = $lines->pluck('matter_id')->unique();
+            // Every matter's assistants, read once: its first one's leave for its days, all of them for its shares.
+            $assistantsByMatter = MatterParty::query()
+                ->whereIn('matter_id', $matterIds)->where('role', 'expert')->where('type', 'assistant')
+                ->orderBy('id')->get()->groupBy('matter_id');
+            $this->firstAssistantOf = $assistantsByMatter->map(fn (Collection $assistants) => $assistants->first()->party_id);
             $matterDeductionTotals = Fee::whereIn('matter_id', $matterIds)
                 ->whereIn('type', FeeType::deductionTypeValues())
                 // Not "total": pluck() would read the fee's own total (Fee::getTotalAttribute) instead.
@@ -126,10 +139,11 @@ class IncentiveCalculatorService
             // ── Phase 1: calculate each incentive line ─────────────────────────
             $processedLines = collect();
 
-            foreach ($lines as $line) {
-                $line->deductions()->delete();
-                $line->assistantLines()->delete();
+            // Their deductions and shares of the last run gone, all at once.
+            IncentiveLineDeduction::query()->whereIn('incentive_line_id', $lines->modelKeys())->delete();
+            IncentiveAssistantLine::query()->whereIn('incentive_line_id', $lines->modelKeys())->delete();
 
+            foreach ($lines as $line) {
                 $matter = $line->matter;
                 $config = $matter->type?->incentiveConfig;
 
@@ -262,10 +276,7 @@ class IncentiveCalculatorService
                     && $matter->commissioning !== MatterCommissiong::COMMITTEE
                     && ! ($matter->type?->exclude_from_incentive_count ?? false);
 
-                $assistants = MatterParty::where('matter_id', $matterId)
-                    ->where('role', 'expert')
-                    ->where('type', 'assistant')
-                    ->get();
+                $assistants = $assistantsByMatter->get($matterId, collect());
 
                 if ($assistants->isEmpty()) {
                     continue;
@@ -407,25 +418,15 @@ class IncentiveCalculatorService
                     $monthCount = $monthMatters->count();
                     $totalCompletedCount += $monthCount;
 
-                    // Mid-month leave prorates the monthly minimum and the bonus-tier
-                    // boundaries by the fraction of that month's working days the
-                    // assistant was actually available (not on leave) — e.g. an
-                    // assistant available for half the month's working days only
-                    // needs half the usual minimum matters.
-                    $availabilityRatio = $this->monthlyAvailabilityRatio($partyId, $month);
-                    $proratedMinimum = (int) round($minimumMattersPerMonth * $availabilityRatio);
-                    $totalProratedMinimum += $proratedMinimum;
+                    // The month's minimum and bonus brackets as they are set, whatever leave the assistant
+                    // took: leave counts only in a matter's own completion days (getCompletionDays()),
+                    // never in how many matters a month needs.
+                    $totalProratedMinimum += $minimumMattersPerMonth;
 
-                    $monthMeetsMinimum = $monthCount >= $proratedMinimum;
+                    $monthMeetsMinimum = $monthCount >= $minimumMattersPerMonth;
 
-                    // Look up extra % for this month's count, prorating the rule's
-                    // own bracket boundaries by the same availability ratio.
-                    $matchedRule = $extraRules->first(function ($r) use ($monthCount, $availabilityRatio) {
-                        $proratedMin = (int) round($r->min_count * $availabilityRatio);
-                        $proratedMax = $r->max_count === null ? null : (int) round($r->max_count * $availabilityRatio);
-
-                        return $monthCount >= $proratedMin && ($proratedMax === null || $monthCount <= $proratedMax);
-                    });
+                    // The extra % for this month's count.
+                    $matchedRule = $extraRules->first(fn ($r) => $monthCount >= $r->min_count && ($r->max_count === null || $monthCount <= $r->max_count));
                     $monthExtraPct = $monthMeetsMinimum ? (float) ($matchedRule?->extra_percentage ?? 0) : 0.0;
 
                     // PDF: a flat penalty applies to every matter in a shortfall
@@ -492,7 +493,28 @@ class IncentiveCalculatorService
                     'fixed_deduction_reason' => $preserved?->fixed_deduction_reason,
                 ]);
             }
-        });
+        }));
+
+        activity()->performedOn($calculation)
+            ->withProperties(['lines' => IncentiveLine::query()->where('incentive_calculation_id', $calculation->getKey())->count()])
+            ->log('Incentive calculated');
+    }
+
+    /** Everyone's leave, by party, read once for a run (calculate()). */
+    private ?Collection $leavesByParty = null;
+
+    /** @var Collection<int, int>|null each matter's first assistant's party, for a run's lines */
+    private ?Collection $firstAssistantOf = null;
+
+    /** The adjustments by a matter's custom fields, read once for a run. */
+    private ?Collection $metaAdjustments = null;
+
+    /** A party's leave ranges, from everyone's read once for the run. */
+    private function leavesOf(int $partyId): Collection
+    {
+        $this->leavesByParty ??= PartyLeave::query()->get()->groupBy('party_id');
+
+        return $this->leavesByParty->get($partyId, collect());
     }
 
     /**
@@ -536,8 +558,8 @@ class IncentiveCalculatorService
     }
 
     /**
-     * What each assistant's deductions in a calculation (paid shares taken back, their fixed deduction) come to
-     * beyond what it earned them: taken from their salary, once, in the payroll month the calculation closes in
+     * What each assistant's deductions in a calculation (paid shares taken back, deductions entered by hand, their
+     * fixed deduction) come to beyond what it earned them: taken from their salary, once, in the month it closes in
      * (PayrollService). Only those with something to take.
      *
      * @return Collection<int, float>
@@ -652,12 +674,13 @@ class IncentiveCalculatorService
             ->groupBy('incentiveLine.matter_id')
             ->map(fn (Collection $lines) => $lines->pluck('party_id')->unique()->count());
 
+        // Every assistant's period figures at once, not one query an assistant.
+        $extras = IncentiveAssistantExtra::where('incentive_calculation_id', $calculation->id)->get()->keyBy('party_id');
+
         return $assistantLines
             ->groupBy('party_id')
-            ->map(function (Collection $lines, int|string $partyId) use ($calculation, $matterFeeTotals, $assistantCountByMatter) {
-                $extra = IncentiveAssistantExtra::where('incentive_calculation_id', $calculation->id)
-                    ->where('party_id', $partyId)
-                    ->first();
+            ->map(function (Collection $lines, int|string $partyId) use ($extras, $matterFeeTotals, $assistantCountByMatter) {
+                $extra = $extras->get($partyId);
 
                 $matters = $this->buildAssistantMatterRows($lines, $matterFeeTotals, $assistantCountByMatter);
                 // The matters worked: not a share taken back nor an amount entered by hand.
@@ -925,7 +948,8 @@ class IncentiveCalculatorService
      */
     public function calculateMetaAdjustment(Model $matter): float
     {
-        $adjustments = IncentiveMetaAdjustment::all();
+        // Read once for a run (calculate()); every time otherwise.
+        $adjustments = $this->metaAdjustments ?? IncentiveMetaAdjustment::all();
         $matterMetas = $matter->metas;
         $total = 0.0;
 
@@ -1078,21 +1102,20 @@ class IncentiveCalculatorService
     }
 
     /**
-     * Working days from matters.distributed_at → matters.initial_report_at,
-     * excluding the weekend and the matter's first assistant's leave days.
-     * DB column is distributed_at (not received_date as was in the old code).
-     * UAE weekend: Saturday and Sunday.
+     * Working days from the assistant's assignment (matters.distributed_at) up to and including the day of the
+     * initial report (matters.initial_report_at): the report's day counts, as the day the work was done.
+     * Excluding the weekend (Saturday and Sunday) and the matter's first assistant's leave days.
      */
     private function getCompletionDays(Model $matter): ?int
     {
-        // DB column: matters.distributed_at
         if (! $matter->distributed_at || ! $matter->initial_report_at) {
             return null;
         }
 
         return $this->workingDaysBetween(
             Carbon::parse($matter->distributed_at),
-            Carbon::parse($matter->initial_report_at),
+            // workingDaysBetween() stops before its end: the day after, so the report's own day is counted.
+            Carbon::parse($matter->initial_report_at)->addDay(),
             $this->firstAssistantLeaveRanges($matter)
         );
     }
@@ -1105,17 +1128,12 @@ class IncentiveCalculatorService
      */
     private function firstAssistantLeaveRanges(Model $matter): Collection
     {
-        $firstAssistant = MatterParty::where('matter_id', $matter->id)
-            ->where('role', 'expert')
-            ->where('type', 'assistant')
-            ->orderBy('id')
-            ->first();
+        // Read for all the run's matters at once (calculate()); one by one otherwise.
+        $partyId = $this->firstAssistantOf !== null
+            ? $this->firstAssistantOf->get($matter->id)
+            : MatterParty::where('matter_id', $matter->id)->where('role', 'expert')->where('type', 'assistant')->orderBy('id')->value('party_id');
 
-        if (! $firstAssistant) {
-            return collect();
-        }
-
-        return PartyLeave::where('party_id', $firstAssistant->party_id)->get();
+        return $partyId ? $this->leavesOf((int) $partyId) : collect();
     }
 
     /**
@@ -1138,57 +1156,6 @@ class IncentiveCalculatorService
         }
 
         return $days;
-    }
-
-    /**
-     * Count working days within a period, inclusive of both endpoints —
-     * used to measure the total working days available in a month bucket
-     * for proration, as opposed to workingDaysBetween's duration semantics.
-     */
-    private function countWorkingDaysInPeriod(Carbon $start, Carbon $end): int
-    {
-        $days = 0;
-        $current = $start->copy()->startOfDay();
-        $endInclusive = $end->copy()->startOfDay();
-
-        while ($current->lte($endInclusive)) {
-            if (! $this->isWeekend($current)) {
-                $days++;
-            }
-            $current->addDay();
-        }
-
-        return $days;
-    }
-
-    /**
-     * Fraction (0..1) of a month bucket's working days an assistant was
-     * actually available — i.e. not on leave. Used to prorate the monthly
-     * minimum and bonus-tier boundaries for a partial month.
-     *
-     * @param  array{start: Carbon, end: Carbon}  $month
-     */
-    private function monthlyAvailabilityRatio(int $partyId, array $month): float
-    {
-        $totalWorkingDays = $this->countWorkingDaysInPeriod($month['start'], $month['end']);
-
-        if ($totalWorkingDays <= 0) {
-            return 1.0;
-        }
-
-        $leaveRanges = PartyLeave::where('party_id', $partyId)->get();
-        $leaveWorkingDays = 0;
-        $current = $month['start']->copy()->startOfDay();
-        $endInclusive = $month['end']->copy()->startOfDay();
-
-        while ($current->lte($endInclusive)) {
-            if (! $this->isWeekend($current) && $this->isOnLeave($current, $leaveRanges)) {
-                $leaveWorkingDays++;
-            }
-            $current->addDay();
-        }
-
-        return max(0.0, min(1.0, 1.0 - ($leaveWorkingDays / $totalWorkingDays)));
     }
 
     /**

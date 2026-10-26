@@ -81,8 +81,9 @@ class MattersSearchTest extends TestCase
             ['571', '2009', 'a', 'b', 'c', 'd', 'e', 'f', 'g'],
             MattersTable::searchWords('571/2009 a-b:c_d'.chr(92).'e|f+g'),
         );
-        // Arabic digits as digits; joining words skipped.
+        // Arabic and Persian digits as digits; joining words skipped.
         $this->assertSame(['571', '2009'], MattersTable::searchWords('٥٧١ لسنة ٢٠٠٩'));
+        $this->assertSame(['571', '2009'], MattersTable::searchWords('۵۷۱/۲۰۰۹'));
     }
 
     public function test_the_number_and_year_are_found_written_any_way(): void

@@ -98,7 +98,7 @@
         </thead>
         <tbody>
         @foreach($assistantSummary['matters'] as $m)
-            <tr class="{{ $loop->even ? 'bg-blue-50' : 'bg-white' }} border-b border-gray-200">
+            <tr class="{{ $loop->even ? 'bg-blue-50' : 'bg-white' }} border-b border-gray-300">
                 <td class="px-3 py-2 font-semibold">
                     {{ $m['matter_reference'] }}
                     {{-- A paid incentive taken back, or an amount entered by hand: what it is, in full. --}}
@@ -146,7 +146,7 @@
                 <td class="px-3 py-2 text-right text-gray-500">{{ number_format($m['base_amount'], 2) }}</td>
                 <td class="px-3 py-2">
                     @forelse($m['deductions'] as $d)
-                        <div class="text-red-600">−{{ $d->percentage }}% ({{ __($d->type) }})</div>
+                        <div class="text-red-600">−{{ $d->percentage }}% ({{ $d->typeLabel() }})</div>
                         @if($d->notes)
                             <div class="text-gray-400">{{ $d->notes }}</div>
                         @endif
@@ -172,7 +172,7 @@
         @endforeach
         </tbody>
         <tfoot>
-        <tr class="bg-blue-100 font-bold border-t-2 border-blue-900">
+        <tr class="bg-blue-100 font-extrabold text-sm border-t-2 border-blue-900">
             <td colspan="9" class="px-3 py-2 text-right text-blue-900">{{ __('Grand Total') }}</td>
             <td class="px-3 py-2 text-right">{{ \App\Support\Currency::format($assistantSummary['share_total']) }}</td>
             <td class="px-3 py-2 text-right text-green-700">{{ \App\Support\Currency::format($assistantSummary['extra_amount']) }}</td>

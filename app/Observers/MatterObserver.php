@@ -101,7 +101,10 @@ class MatterObserver
         // no matter once the matter is gone).
         // A loop, not each->delete(): deleting a file for good answers false, which would stop each() there.
         foreach ($matter->attachments()->withTrashed()->get() as $attachment) {
-            $attachment->delete();
+            // Evidence hidden before stays as it was hidden (hiding it again would move when that was).
+            if (! ($attachment->trashed() && $attachment->category?->keepsEvidence())) {
+                $attachment->delete();
+            }
         }
         $matter->requests()->delete();
     }

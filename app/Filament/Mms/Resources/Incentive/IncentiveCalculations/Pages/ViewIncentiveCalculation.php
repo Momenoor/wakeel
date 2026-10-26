@@ -257,7 +257,7 @@ class ViewIncentiveCalculation extends ViewRecord
                 ->visible(fn () => $this->record->isDraft() && $this->record->lines()->exists())
                 ->requiresConfirmation()
                 ->modalHeading(__('Delete All Lines'))
-                ->modalDescription(__('This permanently removes every imported matter, deduction, and assistant share from this calculation, resetting it back to empty. This action cannot be undone.'))
+                ->modalDescription(__('This permanently removes every imported matter, deduction, assistant share and amount entered by hand from this calculation, resetting it back to empty. This action cannot be undone.'))
                 ->modalIcon('heroicon-o-trash')
                 ->modalIconColor('danger')
                 ->action(function () {

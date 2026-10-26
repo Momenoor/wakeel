@@ -69,6 +69,9 @@ class Performance extends Page implements HasTable
     /** The columns the screens can be ordered by (the table's sortable ones). */
     private const SCREEN_SORTS = ['requests', 'avg_ms', 'max_ms', 'avg_queries', 'avg_repeated'];
 
+    /** A screen's name narrow, broken anywhere: "Component@method + Component@method …" has no space to wrap at. */
+    private const NAME_STYLE = 'max-width: 22rem; overflow-wrap: anywhere; white-space: normal';
+
     public static function getNavigationLabel(): string
     {
         return __('Performance');
@@ -448,7 +451,7 @@ class Performance extends Page implements HasTable
                             TextEntry::make('when'),
                             TextEntry::make('user'),
                             TextEntry::make('name')
-                                ->extraAttributes(['dir' => 'ltr'])
+                                ->extraAttributes(['dir' => 'ltr', 'style' => self::NAME_STYLE])
                                 // The query run most often, under the screen.
                                 ->belowContent(fn (?string $state, TextEntry $component): ?Text => filled($query = data_get($component->getContainer()->getConstantState(), 'top_query'))
                                     ? Text::make($query)->fontFamily(FontFamily::Mono)->size(TextSize::ExtraSmall)->color('gray')->extraAttributes(['dir' => 'ltr', 'style' => 'word-break: break-all'])
@@ -546,7 +549,9 @@ class Performance extends Page implements HasTable
             ->columns([
                 TextColumn::make('name')
                     ->label(__('Screen or action'))
-                    ->extraAttributes(['dir' => 'ltr'])
+                    // Narrow, its long names (Component@method + …, no spaces) broken anywhere to wrap.
+                    ->extraAttributes(['dir' => 'ltr', 'style' => self::NAME_STYLE])
+                    ->extraHeaderAttributes(['style' => 'width: 22rem'])
                     ->wrap(),
                 TextColumn::make('requests')
                     ->label(__('Requests'))

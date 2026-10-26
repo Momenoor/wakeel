@@ -221,7 +221,7 @@ final class MatterHistory
                 : ((string) ($named[0]::query()->whereKey($raw)->value($named[1]) ?? '#'.$raw));
         }
 
-        if (in_array($field, ['amount', 'commission_percentage'], true) && is_numeric($raw)) {
+        if (in_array($field, ['amount', 'vat', 'commission_percentage'], true) && is_numeric($raw)) {
             return number_format((float) $raw, 2);
         }
 

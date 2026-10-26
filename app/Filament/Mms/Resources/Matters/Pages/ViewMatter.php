@@ -79,7 +79,8 @@ class ViewMatter extends ViewRecord
     {
         parent::afterActionCalled($action);
 
-        if ($this->getRecord()->exists) {
+        // Deleted for good, the page holds no matter any more (the parent emptied it): nothing to draw again.
+        if ($this->record?->exists) {
             $this->dispatch(MatterEvents::CHANGED);
         }
     }

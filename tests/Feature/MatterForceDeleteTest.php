@@ -4,13 +4,19 @@ namespace Tests\Feature;
 
 use App\Enums\AttachmentCategory as Category;
 use App\Enums\FeeType;
+use App\Filament\Mms\Resources\Matters\MatterResource;
+use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Models\Attachment;
 use App\Models\Matter;
 use App\Models\User;
 use App\Services\Attachments\AttachmentService;
+use Filament\Actions\ForceDeleteAction;
+use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
@@ -21,6 +27,21 @@ class MatterForceDeleteTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_deleted_for_good_from_its_own_page_it_goes_to_the_matters(): void
+    {
+        Gate::before(fn () => true);
+        Filament::setCurrentPanel('mms');
+        $this->actingAs(User::factory()->create());
+        $matter = Matter::factory()->create();
+        $matter->delete();
+
+        Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])
+            ->callAction(ForceDeleteAction::class)
+            ->assertRedirect(MatterResource::getUrl('index'));
+
+        $this->assertNull(Matter::withTrashed()->find($matter->id));
+    }
+
     public function test_a_matter_with_files_and_financial_evidence_is_deleted_for_good(): void
     {
         Storage::fake('attachments');
@@ -29,11 +50,14 @@ class MatterForceDeleteTest extends TestCase
 
         $matter = Matter::factory()->create();
         $fee = $matter->fees()->create(['type' => FeeType::cases()[0], 'amount' => 1000, 'date' => '2026-01-10']);
-        $invoice = $files->store($fee, UploadedFile::fake()->create('Invoice.pdf', 5, 'application/pdf'), Category::TAX_INVOICE);
+        // The letter first: deleting it for good answers false, which must not stop the files after it.
         $letter = $files->store($matter, UploadedFile::fake()->create('Letter.pdf', 5, 'application/pdf'), Category::GENERAL);
+        $invoice = $files->store($fee, UploadedFile::fake()->create('Invoice.pdf', 5, 'application/pdf'), Category::TAX_INVOICE);
         // Hidden before: an invoice deleted from the matter's page.
         $hidden = $files->store($fee, UploadedFile::fake()->create('Old invoice.pdf', 5, 'application/pdf'), Category::TAX_INVOICE);
+        $this->travelTo('2026-01-12 09:00');
         $hidden->delete();
+        $this->travelBack();
 
         $matter->delete();
         $matter->forceDelete();
@@ -49,5 +73,7 @@ class MatterForceDeleteTest extends TestCase
             $this->assertNull($kept->matter_id);
             Storage::disk('attachments')->assertExists($kept->path);
         }
+        // Hidden before: still when it was hidden.
+        $this->assertSame('2026-01-12 09:00:00', Attachment::withTrashed()->findOrFail($hidden->id)->deleted_at->format('Y-m-d H:i:s'));
     }
 }

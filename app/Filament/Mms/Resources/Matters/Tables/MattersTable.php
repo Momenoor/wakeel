@@ -41,6 +41,9 @@ class MattersTable
     public static function configure(Table $table): Table
     {
         return $table
+            // Newest first, each supplementary matter right after its own; after a column chosen to sort by, the same
+            // order breaks its ties.
+            ->defaultSort(fn (Builder $query): Builder => static::newestFirst($query))
             // One search for the whole table (search()), not one per column.
             ->searchUsing(fn (Builder $query, string $search) => static::search($query, $search))
             ->striped()
@@ -601,6 +604,20 @@ class MattersTable
             'type' => $query->whereHas('type', $any),
             'party' => $query->whereHas('matterParties.party', $any),
         };
+    }
+
+    /**
+     * Newest first by when each matter was created, a supplementary matter right after the one it belongs to:
+     * ordered by its own matter's creation (the matter itself, or the one it is supplementary to), then that
+     * matter before its supplementary ones, these oldest first.
+     */
+    public static function newestFirst(Builder $query): Builder
+    {
+        return $query
+            ->orderByRaw('(select owner.created_at from matters as owner where owner.id = coalesce(matters.parent_id, matters.id)) desc')
+            ->orderByRaw('coalesce(matters.parent_id, matters.id) desc')
+            ->orderByRaw('matters.parent_id is not null')
+            ->orderBy('matters.id');
     }
 
     /**

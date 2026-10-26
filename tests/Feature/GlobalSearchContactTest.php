@@ -2,14 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Mms\Resources\CalendarEvents\CalendarEventResource;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Parties\PartyResource;
+use App\Models\CalendarEvent;
 use App\Models\Matter;
 use App\Models\MatterParty;
 use App\Models\Party;
 use App\Models\User;
 use App\Support\ContactSearch;
 use Filament\Facades\Filament;
+use Filament\GlobalSearch\Providers\DefaultGlobalSearchProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
 use Tests\TestCase;
@@ -28,6 +31,19 @@ class GlobalSearchContactTest extends TestCase
         Filament::setCurrentPanel('mms');
         Gate::before(fn () => true);
         $this->actingAs(User::factory()->create());
+    }
+
+    public function test_matters_come_first_in_the_results(): void
+    {
+        // A matter and a calendar event found by the same number: the matters listed first (the calendar's
+        // resource is registered before them).
+        Matter::factory()->create(['number' => '639', 'year' => 2025]);
+        CalendarEvent::create(['title' => 'جلسة 639/2025', 'start_datetime' => '2026-11-04 10:00', 'end_datetime' => '2026-11-04 11:00', 'type' => 'single']);
+
+        $kinds = array_keys((new DefaultGlobalSearchProvider)->getResults('639/2025')->getCategories()->all());
+
+        $this->assertSame(MatterResource::getPluralModelLabel(), $kinds[0]);
+        $this->assertContains(CalendarEventResource::getPluralModelLabel(), $kinds);
     }
 
     public function test_what_is_typed_is_read_as_an_email_a_phone_or_neither(): void

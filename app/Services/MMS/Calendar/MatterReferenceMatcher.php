@@ -3,6 +3,7 @@
 namespace App\Services\MMS\Calendar;
 
 use App\Models\Matter;
+use App\Support\MatterSearch;
 use Illuminate\Support\Collection;
 
 /**
@@ -22,9 +23,6 @@ class MatterReferenceMatcher
     /** Between a number and its year: "/", or "\" as some type it (shown the other way round in Arabic text). */
     private const SLASH = '[/\\\\]';
 
-    private const DIGITS = ['٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4', '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9',
-        '۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4', '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9'];
-
     /**
      * Every [number, year] pair written in the text, in order, once each.
      *
@@ -36,7 +34,7 @@ class MatterReferenceMatcher
             return [];
         }
 
-        $text = strtr($text, self::DIGITS);
+        $text = strtr($text, MatterSearch::DIGITS);
 
         // Readings of the text, grouped by where they sit in it: "1957/2026"
         // matches both number-first and year-first, and is still one matter.
@@ -228,7 +226,7 @@ class MatterReferenceMatcher
      */
     public static function idsOf(string $number, int $year): array
     {
-        $number = ltrim(trim(strtr($number, self::DIGITS)), '0') ?: '0';
+        $number = ltrim(trim(strtr($number, MatterSearch::DIGITS)), '0') ?: '0';
         $same = self::allMattersFor([['number' => $number, 'year' => $year]])[self::key(['number' => $number, 'year' => $year])] ?? collect();
 
         return $same->pluck('id')->map(fn ($id) => (int) $id)->all();
@@ -241,7 +239,7 @@ class MatterReferenceMatcher
      */
     private static function normalise(string $stored, int $year): ?string
     {
-        $stored = trim(strtr($stored, self::DIGITS));
+        $stored = trim(strtr($stored, MatterSearch::DIGITS));
 
         if (preg_match('~^0*(\d+)(?:\s*(?:/|-|–)\s*'.$year.')?$~', $stored, $m) !== 1) {
             return null;
@@ -258,8 +256,8 @@ class MatterReferenceMatcher
      */
     private static function spellings(string $number): array
     {
-        $arabic = array_flip(array_slice(self::DIGITS, 0, 10, true));
-        $persian = array_flip(array_slice(self::DIGITS, 10, 10, true));
+        $arabic = array_flip(array_slice(MatterSearch::DIGITS, 0, 10, true));
+        $persian = array_flip(array_slice(MatterSearch::DIGITS, 10, 10, true));
 
         return array_values(array_unique([$number, strtr($number, $arabic), strtr($number, $persian)]));
     }

@@ -91,8 +91,8 @@
         </thead>
         <tbody>
         @foreach($assistantSummary as $row)
-            <tr class="{{ $loop->even ? 'bg-blue-50' : 'bg-white' }} border-b border-gray-200">
-                <td class="px-3 py-2 font-semibold">{{ $row['party']->name }}</td>
+            <tr class="{{ $loop->even ? 'bg-blue-50' : 'bg-white' }} border-b border-gray-300">
+                <td class="px-3 py-2 font-bold text-gray-900">{{ $row['party']->name }}</td>
                 <td class="px-3 py-2 text-right">
                         <span
                             class="font-bold {{ $row['completed_matter_count'] >= 6 ? 'text-green-700' : 'text-red-600' }}">
@@ -134,11 +134,16 @@
                     @endif
                 </td>
             </tr>
-            <tr class="{{ $loop->even ? 'bg-blue-50' : 'bg-white' }} border-b border-gray-200">
+            <tr class="{{ $loop->even ? 'bg-blue-50' : 'bg-white' }} border-b border-gray-300">
                 <td colspan="11" class="px-3 py-2">
-                    <table class="w-full text-[10px] border-collapse">
+                    {{-- The same widths for every assistant's table: a fixed layout, not each sized to its own text. --}}
+                    <table class="w-full table-fixed text-[10px] border-collapse border border-gray-300">
+                        <colgroup>
+                            <col class="w-[17%]"><col class="w-[8%]"><col class="w-[5%]"><col class="w-[10%]"><col class="w-[12%]">
+                            <col class="w-[12%]"><col class="w-[9%]"><col class="w-[9%]"><col class="w-[9%]"><col class="w-[9%]">
+                        </colgroup>
                         <thead>
-                        <tr class="text-gray-500">
+                        <tr class="bg-gray-100 text-gray-900 font-bold border-b-2 border-gray-400">
                             <th class="px-2 py-1 text-right">{{ __('Matter') }}</th>
                             <th class="px-2 py-1 text-right">{{ __('Difficulty') }}</th>
                             <th class="px-2 py-1 text-right">{{ __('Days') }}</th>
@@ -153,7 +158,7 @@
                         </thead>
                         <tbody>
                         @foreach($row['matters'] as $m)
-                            <tr class="border-t border-gray-100">
+                            <tr class="border-b border-gray-300 break-words">
                                 <td class="px-2 py-1">
                                     {{ $m['matter_reference'] }}
                                     {{-- A paid incentive taken back, or an amount entered by hand: what it is, in full. --}}
@@ -188,7 +193,7 @@
                                 </td>
                                 <td class="px-2 py-1">
                                     @forelse($m['deductions'] as $d)
-                                        <div class="text-red-600">−{{ $d->percentage }}% ({{ __($d->type) }})</div>
+                                        <div class="text-red-600">−{{ $d->percentage }}% ({{ $d->typeLabel() }})</div>
                                     @empty
                                         —
                                     @endforelse
@@ -206,7 +211,7 @@
                                         <div class="text-gray-400">{{ $m['penalty_reason'] }}</div>
                                     @endif
                                 </td>
-                                <td class="px-2 py-1 text-right font-semibold">{{ number_format($m['total_amount'], 2) }}</td>
+                                <td class="px-2 py-1 text-right font-bold text-gray-900">{{ number_format($m['total_amount'], 2) }}</td>
                             </tr>
                         @endforeach
                         </tbody>
@@ -216,7 +221,7 @@
         @endforeach
         </tbody>
         <tfoot>
-        <tr class="bg-blue-100 font-bold border-t-2 border-blue-900">
+        <tr class="bg-blue-100 font-extrabold text-sm border-t-2 border-blue-900">
             <td colspan="3" class="px-3 py-2 text-right text-blue-900">{{ __('Grand Total') }}</td>
             {{-- Fees Amount is per-assistant (unsplit, matter-level), so it isn't
                  summed here: a matter shared by co-assistants would be double-
@@ -260,7 +265,7 @@
         </thead>
         <tbody>
         @foreach($lines as $line)
-            <tr class="{{ $loop->even ? 'bg-blue-50' : 'bg-white' }} border-b border-gray-200">
+            <tr class="{{ $loop->even ? 'bg-blue-50' : 'bg-white' }} border-b border-gray-300">
                 <td class="px-3 py-2 font-semibold">
                     {{ $line->matter->year }}/{{ $line->matter->number }}
                     {{-- A paid incentive taken back: its assistants' rows say what it is. --}}
@@ -301,7 +306,7 @@
                     @foreach($line->deductions as $d)
                         <div class="text-red-600">
                             −{{ $d->percentage }}%
-                            <span class="text-gray-500">({{ __($d->type) }})</span>
+                            <span class="text-gray-500">({{ $d->typeLabel() }})</span>
                         </div>
                         @if($d->notes)
                             <div class="text-gray-400 text-xs">{{ $d->notes }}</div>
@@ -312,7 +317,7 @@
         @endforeach
         </tbody>
         <tfoot>
-        <tr class="bg-blue-100 font-bold border-t-2 border-blue-900">
+        <tr class="bg-blue-100 font-extrabold text-sm border-t-2 border-blue-900">
             <td colspan="5" class="px-3 py-2 text-right text-blue-900">{{ __('Totals') }}</td>
             <td class="px-3 py-2 text-right">{{ \App\Support\Currency::format($lines->sum('base_amount')) }}</td>
             <td class="px-3 py-2 text-right text-red-600">

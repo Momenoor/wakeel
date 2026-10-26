@@ -129,8 +129,8 @@ class PayrollService
     }
 
     /**
-     * The incentive deductions each employee's incentive did not cover (paid shares taken back, a fixed
-     * deduction), from the finalised calculations closing in this period: taken from the salary, once — the
+     * The incentive deductions each employee's incentive did not cover (paid shares taken back, deductions entered
+     * by hand, a fixed deduction), from the finalised calculations closing in this period: taken from the salary, once — the
      * month a calculation closes in is the one payslip that sees it.
      *
      * @return Collection<int, float>

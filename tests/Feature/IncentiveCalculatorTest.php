@@ -1174,13 +1174,13 @@ class IncentiveCalculatorTest extends TestCase
         MatterTypeIncentiveTier::create(['config_id' => $config->id, 'difficulty' => 'medium', 'days_from' => 1, 'days_to' => 5, 'percentage' => 10.0]);
         MatterTypeIncentiveTier::create(['config_id' => $config->id, 'difficulty' => 'medium', 'days_from' => 6, 'days_to' => 20, 'percentage' => 5.0]);
 
-        // Mon 6/1 -> Tue 6/9 = 6 working days without leave (Mon-Fri, Mon),
-        // which would land in the 6-20 tier (5%). Excluding the 1-day leave
-        // on Wed 6/3 brings the effective count down to 5, landing in the
-        // faster 1-5 tier (10%) instead.
+        // Mon 6/1 -> Mon 6/8, the report's own day counted = 6 working days
+        // without leave (Mon-Fri, Mon), which would land in the 6-20 tier
+        // (5%). Excluding the 1-day leave on Wed 6/3 brings the effective
+        // count down to 5, landing in the faster 1-5 tier (10%) instead.
         $matter = Matter::create([
             'number' => '1', 'year' => '2026', 'type_id' => $type->id,
-            'distributed_at' => '2026-06-01', 'initial_report_at' => '2026-06-09',
+            'distributed_at' => '2026-06-01', 'initial_report_at' => '2026-06-08',
         ]);
         $assistant = Party::create(['name' => 'Assistant', 'role' => ['role' => ['expert'], 'type' => ['assistant']]]);
         MatterParty::create(['matter_id' => $matter->id, 'party_id' => $assistant->id, 'role' => 'expert', 'type' => 'assistant']);
@@ -1199,10 +1199,30 @@ class IncentiveCalculatorTest extends TestCase
         $this->assertEquals(10.0, (float) $line->effective_percentage); // still in the 1-5 tier
     }
 
-    public function test_mid_month_leave_prorates_the_monthly_minimum(): void
+    public function test_completion_days_count_the_initial_reports_own_day(): void
     {
-        // An assistant on leave for roughly half of June's working days only
-        // needs roughly half the usual minimum (3) to avoid the penalty.
+        $config = MatterTypeIncentiveConfig::create(['name' => 'Tiered', 'calculation_type' => 'tiered', 'assistant_rate' => 100.0]);
+        $type = Type::create(['name' => 'Tiered Type', 'incentive_config_id' => $config->id, 'incentive_trigger_type' => 'final_report_date']);
+        $calc = IncentiveCalculation::create(['name' => 'Days Calc', 'period_start' => '2026-06-01', 'period_end' => '2026-06-30', 'status' => 'draft']);
+
+        // From the assistant's assignment up to and including the report's day: weekends not counted.
+        foreach ([['2026-06-01', '2026-06-01', 1], ['2026-06-01', '2026-06-05', 5], ['2026-06-05', '2026-06-08', 2]] as $i => [$assigned, $reported, $days]) {
+            $matter = Matter::create(['number' => "days-$i", 'year' => '2026', 'type_id' => $type->id, 'distributed_at' => $assigned, 'initial_report_at' => $reported]);
+            $fee = Fee::create(['matter_id' => $matter->id, 'amount' => 1000, 'date' => '2026-06-15', 'status' => 'unpaid']);
+            $lines[$days.' '.$assigned.' → '.$reported] = IncentiveLine::create(['incentive_calculation_id' => $calc->id, 'matter_id' => $matter->id, 'fee_id' => $fee->id]);
+        }
+
+        $this->service->calculate($calc);
+
+        foreach ($lines as $case => $line) {
+            $this->assertSame((int) explode(' ', $case)[0], $line->fresh()->completion_days, $case);
+        }
+    }
+
+    public function test_leave_does_not_lower_the_monthly_minimum(): void
+    {
+        // Leave counts only in a matter's own completion days: an assistant on
+        // leave for half of June still needs the full monthly minimum.
         Setting::set('incentive_minimum_matters_per_month', 4, 'incentive');
 
         $config = MatterTypeIncentiveConfig::create([
@@ -1211,18 +1231,14 @@ class IncentiveCalculatorTest extends TestCase
         $type = Type::create(['name' => 'Tiered Type', 'incentive_config_id' => $config->id, 'incentive_trigger_type' => 'final_report_date']);
         $assistant = Party::create(['name' => 'Assistant', 'role' => ['role' => ['expert'], 'type' => ['assistant']]]);
 
-        // On leave for the second half of June 2026 (June has 22 working
-        // days under the Sat/Sun weekend; 2026-06-16 to 2026-06-30 covers 11
-        // of them) — roughly half availability, so the prorated minimum is
-        // round(4 * 0.5) = 2.
+        // On leave for the second half of June 2026 (11 of its 22 working days).
         PartyLeave::create(['party_id' => $assistant->id, 'start_date' => '2026-06-16', 'end_date' => '2026-06-30']);
 
         $calc = IncentiveCalculation::create([
-            'name' => 'Prorate Calc', 'period_start' => '2026-06-01', 'period_end' => '2026-06-30', 'status' => 'draft',
+            'name' => 'Leave Minimum Calc', 'period_start' => '2026-06-01', 'period_end' => '2026-06-30', 'status' => 'draft',
         ]);
 
-        // Only 2 matters completed this month — below the flat minimum of 4,
-        // but should meet the prorated minimum of ~2.
+        // Only 2 matters completed this month: below the minimum of 4, leave or not.
         for ($i = 1; $i <= 2; $i++) {
             $matter = Matter::create(['number' => "leave-$i", 'year' => '2026', 'type_id' => $type->id]);
             MatterParty::create(['matter_id' => $matter->id, 'party_id' => $assistant->id, 'role' => 'expert', 'type' => 'assistant']);
@@ -1238,7 +1254,8 @@ class IncentiveCalculatorTest extends TestCase
             ->where('party_id', $assistant->id)->first();
 
         $this->assertEquals(2, $extra->completed_matter_count);
-        $this->assertEquals(0.0, (float) $extra->minimum_penalty_pct);
+        $this->assertFalse((bool) $extra->meets_minimum);
+        $this->assertGreaterThan(0.0, (float) $extra->penalty_amount);
     }
 
     public function test_working_days_between_uses_saturday_sunday_as_the_uae_weekend(): void

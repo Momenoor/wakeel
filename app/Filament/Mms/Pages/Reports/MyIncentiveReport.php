@@ -424,7 +424,7 @@ class MyIncentiveReport extends Page implements HasTable
                     ->color('danger')
                     ->placeholder('0%')
                     ->description(fn (IncentiveAssistantLine $record) => collect($record->incentiveLine?->getAttribute('deductions'))
-                        ->map(fn ($d) => '−'.$d->percentage.'% ('.__($d->type).')')
+                        ->map(fn ($d) => '−'.$d->percentage.'% ('.$d->typeLabel().')')
                         ->implode(' · ') ?: null)
                     ->alignEnd(),
 

@@ -936,7 +936,7 @@ class MatterInfolist
                         })->values()->all();
 
                         $deductionTypes = $feeLines->flatMap->deductions
-                            ->map(fn ($d) => '−'.$d->percentage.'% '.__($d->type))
+                            ->map(fn ($d) => '−'.$d->percentage.'% '.$d->typeLabel())
                             ->unique()->implode(' · ');
 
                         return Group::make()

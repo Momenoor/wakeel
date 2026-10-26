@@ -294,6 +294,15 @@ class IncentiveService
             ->distinct()
             ->pluck('matter_id');
 
+        // Only the matters with an eligible fee no line has yet, found at once: on a run again, as a rule none —
+        // each matter was otherwise read fee by fee (two queries a matter) to find nothing new.
+        $matterIds = Fee::query()
+            ->whereIn('matter_id', $matterIds)
+            ->where(fn ($q) => $q->whereNull('type')->orWhereNotIn('type', FeeType::excludedFromIncentiveValues()))
+            ->whereNotIn('id', IncentiveLine::query()->whereNotNull('fee_id')->select('fee_id'))
+            ->distinct()
+            ->pluck('matter_id');
+
         $imported = 0;
         $matters = Matter::with('type')->whereIn('id', $matterIds)->get()->keyBy('id');
 

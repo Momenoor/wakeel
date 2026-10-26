@@ -32,4 +32,16 @@ class IncentiveLineDeduction extends Model
     {
         return $this->belongsTo(IncentiveLine::class);
     }
+
+    /** What it is, in the reader's language (its type is a code: review_first, late_final_report …). */
+    public function typeLabel(): string
+    {
+        return match ($this->type) {
+            'review_first' => __('First review'),
+            'review_subsequent' => __('Second or later review'),
+            'late_final_report' => __('Late final report'),
+            'court_penalty' => __('Court Penalty'),
+            default => __((string) $this->type),
+        };
+    }
 }

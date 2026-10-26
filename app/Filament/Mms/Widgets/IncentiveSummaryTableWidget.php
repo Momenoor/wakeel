@@ -555,7 +555,7 @@ class IncentiveSummaryTableWidget extends TableWidget
         }
 
         $lines = $deductions->map(function ($d) {
-            $label = '−'.$d->percentage.'% ('.__($d->type).')';
+            $label = '−'.$d->percentage.'% ('.$d->typeLabel().')';
 
             return e($d->notes ?? $label);
         })->implode('<br>');
@@ -563,11 +563,39 @@ class IncentiveSummaryTableWidget extends TableWidget
         return new HtmlString($lines);
     }
 
+    /** @var array{extras: Collection, shares: Collection, totals: Collection}|null every assistant's, read once a render */
+    private ?array $assistantTotalsCache = null;
+
+    /**
+     * Every assistant's period figures and line sums, read once for the render: each group's heading asked for
+     * its own (three queries an assistant, a heading drawn more than once).
+     *
+     * @return array{extras: Collection, shares: Collection, totals: Collection}
+     */
+    private function assistantTotals(): array
+    {
+        if ($this->assistantTotalsCache !== null) {
+            return $this->assistantTotalsCache;
+        }
+
+        $sums = IncentiveAssistantLine::query()
+            ->whereHas('incentiveLine', fn ($q) => $q->where('incentive_calculation_id', $this->calculationId))
+            ->groupBy('party_id')
+            ->selectRaw('party_id, SUM(share_amount) as share, SUM(total_amount) as total')
+            ->get()
+            ->keyBy('party_id');
+
+        return $this->assistantTotalsCache = [
+            'extras' => IncentiveAssistantExtra::where('incentive_calculation_id', $this->calculationId)->get()->keyBy('party_id'),
+            'shares' => $sums->map(fn ($row) => (float) $row->share),
+            'totals' => $sums->map(fn ($row) => (float) $row->total),
+        ];
+    }
+
     private function describeAssistant(int $partyId): string
     {
-        $extra = IncentiveAssistantExtra::where('incentive_calculation_id', $this->calculationId)
-            ->where('party_id', $partyId)
-            ->first();
+        $totals = $this->assistantTotals();
+        $extra = $totals['extras']->get($partyId);
 
         if (! $extra) {
             return '';
@@ -576,13 +604,7 @@ class IncentiveSummaryTableWidget extends TableWidget
         $parts = [
             __('Completed').': '.$extra->completed_matter_count,
             $extra->meets_minimum ? __('Meets Minimum') : __('Below Minimum'),
-            __('Share Total').': '.number_format(
-                IncentiveAssistantLine::whereHas(
-                    'incentiveLine',
-                    fn ($q) => $q->where('incentive_calculation_id', $this->calculationId)
-                )->where('party_id', $partyId)->sum('share_amount'),
-                2
-            ),
+            __('Share Total').': '.number_format($totals['shares']->get($partyId, 0.0), 2),
         ];
 
         if ($extra->extra_percentage > 0) {
@@ -598,10 +620,7 @@ class IncentiveSummaryTableWidget extends TableWidget
                 .($extra->fixed_deduction_reason ? ' ('.$extra->fixed_deduction_reason.')' : '');
         }
 
-        $total = max(0.0, IncentiveAssistantLine::whereHas(
-            'incentiveLine',
-            fn ($q) => $q->where('incentive_calculation_id', $this->calculationId)
-        )->where('party_id', $partyId)->sum('total_amount') - $extra->fixed_deduction);
+        $total = max(0.0, $totals['totals']->get($partyId, 0.0) - $extra->fixed_deduction);
 
         $parts[] = __('Total').': '.number_format($total, 2);
 

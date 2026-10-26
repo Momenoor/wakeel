@@ -7,6 +7,7 @@ use App\Models\IncentiveAdjustment;
 use App\Models\IncentiveAssistantLine;
 use App\Models\IncentiveCalculation;
 use App\Models\IncentiveLine;
+use App\Support\ActivityLog;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -53,6 +54,12 @@ class IncentiveAdjustments
 
     /** Their lines in a calculation, built again: one per amount entered, its own line under a line of its own. */
     public function apply(Model $calculation): void
+    {
+        // Lines rebuilt from what was entered (that is logged, as it is added or removed): not logged one by one.
+        ActivityLog::quietly(fn () => $this->rebuild($calculation));
+    }
+
+    private function rebuild(Model $calculation): void
     {
         IncentiveLine::query()->where('incentive_calculation_id', $calculation->getKey())->where('is_adjustment', true)->delete();
 

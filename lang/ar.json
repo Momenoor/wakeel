@@ -1843,7 +1843,7 @@
     "This link has already been used. The request status is: ": "تم استخدام هذا الرابط بالفعل. حالة الطلب هي: ",
     "This password reset link will expire in :count minutes.": "ستنتهي صلاحية رابط استعادة كلمة المرور خلال :count دقيقة.",
     "This period did not reach the minimum number of completed matters, so a penalty was applied.": "لم تبلغ هذه الفترة الحد الأدنى من الملفات المنجزة، لذلك طُبّق خصم.",
-    "This permanently removes every imported matter, deduction, and assistant share from this calculation, resetting it back to empty. This action cannot be undone.": "يؤدي هذا إلى إزالة كل دعوى مستوردة وخصم وحصة مساعد من هذا الاحتساب نهائياً، مما يعيده فارغاً بالكامل. لا يمكن التراجع عن هذا الإجراء.",
+    "This permanently removes every imported matter, deduction, assistant share and amount entered by hand from this calculation, resetting it back to empty. This action cannot be undone.": "يؤدي هذا إلى إزالة كل دعوى مستوردة وخصم وحصة مساعد ومبلغ أُدخل يدوياً من هذا الاحتساب نهائياً، مما يعيده فارغاً بالكامل. لا يمكن التراجع عن هذا الإجراء.",
     "This removes only the selected matter's lines, deductions, and assistant shares from this calculation. Other matters are unaffected. This action cannot be undone.": "يؤدي هذا إلى حذف سطور الدعوى المحددة وخصوماتها وحصص المساعدين منها فقط من هذا الاحتساب. الدعاوى الأخرى لا تتأثر. لا يمكن التراجع عن هذا الإجراء.",
     "This removes this matter's lines, deductions, and assistant shares from this calculation only — other matters are unaffected. This action cannot be undone.": "يؤدي هذا إلى حذف سطور هذه الدعوى وخصوماتها وحصص المساعدين منها من هذا الاحتساب فقط — الدعاوى الأخرى لا تتأثر. لا يمكن التراجع عن هذا الإجراء.",
     "This replaces the automatically computed percentage (tier/fixed and committee adjustment) for every fee line of this matter. Leave empty to use the automatic calculation. Click Recalculate afterwards to apply it.": "يحل هذا محل النسبة المحتسبة تلقائياً (الشرائح/النسبة الثابتة وتعديل اللجان) لكل سطر أتعاب في هذه الدعوى. اتركه فارغاً لاستخدام الاحتساب التلقائي، ثم اضغط \"إعادة الاحتساب\" لتطبيقه.",
@@ -4786,5 +4786,8 @@
     "Only a draft calculation can be changed.": "لا يمكن تعديل الحساب إلا وهو مسودة.",
     ":type of :amount: :reason (entered by :user on :date).": ":type بقيمة :amount: :reason (أدخله :user في :date).",
     "A fixed amount added to the assistant's incentive in this calculation, or taken off it: a line of its own in their calculation, counted in their total and in payroll.": "مبلغ ثابت يُضاف إلى حافز المساعد في هذا الحساب أو يُخصم منه: سطر مستقل في حسابه، يدخل في إجماليه وفي الرواتب.",
-    "Add amount or deduction for :name": "إضافة مبلغ أو خصم لـ:name"
+    "Add amount or deduction for :name": "إضافة مبلغ أو خصم لـ:name",
+    "First review": "المراجعة الأولى",
+    "Second or later review": "المراجعة الثانية أو اللاحقة",
+    "Late final report": "تأخير التقرير النهائي"
 }
