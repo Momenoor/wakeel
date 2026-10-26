@@ -33,7 +33,7 @@ use Tests\TestCase;
 /**
  * A matter's marketers: its marketing share (25% of the fees' basic amount by default), split between them and
  * earned as the client pays — a staff marketer paid in their incentive, a third party owed a commission. An
- * assistant on a matter someone else marketed is paid a flat 10% of the fee — of what is left after a third
+ * assistant is paid the matter's usual rate, whoever marketed it — of what is left after a third
  * party's share; the assistant who marketed it themself, the matter's rate.
  */
 class MarketersTest extends TestCase
@@ -100,16 +100,19 @@ class MarketersTest extends TestCase
 
         $this->assertSame('2500.00', MarketingCommission::sole()->amount);
 
-        // 15% of 10,000 for the matter, and 25% of it for marketing it: 1,500 + 2,500.
+        // The matter's 15% and the points set for marketing it themself (3 here) — 1,800 — and 25% of it for
+        // marketing it — 1,800 + 2,500.
+        Setting::set(MarketingCommissions::SELF_BONUS_SETTING, 3, 'incentive');
         $june = $this->june([$fee]);
-        $this->assertSame(4000.0, $this->calculator->payableByParty($june)[$this->assistant->id]);
+        $this->assertSame(4300.0, $this->calculator->payableByParty($june)[$this->assistant->id]);
 
         $rows = $this->calculator->getAssistantSummary($june)->sole()['matters'];
         $this->assertSame(1, $this->calculator->getAssistantSummary($june)->sole()['matter_count']);
         $marketing = collect($rows)->firstWhere('marketing', true);
         $this->assertSame(2500.0, (float) $marketing['total_amount']);
         $this->assertStringContainsString('901/2026', $marketing['description']);
-        $this->assertNull(collect($rows)->firstWhere('marketing', false)['marketed_rate']);
+        $share = collect($rows)->firstWhere('marketing', false);
+        $this->assertSame([3.0, true], [(float) $share['marketed_rate'], $share['marketed_by_self']]);
 
         // Printed with it: the whole office's, and the assistant's own statement.
         Gate::before(fn () => true);
@@ -160,17 +163,17 @@ class MarketersTest extends TestCase
         $this->collect($fee, 10000);
         $june = $this->june([$fee]);
         $this->calculator->finalize($june);
-        $this->assertSame([1000.0, 2500.0], [$this->calculator->payableByParty($june)[$this->assistant->id], $this->calculator->payableByParty($june)[$marketer->id]]);
+        $this->assertSame([1500.0, 2500.0], [$this->calculator->payableByParty($june)[$this->assistant->id], $this->calculator->payableByParty($june)[$marketer->id]]);
 
         $fee->delete();
 
-        // The assistant's 1,000 taken back as a paid share; the marketer's 2,500 by their commissions, not twice.
-        $this->assertSame(['1000.00'], IncentiveReversal::pluck('amount')->all());
+        // The assistant's 1,500 taken back as a paid share; the marketer's 2,500 by their commissions, not twice.
+        $this->assertSame(['1500.00'], IncentiveReversal::pluck('amount')->all());
         $this->assertSame([$this->assistant->id], IncentiveReversal::pluck('party_id')->all());
         $this->assertSame(0.0, (float) MarketingCommission::where('party_id', $marketer->id)->sum('amount'));
     }
 
-    public function test_another_staff_marketer_earns_the_share_and_the_assistant_a_flat_ten_percent(): void
+    public function test_another_staff_marketer_earns_the_share_and_the_assistant_the_matters_usual_rate(): void
     {
         $marketer = $this->employee('Marketer Staff');
         [, $fee] = $this->matter('902', [[$marketer, MarketingCommission::STAFF]]);
@@ -178,10 +181,10 @@ class MarketersTest extends TestCase
 
         $june = $this->june([$fee]);
         $payable = $this->calculator->payableByParty($june);
-        // On the whole fee: 10% of 10,000 — no share taken off for a staff marketer.
-        $this->assertSame(1000.0, $payable[$this->assistant->id]);
+        // The matter's 15% of the whole fee — no share taken off for a staff marketer.
+        $this->assertSame(1500.0, $payable[$this->assistant->id]);
         $this->assertSame(2500.0, $payable[$marketer->id]);
-        $this->assertSame(10.0, (float) collect($this->calculator->getAssistantSummary($june)->firstWhere('party.id', $this->assistant->id)['matters'])->first()['marketed_rate']);
+        $this->assertNull(collect($this->calculator->getAssistantSummary($june)->firstWhere('party.id', $this->assistant->id)['matters'])->first()['marketed_rate']);
     }
 
     public function test_a_third_party_is_owed_the_share_and_the_assistant_paid_on_what_is_left(): void
@@ -191,8 +194,8 @@ class MarketersTest extends TestCase
         $this->collect($fee, 10000);
 
         $june = $this->june([$fee]);
-        // 10% of 7,500: the fee less the third party's 2,500.
-        $this->assertSame(750.0, $this->calculator->payableByParty($june)[$this->assistant->id]);
+        // 15% of 7,500: the fee less the third party's 2,500.
+        $this->assertSame(1125.0, $this->calculator->payableByParty($june)[$this->assistant->id]);
         $this->assertArrayNotHasKey($outsider->id, $this->calculator->payableByParty($june)->all());
 
         // Owed, then marked paid from the report.
@@ -273,6 +276,31 @@ class MarketersTest extends TestCase
             ->assertSee(['Staff Marketer', 'Outside Marketer', __('Marketing share :rate%', ['rate' => '20'])]);
     }
 
+    public function test_a_payments_date_changed_dates_what_it_earned_with_it_while_not_paid(): void
+    {
+        $marketer = $this->employee('Redated');
+        [, $fee] = $this->matter('910', [[$marketer, MarketingCommission::STAFF]]);
+        $payment = Allocation::create(['matter_id' => $fee->matter_id, 'fee_id' => $fee->id, 'amount' => 10000, 'date' => '2026-07-03']);
+        $this->assertSame([$payment->id, '2026-07-03'], [MarketingCommission::sole()->allocation_id, MarketingCommission::sole()->date->toDateString()]);
+
+        // Entered as July, paid in June: the commission moves to June — into June's calculation.
+        $payment->update(['date' => '2026-06-28']);
+        $this->assertSame('2026-06-28', MarketingCommission::sole()->date->toDateString());
+        $this->assertSame(2500.0, $this->calculator->payableByParty($this->june([$fee]))[$marketer->id]);
+
+        // Paid in June's, finalized: moved again, it stays as paid.
+        $this->calculator->finalize(IncentiveCalculation::sole());
+        $payment->update(['date' => '2026-07-10']);
+        $this->assertSame('2026-06-28', MarketingCommission::sole()->date->toDateString());
+    }
+
+    public function test_the_old_marketing_fee_is_not_a_new_fees_type_but_one_of_before_keeps_it(): void
+    {
+        $this->assertArrayNotHasKey(FeeType::MARKETING->value, FeeType::newFeeOptions());
+        $this->assertArrayHasKey(FeeType::MARKETING->value, FeeType::newFeeOptions(FeeType::MARKETING->value));
+        $this->assertArrayNotHasKey(FeeType::VAT->value, FeeType::newFeeOptions(FeeType::MARKETING));
+    }
+
     public function test_a_fixed_share_is_earned_in_the_part_collected(): void
     {
         $marketer = $this->employee('Fixed Marketer');
@@ -282,6 +310,6 @@ class MarketersTest extends TestCase
         $this->collect($fee, 2500);
         $this->assertSame(300.0, (float) MarketingCommission::sum('amount'));
         $this->assertSame(25.0, MarketingCommissions::defaultShare());
-        $this->assertSame(10.0, MarketingCommissions::otherRate());
+        $this->assertSame(5.0, MarketingCommissions::selfBonus());
     }
 }

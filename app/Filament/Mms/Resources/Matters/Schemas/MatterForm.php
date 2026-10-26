@@ -502,7 +502,7 @@ class MatterForm
                                                 Select::make('type')
                                                     ->label(__('Type'))
                                                     // A VAT row of before keeps its type; a new fee carries its own VAT.
-                                                    ->options(fn ($state): array => FeeType::isVat($state) ? [FeeType::VAT->value => FeeType::VAT->getLabel(), ...FeeType::newFeeOptions()] : FeeType::newFeeOptions())
+                                                    ->options(fn ($state): array => FeeType::newFeeOptions($state))
                                                     ->disabled(fn ($state): bool => FeeType::isVat($state))
                                                     ->dehydrated()
                                                     ->afterStateUpdated(FeeVatFields::typeChosen())

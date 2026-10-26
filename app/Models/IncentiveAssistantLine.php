@@ -18,6 +18,7 @@ class IncentiveAssistantLine extends Model
         'incentive_adjustment_id',
         'marketing_commission_id',
         'marketed_rate',
+        'marketed_by_self',
         'percentage_override',
         'share_amount',
         'extra_percentage',
@@ -30,6 +31,7 @@ class IncentiveAssistantLine extends Model
     protected $casts = [
         'percentage_override' => 'decimal:2',
         'marketed_rate' => 'decimal:2',
+        'marketed_by_self' => 'boolean',
         'share_amount' => 'decimal:2',
         'extra_percentage' => 'decimal:2',
         'extra_amount' => 'decimal:2',
@@ -69,6 +71,12 @@ class IncentiveAssistantLine extends Model
     public function adjustment(): BelongsTo
     {
         return $this->belongsTo(IncentiveAdjustment::class, 'incentive_adjustment_id');
+    }
+
+    /** "Marketed the matter themself: +5%" — the points of the fee added to their share for it. */
+    public function marketedRateLabel(): ?string
+    {
+        return $this->marketed_rate === null ? null : __('Marketed the matter themself: +:rate%', ['rate' => (float) $this->marketed_rate]);
     }
 
     /** A staff marketer's commission (MarketingCommissions): what this line is. */

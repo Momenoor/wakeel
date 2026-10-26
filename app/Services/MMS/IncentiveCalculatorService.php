@@ -139,7 +139,7 @@ class IncentiveCalculatorService
                 ->selectRaw('matter_id, SUM(amount) as basic')
                 ->groupBy('matter_id')
                 ->pluck('basic', 'matter_id');
-            $otherMarketedRate = MarketingCommissions::otherRate();
+            $selfMarketedBonus = MarketingCommissions::selfBonus();
             $matterDeductionTotals = Fee::whereIn('matter_id', $matterIds)
                 ->whereIn('type', FeeType::deductionTypeValues())
                 // Not "total": pluck() would read the fee's own total (Fee::getTotalAttribute) instead.
@@ -331,12 +331,10 @@ class IncentiveCalculatorService
 
                 foreach ($assistants as $mp) {
                     $override = $existingAssistantOverrides->get($matterId.'-'.$mp->party_id)?->percentage_override;
-                    // Someone else marketed the matter: this assistant is paid the flat rate of the fee instead of
-                    // the matter's (unless a rate was typed in for them). The marketer themself: the matter's.
-                    $marketedRate = $override === null && $matterMarketers && ! $matterMarketers->contains('party_id', $mp->party_id)
-                        ? $otherMarketedRate
-                        : null;
-                    $rate = $override ?? $marketedRate;
+                    // The assistant who marketed the matter themself: their share as usual, and the bonus points of
+                    // the fee on top (Settings → Incentive → Marketing) — besides their marketing commission.
+                    $marketedBonus = $matterMarketers?->contains('party_id', $mp->party_id) && $selfMarketedBonus > 0 ? $selfMarketedBonus : null;
+                    $rate = $override;
 
                     if ($rate !== null) {
                         // A manual override is this specific assistant's final
@@ -357,11 +355,16 @@ class IncentiveCalculatorService
                             : round($totalForAssistants / $assistantCount, 2);
                     }
 
+                    if ($marketedBonus !== null && ! ($matter->has_court_penalty ?? false)) {
+                        $shareAmount = round($shareAmount + $matterLines->sum(fn ($l) => $l['line']->fee_amount_excl_vat * $marketedBonus / 100), 2);
+                    }
+
                     IncentiveAssistantLine::create([
                         'incentive_line_id' => $firstLine->id,
                         'party_id' => $mp->party_id,
                         'percentage_override' => $override,
-                        'marketed_rate' => $marketedRate,
+                        'marketed_rate' => $marketedBonus,
+                        'marketed_by_self' => $marketedBonus !== null,
                         'share_amount' => $shareAmount,
                         'extra_percentage' => 0,
                         'extra_amount' => 0,
@@ -805,8 +808,9 @@ class IncentiveCalculatorService
                     'committee_adjustment' => $incentiveLine->committee_adjustment,
                     'percentage' => $incentiveLine->effective_percentage,
                     'percentage_override' => $matterLines->first()->percentage_override,
-                    // Paid the flat rate, someone else having marketed the matter.
+                    // Paid a flat rate, the matter marketed — by them, or by someone else.
                     'marketed_rate' => $matterLines->first()->marketed_rate,
+                    'marketed_by_self' => (bool) $matterLines->first()->marketed_by_self,
                     'base_amount' => $feeTotals?->total_base_amount ?? $incentiveLine->base_amount,
                     'total_deduction_pct' => $incentiveLine->total_deduction_pct,
                     'deductions' => $incentiveLine->deductions,

@@ -273,9 +273,9 @@ class MyIncentiveReport extends Page implements HasTable
         if ($record->percentage_override !== null) {
             $parts[] = __('override');
         }
-        // Someone else marketed the matter: paid the flat rate of the fee instead of the matter's.
-        if ($record->marketed_rate !== null) {
-            $parts[] = __('Marketed by another: :rate%', ['rate' => (float) $record->marketed_rate]);
+        // A marketed matter: paid a flat rate of the fee instead of the matter's — said why.
+        if ($label = $record->marketedRateLabel()) {
+            $parts[] = $label;
         }
 
         $count = (int) $this->assistantCounts()->get($record->incentiveLine?->getAttribute('matter_id'), 1);

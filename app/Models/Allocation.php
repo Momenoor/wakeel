@@ -86,8 +86,11 @@ class Allocation extends Model implements AttachmentOwner
             $allocation->followFee();
             $allocation->fee?->updateStatus();
             $allocation->matter?->updateCollectionStatus();
-            // Collected: what the matter's marketers earn by it (on the payment's date).
-            app(MarketingCommissions::class)->afterChange($allocation->matter, $allocation->date);
+            // Its date changed: what it earned its marketers, dated with it; collected: what they earn by it.
+            if ($allocation->wasChanged('date')) {
+                app(MarketingCommissions::class)->redate($allocation);
+            }
+            app(MarketingCommissions::class)->afterChange($allocation->matter, $allocation->date, $allocation);
         });
 
         static::deleted(function (Allocation $allocation) {

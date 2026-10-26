@@ -94,7 +94,7 @@ class FinancialConfiguration extends Page
                 'incentive_committee_fixed_percentage' => Setting::get('incentive_committee_fixed_percentage', 8.0),
                 'incentive_office_work_adjustment' => Setting::get('incentive_office_work_adjustment', 2.0),
                 MarketingCommissions::SHARE_SETTING => MarketingCommissions::defaultShare(),
-                MarketingCommissions::OTHER_RATE_SETTING => MarketingCommissions::otherRate(),
+                MarketingCommissions::SELF_BONUS_SETTING => MarketingCommissions::selfBonus(),
 
                 'incentive_enable_first_review_deduction' => Setting::get('incentive_enable_first_review_deduction', true),
                 'incentive_enable_subsequent_review_deduction' => Setting::get('incentive_enable_subsequent_review_deduction', true),

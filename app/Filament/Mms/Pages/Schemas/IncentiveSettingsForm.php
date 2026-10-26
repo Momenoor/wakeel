@@ -58,7 +58,7 @@ class IncentiveSettingsForm
 
             // Who brought a matter in (MarketingCommissions).
             Section::make(__('Marketing'))
-                ->description(__('A matter\'s marketers share its marketing share, earned as the client pays: a staff marketer in their incentive, a third party as a commission owed.'))
+                ->description(__('A matter\'s marketers share its marketing share, earned as the client pays: a staff marketer in their incentive, a third party as a commission owed. An assistant is paid the matter\'s usual rate, whoever marketed it.'))
                 ->icon(Heroicon::Megaphone)
                 ->columns(2)
                 ->schema([
@@ -73,16 +73,16 @@ class IncentiveSettingsForm
                         ->default(MarketingCommissions::DEFAULT_SHARE)
                         ->helperText(__('Of the fees\' basic amount, for a matter\'s marketers together; changeable on each matter.')),
 
-                    TextInput::make(MarketingCommissions::OTHER_RATE_SETTING)
-                        ->label(__('Assistant rate when another marketed the matter (%)'))
+                    TextInput::make(MarketingCommissions::SELF_BONUS_SETTING)
+                        ->label(__('Added to the assistant who marketed the matter themselves (%)'))
                         ->suffix('%')
                         ->numeric()
                         ->minValue(0)
                         ->maxValue(100)
                         ->step(0.01)
                         ->required()
-                        ->default(MarketingCommissions::DEFAULT_OTHER_RATE)
-                        ->helperText(__('Of the fee, instead of the matter\'s rate. The assistant who marketed the matter is paid the matter\'s rate.')),
+                        ->default(MarketingCommissions::DEFAULT_SELF_BONUS)
+                        ->helperText(__('Points of the fee on top of the matter\'s usual rate (10% → 15%), besides their marketing share.')),
                 ]),
 
             Section::make(__('Deduction Toggles'))

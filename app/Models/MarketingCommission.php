@@ -22,6 +22,7 @@ class MarketingCommission extends Model
     protected $fillable = [
         'matter_id',
         'party_id',
+        'allocation_id',
         'kind',
         'date',
         'base',

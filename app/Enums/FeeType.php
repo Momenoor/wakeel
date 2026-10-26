@@ -84,14 +84,18 @@ enum FeeType: string implements HasColor, HasLabel
     }
 
     /**
-     * The types a new fee can be: all but VAT — a fee carries its own VAT now; the VAT rows of before are kept
-     * as they were.
+     * The types a new fee can be: all but VAT — a fee carries its own VAT now — and Marketing — a matter's
+     * marketers are its parties now (MarketingCommissions). Fees of them of before are kept as they were: a fee
+     * being changed keeps its own type among the options ($current).
      *
      * @return array<string, string>
      */
-    public static function newFeeOptions(): array
+    public static function newFeeOptions(mixed $current = null): array
     {
-        return collect(self::cases())->reject(fn (self $type): bool => $type === self::VAT)
+        $current = self::of($current);
+
+        return collect(self::cases())
+            ->reject(fn (self $type): bool => in_array($type, [self::VAT, self::MARKETING], true) && $type !== $current)
             ->mapWithKeys(fn (self $type): array => [$type->value => (string) $type->getLabel()])
             ->all();
     }

@@ -3,6 +3,7 @@
 namespace App\Services\MMS;
 
 use App\Enums\FeeType;
+use App\Models\Allocation;
 use App\Models\Fee;
 use App\Models\IncentiveAssistantLine;
 use App\Models\IncentiveLine;
@@ -30,7 +31,8 @@ use Throwable;
  * A staff marketer is paid in the incentive calculation of its period (apply(): a line of their own there); an
  * external one is owed until marked paid (markPaid()). On the assistants' side (IncentiveCalculatorService): an
  * external marketer's share comes off the fee before the assistants' incentive is worked on it, and an assistant
- * on a matter someone else marketed is paid a flat rate (otherRate()), not the matter's.
+ * who marketed the matter themself is paid their usual share and some points of the fee more (selfBonus()); one on
+ * a matter someone else marketed, their usual share.
  */
 class MarketingCommissions
 {
@@ -39,19 +41,19 @@ class MarketingCommissions
 
     public const DEFAULT_SHARE = 25.0;
 
-    /** Settings → Incentive: an assistant's flat rate on a matter someone else marketed. */
-    public const OTHER_RATE_SETTING = 'incentive_rate_when_marketed_by_other';
+    /** Settings → Incentive: the points of the fee added to the share of an assistant who marketed the matter themself. */
+    public const SELF_BONUS_SETTING = 'incentive_bonus_when_marketed_by_self';
 
-    public const DEFAULT_OTHER_RATE = 10.0;
+    public const DEFAULT_SELF_BONUS = 5.0;
 
     public static function defaultShare(): float
     {
         return self::setting(self::SHARE_SETTING, self::DEFAULT_SHARE);
     }
 
-    public static function otherRate(): float
+    public static function selfBonus(): float
     {
-        return self::setting(self::OTHER_RATE_SETTING, self::DEFAULT_OTHER_RATE);
+        return self::setting(self::SELF_BONUS_SETTING, self::DEFAULT_SELF_BONUS);
     }
 
     private static function setting(string $key, float $default): float
@@ -100,18 +102,32 @@ class MarketingCommissions
     }
 
     /** A payment, a fee or a credit note changed on a matter: what its marketers earned, again. */
-    public function afterChange(?Matter $matter, ?CarbonInterface $date = null): void
+    public function afterChange(?Matter $matter, ?CarbonInterface $date = null, ?Allocation $payment = null): void
     {
         if ($matter && ($matter->matterParties()->where('role', 'marketer')->exists() || MarketingCommission::query()->where('matter_id', $matter->getKey())->exists())) {
-            $this->sync($matter, $date);
+            $this->sync($matter, $date, $payment);
         }
+    }
+
+    /**
+     * A payment's date changed: what it earned is dated with it — while not paid yet (not marked paid, nor in a
+     * final calculation); a draft's lines read it again when run.
+     */
+    public function redate(Allocation $payment): void
+    {
+        MarketingCommission::query()
+            ->where('allocation_id', $payment->getKey())
+            ->whereNull('paid_at')
+            ->where(fn ($query) => $query->whereNull('incentive_calculation_id')
+                ->orWhereHas('calculation', fn ($calculation) => $calculation->where('status', '!=', 'finalized')))
+            ->update(['date' => $payment->date->toDateString()]);
     }
 
     /**
      * What each of the matter's marketers has earned in all, worked out again, and the difference kept — dated
      * $date (the payment's), or as the matter's latest payment, or (nothing paid) today.
      */
-    public function sync(Matter $matter, ?CarbonInterface $date = null): void
+    public function sync(Matter $matter, ?CarbonInterface $date = null, ?Allocation $payment = null): void
     {
         $marketers = $matter->matterParties()->where('role', 'marketer')->get();
         $recorded = MarketingCommission::query()->where('matter_id', $matter->getKey())->get(['party_id', 'kind', 'amount'])->groupBy('party_id');
@@ -148,6 +164,8 @@ class MarketingCommissions
             MarketingCommission::create([
                 'matter_id' => $matter->getKey(),
                 'party_id' => $partyId,
+                // Earned by a payment: kept with it, dated with it (redate()).
+                'allocation_id' => $payment?->getKey(),
                 'kind' => $part['kind'] ?? $recorded->get($partyId)->first()->kind,
                 'date' => ($date ?? now())->toDateString(),
                 'base' => $collected,
