@@ -147,7 +147,7 @@ class LeaveRequestTest extends TestCase
             ->generate(PayrollRun::create(['period' => '2026-06', 'status' => PayrollRunStatus::DRAFT]))
             ->first();
 
-        // Ten days away, five days docked: 5 × (6,000/30) = 1,000.
+        // Ten days away, five days docked, of the whole salary (a basic of 6,000 only): 5 × (6,000/30) = 1,000.
         $this->assertSame('5.0', $payslip->unpaid_days);
         $this->assertSame('1000.00', $payslip->unpaid_deduction);
     }

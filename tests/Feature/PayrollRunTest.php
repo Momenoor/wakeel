@@ -121,7 +121,7 @@ class PayrollRunTest extends TestCase
         $this->assertCount(0, $this->payroll->generate($this->payrollRun()));
     }
 
-    public function test_unpaid_leave_is_deducted_at_basic_over_thirty(): void
+    public function test_unpaid_leave_is_deducted_at_the_whole_salary_over_thirty(): void
     {
         $party = $this->employee();
 
@@ -135,12 +135,11 @@ class PayrollRunTest extends TestCase
 
         $payslip = $this->payroll->generate($this->payrollRun())->first();
 
-        // Five days at 6,000/30 = 200 a day. Had the rate been taken off gross
-        // pay it would be 333.33 a day, and the employee would lose 666 AED too
-        // much on a single week's unpaid leave.
+        // Five days of the whole salary — basic and allowances, 10,000/30 = 333.33 a day — not of the basic alone
+        // (6,000/30 = 200 a day).
         $this->assertSame('5.0', $payslip->unpaid_days);
-        $this->assertSame('1000.00', $payslip->unpaid_deduction);
-        $this->assertSame('9000.00', $payslip->net_pay);
+        $this->assertSame('1666.67', $payslip->unpaid_deduction);
+        $this->assertSame('8333.33', $payslip->net_pay);
     }
 
     public function test_half_pay_sick_leave_withholds_half_a_day_per_day(): void
@@ -158,7 +157,7 @@ class PayrollRunTest extends TestCase
         $payslip = $this->payroll->generate($this->payrollRun())->first();
 
         $this->assertSame('2.0', $payslip->unpaid_days);
-        $this->assertSame('400.00', $payslip->unpaid_deduction);
+        $this->assertSame('666.67', $payslip->unpaid_deduction);
     }
 
     public function test_leave_recorded_before_this_module_existed_costs_nothing(): void

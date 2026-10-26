@@ -306,10 +306,10 @@ class PayrollService
         $allowances = (float) $salary->except(SalaryComponent::BASIC->value)->sum();
         $grossSalary = round($basic + $allowances, 2);
         $unpaidDays = $this->unpaidDaysInPeriod($party->getKey(), $periodStart, $periodEnd);
-        // Shared with the gratuity service's own daily rate, under the same
-        // setting key — basic salary ÷ a month has to mean the same thing on
-        // both figures, or the two would silently disagree about the divisor.
-        $unpaidDeduction = round(($basic / $this->gratuity->daysPerMonth()) * $unpaidDays, 2);
+        // An absence without permission and unpaid leave cost the whole salary of each day — basic and allowances,
+        // not the basic alone. The days of a month are the gratuity service's own (the same setting), so a day means
+        // the same on both figures; the gratuity itself stays on the basic.
+        $unpaidDeduction = round(($grossSalary / $this->gratuity->daysPerMonth()) * $unpaidDays, 2);
 
         $installments = $this->dueInstallments($party, $run->getAttribute('period'));
         $loanDeduction = round((float) $installments->sum('amount'), 2);
