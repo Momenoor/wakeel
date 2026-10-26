@@ -45,7 +45,7 @@ class ViewMatter extends ViewRecord
         return parent::resolveRecord($key)->loadMissing(self::EAGER);
     }
 
-    private const EAGER = ['requests.attachments', 'requests.requestBy', 'fees.ownedAttachments', 'fees.allocations.ownedAttachments'];
+    private const EAGER = ['requests.attachments', 'requests.requestBy', 'fees.ownedAttachments', 'fees.allocations.ownedAttachments', 'fees.creditNotes.ownedAttachments', 'expenses.ownedAttachments', 'marketers.party', 'marketingCommissions.party', 'marketingCommissions.calculation'];
 
     /**
      * And again before each render: an action's refresh() reads the fees and requests again without what

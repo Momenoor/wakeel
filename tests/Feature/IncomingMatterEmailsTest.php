@@ -548,6 +548,10 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertSame('Saved', $with->forceFill(['onedrive' => ['attachments' => 2]])->oneDriveLabel('attachments'));
         $this->assertSame('Not checked', $with->forceFill(['onedrive' => null])->oneDriveLabel('attachments'));
         $this->assertSame('Not checked', $with->oneDriveLabel('pdf'));
+        // Attached files and links to more beside them: both said, in short.
+        $links = ['links' => [['url' => 'https://drive.google.com/file/d/1AbC/view', 'label' => 'a'], ['url' => 'https://we.tl/t-x', 'label' => 'b']]];
+        $this->assertSame('Saved · 2 links to save', (clone $with)->forceFill(['onedrive' => ['attachments' => 2], ...$links])->oneDriveLabel('attachments'));
+        $this->assertSame('Not saved · 2 links to save', (clone $with)->forceFill(['onedrive' => ['attachments' => 0], ...$links])->oneDriveLabel('attachments'));
         // The PDF of one that came in opens; its details list the files it came with.
         $page->assertTableActionVisible('open', $received)
             ->assertTableActionHidden('open', $sent)

@@ -15,18 +15,30 @@ use Illuminate\Support\HtmlString;
 
 /**
  * A fee's VAT on every form a fee is added or changed on — the matter view's Add Fee and Edit Fee, the matter
- * form's fees: "Including VAT" (on for the types entered VAT included, an expert fee — FeeType), the basic, VAT
- * and total as typed, and what is saved — split by App\Support\Vat, nowhere else.
+ * form's fees: "VAT not applicable" (a fee VAT does not apply to, kept with none), "Including VAT" (on for the
+ * types entered VAT included, an expert fee — FeeType), the basic, VAT and total as typed, and what is saved —
+ * split by App\Support\Vat, nowhere else.
  */
 final class FeeVatFields
 {
-    /** "Including VAT": shown for the types VAT is charged on; set to the type's own default when it is chosen. */
+    /** "VAT not applicable": for the types VAT is charged on, a fee of one that VAT does not apply to — none on it. */
+    public static function exemptToggle(): Toggle
+    {
+        return Toggle::make('is_vat_exempt')
+            ->label(__('VAT not applicable'))
+            ->default(false)
+            ->visible(fn (Get $get, $record = null): bool => self::carriesVat($get('type') ?? self::fee($record)?->type))
+            ->inline(false)
+            ->live();
+    }
+
+    /** "Including VAT": shown for the types VAT is charged on, VAT applying; set to the type's own default when it is chosen. */
     public static function toggle(): Toggle
     {
         return Toggle::make('is_vat_included')
             ->label(__('Including VAT'))
             ->default(fn (Get $get): bool => self::includedByDefault($get('type')))
-            ->visible(fn (Get $get, $record = null): bool => self::carriesVat($get('type') ?? self::fee($record)?->type))
+            ->visible(fn (Get $get, $record = null): bool => self::carriesVat($get('type') ?? self::fee($record)?->type) && ! $get('is_vat_exempt'))
             ->inline(false)
             ->live();
     }
@@ -49,6 +61,9 @@ final class FeeVatFields
             if (blank($get('amount')) || ! self::carriesVat($get('type') ?? $record?->type)) {
                 return null;
             }
+            if ($get('is_vat_exempt')) {
+                return new HtmlString(e(__('No VAT')).'  ·  '.e(__('Total')).' '.Currency::format(round((float) $get('amount'), 2)));
+            }
 
             $kept = self::kept((float) $get('amount'), (bool) $get('is_vat_included'), $record);
             $split = $kept ?? Vat::split((float) $get('amount'), (bool) $get('is_vat_included'));
@@ -59,40 +74,42 @@ final class FeeVatFields
     }
 
     /**
-     * What is saved of a fee as entered: its basic amount, its VAT and whether it was entered VAT included — or, a
-     * fee whose amount and "Including VAT" were left as they were, what it already is (a fee of before, kept
-     * without VAT, keeps it so when only its date or note changes).
+     * What is saved of a fee as entered: its basic amount, its VAT, whether it was entered VAT included and whether
+     * VAT does not apply to it (then none: its amount its total) — or, a fee whose amount and VAT choices were left
+     * as they were, what it already is (a fee of before, kept without VAT, keeps it so when only its date or note
+     * changes).
      *
-     * @param  array<string, mixed>  $data  amount, is_vat_included, and type when it is chosen
-     * @return array{amount: float, vat: float, is_vat_included: bool}
+     * @param  array<string, mixed>  $data  amount, is_vat_included, is_vat_exempt, and type when it is chosen
+     * @return array{amount: float, vat: float, is_vat_included: bool, is_vat_exempt: bool}
      */
     public static function attributes(array $data, ?Fee $fee = null): array
     {
         $type = FeeType::of($data['type'] ?? null) ?? $fee?->type;
-        $included = (bool) ($data['is_vat_included'] ?? false);
+        $exempt = (bool) ($data['is_vat_exempt'] ?? false);
+        $included = ! $exempt && (bool) ($data['is_vat_included'] ?? false);
         $amount = (float) ($data['amount'] ?? 0);
 
-        if (! $type?->carriesVat()) {
-            return ['amount' => $amount, 'vat' => 0.0, 'is_vat_included' => false];
+        if (! $type?->carriesVat() || $exempt) {
+            return ['amount' => $amount, 'vat' => 0.0, 'is_vat_included' => false, 'is_vat_exempt' => $exempt && (bool) $type?->carriesVat()];
         }
 
         if ($fee !== null && $fee->type === $type && ($kept = self::kept($amount, $included, $fee)) !== null) {
-            return ['amount' => $kept['basic'], 'vat' => $kept['vat'], 'is_vat_included' => $included];
+            return ['amount' => $kept['basic'], 'vat' => $kept['vat'], 'is_vat_included' => $included, 'is_vat_exempt' => false];
         }
 
         $split = Vat::split($amount, $included);
 
-        return ['amount' => $split['basic'], 'vat' => $split['vat'], 'is_vat_included' => $included];
+        return ['amount' => $split['basic'], 'vat' => $split['vat'], 'is_vat_included' => $included, 'is_vat_exempt' => false];
     }
 
     /**
-     * A fee's amount and "Including VAT" as its form shows them: the total when it was entered VAT included.
+     * A fee's amount and VAT choices as its form shows them: the total when it was entered VAT included.
      *
-     * @return array{amount: float, is_vat_included: bool}
+     * @return array{amount: float, is_vat_included: bool, is_vat_exempt: bool}
      */
     public static function fill(Fee $fee): array
     {
-        return ['amount' => $fee->entered_amount, 'is_vat_included' => (bool) $fee->is_vat_included];
+        return ['amount' => $fee->entered_amount, 'is_vat_included' => (bool) $fee->is_vat_included, 'is_vat_exempt' => (bool) $fee->is_vat_exempt];
     }
 
     /**
@@ -102,7 +119,7 @@ final class FeeVatFields
      */
     private static function kept(float $amount, bool $included, ?Fee $fee): ?array
     {
-        if ($fee === null || ! $fee->exists || $included !== (bool) $fee->is_vat_included || round($amount, 2) !== round($fee->entered_amount, 2)) {
+        if ($fee === null || ! $fee->exists || (bool) $fee->is_vat_exempt || $included !== (bool) $fee->is_vat_included || round($amount, 2) !== round($fee->entered_amount, 2)) {
             return null;
         }
 

@@ -10,6 +10,7 @@ use App\Filament\Mms\Widgets\IncentiveTypeConfigsOverviewWidget;
 use App\Filament\Shared\Clusters\Settings;
 use App\Filament\Support\SettingsForm;
 use App\Models\Setting;
+use App\Services\MMS\MarketingCommissions;
 use App\Support\ScreenPermissions;
 use App\Support\Vat;
 use BackedEnum;
@@ -92,6 +93,8 @@ class FinancialConfiguration extends Page
                 'incentive_below_minimum_penalty_pct' => Setting::get('incentive_below_minimum_penalty_pct', 2.0),
                 'incentive_committee_fixed_percentage' => Setting::get('incentive_committee_fixed_percentage', 8.0),
                 'incentive_office_work_adjustment' => Setting::get('incentive_office_work_adjustment', 2.0),
+                MarketingCommissions::SHARE_SETTING => MarketingCommissions::defaultShare(),
+                MarketingCommissions::OTHER_RATE_SETTING => MarketingCommissions::otherRate(),
 
                 'incentive_enable_first_review_deduction' => Setting::get('incentive_enable_first_review_deduction', true),
                 'incentive_enable_subsequent_review_deduction' => Setting::get('incentive_enable_subsequent_review_deduction', true),

@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Resources\Matters\Pages;
 use App\Filament\Mms\Resources\CalendarEvents\Schemas\CalendarEventForm;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Models\Matter;
+use App\Services\MMS\MarketingCommissions;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
@@ -23,6 +24,9 @@ class EditMatter extends EditRecord
      */
     protected function afterSave(): void
     {
+        // Its marketers or their share changed: what they have earned, again, once (MarketingCommissions).
+        app(MarketingCommissions::class)->afterChange($this->record);
+
         $date = $this->record->next_session_date;
 
         if (! $date || ! $this->record->wasChanged('next_session_date')

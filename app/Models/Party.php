@@ -141,6 +141,8 @@ class Party extends Model
             // Written to from a matter — police, central bank … — with
             // letter templates of their own (LetterTemplate::entities()).
             'external' => __('External entity'),
+            // Brings matters in, and earns a share of them (MarketingCommissions).
+            'marketer' => __('Marketer'),
         ];
     }
 

@@ -11,6 +11,8 @@ use App\Filament\Mms\Pages\Reports\AssistantPerformanceReport;
 use App\Filament\Mms\Pages\Reports\CourtWorkloadReport;
 use App\Filament\Mms\Pages\Reports\DeductionsReconciliationReport;
 use App\Filament\Mms\Pages\Reports\FeeCollectionAgingReport;
+use App\Filament\Mms\Pages\Reports\MarketingCommissionsReport;
+use App\Filament\Mms\Pages\Reports\MatterExpensesReport;
 use App\Filament\Mms\Pages\Reports\MatterQualityReport;
 use App\Filament\Mms\Pages\Reports\MattersMonthlyReport;
 use App\Filament\Mms\Pages\Reports\MyIncentiveReport;
@@ -51,7 +53,7 @@ class FilamentPagesRenderTest extends TestCase
     {
         foreach ([AssistantMatterFeesReport::class, AssistantPerformanceReport::class, DeductionsReconciliationReport::class, FeeCollectionAgingReport::class,
             MatterQualityReport::class, MyMattersReport::class, OverdueMattersReport::class, TypeProfitabilityReport::class, VatSummaryReport::class,
-            AssistantMattersReport::class, CourtWorkloadReport::class,
+            AssistantMattersReport::class, CourtWorkloadReport::class, MatterExpensesReport::class, MarketingCommissionsReport::class,
             MattersMonthlyReport::class, MyIncentiveReport::class] as $page) {
             Livewire::test($page)
                 ->assertOk()

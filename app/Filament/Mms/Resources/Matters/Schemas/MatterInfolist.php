@@ -31,13 +31,18 @@ use App\Livewire\MatterHistoryTab;
 use App\Livewire\MatterOneDriveFiles;
 use App\Models\CalendarEvent;
 use App\Models\Fee;
+use App\Models\FeeCreditNote;
 use App\Models\IncentiveAssistantLine;
+use App\Models\MarketingCommission;
 use App\Models\Matter;
+use App\Models\MatterExpense;
 use App\Models\Party;
 use App\Models\Type;
 use App\Services\MMS\Calendar\EventMatterLinker;
+use App\Services\MMS\FeeCreditNotes;
 use App\Services\MMS\IncentiveCalculatorService;
 use App\Services\MMS\IncentiveReversals;
+use App\Services\MMS\MarketingCommissions;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\OneDriveFolderLinker;
 use App\Services\MMS\Requests\RequestHistory;
@@ -50,6 +55,7 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
@@ -166,6 +172,8 @@ class MatterInfolist
                             ->visible(fn (): bool => ScreenPermissions::can(ScreenPermissions::MATTER_FEES_TAB))
                             ->schema([
                                 static::feesSection(),
+                                static::expensesSection(),
+                                static::marketingSection(),
                                 static::incentiveSection(),
                             ]),
                         Tab::make(__('Requests & Notes'))->key('requests', isInheritable: false)
@@ -802,6 +810,7 @@ class MatterInfolist
                             ->prefix(fn (Get $get) => FeeType::of($get('type'))?->isNegative() ? '-' : '+')
                             ->live(debounce: 400)
                             ->required(),
+                        FeeVatFields::exemptToggle(),
                         FeeVatFields::toggle(),
                         FeeVatFields::preview(),
                         // Optional: today when left empty (Fee).
@@ -813,7 +822,7 @@ class MatterInfolist
                         // The invoice, the contract … with it, if there is one.
                         ...AttachmentFields::given(new Fee),
                     ])->action(function (array $data, $record, $component) {
-                        $fee = $record->fees()->create([...Arr::except($data, [...AttachmentFields::GIVEN, 'is_vat_included']), ...FeeVatFields::attributes($data)]);
+                        $fee = $record->fees()->create([...Arr::except($data, [...AttachmentFields::GIVEN, 'is_vat_included', 'is_vat_exempt']), ...FeeVatFields::attributes($data)]);
                         AttachmentFields::saveGiven($fee, $data);
                         $record->updateCollectionStatus();
                         $record->refresh();
@@ -848,9 +857,12 @@ class MatterInfolist
                             ->icon('heroicon-o-banknotes')
                             ->color(fn ($state, Get $get) => $get('type')?->isNegative() ? 'danger' : null)
                             // Its VAT, when it has any: "Basic ⃁ 1,000.00 · VAT ⃁ 50.00".
-                            ->helperText(fn (Fee $record): ?HtmlString => (float) $record->vat !== 0.0
-                                ? new HtmlString(e(__('Basic')).' '.Currency::format((float) $record->amount).' · '.e(__('VAT')).' '.Currency::format((float) $record->vat))
-                                : null),
+                            ->helperText(fn (Fee $record): ?HtmlString => match (true) {
+                                (float) $record->vat !== 0.0 => new HtmlString(e(__('Basic')).' '.Currency::format((float) $record->amount).' · '.e(__('VAT')).' '.Currency::format((float) $record->vat)),
+                                // VAT not applicable to it: said so, not taken for a fee of before.
+                                (bool) $record->is_vat_exempt => new HtmlString(e(__('No VAT'))),
+                                default => null,
+                            }),
                         TextEntry::make('collected_amount')
                             ->label(__('Collected'))
                             ->aed()
@@ -870,12 +882,33 @@ class MatterInfolist
                         Actions::make([
                             static::collectFeeAction(),
                             static::attachFilesAction('attachFeeFiles', fn () => auth()->user()->can('CreateFee:Matter') || auth()->user()->can('UpdateFee:Matter')),
+                            static::creditNoteAction(),
                             static::editFeeAction(),
                             static::deleteFeeAction(),
                         ])->alignEnd(),
                         TextEntry::make('description')->label(__('Description'))
                             ->placeholder('—')->columnSpan(2),
                         AttachmentList::make(),
+                        // What it was reduced by: each credit note, its document with it.
+                        RepeatableEntry::make('creditNotes')
+                            ->label(__('Credit notes'))
+                            ->columns(5)
+                            ->columnSpanFull()
+                            ->visible(fn (Fee $record): bool => $record->creditNotes->isNotEmpty())
+                            ->schema([
+                                TextEntry::make('total')->label(__('Amount'))->aed()->weight(FontWeight::SemiBold)->color('danger')
+                                    ->helperText(fn (FeeCreditNote $record): ?string => (float) $record->vat !== 0.0
+                                        ? __('Basic').' '.number_format((float) $record->basic, 2).' · '.__('VAT').' '.number_format((float) $record->vat, 2)
+                                        : null),
+                                TextEntry::make('number')->label(__('Credit note number'))->placeholder('—'),
+                                TextEntry::make('date')->label(__('Date'))->date(),
+                                TextEntry::make('reason')->label(__('Reason'))->placeholder('—'),
+                                Actions::make([
+                                    static::attachFilesAction('attachCreditNoteFiles', fn () => auth()->user()->can('UpdateFee:Matter')),
+                                    static::deleteCreditNoteAction(),
+                                ])->alignEnd(),
+                                AttachmentList::make()->label(__('Documents')),
+                            ]),
                         RepeatableEntry::make('allocations')
                             ->label(__('Payment History'))
                             ->columns(4)
@@ -896,6 +929,163 @@ class MatterInfolist
                             ]),
                     ]),
             ]);
+    }
+
+    /**
+     * The matter's expenses: what the client gave for its procedures (its fees of type "Matter expenses", collected
+     * as any fee), what was paid out of it — each with its receipt — and the balance; not the office's revenue.
+     */
+    private static function expensesSection(): Section
+    {
+        return Section::make(__('Matter expenses'))
+            ->key('expensesSection', isInheritable: false)
+            ->icon('heroicon-o-receipt-refund')
+            ->description(__('Received from the client for the matter\'s procedures — a fee of type "Matter expenses" — and paid out for them.'))
+            ->visible(fn (Matter $record): bool => $record->expenses->isNotEmpty()
+                || $record->fees->contains(fn (Fee $fee): bool => (bool) $fee->type?->isPassThrough())
+                || auth()->user()->can('CreateFee:Matter'))
+            ->collapsible()
+            ->headerActions([static::addExpenseAction()])
+            ->schema([
+                Grid::make(['default' => 2, 'md' => 4])
+                    ->schema([
+                        TextEntry::make('expenses_charged')->label(__('Charged to the client'))->aed()
+                            ->state(fn (Matter $record): float => $record->expensesSummary()['charged']),
+                        TextEntry::make('expenses_received')->label(__('Received from the client'))->aed()->color('success')
+                            ->state(fn (Matter $record): float => $record->expensesSummary()['received']),
+                        TextEntry::make('expenses_spent')->label(__('Paid out'))->aed()->color('danger')
+                            ->state(fn (Matter $record): float => $record->expensesSummary()['spent']),
+                        TextEntry::make('expenses_balance')->label(__('Balance'))->aed()->weight(FontWeight::Bold)
+                            ->state(fn (Matter $record): float => $record->expensesSummary()['balance'])
+                            ->color(fn (float $state): string => $state < 0 ? 'danger' : ($state > 0 ? 'warning' : 'success'))
+                            ->helperText(fn (float $state): ?string => match (true) {
+                                $state < 0 => __('Paid out before it was received: to collect from the client.'),
+                                $state > 0 => __('Received and not paid out yet: to spend, or to refund to the client.'),
+                                default => null,
+                            }),
+                    ]),
+                RepeatableEntry::make('expenses')
+                    ->hiddenLabel()
+                    // Newest first.
+                    ->state(fn (Matter $record) => $record->expenses->sortBy([['date', 'desc'], ['id', 'desc']])->values())
+                    ->visible(fn (Matter $record): bool => $record->expenses->isNotEmpty())
+                    ->columns(5)
+                    ->columnSpanFull()
+                    ->schema([
+                        TextEntry::make('amount')->label(__('Amount'))->aed()->weight(FontWeight::SemiBold)->color('danger'),
+                        TextEntry::make('date')->label(__('Date'))->date()->icon('heroicon-o-calendar'),
+                        TextEntry::make('payee')->label(__('Paid to'))->placeholder('—'),
+                        TextEntry::make('description')->label(__('For'))->placeholder('—'),
+                        Actions::make([
+                            static::attachFilesAction('attachExpenseFiles', fn () => auth()->user()->can('CreateFee:Matter') || auth()->user()->can('UpdateFee:Matter')),
+                            static::editExpenseAction(),
+                            static::deleteExpenseAction(),
+                        ])->alignEnd(),
+                        AttachmentList::make()->label(__('Receipts')),
+                    ]),
+            ]);
+    }
+
+    /**
+     * Who brought the matter in: each marketer, staff or a third party, their part of the share and what they have
+     * earned of it so far — as the client paid (MarketingCommissions).
+     */
+    private static function marketingSection(): Section
+    {
+        return Section::make(__('Marketing'))
+            ->key('marketingSection', isInheritable: false)
+            ->icon('heroicon-o-megaphone')
+            ->visible(fn (Matter $record): bool => $record->marketers->isNotEmpty() || $record->marketingCommissions->isNotEmpty())
+            ->collapsible()
+            ->description(fn (Matter $record): string => $record->marketing_fixed !== null
+                ? __('Marketing share :amount fixed', ['amount' => Currency::text((float) $record->marketing_fixed)])
+                : __('Marketing share :rate%', ['rate' => rtrim(rtrim(number_format((float) ($record->marketing_rate ?? MarketingCommissions::defaultShare()), 2), '0'), '.')]))
+            ->schema([
+                RepeatableEntry::make('marketing_rows')
+                    ->hiddenLabel()
+                    ->state(function (Matter $record): array {
+                        $parts = MarketingCommissions::parts($record->marketers);
+                        $earned = $record->marketingCommissions->groupBy('party_id');
+
+                        return $parts->keys()->merge($earned->keys())->unique()->map(fn ($partyId): array => [
+                            'name' => $record->marketers->firstWhere('party_id', $partyId)?->party?->name ?? $earned->get($partyId)?->first()?->party?->name ?? '—',
+                            'kind' => MarketingCommission::kindLabel($parts->get($partyId)['kind'] ?? $earned->get($partyId)?->first()?->kind),
+                            'part' => isset($parts[$partyId]) ? round($parts[$partyId]['part'] * 100, 2).'%' : '—',
+                            'earned' => (float) $earned->get($partyId, collect())->sum('amount'),
+                            // Staff: paid in a calculation; external: marked paid.
+                            'settled' => (float) $earned->get($partyId, collect())->filter(fn (MarketingCommission $c): bool => $c->paid_at !== null || ($c->calculation?->isFinalized() ?? false))->sum('amount'),
+                        ])->values()->all();
+                    })
+                    ->columns(5)
+                    ->schema([
+                        TextEntry::make('name')->label(__('Marketer'))->weight(FontWeight::SemiBold),
+                        TextEntry::make('kind')->label(__('Kind'))->badge(),
+                        TextEntry::make('part')->label(__('Part of the share')),
+                        TextEntry::make('earned')->label(__('Earned so far'))->aed(),
+                        TextEntry::make('settled')->label(__('Paid'))->aed()->color('success'),
+                    ]),
+            ]);
+    }
+
+    /** The fields of an expense paid out, as added and as changed. */
+    private static function expenseFields(): array
+    {
+        return [
+            TextInput::make('amount')->label(__('Amount'))->numeric()->minValue(0.01)->required()->prefix(Currency::symbol()),
+            DatePicker::make('date')->label(__('Date'))->default(now())->required(),
+            TextInput::make('payee')->label(__('Paid to'))->maxLength(255),
+            Textarea::make('description')->label(__('For'))->rows(2),
+        ];
+    }
+
+    private static function addExpenseAction(): Action
+    {
+        return Action::make('addExpense')
+            ->label(__('Record expense paid'))
+            ->icon('heroicon-o-plus')
+            ->visible(fn () => auth()->user()->can('CreateFee:Matter'))
+            ->modalHeading(__('Record expense paid'))
+            ->schema([
+                ...static::expenseFields(),
+                // The receipt with it, if there is one.
+                ...AttachmentFields::given(new MatterExpense),
+            ])
+            ->action(function (array $data, Matter $record, $component) {
+                $expense = $record->expenses()->create(Arr::only($data, ['amount', 'date', 'payee', 'description']));
+                AttachmentFields::saveGiven($expense, $data);
+                static::refreshRecord($component);
+            });
+    }
+
+    private static function editExpenseAction(): Action
+    {
+        return Action::make('editExpense')
+            ->label(__('Edit'))
+            ->iconButton()
+            ->icon('heroicon-o-pencil')
+            ->visible(fn () => auth()->user()->can('UpdateFee:Matter'))
+            ->modalHeading(__('Edit expense paid'))
+            ->schema(static::expenseFields())
+            ->fillForm(fn (MatterExpense $record): array => $record->only(['amount', 'date', 'payee', 'description']))
+            ->action(function (array $data, MatterExpense $record, $component) {
+                $record->update(Arr::only($data, ['amount', 'date', 'payee', 'description']));
+                static::refreshRecord($component);
+            });
+    }
+
+    private static function deleteExpenseAction(): Action
+    {
+        return Action::make('deleteExpense')
+            ->label(__('Delete'))
+            ->iconButton()
+            ->icon('heroicon-o-trash')
+            ->color('danger')
+            ->visible(fn () => auth()->user()->can('DeleteFee:Matter'))
+            ->requiresConfirmation()
+            ->action(function (MatterExpense $record, $component) {
+                $record->delete();
+                static::refreshRecord($component);
+            });
     }
 
     private static function incentiveSection(): Section
@@ -1304,9 +1494,14 @@ class MatterInfolist
             ->icon('heroicon-o-pencil')
             ->visible(fn ($record) => auth()->user()->can('UpdateFee:Matter'))
             ->modalHeading(__('Edit Fee'))
+            // Its incentive already paid: a corrected amount settles the difference in the next calculation.
+            ->modalDescription(fn (Fee $record): ?string => IncentiveReversals::isPaid($record)
+                ? __('This fee\'s incentive has already been paid. Changing its amount takes the difference\'s part back from its assistants in the next incentive calculation, or pays it when it goes up.')
+                : null)
             ->schema([
                 TextInput::make('amount')->label(__('Fee Amount'))
                     ->numeric()->required()->prefix(Currency::symbol())->live(debounce: 400),
+                FeeVatFields::exemptToggle(),
                 FeeVatFields::toggle(),
                 FeeVatFields::preview(),
                 // Both optional; a fee left without a date is dated today (Fee).
@@ -1325,6 +1520,52 @@ class MatterInfolist
                     'description' => $data['description'] ?? null,
                 ]);
                 $record->refresh();
+                static::refreshRecord($component);
+            });
+    }
+
+    /** A credit note on the fee: it reduces the fee by its amount, its VAT split as the fee's is. */
+    private static function creditNoteAction(): Action
+    {
+        return Action::make('creditNote')
+            ->label(__('Credit note'))
+            ->iconButton()
+            ->icon('heroicon-o-receipt-percent')
+            ->color('warning')
+            ->tooltip(__('Credit note'))
+            // On a fee of the office's: not a deduction, nor a VAT row of before.
+            ->visible(fn (Fee $record): bool => auth()->user()->can('UpdateFee:Matter') && ! $record->type?->isNegative() && ! FeeType::isVat($record->type))
+            ->modalHeading(__('Credit note'))
+            ->modalDescription(fn (Fee $record): string => __('It takes its amount off this fee (:total now) — its VAT too.', ['total' => Currency::text($record->total)])
+                .(IncentiveReversals::isPaid($record) ? ' '.__('This fee\'s incentive has already been paid: its assistants\' part of the credit note is taken back in the next incentive calculation.') : ''))
+            ->schema(fn (Fee $record): array => [
+                TextInput::make('amount')->label(__('Amount'))->numeric()->minValue(0.01)->required()->prefix(Currency::symbol()),
+                Toggle::make('is_vat_included')->label(__('Including VAT'))->default(true)->inline(false)
+                    ->visible(FeeCreditNotes::withVat($record)),
+                TextInput::make('number')->label(__('Credit note number'))->maxLength(255),
+                DatePicker::make('date')->label(__('Date'))->default(now())->required(),
+                Textarea::make('reason')->label(__('Reason'))->rows(2),
+                ...AttachmentFields::given(new FeeCreditNote),
+            ])
+            ->action(function (array $data, Fee $record, $component) {
+                $note = app(FeeCreditNotes::class)->add($record, $data);
+                AttachmentFields::saveGiven($note, $data);
+                static::refreshRecord($component);
+            });
+    }
+
+    private static function deleteCreditNoteAction(): Action
+    {
+        return Action::make('deleteCreditNote')
+            ->label(__('Delete'))
+            ->iconButton()
+            ->icon('heroicon-o-trash')
+            ->color('danger')
+            ->visible(fn () => auth()->user()->can('UpdateFee:Matter'))
+            ->requiresConfirmation()
+            ->modalDescription(__('The fee is given back what the credit note took off it.'))
+            ->action(function (FeeCreditNote $record, $component) {
+                app(FeeCreditNotes::class)->remove($record);
                 static::refreshRecord($component);
             });
     }

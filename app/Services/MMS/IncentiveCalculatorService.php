@@ -12,6 +12,7 @@ use App\Models\IncentiveExtraRule;
 use App\Models\IncentiveLine;
 use App\Models\IncentiveLineDeduction;
 use App\Models\IncentiveMetaAdjustment;
+use App\Models\MarketingCommission;
 use App\Models\MatterParty;
 use App\Models\MatterTypeIncentiveTier;
 use App\Models\PartyLeave;
@@ -106,6 +107,8 @@ class IncentiveCalculatorService
             app(IncentiveReversals::class)->apply($calculation);
             // Amounts added or taken off by hand: a line of the assistant's own, built again as they were entered.
             app(IncentiveAdjustments::class)->apply($calculation);
+            // Staff marketers' commissions of the period: a line of the marketer's own (MarketingCommissions).
+            app(MarketingCommissions::class)->apply($calculation);
 
             $lines = IncentiveLine::with(['fee', 'matter.type.incentiveConfig', 'matter.metas'])
                 ->where('incentive_calculation_id', $calculation->id)
@@ -127,6 +130,16 @@ class IncentiveCalculatorService
                 ->whereIn('matter_id', $matterIds)->where('role', 'expert')->where('type', 'assistant')
                 ->orderBy('id')->get()->groupBy('matter_id');
             $this->firstAssistantOf = $assistantsByMatter->map(fn (Collection $assistants) => $assistants->first()->party_id);
+            // Every matter's marketers, read once (MarketingCommissions): an external one's share comes off the fee;
+            // an assistant on a matter someone else marketed is paid a flat rate of it.
+            $marketersByMatter = MatterParty::query()->whereIn('matter_id', $matterIds)->where('role', 'marketer')->get()->groupBy('matter_id');
+            $matterRevenueBasic = $marketersByMatter->isEmpty() ? collect() : Fee::query()
+                ->whereIn('matter_id', $marketersByMatter->keys())
+                ->where(fn ($q) => $q->whereNull('type')->orWhereNotIn('type', FeeType::excludedFromIncentiveValues()))
+                ->selectRaw('matter_id, SUM(amount) as basic')
+                ->groupBy('matter_id')
+                ->pluck('basic', 'matter_id');
+            $otherMarketedRate = MarketingCommissions::otherRate();
             $matterDeductionTotals = Fee::whereIn('matter_id', $matterIds)
                 ->whereIn('type', FeeType::deductionTypeValues())
                 // Not "total": pluck() would read the fee's own total (Fee::getTotalAttribute) instead.
@@ -165,6 +178,16 @@ class IncentiveCalculatorService
                 $matterDeduction = (float) ($matterDeductionTotals[$matter->id] ?? 0.0);
                 $lineShare = $matterGrossTotal > 0 ? ($grossFeeAmount / $matterGrossTotal) : 0.0;
                 $feeAmountExclVat = max(0.0, $grossFeeAmount - ($matterDeduction * $lineShare));
+
+                // A third party marketed it: their part of the marketing share comes off the fee first — the
+                // assistants' incentive is on what is left. A staff marketer's does not: theirs is on the fee.
+                if ($marketers = $marketersByMatter->get($matter->id)) {
+                    $externalPart = (float) MarketingCommissions::parts($marketers)->where('kind', MarketingCommission::EXTERNAL)->sum('part');
+
+                    if ($externalPart > 0) {
+                        $feeAmountExclVat = round(max(0.0, $feeAmountExclVat - MarketingCommissions::shareOf($matter, $grossFeeAmount, (float) ($matterRevenueBasic[$matter->id] ?? $grossFeeAmount)) * $externalPart), 2);
+                    }
+                }
 
                 // DB column: matters.difficulty = 'easy' | 'medium' | 'hard'
                 $rawDifficulty = $matter->difficulty;
@@ -304,10 +327,18 @@ class IncentiveCalculatorService
                 $totalCommissionWeight = $assistants->sum(fn ($mp) => (float) ($mp->commission_percentage ?? 0));
                 $firstLine = $matterLines->first()['line'];
 
+                $matterMarketers = $marketersByMatter->get($matterId);
+
                 foreach ($assistants as $mp) {
                     $override = $existingAssistantOverrides->get($matterId.'-'.$mp->party_id)?->percentage_override;
+                    // Someone else marketed the matter: this assistant is paid the flat rate of the fee instead of
+                    // the matter's (unless a rate was typed in for them). The marketer themself: the matter's.
+                    $marketedRate = $override === null && $matterMarketers && ! $matterMarketers->contains('party_id', $mp->party_id)
+                        ? $otherMarketedRate
+                        : null;
+                    $rate = $override ?? $marketedRate;
 
-                    if ($override !== null) {
+                    if ($rate !== null) {
                         // A manual override is this specific assistant's final
                         // effective percentage of the fee for this matter — it
                         // does not affect any other assistant sharing the same
@@ -315,8 +346,8 @@ class IncentiveCalculatorService
                         // automatic calculation; a court penalty still zeroes it.
                         $shareAmount = ($matter->has_court_penalty ?? false)
                             ? 0.0
-                            : round($matterLines->sum(function ($l) use ($override) {
-                                $netPct = max(0.0, (float) $override - (float) $l['line']->total_deduction_pct);
+                            : round($matterLines->sum(function ($l) use ($rate) {
+                                $netPct = max(0.0, (float) $rate - (float) $l['line']->total_deduction_pct);
 
                                 return $l['line']->fee_amount_excl_vat * $netPct / 100;
                             }), 2);
@@ -330,6 +361,7 @@ class IncentiveCalculatorService
                         'incentive_line_id' => $firstLine->id,
                         'party_id' => $mp->party_id,
                         'percentage_override' => $override,
+                        'marketed_rate' => $marketedRate,
                         'share_amount' => $shareAmount,
                         'extra_percentage' => 0,
                         'extra_amount' => 0,
@@ -623,6 +655,7 @@ class IncentiveCalculatorService
             ->where('party_id', $partyId)
             ->whereNull('incentive_reversal_id')
             ->whereNull('incentive_adjustment_id')
+            ->whereNull('marketing_commission_id')
             ->whereHas('incentiveLine', fn ($q) => $q->where('incentive_calculation_id', $calculationId))
             ->orderBy('id')
             ->get(['id', 'total_amount']);
@@ -662,7 +695,7 @@ class IncentiveCalculatorService
             ->get()
             ->keyBy('matter_id');
 
-        $assistantLines = IncentiveAssistantLine::with('party', 'incentiveLine.matter.court', 'incentiveLine.matter.type', 'incentiveLine.deductions', 'reversal.matter', 'reversal.paidCalculation', 'reversal.deletedBy', 'adjustment.createdBy')
+        $assistantLines = IncentiveAssistantLine::with('party', 'incentiveLine.matter.court', 'incentiveLine.matter.type', 'incentiveLine.deductions', 'reversal.matter', 'reversal.paidCalculation', 'reversal.deletedBy', 'reversal.creditNote', 'adjustment.createdBy', 'marketingCommission.matter')
             ->whereHas('incentiveLine', fn ($q) => $q->where('incentive_calculation_id', $calculation->id))
             ->get();
 
@@ -731,6 +764,7 @@ class IncentiveCalculatorService
         return $lines->groupBy(fn (IncentiveAssistantLine $line): string => match (true) {
             $line->incentive_reversal_id !== null => 'reversal-'.$line->incentive_reversal_id,
             $line->incentive_adjustment_id !== null => 'adjustment-'.$line->incentive_adjustment_id,
+            $line->marketing_commission_id !== null => 'marketing-'.$line->marketing_commission_id,
             default => (string) $line->incentiveLine->matter_id,
         })
             ->map(function (Collection $matterLines) use ($matterFeeTotals, $assistantCountByMatter) {
@@ -755,6 +789,8 @@ class IncentiveCalculatorService
                     // A share taken back, or an amount entered by hand: what it is, in full.
                     'reversal' => $reversal !== null,
                     'adjustment' => $adjustment?->type,
+                    // A staff marketer's commission on the matter: what it is, in full.
+                    'marketing' => $first->marketing_commission_id !== null,
                     'description' => $first->description(),
                     // The matter's own difficulty is the source of truth —
                     // incentiveLine->difficulty is a denormalized copy that
@@ -769,6 +805,8 @@ class IncentiveCalculatorService
                     'committee_adjustment' => $incentiveLine->committee_adjustment,
                     'percentage' => $incentiveLine->effective_percentage,
                     'percentage_override' => $matterLines->first()->percentage_override,
+                    // Paid the flat rate, someone else having marketed the matter.
+                    'marketed_rate' => $matterLines->first()->marketed_rate,
                     'base_amount' => $feeTotals?->total_base_amount ?? $incentiveLine->base_amount,
                     'total_deduction_pct' => $incentiveLine->total_deduction_pct,
                     'deductions' => $incentiveLine->deductions,

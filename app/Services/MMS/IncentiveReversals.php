@@ -3,6 +3,7 @@
 namespace App\Services\MMS;
 
 use App\Models\Fee;
+use App\Models\FeeCreditNote;
 use App\Models\IncentiveAssistantLine;
 use App\Models\IncentiveLine;
 use App\Models\IncentiveReversal;
@@ -10,11 +11,13 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * A fee deleted after its incentive was paid.
+ * A fee deleted, corrected or credited after its incentive was paid.
  *
- * The finalized calculation it was paid in stays as it was paid — its line is kept, no longer pointing at the
- * fee. What each assistant was paid for that fee is recorded (an IncentiveReversal, with the fee as it was) and
- * taken back in the next calculation run: a negative line of the assistant's there, described in full.
+ * The finalized calculation it was paid in stays as it was paid. What each assistant was paid for that fee is
+ * recorded (an IncentiveReversal, with the fee as it was) and taken back in the next calculation run: a negative
+ * line of the assistant's there, described in full — all of it for a fee deleted; for a fee whose basic amount
+ * was corrected or reduced by a credit note, the part the change is of the basic amount it was paid on (and,
+ * corrected upward, paid extra: a line above zero). A fee deleted after a change takes back only what is left.
  *
  * An assistant has one share per matter, for all of its fees together; the deleted fee's part of it is its part
  * of the matter's net amount (or, with a percentage typed in for the assistant, that percentage of the fee), and
@@ -48,7 +51,7 @@ class IncentiveReversals
             : __('filament-actions::modal.confirmation');
     }
 
-    /** As the fee is deleted: its draft lines go with it; what was paid on it is kept to be taken back. */
+    /** As the fee is deleted: its draft lines go with it; what was paid on it, and not taken back yet, is kept to be. */
     public function record(Fee $fee): void
     {
         IncentiveLine::query()
@@ -56,6 +59,53 @@ class IncentiveReversals
             ->whereHas('calculation', fn (Builder $query) => $query->where('status', 'draft'))
             ->delete();
 
+        $this->eachPaidShare($fee, function (IncentiveLine $line, IncentiveAssistantLine $share, float $part, float $recorded) use ($fee): void {
+            $amount = round($part - $recorded, 2);
+
+            if ($amount > 0) {
+                $this->keep($fee, $line, $share, $amount, ['reason' => IncentiveReversal::DELETED, 'fee_amount' => $fee->amount]);
+            }
+        });
+    }
+
+    /**
+     * As a fee whose incentive was paid has its basic amount changed — corrected (Edit Fee), or reduced by a credit
+     * note: each assistant's part of the change, kept to be taken back in the next calculation run — or, gone up,
+     * paid there. The part of the paid share the change is of the basic amount it was paid on. Its draft lines
+     * need nothing: their calculation reads the fee again when run.
+     */
+    public function recordChange(Fee $fee, float $before, ?FeeCreditNote $note = null): void
+    {
+        $after = (float) $fee->amount;
+
+        if (abs($before - $after) < 0.005) {
+            return;
+        }
+
+        $this->eachPaidShare($fee, function (IncentiveLine $line, IncentiveAssistantLine $share, float $part, float $recorded, float $paidOn) use ($fee, $before, $after, $note): void {
+            $amount = $paidOn > 0 ? round($part * ($before - $after) / $paidOn, 2) : 0.0;
+            // Never more back than is left of it.
+            $amount = min($amount, round($part - $recorded, 2));
+
+            if (abs($amount) >= 0.005) {
+                $this->keep($fee, $line, $share, $amount, [
+                    'reason' => $note ? IncentiveReversal::CREDIT_NOTE : IncentiveReversal::CORRECTED,
+                    'fee_amount' => $before,
+                    'fee_amount_after' => $after,
+                    'credit_note_id' => $note?->getKey(),
+                ]);
+            }
+        }, $before);
+    }
+
+    /**
+     * Each assistant's share of a matter whose line of this fee was paid: with the fee's part of it, what of that
+     * is already kept to be taken back, and the fee's basic amount it was paid on (as it was before any change).
+     *
+     * @param  callable(IncentiveLine, IncentiveAssistantLine, float, float, float): void  $each
+     */
+    private function eachPaidShare(Fee $fee, callable $each, ?float $before = null): void
+    {
         foreach (self::paidLines($fee)->get() as $line) {
             $matterLines = IncentiveLine::query()
                 ->where('incentive_calculation_id', $line->incentive_calculation_id)
@@ -69,28 +119,32 @@ class IncentiveReversals
                 ->whereNull('incentive_reversal_id')
                 ->get();
 
+            $kept = IncentiveReversal::query()->where('fee_id', $fee->getKey())->where('paid_line_id', $line->getKey())->orderBy('id')->get();
+            // The basic amount it was paid on: as the first change found it, or as it is when there was none.
+            $paidOn = (float) ($kept->first()?->fee_amount ?? $before ?? $fee->amount);
+
             foreach ($shares as $share) {
-                $amount = $this->feePart($line, $share, $matterNet);
-
-                if ($amount <= 0) {
-                    continue;
-                }
-
-                IncentiveReversal::create([
-                    'matter_id' => $line->matter_id,
-                    'party_id' => $share->party_id,
-                    'fee_id' => $fee->getKey(),
-                    'fee_type' => $fee->type?->value,
-                    'fee_amount' => $fee->amount,
-                    'fee_date' => $fee->date,
-                    'paid_line_id' => $line->getKey(),
-                    'paid_calculation_id' => $line->incentive_calculation_id,
-                    'paid_amount' => $share->total_amount,
-                    'amount' => $amount,
-                    'deleted_by' => auth()->id(),
-                ]);
+                $each($line, $share, $this->feePart($line, $share, $matterNet), (float) $kept->where('party_id', $share->party_id)->sum('amount'), $paidOn);
             }
         }
+    }
+
+    /** @param  array<string, mixed>  $why  reason, the fee's basic amount before (and after), its credit note */
+    private function keep(Fee $fee, IncentiveLine $line, IncentiveAssistantLine $share, float $amount, array $why): void
+    {
+        IncentiveReversal::create([
+            'matter_id' => $line->matter_id,
+            'party_id' => $share->party_id,
+            'fee_id' => $fee->getKey(),
+            'fee_type' => $fee->type?->value,
+            'fee_date' => $fee->date,
+            'paid_line_id' => $line->getKey(),
+            'paid_calculation_id' => $line->incentive_calculation_id,
+            'paid_amount' => $share->total_amount,
+            'amount' => $amount,
+            'deleted_by' => auth()->id(),
+            ...$why,
+        ]);
     }
 
     /** The deleted fee's part of what an assistant was paid for the matter. */
@@ -124,7 +178,10 @@ class IncentiveReversals
             ->orderBy('id')
             ->get();
 
-        foreach ($pending->groupBy(fn (IncentiveReversal $reversal): string => $reversal->paid_line_id.'-'.$reversal->fee_id) as $group) {
+        // One line per paid fee and per change of it (deleted, each correction, each credit note): an assistant once on each.
+        foreach ($pending->groupBy(fn (IncentiveReversal $reversal): string => implode('-', [
+            $reversal->paid_line_id, $reversal->fee_id, $reversal->reason, $reversal->fee_amount_after, $reversal->credit_note_id, $reversal->created_at?->getTimestamp(),
+        ])) as $group) {
             $line = IncentiveLine::create([
                 'incentive_calculation_id' => $calculation->getKey(),
                 'matter_id' => $group->first()->matter_id,

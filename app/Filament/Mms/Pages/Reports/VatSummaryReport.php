@@ -12,6 +12,7 @@ use App\Support\ReportPrintAction;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
+use Filament\Support\Contracts\HasColor;
 use Filament\Support\Enums\Width;
 use Filament\Tables\Columns\Summarizers\Sum;
 use Filament\Tables\Columns\TextColumn;
@@ -21,6 +22,7 @@ use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 
 /**
  * VAT charged and collected, per fee, for a filing period.
@@ -32,6 +34,10 @@ use Illuminate\Database\Eloquent\Builder;
  * Listed per fee rather than per month so a return can be tied back to the
  * individual matter it came from; the period filter and column totals give the
  * figure to file.
+ *
+ * A credit note (FeeCreditNote) reduces its fee, but its VAT is filed in its own period: the fee's row shows the
+ * VAT it was charged before any credit note, and each credit note is a row of its own, its VAT below zero, dated
+ * as it was issued.
  */
 class VatSummaryReport extends Page implements HasTable
 {
@@ -74,14 +80,33 @@ class VatSummaryReport extends Page implements HasTable
 
     protected function getTableQuery(): Builder
     {
-        // The VAT rows of before, and every fee that carries VAT of its own.
+        // What its credit notes took off its VAT: given back here, filed in their own rows.
+        $credited = '(SELECT COALESCE(SUM(c.vat), 0) FROM fee_credit_notes c WHERE c.fee_id = fees.id)';
+
+        // The VAT rows of before, and every fee that carries VAT of its own (or did, before a credit note).
+        $fees = DB::table('fees')
+            ->where(fn ($query) => $query->where('fees.type', FeeType::VAT->value)->orWhere('fees.vat', '<>', 0)->orWhereRaw($credited.' <> 0'))
+            ->select(['fees.id', 'fees.matter_id', 'fees.type', 'fees.date', 'fees.status'])
+            ->selectRaw('('.self::charged().') + '.$credited.' as vat_charged')
+            ->selectRaw(self::collected().' as vat_collected')
+            ->selectRaw('NULL as credit_note_number');
+
+        // Each credit note with VAT, in its own period — keyed below zero, apart from the fees.
+        $notes = DB::table('fee_credit_notes as c')
+            ->join('fees as f', 'f.id', '=', 'c.fee_id')
+            ->where('c.vat', '<>', 0)
+            ->selectRaw('-c.id as id, c.matter_id, f.type, c.date, NULL as status, -c.vat as vat_charged, 0 as vat_collected, c.number as credit_note_number');
+
         return Fee::query()
-            ->where(fn (Builder $query) => $query->where('fees.type', FeeType::VAT->value)->orWhere('fees.vat', '<>', 0))
+            ->fromSub($fees->unionAll($notes), 'fees')
             ->whereHas('matter')
-            ->with(['matter.court', 'matter.type'])
-            ->select('fees.*')
-            ->selectRaw(self::charged().' as vat_charged')
-            ->selectRaw(self::collected().' as vat_collected');
+            ->with(['matter.court', 'matter.type']);
+    }
+
+    /** A credit note's row, not a fee's. */
+    private static function isCreditNote(Fee $record): bool
+    {
+        return (int) $record->getKey() < 0;
     }
 
     public function table(Table $table): Table
@@ -145,7 +170,12 @@ class VatSummaryReport extends Page implements HasTable
 
                 TextColumn::make('status')
                     ->label(__('Status'))
-                    ->badge(),
+                    ->badge()
+                    // A credit note's row: said so, with its number.
+                    ->getStateUsing(fn (Fee $record) => self::isCreditNote($record)
+                        ? trim(__('Credit note').' '.$record->credit_note_number)
+                        : $record->status)
+                    ->color(fn (Fee $record, $state) => self::isCreditNote($record) ? 'warning' : ($state instanceof HasColor ? $state->getColor() : 'gray')),
             ])
             ->filters([
                 ReportDateRangeFilter::make(
@@ -156,7 +186,7 @@ class VatSummaryReport extends Page implements HasTable
 
                 Filter::make('uncollected_only')
                     ->label(__('Not fully collected'))
-                    ->query(fn (Builder $query) => $query->whereRaw('('.self::charged().') > ('.self::collected().') + 0.005')),
+                    ->query(fn (Builder $query) => $query->whereRaw('fees.vat_charged > fees.vat_collected + 0.005')),
             ])
             ->filtersLayout(FiltersLayout::AboveContent)
             ->filtersFormWidth(Width::ExtraLarge)

@@ -118,10 +118,15 @@ class EmailsRelationManager extends RelationManager
                     ->label(__('Attachments in OneDrive'))
                     ->badge()
                     ->state(fn (MatterEmail $record): ?string => $record->oneDriveLabel('attachments'))
-                    // Its documents as links to download, not attached: to be seen, and fetched by hand.
-                    ->color(fn (?string $state, MatterEmail $record): string => self::onlyLinks($record) ? 'warning' : self::color($state))
-                    ->icon(fn (MatterEmail $record): ?string => self::onlyLinks($record) ? 'heroicon-o-link' : null)
-                    ->tooltip(fn (MatterEmail $record): ?string => self::onlyLinks($record) ? __('Its documents came as links to download, not attached — see Details.') : null),
+                    // Documents as links to download — instead of attached, or beside them: to be seen, and
+                    // fetched by hand.
+                    ->color(fn (?string $state, MatterEmail $record): string => self::hasLinks($record) ? 'warning' : self::color($state))
+                    ->icon(fn (MatterEmail $record): ?string => self::hasLinks($record) ? 'heroicon-o-link' : null)
+                    ->tooltip(fn (MatterEmail $record): ?string => match (true) {
+                        ! self::hasLinks($record) => null,
+                        $record->attachmentsState() === 'none' => __('Its documents came as links to download, not attached — see Details.'),
+                        default => __('Besides its attachments, it has links to documents to download, never saved by themselves — see Details.'),
+                    }),
                 TextColumn::make('matched_by')
                     ->label(__('Matter known by'))
                     ->formatStateUsing(fn (?string $state): string => MatterEmail::matchedByLabel($state))
@@ -239,10 +244,10 @@ class EmailsRelationManager extends RelationManager
         };
     }
 
-    /** It came with no file, but with links to documents to download. */
-    private static function onlyLinks(MatterEmail $email): bool
+    /** It came with links to documents to download — with no file, or beside its files. */
+    private static function hasLinks(MatterEmail $email): bool
     {
-        return $email->direction === MatterEmail::RECEIVED && $email->downloadLinks() !== [] && $email->attachmentsState() === 'none';
+        return $email->direction === MatterEmail::RECEIVED && $email->downloadLinks() !== [];
     }
 
     /** The URL of the email's PDF (the first file kept), when there is one. */

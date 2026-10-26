@@ -9,9 +9,11 @@ use App\Filament\Mms\Resources\Parties\Schemas\PartyForm;
 use App\Filament\Support\CustomFieldInput;
 use App\Filament\Support\FeeVatFields;
 use App\Models\Fee;
+use App\Models\MarketingCommission;
 use App\Models\Party;
 use App\Models\Type;
 use App\Services\MMS\IncentiveReversals;
+use App\Services\MMS\MarketingCommissions;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
@@ -418,6 +420,61 @@ class MatterForm
                                             ),
                                     ]),
 
+                                // Who brought it in, and their share of it (MarketingCommissions).
+                                Section::make(__('Marketing'))
+                                    ->icon('heroicon-o-megaphone')
+                                    ->description(__('An employee is paid their part in their incentive; anyone else is owed it as a commission. Earned as the client pays.'))
+                                    ->collapsible()
+                                    ->schema([
+                                        Repeater::make('marketers')
+                                            ->relationship('marketers')
+                                            ->hiddenLabel()
+                                            ->table([
+                                                Repeater\TableColumn::make(__('Marketer')),
+                                                Repeater\TableColumn::make(__('Part of the share'))->width(160),
+                                            ])
+                                            ->compact()
+                                            ->defaultItems(0)
+                                            // Staff or a third party, from the party itself: an employee is staff.
+                                            ->mutateRelationshipDataBeforeCreateUsing(fn (array $data): array => [...$data, ...self::marketerKind($data)])
+                                            ->mutateRelationshipDataBeforeSaveUsing(fn (array $data): array => [...$data, ...self::marketerKind($data)])
+                                            ->schema([
+                                                Select::make('party_id')
+                                                    ->label(__('Marketer'))
+                                                    ->relationship('party', 'name', fn ($query) => $query->where(fn ($q) => $q->withRole('marketer')->orWhere(fn ($e) => $e->withRole('employee'))))
+                                                    ->disableOptionsWhenSelectedInSiblingRepeaterItems()
+                                                    ->searchable()
+                                                    ->preload()
+                                                    ->required(),
+                                                TextInput::make('marketing_part')
+                                                    ->label(__('Part of the share'))
+                                                    ->numeric()
+                                                    ->minValue(0)
+                                                    ->maxValue(100)
+                                                    ->suffix('%')
+                                                    ->placeholder(__('Equal')),
+                                                Hidden::make('role')->default('marketer'),
+                                            ])
+                                            ->addActionLabel(__('Add Marketer'))
+                                            ->addActionAlignment(Alignment::Start),
+                                        Grid::make(2)
+                                            ->schema([
+                                                TextInput::make('marketing_rate')
+                                                    ->label(__('Marketing share (%)'))
+                                                    ->numeric()
+                                                    ->minValue(0)
+                                                    ->maxValue(100)
+                                                    ->suffix('%')
+                                                    ->placeholder(fn (): string => (string) MarketingCommissions::defaultShare())
+                                                    ->helperText(__('Of the fees\' basic amount; empty: the setting\'s.')),
+                                                TextInput::make('marketing_fixed')
+                                                    ->label(__('Or a fixed amount'))
+                                                    ->numeric()
+                                                    ->minValue(0)
+                                                    ->helperText(__('Instead of the percentage, for all the matter\'s fees.')),
+                                            ]),
+                                    ]),
+
                                 Section::make(__('Fees'))
                                     ->visible(fn () => auth()->user()->can('CreateFee:Matter') || auth()->user()->can('UpdateFee:Matter'))
                                     ->schema([
@@ -427,6 +484,8 @@ class MatterForm
                                             ->table([
                                                 Repeater\TableColumn::make(__('Type')),
                                                 Repeater\TableColumn::make(__('Amount')),
+                                                Repeater\TableColumn::make(__('VAT not applicable'))
+                                                    ->alignment(Alignment::Center),
                                                 Repeater\TableColumn::make(__('Including VAT'))
                                                     ->alignment(Alignment::Center),
                                                 Repeater\TableColumn::make(__('Basic · VAT · Total')),
@@ -456,6 +515,9 @@ class MatterForm
                                                     ->required()
                                                     ->prefix(fn (Get $get) => FeeType::of($get('type'))?->isNegative() ? '-' : '+')
                                                     ->live(debounce: 400),
+
+                                                FeeVatFields::exemptToggle()
+                                                    ->extraAttributes(['class' => 'mx-4']),
 
                                                 FeeVatFields::toggle()
                                                     ->extraAttributes(['class' => 'mx-4']),
@@ -499,5 +561,18 @@ class MatterForm
         $parts = array_filter(['📞 '.($party?->latestPhone() ?? ''), '✉ '.($party?->latestEmail() ?? '')], fn (string $part): bool => mb_strlen($part) > 2);
 
         return $parts !== [] ? implode(' · ', $parts) : __('No phone or email yet');
+    }
+
+    /**
+     * A marketer row as kept: of the role "marketer", and staff when the party is an employee (paid in their
+     * incentive), else external (owed a commission) — MarketingCommissions.
+     *
+     * @return array{role: string, type: string}
+     */
+    private static function marketerKind(array $data): array
+    {
+        $party = Party::find($data['party_id'] ?? null);
+
+        return ['role' => 'marketer', 'type' => $party?->isEmployee() ? MarketingCommission::STAFF : MarketingCommission::EXTERNAL];
     }
 }

@@ -64,6 +64,8 @@ class Matter extends Model implements AttachmentOwner
         'is_office_work',
         'received_at',
         'custom_fields',
+        'marketing_rate',
+        'marketing_fixed',
     ];
 
     protected array $dates = [
@@ -90,6 +92,8 @@ class Matter extends Model implements AttachmentOwner
         'review_count' => 'integer',
         'has_substantive_changes' => 'boolean',
         'has_court_penalty' => 'boolean',
+        'marketing_rate' => 'decimal:2',
+        'marketing_fixed' => 'decimal:2',
         'final_report_memo_date' => 'date',
         'is_office_work' => 'boolean',
         'created_at' => 'date:Y-m-d',
@@ -297,6 +301,18 @@ class Matter extends Model implements AttachmentOwner
     /**
      * @return HasMany<MatterParty, $this>
      */
+    /** Who brought it in (MarketingCommissions): its parties of the role "marketer", staff or external. */
+    public function marketers(): HasMany
+    {
+        return $this->hasMany(MatterParty::class, 'matter_id')->where('role', 'marketer');
+    }
+
+    /** What its marketers earned (MarketingCommission). */
+    public function marketingCommissions(): HasMany
+    {
+        return $this->hasMany(MarketingCommission::class);
+    }
+
     public function assistantsOnly(): HasMany
     {
         return $this->hasMany(MatterParty::class, 'matter_id')
@@ -413,6 +429,33 @@ class Matter extends Model implements AttachmentOwner
     public function allocations(): HasMany
     {
         return $this->hasMany(Allocation::class);
+    }
+
+    /** What was paid out for its procedures (MatterExpense). */
+    public function expenses(): HasMany
+    {
+        return $this->hasMany(MatterExpense::class);
+    }
+
+    /**
+     * Its expenses: charged to the client (its fees of type "Matter expenses", VAT never on them), received of
+     * them, paid out, and the balance — received less paid out: above zero still to spend or to refund, below
+     * zero paid out before it was received, to collect. From its fees, their payments and its expenses as loaded.
+     *
+     * @return array{charged: float, received: float, spent: float, balance: float}
+     */
+    public function expensesSummary(): array
+    {
+        $fees = $this->fees->filter(fn (Fee $fee): bool => (bool) $fee->type?->isPassThrough());
+        $received = round((float) $fees->sum(fn (Fee $fee): float => (float) $fee->allocations->sum('amount')), 2);
+        $spent = round((float) $this->expenses->sum('amount'), 2);
+
+        return [
+            'charged' => round((float) $fees->sum(fn (Fee $fee): float => $fee->total), 2),
+            'received' => $received,
+            'spent' => $spent,
+            'balance' => round($received - $spent, 2),
+        ];
     }
 
     /**

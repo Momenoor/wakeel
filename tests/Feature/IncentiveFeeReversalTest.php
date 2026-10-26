@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Enums\FeeType;
+use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Models\Fee;
+use App\Models\FeeCreditNote;
 use App\Models\IncentiveCalculation;
 use App\Models\IncentiveLine;
 use App\Models\IncentiveReversal;
@@ -14,9 +16,15 @@ use App\Models\Party;
 use App\Models\Setting;
 use App\Models\Type;
 use App\Models\User;
+use App\Services\MMS\FeeCreditNotes;
 use App\Services\MMS\IncentiveCalculatorService;
 use App\Services\MMS\IncentiveReversals;
+use Filament\Actions\Testing\TestAction;
+use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
@@ -119,6 +127,85 @@ class IncentiveFeeReversalTest extends TestCase
         // July deleted (a draft): it waits for the next calculation again.
         $july->delete();
         $this->assertNull($reversal->fresh()->applied_calculation_id);
+    }
+
+    public function test_a_paid_fee_corrected_settles_the_difference_and_deleted_after_takes_back_only_what_is_left(): void
+    {
+        $fee = $this->fee($this->matter('601'), 15000);
+        $june = $this->calculation('June', [$fee]);
+        $this->calculator->finalize($june);
+        $this->assertSame(3000.0, $this->calculator->payableByParty($june)[$this->assistant->id]);
+
+        // Entered 15,000 by mistake, corrected to 10,000: a third of what was paid on it taken back.
+        $fee->update(['amount' => 10000]);
+        $down = IncentiveReversal::sole();
+        $this->assertSame([IncentiveReversal::CORRECTED, '1000.00', '15000.00', '10000.00'], [$down->reason, $down->amount, $down->fee_amount, $down->fee_amount_after]);
+        $this->assertStringContainsString('corrected from', $down->description());
+
+        // Then to 12,000: 2,000 of the 15,000 it was paid on given back.
+        $fee->update(['amount' => 12000]);
+        $up = IncentiveReversal::latest('id')->first();
+        $this->assertSame('-400.00', $up->amount);
+        $this->assertStringContainsString('is added', $up->description());
+
+        // Only its note changed: nothing.
+        $fee->update(['description' => 'Its note']);
+        $this->assertSame(2, IncentiveReversal::count());
+
+        // July: 10,000 elsewhere earns 2,000; 1,000 taken back, 400 given back.
+        $july = $this->calculation('July', [$this->fee($this->matter('602'), 10000)]);
+        $this->assertSame(1400.0, $this->calculator->payableByParty($july)[$this->assistant->id]);
+
+        // Deleted after: what is left of the 3,000 paid on it — 2,400.
+        $fee->delete();
+        $this->assertSame('2400.00', IncentiveReversal::latest('id')->first()->amount);
+    }
+
+    public function test_a_credit_note_reduces_the_fee_and_its_vat_and_takes_back_its_part_of_a_paid_incentive(): void
+    {
+        $matter = $this->matter('701');
+        $fee = Fee::create(['matter_id' => $matter->id, 'type' => FeeType::EXPERT_FEE, 'amount' => 15000, 'vat' => 750, 'is_vat_included' => true, 'date' => '2026-06-15']);
+        $june = $this->calculation('June', [$fee]);
+        $this->calculator->finalize($june);
+
+        // More than the fee's total: refused.
+        try {
+            app(FeeCreditNotes::class)->add($fee, ['amount' => 16000, 'date' => '2026-07-02']);
+            $this->fail('A credit note above the fee\'s total was taken.');
+        } catch (ValidationException) {
+        }
+
+        // 5,250 VAT included: 5,000 off its basic amount, 250 off its VAT.
+        $note = app(FeeCreditNotes::class)->add($fee, ['amount' => 5250, 'is_vat_included' => true, 'number' => 'CN-17', 'date' => '2026-07-02', 'reason' => 'Court reduced the fee']);
+        $fee->refresh();
+        $this->assertSame([10000.0, 500.0, 10500.0], [(float) $fee->amount, (float) $fee->vat, $fee->total]);
+        $this->assertSame([5000.0, 250.0, 15000.0], [(float) $note->basic, (float) $note->vat, (float) $note->fee_amount_before]);
+
+        $reversal = IncentiveReversal::sole();
+        $this->assertSame([IncentiveReversal::CREDIT_NOTE, '1000.00', $note->id], [$reversal->reason, $reversal->amount, $reversal->credit_note_id]);
+        $this->assertStringContainsString('CN-17', $reversal->description());
+
+        // Entered by mistake: deleted, the fee and the incentive given back.
+        app(FeeCreditNotes::class)->remove($note);
+        $fee->refresh();
+        $this->assertSame([15000.0, 750.0], [(float) $fee->amount, (float) $fee->vat]);
+        $this->assertSame(0.0, (float) IncentiveReversal::sum('amount'));
+    }
+
+    public function test_a_credit_note_is_entered_from_the_fee_on_the_matter_page(): void
+    {
+        Gate::before(fn () => true);
+        Filament::setCurrentPanel('mms');
+        $matter = $this->matter('801');
+        $fee = Fee::create(['matter_id' => $matter->id, 'type' => FeeType::OTHER, 'amount' => 2000, 'vat' => 100, 'date' => '2026-06-15']);
+
+        Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])
+            ->callAction(TestAction::make('creditNote')->schemaComponent('fees.0', 'infolist'), ['amount' => 1050, 'is_vat_included' => true, 'number' => 'CN-3', 'date' => '2026-06-20'])
+            ->assertHasNoActionErrors()
+            ->assertSee('CN-3');
+
+        $this->assertSame([1000.0, 50.0], [(float) $fee->refresh()->amount, (float) $fee->vat]);
+        $this->assertSame(1, FeeCreditNote::count());
     }
 
     public function test_a_share_taken_back_on_a_matter_also_in_the_next_calculation_is_not_changed_by_its_month(): void

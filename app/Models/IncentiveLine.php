@@ -19,6 +19,7 @@ class IncentiveLine extends Model
         'fee_id',
         'is_reversal',
         'is_adjustment',
+        'is_marketing',
         'completion_days',
         'difficulty',
         'fee_amount_excl_vat',
@@ -35,6 +36,7 @@ class IncentiveLine extends Model
     protected $casts = [
         'is_reversal' => 'boolean',
         'is_adjustment' => 'boolean',
+        'is_marketing' => 'boolean',
         'completion_days' => 'integer',
         'fee_amount_excl_vat' => 'decimal:2',
         'base_percentage' => 'decimal:2',
@@ -66,7 +68,7 @@ class IncentiveLine extends Model
      */
     public function scopeFromFees(Builder $query): void
     {
-        $query->where('is_reversal', false)->where('is_adjustment', false);
+        $query->where('is_reversal', false)->where('is_adjustment', false)->where('is_marketing', false);
     }
 
     public function matter(): BelongsTo

@@ -8,6 +8,7 @@ use App\Models\Concerns\AnnouncesChanges;
 use App\Models\Concerns\HasAttachments;
 use App\Models\Contracts\AttachmentOwner;
 use App\Services\MMS\FeeChangeNotifier;
+use App\Services\MMS\MarketingCommissions;
 use App\Support\Dates;
 use Filament\Notifications\Notification;
 use Illuminate\Contracts\Database\Query\Expression;
@@ -85,11 +86,14 @@ class Allocation extends Model implements AttachmentOwner
             $allocation->followFee();
             $allocation->fee?->updateStatus();
             $allocation->matter?->updateCollectionStatus();
+            // Collected: what the matter's marketers earn by it (on the payment's date).
+            app(MarketingCommissions::class)->afterChange($allocation->matter, $allocation->date);
         });
 
         static::deleted(function (Allocation $allocation) {
             $allocation->fee?->updateStatus();
             $allocation->matter?->updateCollectionStatus();
+            app(MarketingCommissions::class)->afterChange($allocation->matter);
         });
     }
 
@@ -129,13 +133,14 @@ class Allocation extends Model implements AttachmentOwner
      * @return BelongsTo<Fee, $this>
      */
     /**
-     * For sums of payments "excl. VAT": each payment joined to its fee, the VAT rows of before left out — with
-     * exclVatAmount() the part of each payment that is its fee's basic amount.
+     * For sums of payments "excl. VAT": each payment joined to its fee, the VAT rows of before and the matter's
+     * expenses (received only to be paid out) left out — with exclVatAmount() the part of each payment that is
+     * its fee's basic amount.
      */
     public function scopeExclVat(Builder $query): void
     {
         $query->join('fees as paid_fee', 'paid_fee.id', '=', 'allocations.fee_id')
-            ->where('paid_fee.type', '!=', FeeType::VAT->value);
+            ->whereNotIn('paid_fee.type', [FeeType::VAT->value, FeeType::MATTER_EXPENSES->value]);
     }
 
     /**

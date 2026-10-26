@@ -10,6 +10,7 @@ use App\Models\Concerns\HasAttachments;
 use App\Models\Contracts\AttachmentOwner;
 use App\Services\MMS\FeeChangeNotifier;
 use App\Services\MMS\IncentiveReversals;
+use App\Services\MMS\MarketingCommissions;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -31,6 +32,9 @@ class Fee extends Model implements AttachmentOwner
     /** Short of its total, or over it, by less than this (a dirham), a fee or a matter is paid. */
     public const PAID_WITHIN = 1.0;
 
+    /** The credit note it is being reduced by, while it is (FeeCreditNotes) — so a paid incentive says why. */
+    public ?FeeCreditNote $creditedBy = null;
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
@@ -44,6 +48,7 @@ class Fee extends Model implements AttachmentOwner
         'amount',
         'vat',
         'is_vat_included',
+        'is_vat_exempt',
         'date',
         'description',
         'status',
@@ -56,6 +61,8 @@ class Fee extends Model implements AttachmentOwner
         'amount' => 'decimal:2',
         'vat' => 'decimal:2',
         'is_vat_included' => 'boolean',
+        // VAT does not apply to it: no VAT, whatever its type (FeeVatFields).
+        'is_vat_exempt' => 'boolean',
         'type' => FeeType::class,
     ];
 
@@ -69,6 +76,26 @@ class Fee extends Model implements AttachmentOwner
             // Its incentive already paid: the paid calculation stays as it was, and each assistant's share of
             // it is taken back in the next calculation (IncentiveReversals). In a draft it simply goes.
             app(IncentiveReversals::class)->record($fee);
+        });
+
+        static::updated(function (Fee $fee) {
+            // Its basic amount corrected, or reduced by a credit note, after its incentive was paid: the change's
+            // part of it settled in the next calculation (IncentiveReversals). Nothing when it was not paid.
+            if ($fee->wasChanged('amount')) {
+                app(IncentiveReversals::class)->recordChange($fee, (float) $fee->getOriginal('amount'), $fee->creditedBy);
+            }
+        });
+
+        static::created(function (Fee $fee) {
+            // A fee added: a fixed marketing share is spread over more (MarketingCommissions).
+            app(MarketingCommissions::class)->afterChange($fee->matter);
+        });
+
+        static::updated(function (Fee $fee) {
+            // Corrected, credited or of another type: what the matter's marketers earned, again.
+            if ($fee->wasChanged(['amount', 'vat', 'type'])) {
+                app(MarketingCommissions::class)->afterChange($fee->matter);
+            }
         });
 
         static::saving(function (Fee $fee) {
@@ -111,6 +138,7 @@ class Fee extends Model implements AttachmentOwner
                 }
             }
             $fee->matter?->updateCollectionStatus();
+            app(MarketingCommissions::class)->afterChange($fee->matter);
         });
     }
 
@@ -138,6 +166,12 @@ class Fee extends Model implements AttachmentOwner
     public function incentiveLines(): HasMany
     {
         return $this->hasMany(IncentiveLine::class);
+    }
+
+    /** The credit notes it was reduced by (FeeCreditNote). */
+    public function creditNotes(): HasMany
+    {
+        return $this->hasMany(FeeCreditNote::class);
     }
 
     public function getTotalAllocatedAttribute(): float

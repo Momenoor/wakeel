@@ -8,8 +8,10 @@ use App\Models\Attachment;
 use App\Models\CalendarEvent;
 use App\Models\Court;
 use App\Models\Fee;
+use App\Models\FeeCreditNote;
 use App\Models\Matter;
 use App\Models\MatterEmail;
+use App\Models\MatterExpense;
 use App\Models\MatterLetter;
 use App\Models\MatterMinutes;
 use App\Models\MatterParty;
@@ -41,6 +43,8 @@ final class MatterHistory
         MatterRequest::class => 'Request',
         Fee::class => 'Fee',
         Allocation::class => 'Collection',
+        MatterExpense::class => 'Expense paid',
+        FeeCreditNote::class => 'Credit note',
         Note::class => 'Note',
         Attachment::class => 'File',
         MatterMinutes::class => 'Minutes',
@@ -62,8 +66,10 @@ final class MatterHistory
         ],
         MatterParty::class => ['party_id' => 'Name', 'type' => 'Type', 'commission_percentage' => 'Commission %'],
         MatterRequest::class => ['status' => 'Status', 'comment' => 'Comment', 'approved_comment' => 'Reviewer Comment'],
-        Fee::class => ['type' => 'Type', 'amount' => 'Amount', 'vat' => 'VAT', 'is_vat_included' => 'Including VAT', 'date' => 'Date', 'status' => 'Status', 'description' => 'Description'],
+        Fee::class => ['type' => 'Type', 'amount' => 'Amount', 'vat' => 'VAT', 'is_vat_included' => 'Including VAT', 'is_vat_exempt' => 'VAT not applicable', 'date' => 'Date', 'status' => 'Status', 'description' => 'Description'],
         Allocation::class => ['amount' => 'Amount', 'date' => 'Date', 'description' => 'Description'],
+        MatterExpense::class => ['amount' => 'Amount', 'date' => 'Date', 'payee' => 'Paid to', 'description' => 'For'],
+        FeeCreditNote::class => ['number' => 'Credit note number', 'date' => 'Date', 'basic' => 'Basic', 'vat' => 'VAT', 'reason' => 'Reason'],
         Note::class => ['text' => 'Note'],
         Attachment::class => ['name' => 'Name', 'category' => 'Category'],
         MatterMinutes::class => ['number' => 'Number', 'meeting_at' => 'Meeting date', 'status' => 'Status'],
@@ -221,7 +227,7 @@ final class MatterHistory
                 : ((string) ($named[0]::query()->whereKey($raw)->value($named[1]) ?? '#'.$raw));
         }
 
-        if (in_array($field, ['amount', 'vat', 'commission_percentage'], true) && is_numeric($raw)) {
+        if (in_array($field, ['amount', 'vat', 'basic', 'commission_percentage'], true) && is_numeric($raw)) {
             return number_format((float) $raw, 2);
         }
 

@@ -240,17 +240,26 @@ class MatterEmail extends Model
 
         if ($what === 'attachments') {
             $links = count($this->downloadLinks());
+            $state = $this->attachmentsState();
 
-            return match ($this->attachmentsState()) {
-                // Its documents sent as links to download, not attached.
-                'none' => $links > 0
+            // Its documents sent as links to download, not attached.
+            if ($state === 'none') {
+                return $links > 0
                     ? trans_choice('Without attachment, :count download link|Without attachment, :count download links', $links, ['count' => $links])
-                    : __('Without attachment'),
+                    : __('Without attachment');
+            }
+
+            $label = match ($state) {
                 'saved' => __('Saved'),
                 'partly' => __('Partly saved'),
                 'not_saved' => __('Not saved'),
                 default => __('Not checked'),
             };
+
+            // Attached files and links to more beside them: "Saved · 2 links to save" — those are never saved by itself.
+            return $links > 0
+                ? $label.' · '.trans_choice(':count link to save|:count links to save', $links, ['count' => $links])
+                : $label;
         }
 
         return match ($this->inOneDrive($what)) {

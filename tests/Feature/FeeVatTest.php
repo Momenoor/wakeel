@@ -19,6 +19,7 @@ use App\Models\MatterTypeIncentiveConfig;
 use App\Models\Setting;
 use App\Models\Type;
 use App\Models\User;
+use App\Services\MMS\FeeCreditNotes;
 use App\Services\MMS\FeeVatAndStatusFix;
 use App\Services\MMS\IncentiveCalculatorService;
 use App\Services\MMS\VatRowMerger;
@@ -135,7 +136,37 @@ class FeeVatTest extends TestCase
         $this->page()->callAction($edit, ['amount' => 1050, 'is_vat_included' => true]);
         $this->assertSame([1000.0, 50.0, 1050.0], [(float) $fee->refresh()->amount, (float) $fee->vat, $fee->total]);
         // Shown again as entered: the total.
-        $this->assertSame(['amount' => 1050.0, 'is_vat_included' => true], FeeVatFields::fill($fee));
+        $this->assertSame(['amount' => 1050.0, 'is_vat_included' => true, 'is_vat_exempt' => false], FeeVatFields::fill($fee));
+    }
+
+    public function test_a_fee_vat_does_not_apply_to_is_kept_with_none_and_says_so(): void
+    {
+        // An expert fee, entered VAT included by default — VAT not applicable: its amount is its total, none on it.
+        $this->page()->mountAction($this->addFee())
+            ->fillForm(['type' => FeeType::EXPERT_FEE->value, 'amount' => 1000, 'is_vat_exempt' => true])
+            ->assertFormFieldExists('is_vat_exempt')
+            ->assertFormFieldHidden('is_vat_included')
+            ->assertMountedActionModalSee(__('No VAT'))
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        $fee = $this->matter->fees()->sole();
+        $this->assertSame([1000.0, 0.0, false, true, 1000.0], [(float) $fee->amount, (float) $fee->vat, $fee->is_vat_included, $fee->is_vat_exempt, $fee->total]);
+
+        // Edited: shown as it is, kept without VAT when only its note changes; VAT applying again, split.
+        $edit = TestAction::make('editFee')->schemaComponent('fees.0', 'infolist');
+        $this->page()->mountAction($edit)
+            ->assertActionDataSet(['amount' => 1000.0, 'is_vat_exempt' => true])
+            ->fillForm(['description' => 'Its note only'])
+            ->callMountedAction();
+        $this->assertSame([1000.0, 0.0, true], [(float) $fee->refresh()->amount, (float) $fee->vat, $fee->is_vat_exempt]);
+
+        $this->page()->callAction($edit, ['amount' => 1050, 'is_vat_exempt' => false, 'is_vat_included' => true]);
+        $this->assertSame([1000.0, 50.0, false], [(float) $fee->refresh()->amount, (float) $fee->vat, $fee->is_vat_exempt]);
+
+        // A deduction is never charged VAT: nothing to choose, nothing kept.
+        $this->assertSame(['amount' => 200.0, 'vat' => 0.0, 'is_vat_included' => false, 'is_vat_exempt' => false],
+            FeeVatFields::attributes(['type' => FeeType::DISCOUNT->value, 'amount' => 200, 'is_vat_exempt' => true]));
     }
 
     public function test_the_incentive_is_on_the_basic_amount_only(): void
@@ -331,6 +362,30 @@ class FeeVatTest extends TestCase
         Livewire::test(VatSummaryReport::class)
             ->assertCanSeeTableRecords(Fee::query()->where('type', FeeType::VAT->value)->orWhere('vat', '>', 0)->get())
             ->assertCountTableRecords(2);
+    }
+
+    public function test_a_credit_notes_vat_is_filed_in_its_own_period(): void
+    {
+        // Charged in June: 15,000 and 750 VAT; a credit note in July takes off 5,000 and 250.
+        $fee = $this->matter->fees()->create(['type' => FeeType::EXPERT_FEE, 'amount' => 15000, 'vat' => 750, 'is_vat_included' => true, 'date' => '2026-06-10']);
+        app(FeeCreditNotes::class)->add($fee, ['amount' => 5250, 'is_vat_included' => true, 'number' => 'CN-9', 'date' => '2026-07-05']);
+        $this->assertSame(500.0, (float) $fee->refresh()->vat);
+
+        // The VAT of a period, as the report's total reads it.
+        $charged = fn (?string $from, ?string $until): float => round((float) Livewire::test(VatSummaryReport::class)
+            ->filterTable('period', $from ? ['preset' => 'custom', 'from' => $from, 'until' => $until] : [])
+            ->instance()->getFilteredTableQuery()->get()->sum('vat_charged'), 2);
+
+        // June: the 750 charged, as it was filed; July: the credit note's 250 off; both: 500.
+        $this->assertSame(750.0, $charged('2026-06-01', '2026-06-30'));
+        $this->assertSame(-250.0, $charged('2026-07-01', '2026-07-31'));
+        $this->assertSame(500.0, $charged(null, null));
+
+        // The credit note a row of its own, said so with its number.
+        Livewire::test(VatSummaryReport::class)
+            ->filterTable('period', ['preset' => 'custom', 'from' => '2026-07-01', 'until' => '2026-07-31'])
+            ->assertCountTableRecords(1)
+            ->assertSee('CN-9');
     }
 
     public function test_the_matter_forms_fees_save_split_and_show_as_entered(): void

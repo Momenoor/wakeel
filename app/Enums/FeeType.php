@@ -20,6 +20,10 @@ enum FeeType: string implements HasColor, HasLabel
 
     case DISCOUNT = 'discount';
 
+    // Received from the client to pay the matter's procedures (court fees, translation …), paid out again
+    // (MatterExpense): owed by the client like a fee, but not the office's revenue — no VAT, no incentive.
+    case MATTER_EXPENSES = 'matter expenses';
+
     public function getLabel(): ?string
     {
         return match ($this) {
@@ -31,6 +35,7 @@ enum FeeType: string implements HasColor, HasLabel
             self::UNCOLLECTED => __('Uncollected'),
             self::DISCOUNT => __('Discount'),
             self::OTHER => __('Other'),
+            self::MATTER_EXPENSES => __('Matter expenses'),
         };
     }
 
@@ -42,6 +47,7 @@ enum FeeType: string implements HasColor, HasLabel
             self::VAT => 'info',
             self::COURT_PENALITY, self::DISCOUNT, self::OFFICE_SHARE, self::UNCOLLECTED => 'danger',
             self::OTHER => 'gray',
+            self::MATTER_EXPENSES => 'primary',
         };
     }
 
@@ -56,11 +62,17 @@ enum FeeType: string implements HasColor, HasLabel
 
     /**
      * Whether VAT is charged on it (App\Support\Vat): the office's fees — not a deduction, nor the VAT rows of
-     * before, which were the VAT itself.
+     * before, which were the VAT itself, nor the matter's expenses, only passed on.
      */
     public function carriesVat(): bool
     {
-        return ! $this->isNegative() && $this !== self::VAT;
+        return ! $this->isNegative() && $this !== self::VAT && $this !== self::MATTER_EXPENSES;
+    }
+
+    /** Money passed on, not the office's revenue: the matter's expenses, received to be paid out again. */
+    public function isPassThrough(): bool
+    {
+        return $this === self::MATTER_EXPENSES;
     }
 
     /**
@@ -111,13 +123,14 @@ enum FeeType: string implements HasColor, HasLabel
     }
 
     /**
-     * Fee types that should never be picked as an incentive-eligible fee:
-     * VAT (a pass-through tax, not office revenue) plus every deduction type.
+     * Fee types that should never be picked as an incentive-eligible fee, nor counted as revenue billed:
+     * VAT (a pass-through tax, not office revenue), the matter's expenses (passed on too) plus every
+     * deduction type.
      *
      * @return list<string>
      */
     public static function excludedFromIncentiveValues(): array
     {
-        return [...self::deductionTypeValues(), self::VAT->value];
+        return [...self::deductionTypeValues(), self::VAT->value, self::MATTER_EXPENSES->value];
     }
 }

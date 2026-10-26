@@ -31,10 +31,12 @@ class MatterParty extends Model
         'type',
         'role',
         'commission_percentage',
+        'marketing_part',
     ];
 
     protected $casts = [
         'commission_percentage' => 'decimal:2',
+        'marketing_part' => 'decimal:2',
     ];
 
     public $incrementing = true;
