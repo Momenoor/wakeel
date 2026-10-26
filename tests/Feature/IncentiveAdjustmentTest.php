@@ -107,6 +107,19 @@ class IncentiveAdjustmentTest extends TestCase
         $this->assertSame(1, IncentiveAdjustment::count());
     }
 
+    public function test_the_whole_office_print_shows_each_assistant_and_no_list_of_lines(): void
+    {
+        Permission::firstOrCreate(['name' => 'Print:IncentiveCalculation', 'guard_name' => 'web']);
+        auth()->user()->givePermissionTo('Print:IncentiveCalculation');
+
+        $this->get(route('incentive.calculation.print', ['calculation' => $this->calculation->id]))
+            ->assertSuccessful()
+            ->assertSee('Assistant One')
+            ->assertSee('501/2026')
+            ->assertSee(__('Assistant Summary'))
+            ->assertDontSee(__('Calculation Lines'));
+    }
+
     public function test_a_rows_icon_adds_for_that_rows_assistant(): void
     {
         $row = IncentiveAssistantLine::where('party_id', $this->assistant->id)->sole();

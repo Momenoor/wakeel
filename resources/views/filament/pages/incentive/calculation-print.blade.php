@@ -29,7 +29,7 @@
         @endif
         <p>
             <span class="font-semibold text-gray-700">{{ __('Created By') }}:</span>
-            {{ $calculation->creator->name }}
+            {{ $calculation->creator?->name ?? '—' }}
         </p>
         <p>
             <span class="font-semibold text-gray-700">{{ __('Printed') }}:</span>
@@ -239,92 +239,6 @@
                 {{ \App\Support\Currency::format($assistantSummary->sum('fixed_deduction')) }}</td>
             <td class="px-3 py-2 text-right text-green-800">
                 {{ \App\Support\Currency::format($assistantSummary->sum('total')) }}</td>
-        </tr>
-        </tfoot>
-    </table>
-</div>
-
-{{-- Calculation Lines --}}
-<div class="mb-8">
-    <h3 class="text-sm font-bold text-blue-900 border-b border-blue-400 pb-1 mb-3">
-        {{ __('Calculation Lines') }}
-    </h3>
-    <table class="w-full text-xs border-collapse">
-        <thead>
-        <tr class="bg-blue-900 text-white">
-            <th class="px-3 py-2 text-left">{{ __('Matter') }}</th>
-            <th class="px-3 py-2 text-left">{{ __('Difficulty') }}</th>
-            <th class="px-3 py-2 text-right">{{ __('Days') }}</th>
-            <th class="px-3 py-2 text-right">{{ __('Fee (excl. VAT)') }}</th>
-            <th class="px-3 py-2 text-right">{{ __('Rate %') }}</th>
-            <th class="px-3 py-2 text-right">{{ __('Base Amount') }}</th>
-            <th class="px-3 py-2 text-right">{{ __('Deductions') }}</th>
-            <th class="px-3 py-2 text-right">{{ __('Net Amount') }}</th>
-            <th class="px-3 py-2 text-left">{{ __('Detail') }}</th>
-        </tr>
-        </thead>
-        <tbody>
-        @foreach($lines as $line)
-            <tr class="{{ $loop->even ? 'bg-blue-50' : 'bg-white' }} border-b border-gray-300">
-                <td class="px-3 py-2 font-semibold">
-                    {{ $line->matter->year }}/{{ $line->matter->number }}
-                    {{-- A paid incentive taken back: its assistants' rows say what it is. --}}
-                    @if($line->is_reversal)
-                        <div class="text-xs font-normal text-red-600">{{ __('Taken back') }}</div>
-                    @endif
-                </td>
-                <td class="px-3 py-2">
-                    @php $diffClass = match($line->matter->difficulty) {
-                            \App\Enums\MatterDifficulty::EASY   => 'bg-green-100 text-green-800',
-                            \App\Enums\MatterDifficulty::MEDIUM => 'bg-yellow-100 text-yellow-800',
-                            \App\Enums\MatterDifficulty::HARD   => 'bg-red-100 text-red-800',
-                            default => 'bg-gray-100 text-gray-800',
-                        }; @endphp
-                    <span class="inline-block px-2 py-0.5 rounded text-xs font-medium {{ $diffClass }}">
-                            {{ $line->matter->difficulty?->getLabel() ?? '—' }}
-                        </span>
-                </td>
-                <td class="px-3 py-2 text-right text-gray-400">{{ $line->completion_days ?? '—' }}</td>
-                <td class="px-3 py-2 text-right">{{ number_format($line->fee_amount_excl_vat, 2) }}</td>
-                <td class="px-3 py-2 text-right">
-                    {{ $line->effective_percentage }}%
-                    @if($line->committee_adjustment != 0)
-                        <div class="text-gray-400 text-xs">
-                            ({{ $line->base_percentage }}
-                            %{{ $line->committee_adjustment > 0 ? '+' : '' }}{{ $line->committee_adjustment }}%)
-                        </div>
-                    @endif
-                </td>
-                <td class="px-3 py-2 text-right">{{ number_format($line->base_amount, 2) }}</td>
-                <td class="px-3 py-2 text-right {{ $line->total_deduction_pct > 0 ? 'text-red-600 font-medium' : 'text-gray-400' }}">
-                    {{ $line->total_deduction_pct > 0 ? '-' . $line->total_deduction_pct . '%' : '0%' }}
-                </td>
-                <td class="px-3 py-2 text-right font-bold {{ $line->net_amount < $line->base_amount ? 'text-yellow-700' : 'text-green-700' }}">
-                    {{ number_format($line->net_amount, 2) }}
-                </td>
-                <td class="px-3 py-2">
-                    @foreach($line->deductions as $d)
-                        <div class="text-red-600">
-                            −{{ $d->percentage }}%
-                            <span class="text-gray-500">({{ $d->typeLabel() }})</span>
-                        </div>
-                        @if($d->notes)
-                            <div class="text-gray-400 text-xs">{{ $d->notes }}</div>
-                        @endif
-                    @endforeach
-                </td>
-            </tr>
-        @endforeach
-        </tbody>
-        <tfoot>
-        <tr class="bg-blue-100 font-extrabold text-sm border-t-2 border-blue-900">
-            <td colspan="5" class="px-3 py-2 text-right text-blue-900">{{ __('Totals') }}</td>
-            <td class="px-3 py-2 text-right">{{ \App\Support\Currency::format($lines->sum('base_amount')) }}</td>
-            <td class="px-3 py-2 text-right text-red-600">
-                −{{ number_format($lines->avg('total_deduction_pct'), 1) }}% avg
-            </td>
-            <td class="px-3 py-2 text-right text-green-700">{{ \App\Support\Currency::format($lines->sum('net_amount')) }}</td>
-            <td></td>
         </tr>
         </tfoot>
     </table>
