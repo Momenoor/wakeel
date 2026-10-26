@@ -12,12 +12,31 @@
                 display: none !important;
             }
 
+            /* A4 landscape, the smallest margin a printer keeps; the page's own padding is for the screen only. */
+            @page {
+                size: A4 landscape;
+                margin: 5mm;
+            }
+
             body {
                 font-size: 11px;
+                padding: 0;
             }
 
             tr {
                 page-break-inside: avoid;
+            }
+
+            /* A row holding a whole table (an assistant's matters) splits between pages, row by row of its own;
+               the row before it (the assistant's title) goes with it, so a title never ends a page alone. */
+            tr.print-split {
+                page-break-inside: auto;
+                break-inside: auto;
+            }
+
+            tr.print-keep-next {
+                page-break-after: avoid;
+                break-after: avoid;
             }
         }
     </style>

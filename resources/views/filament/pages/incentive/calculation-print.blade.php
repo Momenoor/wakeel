@@ -91,7 +91,7 @@
         </thead>
         <tbody>
         @foreach($assistantSummary as $row)
-            <tr class="{{ $loop->even ? 'bg-blue-50' : 'bg-white' }} border-b border-gray-300">
+            <tr class="print-keep-next {{ $loop->even ? 'bg-blue-50' : 'bg-white' }} border-b border-gray-300">
                 <td class="px-3 py-2 font-bold text-gray-900">{{ $row['party']->name }}</td>
                 <td class="px-3 py-2 text-right">
                         <span
@@ -134,7 +134,7 @@
                     @endif
                 </td>
             </tr>
-            <tr class="{{ $loop->even ? 'bg-blue-50' : 'bg-white' }} border-b border-gray-300">
+            <tr class="print-split {{ $loop->even ? 'bg-blue-50' : 'bg-white' }} border-b border-gray-300">
                 <td colspan="11" class="px-3 py-2">
                     {{-- The same widths for every assistant's table: a fixed layout, not each sized to its own text. --}}
                     <table class="w-full table-fixed text-[10px] border-collapse border border-gray-300">

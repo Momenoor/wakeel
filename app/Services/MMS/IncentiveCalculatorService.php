@@ -373,7 +373,7 @@ class IncentiveCalculatorService
                 $totalExtraAmount = 0.0;
                 $totalPenaltyAmount = 0.0;
                 $totalCompletedCount = 0;
-                $totalProratedMinimum = 0;
+                $totalMinimum = 0;
                 $preserved = $existingFixedDeductions->get($partyId);
 
                 // We need to know which matters belong to which month to calculate monthly extra/penalty
@@ -421,7 +421,7 @@ class IncentiveCalculatorService
                     // The month's minimum and bonus brackets as they are set, whatever leave the assistant
                     // took: leave counts only in a matter's own completion days (getCompletionDays()),
                     // never in how many matters a month needs.
-                    $totalProratedMinimum += $minimumMattersPerMonth;
+                    $totalMinimum += $minimumMattersPerMonth;
 
                     $monthMeetsMinimum = $monthCount >= $minimumMattersPerMonth;
 
@@ -431,7 +431,7 @@ class IncentiveCalculatorService
 
                     // PDF: a flat penalty applies to every matter in a shortfall
                     // month — it is NOT multiplied by how many matters short of the
-                    // (prorated) minimum the assistant is. Skipped entirely when
+                    // minimum the assistant is. Skipped entirely when
                     // the below-minimum-penalty toggle is off.
                     $monthPenaltyPct = ($enableBelowMinimumPenalty && ! $monthMeetsMinimum) ? $belowMinimumPenaltyPct : 0.0;
 
@@ -484,7 +484,7 @@ class IncentiveCalculatorService
                     'incentive_calculation_id' => $calculation->id,
                     'party_id' => $partyId,
                     'completed_matter_count' => $totalCompletedCount,
-                    'meets_minimum' => $totalCompletedCount >= $totalProratedMinimum, // Optional interpretation
+                    'meets_minimum' => $totalCompletedCount >= $totalMinimum, // Optional interpretation
                     'minimum_penalty_pct' => $totalShare > 0 ? round($totalPenaltyAmount / $totalShare * 100, 2) : 0,
                     'extra_percentage' => $totalShare > 0 ? round($totalExtraAmount / $totalShare * 100, 2) : 0,
                     'extra_amount' => $totalExtraAmount,

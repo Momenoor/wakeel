@@ -35,10 +35,10 @@ use Throwable;
  * arrives here at approval time, from the approver.
  *
  * Approving is also what makes a request real to the rest of the app: it writes
- * rows into `party_leaves`, the ledger the incentive calculator already prorates
- * quotas from and the payroll engine counts unpaid days from. Neither of those
+ * rows into `party_leaves`, the ledger the incentive calculator leaves out of
+ * completion days and the payroll engine counts unpaid days from. Neither of those
  * knows this workflow exists, which is the point — a request sitting in the
- * queue must have no effect on anyone's pay or quota until someone approves it.
+ * queue must have no effect on anyone's pay or incentive until someone approves it.
  */
 class LeaveRequestService
 {

@@ -12,7 +12,7 @@ use Spatie\Activitylog\Support\LogOptions;
  * A stretch of days an employee was away.
  *
  * This is the single ledger the rest of the app reads: IncentiveCalculatorService
- * prorates monthly quotas from it, and payroll counts unpaid days from it. Leave
+ * leaves its days out of a matter's completion days, and payroll counts unpaid days from it. Leave
  * requests write a row here on approval rather than keeping their own record, so
  * neither consumer has to know the approval workflow exists — and so the rows
  * entered by hand before that workflow did keep working.

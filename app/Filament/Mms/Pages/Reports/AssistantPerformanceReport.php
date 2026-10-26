@@ -31,8 +31,8 @@ use Illuminate\Database\Eloquent\Builder;
  *
  * Incentive counts FINALIZED calculations only, since draft figures still move.
  * Leave days are shown because they legitimately reduce what an assistant could
- * have taken on, and the incentive engine already prorates monthly targets by
- * exactly that ratio.
+ * have taken on; the incentive engine leaves them out of a matter's completion
+ * days, not out of the monthly minimum.
  */
 class AssistantPerformanceReport extends Page implements HasTable
 {

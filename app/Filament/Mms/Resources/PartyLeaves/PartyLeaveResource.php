@@ -28,8 +28,8 @@ class PartyLeaveResource extends Resource
     }
 
     /**
-     * The ledger every approved request lands in, and that the incentive
-     * calculator prorates monthly quotas from. Named for what it is so it is not
+     * The ledger every approved request lands in, and whose days the incentive
+     * calculator leaves out of completion days. Named for what it is so it is not
      * mistaken for the request queue that now sits above it.
      */
     public static function getNavigationLabel(): string

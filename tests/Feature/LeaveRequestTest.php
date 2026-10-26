@@ -27,8 +27,8 @@ use Tests\TestCase;
  * The leave request workflow and its two consumers.
  *
  * The load-bearing assertion in this file is that a PENDING request changes
- * nothing. `party_leaves` is read by the incentive calculator to prorate monthly
- * quotas and by payroll to withhold pay; if a request touched that ledger before
+ * nothing. `party_leaves` is read by the incentive calculator for completion
+ * days and by payroll to withhold pay; if a request touched that ledger before
  * approval, submitting one would dock your own salary.
  */
 class LeaveRequestTest extends TestCase
