@@ -63,6 +63,8 @@ class MatterExpensesTest extends TestCase
             ->assertHasNoActionErrors();
         $fee = $this->matter->fees()->sole();
         $this->assertSame([2000.0, 0.0, 2000.0], [(float) $fee->amount, (float) $fee->vat, $fee->total]);
+        // Passed on, not the office's fee: no credit note on it.
+        $this->page()->assertDontSee(__('Credit note'));
         $this->assertSame(['amount' => 2000.0, 'vat' => 0.0, 'is_vat_included' => false, 'is_vat_exempt' => false],
             FeeVatFields::attributes(['type' => FeeType::MATTER_EXPENSES->value, 'amount' => 2000, 'is_vat_included' => true]));
 

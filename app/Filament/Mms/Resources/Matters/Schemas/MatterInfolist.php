@@ -1022,7 +1022,7 @@ class MatterInfolist
                         TextEntry::make('kind')->label(__('Kind'))->badge(),
                         TextEntry::make('part')->label(__('Part of the share')),
                         TextEntry::make('earned')->label(__('Earned so far'))->aed(),
-                        TextEntry::make('settled')->label(__('Paid'))->aed()->color('success'),
+                        TextEntry::make('settled')->label(__('Paid so far'))->aed()->color('success'),
                     ]),
             ]);
     }
@@ -1533,8 +1533,8 @@ class MatterInfolist
             ->icon('heroicon-o-receipt-percent')
             ->color('warning')
             ->tooltip(__('Credit note'))
-            // On a fee of the office's: not a deduction, nor a VAT row of before.
-            ->visible(fn (Fee $record): bool => auth()->user()->can('UpdateFee:Matter') && ! $record->type?->isNegative() && ! FeeType::isVat($record->type))
+            // On a fee of the office's: not a deduction, a VAT row of before, nor the matter's expenses.
+            ->visible(fn (Fee $record): bool => auth()->user()->can('UpdateFee:Matter') && ! $record->type?->isNegative() && ! FeeType::isVat($record->type) && ! $record->type?->isPassThrough())
             ->modalHeading(__('Credit note'))
             ->modalDescription(fn (Fee $record): string => __('It takes its amount off this fee (:total now) — its VAT too.', ['total' => Currency::text($record->total)])
                 .(IncentiveReversals::isPaid($record) ? ' '.__('This fee\'s incentive has already been paid: its assistants\' part of the credit note is taken back in the next incentive calculation.') : ''))

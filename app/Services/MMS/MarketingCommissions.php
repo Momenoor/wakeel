@@ -109,7 +109,7 @@ class MarketingCommissions
 
     /**
      * What each of the matter's marketers has earned in all, worked out again, and the difference kept — dated
-     * $date (the payment's), or today.
+     * $date (the payment's), or as the matter's latest payment, or (nothing paid) today.
      */
     public function sync(Matter $matter, ?CarbonInterface $date = null): void
     {
@@ -130,6 +130,9 @@ class MarketingCommissions
             return $fee->total > 0 ? min($basic, $paid * $basic / $fee->total) : 0.0;
         }), 2);
         $share = self::shareOf($matter, $collected, $matterBasic);
+        // Not by a payment (a marketer added, a credit note …): dated as the latest payment it is earned on — so it
+        // falls in the period the money came in, not after it; with nothing paid yet, today.
+        $date ??= $fees->flatMap(fn (Fee $fee) => $fee->allocations)->max('date');
         $parts = self::parts($marketers);
 
         foreach ($parts->keys()->merge($recorded->keys())->unique() as $partyId) {

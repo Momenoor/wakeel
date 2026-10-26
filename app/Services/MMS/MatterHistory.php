@@ -203,6 +203,8 @@ final class MatterHistory
             MatterLetter::class => (string) (($values['subject'] ?? null) ?: ($values['reference'] ?? '')),
             MatterEmail::class => (string) ($values['subject'] ?? ''),
             CalendarEvent::class => (string) ($values['title'] ?? ''),
+            MatterExpense::class => $value('amount').(filled($values['payee'] ?? null) ? ' — '.$values['payee'] : ''),
+            FeeCreditNote::class => trim(($values['number'] ?? '').' — '.self::value($class, 'basic', $values['basic'] ?? null), ' —'),
             default => '',
         }, ' —') ?: '—';
     }

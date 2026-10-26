@@ -10,6 +10,7 @@ use App\Models\Allocation;
 use App\Models\Fee;
 use App\Models\IncentiveCalculation;
 use App\Models\IncentiveLine;
+use App\Models\IncentiveReversal;
 use App\Models\MarketingCommission;
 use App\Models\Matter;
 use App\Models\MatterParty;
@@ -24,6 +25,7 @@ use App\Services\MMS\MarketingCommissions;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -132,6 +134,40 @@ class MarketersTest extends TestCase
         $this->assertStringContainsString('AED 2,500.00', $rows->sole()['description']);
         $this->assertStringContainsString(__(':amount of it in this calculation.', ['amount' => 'AED 2,500.00']), $rows->sole()['description']);
         $this->assertSame(2, MarketingCommission::where('incentive_calculation_id', $june->id)->count());
+    }
+
+    public function test_a_marketer_added_after_payments_earns_as_of_them_not_today(): void
+    {
+        $marketer = $this->employee('Added Late');
+        [$matter, $fee] = $this->matter('908', []);
+        $this->collect($fee, 5000, '2026-06-08');
+        $this->collect($fee, 5000, '2026-06-22');
+
+        // Added on 1 August: earned on June's payments — in June's calculation.
+        Carbon::setTestNow('2026-08-01');
+        MatterParty::create(['matter_id' => $matter->id, 'party_id' => $marketer->id, 'role' => 'marketer', 'type' => MarketingCommission::STAFF]);
+        app(MarketingCommissions::class)->sync($matter->fresh());
+        Carbon::setTestNow();
+
+        $this->assertSame('2026-06-22', MarketingCommission::sole()->date->toDateString());
+        $this->assertSame(2500.0, $this->calculator->payableByParty($this->june([$fee]))[$marketer->id]);
+    }
+
+    public function test_a_paid_fee_deleted_takes_back_the_assistants_share_and_the_commission_once_each(): void
+    {
+        $marketer = $this->employee('Marketer Paid');
+        [, $fee] = $this->matter('909', [[$marketer, MarketingCommission::STAFF]]);
+        $this->collect($fee, 10000);
+        $june = $this->june([$fee]);
+        $this->calculator->finalize($june);
+        $this->assertSame([1000.0, 2500.0], [$this->calculator->payableByParty($june)[$this->assistant->id], $this->calculator->payableByParty($june)[$marketer->id]]);
+
+        $fee->delete();
+
+        // The assistant's 1,000 taken back as a paid share; the marketer's 2,500 by their commissions, not twice.
+        $this->assertSame(['1000.00'], IncentiveReversal::pluck('amount')->all());
+        $this->assertSame([$this->assistant->id], IncentiveReversal::pluck('party_id')->all());
+        $this->assertSame(0.0, (float) MarketingCommission::where('party_id', $marketer->id)->sum('amount'));
     }
 
     public function test_another_staff_marketer_earns_the_share_and_the_assistant_a_flat_ten_percent(): void

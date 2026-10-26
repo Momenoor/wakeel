@@ -110,13 +110,15 @@ class IncentiveReversals
             $matterLines = IncentiveLine::query()
                 ->where('incentive_calculation_id', $line->incentive_calculation_id)
                 ->where('matter_id', $line->matter_id)
-                ->where('is_reversal', false)
+                // Its fees' lines: not a share taken back, nor a marketer's commission (its own, kept by MarketingCommissions).
+                ->fromFees()
                 ->get(['id', 'net_amount']);
             $matterNet = (float) $matterLines->sum('net_amount');
 
             $shares = IncentiveAssistantLine::query()
                 ->whereIn('incentive_line_id', $matterLines->modelKeys())
                 ->whereNull('incentive_reversal_id')
+                ->whereNull('marketing_commission_id')
                 ->get();
 
             $kept = IncentiveReversal::query()->where('fee_id', $fee->getKey())->where('paid_line_id', $line->getKey())->orderBy('id')->get();

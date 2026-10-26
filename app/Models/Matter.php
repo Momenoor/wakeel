@@ -298,9 +298,6 @@ class Matter extends Model implements AttachmentOwner
         return $this->hasMany(MatterParty::class, 'matter_id')->where('role', 'attendee');
     }
 
-    /**
-     * @return HasMany<MatterParty, $this>
-     */
     /** Who brought it in (MarketingCommissions): its parties of the role "marketer", staff or external. */
     public function marketers(): HasMany
     {
@@ -313,6 +310,9 @@ class Matter extends Model implements AttachmentOwner
         return $this->hasMany(MarketingCommission::class);
     }
 
+    /**
+     * @return HasMany<MatterParty, $this>
+     */
     public function assistantsOnly(): HasMany
     {
         return $this->hasMany(MatterParty::class, 'matter_id')
