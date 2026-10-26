@@ -172,6 +172,8 @@
                                 <td class="px-2 py-1 text-right">
                                     @if($m['percentage_override'] !== null)
                                         {{ $m['percentage_override'] }}% <span class="text-gray-400">({{ __('override') }})</span>
+                                    @elseif(($m['marketed_rate'] ?? null) !== null)
+                                        {{ (float) $m['marketed_rate'] }}% <span class="text-gray-400">({{ __('marketed by another') }})</span>
                                     @else
                                         {{ $m['percentage'] }}%
                                     @endif

@@ -86,6 +86,6 @@ class IncentiveAssistantLine extends Model
     /** What a line that is not a share of a matter worked is, in full. */
     public function description(): ?string
     {
-        return $this->reversal?->description() ?? $this->adjustment?->description() ?? $this->marketingCommission?->label();
+        return $this->reversal?->description() ?? $this->adjustment?->description() ?? $this->marketingCommission?->label((float) $this->share_amount);
     }
 }

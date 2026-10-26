@@ -84,13 +84,18 @@ class MarketingCommission extends Model
         return $kind === self::STAFF ? __('Office staff') : __('Third party');
     }
 
-    /** What it is, as its incentive line and the report say it. */
-    public function label(): string
+    /**
+     * What it is, as its incentive line says it: on its matter, what it comes to in all (its description) — and,
+     * given what of it is in a calculation, that: the rest was paid in one before, or is to be in one after.
+     */
+    public function label(?float $inCalculation = null): string
     {
-        return __('Marketing commission on matter :matter (:date): :description', [
+        $label = __('Marketing commission on matter :matter (:date): :description', [
             'matter' => $this->matter ? $this->matter->number.'/'.$this->matter->year : '—',
             'date' => $this->date?->format(Dates::dateFormat()) ?? '—',
             'description' => $this->description ?: Currency::text((float) $this->amount),
         ]);
+
+        return $inCalculation === null ? $label : $label.' '.__(':amount of it in this calculation.', ['amount' => Currency::text($inCalculation)]);
     }
 }

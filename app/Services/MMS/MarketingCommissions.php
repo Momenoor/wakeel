@@ -156,6 +156,7 @@ class MarketingCommissions
         }
     }
 
+    /** What it came of, and what it makes in all. */
     private function describe(Matter $matter, float $collected, float $matterBasic, float $part, float $target): string
     {
         return __(':share; collected :collected of the fees\' :basic; :part% of it: :target earned in all.', [
@@ -171,7 +172,8 @@ class MarketingCommissions
 
     /**
      * A calculation run: its staff marketers' commissions — those of its period not paid in another calculation —
-     * each a line of the marketer's own, rebuilt every run. A draft deleted gives them back (its id emptied).
+     * one line of the marketer's own for each matter (what each payment or change on it added, together), rebuilt
+     * every run. A draft deleted gives them back (its id emptied).
      */
     public function apply(Model $calculation): void
     {
@@ -185,27 +187,31 @@ class MarketingCommissions
                 ->orderBy('id')
                 ->get();
 
-            foreach ($pending as $commission) {
+            foreach ($pending->groupBy(fn (MarketingCommission $c): string => $c->party_id.'-'.$c->matter_id) as $commissions) {
+                $amount = round((float) $commissions->sum('amount'), 2);
+                // The latest says what it all comes to (its line's description: MarketingCommission::label()).
+                $latest = $commissions->last();
+
                 $line = IncentiveLine::create([
                     'incentive_calculation_id' => $calculation->getKey(),
-                    'matter_id' => $commission->matter_id,
+                    'matter_id' => $latest->matter_id,
                     'is_marketing' => true,
-                    'net_amount' => $commission->amount,
+                    'net_amount' => $amount,
                 ]);
 
                 IncentiveAssistantLine::create([
                     'incentive_line_id' => $line->getKey(),
-                    'party_id' => $commission->party_id,
-                    'marketing_commission_id' => $commission->getKey(),
-                    'share_amount' => $commission->amount,
+                    'party_id' => $latest->party_id,
+                    'marketing_commission_id' => $latest->getKey(),
+                    'share_amount' => $amount,
                     'extra_percentage' => 0,
                     'extra_amount' => 0,
                     'minimum_penalty_pct' => 0,
                     'minimum_penalty_amount' => 0,
-                    'total_amount' => $commission->amount,
+                    'total_amount' => $amount,
                 ]);
 
-                $commission->update(['incentive_calculation_id' => $calculation->getKey()]);
+                MarketingCommission::query()->whereKey($commissions->modelKeys())->update(['incentive_calculation_id' => $calculation->getKey()]);
             }
         });
     }

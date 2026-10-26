@@ -4,6 +4,7 @@ namespace App\Services\MMS;
 
 use App\Enums\FeeType;
 use App\Models\Fee;
+use App\Models\IncentiveCalculation;
 use App\Models\IncentiveLine;
 use App\Models\Matter;
 use Carbon\Carbon;
@@ -23,6 +24,8 @@ class IncentiveService
         if (empty($filters['assistant_ids'])) {
             return collect();
         }
+        // Not only the period's own: whatever of before it was never calculated (catchUpStart()).
+        $start = self::catchUpStart($start);
         // Get already imported matter/fee IDs from ANY finalized or existing calculation
         $importedFeeIds = IncentiveLine::pluck('fee_id')->filter()->toArray();
 
@@ -41,9 +44,12 @@ class IncentiveService
             ->whereHas('type', function ($q) {
                 $q->where('incentive_trigger_type', 'fees_registered_date');
             })
-            ->whereHas('fees', function ($q) use ($start, $end) {
+            ->whereHas('fees', function ($q) use ($start, $end, $importedFeeIds) {
                 $q->whereBetween('date', [$start->toDateString(), $end->toDateString()])
                     ->where(fn ($q2) => $q2->whereNull('type')->orWhereNotIn('type', FeeType::excludedFromIncentiveValues()));
+                if (! empty($importedFeeIds)) {
+                    $q->whereNotIn('id', $importedFeeIds);
+                }
             });
 
         // Condition C: allow_current_status_import — the matter is still
@@ -340,12 +346,25 @@ class IncentiveService
 
         if ($isCurrentStatusMatter) {
             $feesQuery->whereBetween('date', [
-                Carbon::parse($calculation->period_start)->toDateString(),
+                self::catchUpStart(Carbon::parse($calculation->period_start))->toDateString(),
                 Carbon::parse($calculation->period_end)->toDateString(),
             ]);
         }
 
         return $feesQuery;
+    }
+
+    /**
+     * Where a calculation looks from: not its own start, but the first calculation's — so whatever came before its
+     * period and was never calculated (a final report, a fee registered, never imported) is picked up by it, never
+     * lost; what was calculated is not, its fees having their lines. Not before the first calculation: the office's
+     * history from before incentives were calculated here is left as it was.
+     */
+    public static function catchUpStart(Carbon $start): Carbon
+    {
+        $first = IncentiveCalculation::query()->min('period_start');
+
+        return $first !== null && Carbon::parse($first)->lt($start) ? Carbon::parse($first)->startOfDay() : $start;
     }
 
     /**

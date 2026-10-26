@@ -4852,5 +4852,8 @@
     "Owed": "مستحقة",
     "No marketing commissions": "لا توجد عمولات تسويق",
     "Only third parties' commissions not paid yet are marked: a staff marketer is paid in their incentive.": "تُعلَّم عمولات الأطراف الخارجية غير المدفوعة فقط: أما المسوّق الموظف فتُصرف عمولته ضمن حافزه.",
-    ":count commission marked paid|:count commissions marked paid": "عُلّمت عمولة واحدة كمدفوعة|عُلّمت :count عمولات كمدفوعة"
+    ":count commission marked paid|:count commissions marked paid": "عُلّمت عمولة واحدة كمدفوعة|عُلّمت :count عمولات كمدفوعة",
+    "Marketed by another: :rate%": "سوّقها غيره: :rate%",
+    "marketed by another": "سوّقها غيره",
+    ":amount of it in this calculation.": "منها :amount في هذا الحساب."
 }

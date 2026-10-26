@@ -115,6 +115,25 @@ class MarketersTest extends TestCase
         $this->get(route('incentive.calculation.print.assistant', ['calculation' => $june->id, 'party' => $this->assistant->id]))->assertSuccessful()->assertSee(__('Marketing commission on matter :matter (:date): :description', ['matter' => '901/2026', 'date' => '10/06/2026', 'description' => '']), false);
     }
 
+    public function test_a_matters_commissions_of_a_period_are_one_line_saying_what_they_come_to(): void
+    {
+        $marketer = $this->employee('Paid Twice');
+        [, $fee] = $this->matter('907', [[$marketer, MarketingCommission::STAFF]]);
+        // Paid in two: two commissions of 1,250.
+        $this->collect($fee, 5000, '2026-06-08');
+        $this->collect($fee, 5000, '2026-06-18');
+        $this->assertSame(2, MarketingCommission::count());
+
+        $june = $this->june([$fee]);
+        $rows = collect($this->calculator->getAssistantSummary($june)->firstWhere('party.id', $marketer->id)['matters']);
+        $this->assertCount(1, $rows);
+        $this->assertSame(2500.0, (float) $rows->sole()['total_amount']);
+        // What it comes to in all, and what of it is here.
+        $this->assertStringContainsString('AED 2,500.00', $rows->sole()['description']);
+        $this->assertStringContainsString(__(':amount of it in this calculation.', ['amount' => 'AED 2,500.00']), $rows->sole()['description']);
+        $this->assertSame(2, MarketingCommission::where('incentive_calculation_id', $june->id)->count());
+    }
+
     public function test_another_staff_marketer_earns_the_share_and_the_assistant_a_flat_ten_percent(): void
     {
         $marketer = $this->employee('Marketer Staff');
