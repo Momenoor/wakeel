@@ -6,8 +6,8 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * A marketing commission earned by a payment keeps it (allocation_id): the payment's date changed, the commission is
- * dated with it while not yet paid (MarketingCommissions::redate()). And an assistant's line says whether the flat
- * rate it was paid at was because they marketed the matter themself (marketed_by_self) or someone else did.
+ * dated with it while not yet paid (MarketingCommissions::redate()). And an assistant's line says whether the
+ * points added to it (marketed_rate) were because they marketed the matter themself (marketed_by_self).
  * Plain added columns: nothing of before changes.
  */
 return new class extends Migration
@@ -19,7 +19,7 @@ return new class extends Migration
         });
 
         Schema::table('incentive_assistant_lines', function (Blueprint $table) {
-            $table->boolean('marketed_by_self')->default(false)->after('marketed_rate')->comment('the flat rate because they marketed the matter themself');
+            $table->boolean('marketed_by_self')->default(false)->after('marketed_rate')->comment('marketed_rate is the points added because they marketed the matter themself');
         });
     }
 

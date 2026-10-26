@@ -254,7 +254,7 @@ class MyIncentiveReportTest extends TestCase
         $calculation = $this->calculation(name: 'March period');
         $this->lineFor($calculation, $mine, 300);
 
-        IncentiveAssistantExtra::create([
+        $extra = IncentiveAssistantExtra::create([
             'incentive_calculation_id' => $calculation->id,
             'party_id' => $mine->id,
             'completed_matter_count' => 1,
@@ -267,14 +267,20 @@ class MyIncentiveReportTest extends TestCase
         ]);
 
         $this->actingAs($user);
+        $warning = __('This period did not reach the minimum number of completed matters, so a penalty was applied.');
 
+        // Below the minimum in all, but no penalty applied for it (a month met it, the penalty off …): no warning.
         Livewire::test(MyIncentiveReport::class)
             ->assertOk()
             ->assertSee('March period')
             ->assertSee(__('Net Total'))
             ->assertSee('(+5.00%)')
             ->assertSee('Late reports')
-            ->assertSee(__('This period did not reach the minimum number of completed matters, so a penalty was applied.'));
+            ->assertDontSee($warning);
+
+        // A penalty applied: said why.
+        $extra->update(['penalty_amount' => 30]);
+        Livewire::test(MyIncentiveReport::class)->assertSee($warning);
     }
 
     public function test_an_assistant_may_print_their_own_statement_but_not_another_persons(): void

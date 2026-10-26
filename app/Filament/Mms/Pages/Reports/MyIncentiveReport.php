@@ -338,7 +338,9 @@ class MyIncentiveReport extends Page implements HasTable
                     ->description(__('This period did not reach the minimum number of completed matters, so a penalty was applied.'))
                     ->icon(Heroicon::OutlinedExclamationTriangle)
                     ->color('warning')
-                    ->visible(! ($extra?->meets_minimum ?? true)),
+                    // Only when a penalty was applied for it: below the minimum in all, a month of it may still have met
+                    // it, the penalty may be off, or the matters not of those counted — no penalty, nothing to warn of.
+                    ->visible((float) ($extra?->penalty_amount ?? 0) > 0),
             ]);
     }
 

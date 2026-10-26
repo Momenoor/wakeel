@@ -808,7 +808,7 @@ class IncentiveCalculatorService
                     'committee_adjustment' => $incentiveLine->committee_adjustment,
                     'percentage' => $incentiveLine->effective_percentage,
                     'percentage_override' => $matterLines->first()->percentage_override,
-                    // Paid a flat rate, the matter marketed — by them, or by someone else.
+                    // Marketed by them: the points of the fee added to their usual share (none: null).
                     'marketed_rate' => $matterLines->first()->marketed_rate,
                     'marketed_by_self' => (bool) $matterLines->first()->marketed_by_self,
                     'base_amount' => $feeTotals?->total_base_amount ?? $incentiveLine->base_amount,
