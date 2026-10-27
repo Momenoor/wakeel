@@ -68,8 +68,9 @@ class LeaveRequestService
             throw new RuntimeException('Only a pending leave request can be approved.');
         }
 
+        // Annual days beyond the balance are the approver's to give: the balance goes below zero and the next
+        // grant makes them up. (The request itself only suggests annual days within it — LeaveBalanceService::suggestSplit().)
         $this->assertPeriodsCoverTheRequest($request, $periods);
-        $this->assertAnnualWithinBalance($request, $periods);
 
         return DB::transaction(function () use ($request, $approver, $periods, $comment): LeaveRequest {
             $request->forceFill([
@@ -120,9 +121,6 @@ class LeaveRequestService
 
         $this->assertPeriodsCoverTheRequest($request, $periods);
         $old = $request->periods()->get();
-        // Its own annual days come back first: the new split may use them again.
-        $released = (float) $old->filter(fn (LeaveRequestPeriod $period): bool => $period->getAttribute('leave_type') === LeaveType::ANNUAL)->sum('day_count');
-        $this->assertAnnualWithinBalance($request, $periods, $released);
 
         return DB::transaction(function () use ($request, $by, $periods, $comment, $old): LeaveRequest {
             foreach ($old as $period) {
@@ -369,34 +367,6 @@ class LeaveRequestService
                 rtrim(rtrim(number_format($total, 1), '0'), '.'),
                 rtrim(rtrim(number_format($request->requestedDays(), 1), '0'), '.'),
             ));
-        }
-    }
-
-    /**
-     * Annual days can only come out of what the balance holds; anything
-     * beyond it is unpaid leave, and has to be booked as such.
-     *
-     * @param  list<array{leave_type: string|LeaveType, start_date: string, end_date: string, day_count: float|string}>  $periods
-     */
-    private function assertAnnualWithinBalance(LeaveRequest $request, array $periods, float $released = 0.0): void
-    {
-        $annual = 0.0;
-
-        foreach ($periods as $period) {
-            $type = $period['leave_type'] instanceof LeaveType ? $period['leave_type'] : LeaveType::tryFrom((string) $period['leave_type']);
-
-            if ($type === LeaveType::ANNUAL) {
-                $annual += (float) $period['day_count'];
-            }
-        }
-
-        // With the days this request gives back, its types changed (reclassify()).
-        $balance = $this->balances->balance((int) $request->getAttribute('party_id')) + $released;
-
-        if ($annual > 0 && $annual > $balance + 0.001) {
-            throw new RuntimeException(__('Only :balance annual leave days are left in the balance; book the rest as unpaid leave.', [
-                'balance' => rtrim(rtrim(number_format(max(0, $balance), 1), '0'), '.'),
-            ]));
         }
     }
 

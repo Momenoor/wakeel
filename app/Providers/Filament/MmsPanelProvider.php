@@ -7,10 +7,12 @@ use App\Filament\Mms\Pages\AdminDashboard;
 use App\Filament\Mms\Pages\Chat;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\Pages\ListMatters;
+use App\Filament\Mms\Resources\Types\TypeResource;
 use App\Filament\Shared\Actions\ForceSignOutActions;
 use App\Filament\Shared\Users\LastSeen;
 use App\Models\CalendarEvent;
 use App\Models\Setting;
+use App\Models\Type;
 use App\Services\MMS\Calendar\UnmatchedEventReferences;
 use App\Services\Push\VapidKeys;
 use App\Support\Branding;
@@ -104,6 +106,12 @@ class MmsPanelProvider extends PanelProvider
             );
     }
 
+    /** The hourly pop-ups (resources/views/components/admin-popup) are for super admins and admins. */
+    private static function seesAdminPopups(): bool
+    {
+        return (bool) Auth::user()?->hasAnyRole(['admin', Utils::getSuperAdminName()]) && config('modules.mms', true);
+    }
+
     public function boot(): void
     {
         Select::configureUsing(fn (Select $select) => $select->native(false));
@@ -151,9 +159,7 @@ class MmsPanelProvider extends PanelProvider
         FilamentView::registerRenderHook(
             PanelsRenderHook::BODY_END,
             function (): string {
-                $user = Auth::user();
-
-                if (! $user || ! $user->hasAnyRole(['admin', Utils::getSuperAdminName()]) || ! config('modules.mms', true)) {
+                if (! self::seesAdminPopups()) {
                     return '';
                 }
 
@@ -178,6 +184,31 @@ class MmsPanelProvider extends PanelProvider
                     'count' => count($missing),
                     'rows' => $rows,
                     'dashboardUrl' => AdminDashboard::getUrl(panel: 'mms'),
+                ])->render();
+            }
+        );
+
+        // For super admins and admins: matter types linked to no incentive
+        // calculation type (a new one, say), whose fees the calculation skips.
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::BODY_END,
+            function (): string {
+                if (! self::seesAdminPopups()) {
+                    return '';
+                }
+
+                $types = Type::query()->where('active', true)->whereNull('incentive_config_id')->orderBy('name')->get(['id', 'name']);
+
+                if ($types->isEmpty()) {
+                    return '';
+                }
+
+                return view('filament.partials.types-without-incentive-popup', [
+                    'types' => $types->map(fn (Type $type): array => [
+                        'name' => $type->name,
+                        'url' => TypeResource::getUrl('edit', ['record' => $type], panel: 'mms'),
+                    ])->all(),
+                    'typesUrl' => TypeResource::getUrl(panel: 'mms'),
                 ])->render();
             }
         );

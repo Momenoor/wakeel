@@ -29,6 +29,25 @@ class MatterTypeIncentiveConfig extends Model
             ->logAll();
     }
 
+    /**
+     * The ways an incentive is worked out, by name.
+     *
+     * @return array<string, string>
+     */
+    public static function calculationTypes(): array
+    {
+        return [
+            'tiered' => __('Tiered — % by working days & difficulty'),
+            'fixed' => __('Fixed — fixed % for all fees'),
+            'committee' => __('Committee — tiered ± 2%'),
+        ];
+    }
+
+    public function calculationTypeLabel(): string
+    {
+        return self::calculationTypes()[$this->calculation_type] ?? (string) $this->calculation_type;
+    }
+
     public function matterTypes(): HasMany
     {
         return $this->hasMany(Type::class, 'incentive_config_id');

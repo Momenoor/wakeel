@@ -7,6 +7,7 @@ use App\Enums\LoanKind;
 use App\Enums\PayrollRunStatus;
 use App\Enums\RequestStatus;
 use App\Enums\SalaryComponent;
+use App\Filament\Mms\Actions\Leave\ApproveLeaveAction;
 use App\Filament\Mms\Concerns\PayrollRefresh;
 use App\Filament\Mms\Pages\Payroll\EndOfServiceGratuityClosingVoucher;
 use App\Filament\Mms\Resources\EmployeeLoans\EmployeeLoanResource;
@@ -30,6 +31,7 @@ use App\Models\User;
 use App\Services\MMS\LoanScheduleService;
 use App\Services\MMS\PayrollJournalVoucherService;
 use App\Services\MMS\PayrollService;
+use App\Services\MMS\LeaveBalanceService;
 use Database\Seeders\PayrollModulePermissionsSeeder;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
@@ -302,6 +304,28 @@ class PayrollModuleResourcesTest extends TestCase
         $this->assertSame(RequestStatus::APPROVED, $request->fresh()->status);
         $this->assertSame(1, PartyLeave::where('party_id', $party->id)->count());
         $this->assertSame(5.0, $request->fresh()->unpaidDays());
+    }
+
+    public function test_the_approver_gives_annual_days_beyond_the_balance_and_is_told(): void
+    {
+        $party = $this->employee();
+        $request = $this->pendingRequest($party);
+
+        $periods = [['leave_type' => LeaveType::ANNUAL->value, 'start_date' => '2026-06-01', 'end_date' => '2026-06-05', 'day_count' => 5]];
+
+        // The form says what the days beyond the balance do to it.
+        $this->assertSame(
+            __(':days annual days are beyond the balance: the balance goes to :balance, and the next balance added makes them up.', ['days' => '5', 'balance' => '-5']),
+            ApproveLeaveAction::beyondBalanceNote($periods, $request),
+        );
+        $this->assertNull(ApproveLeaveAction::beyondBalanceNote([['leave_type' => LeaveType::UNPAID->value, 'day_count' => 5]], $request));
+
+        Livewire::test(ListLeaveRequests::class)
+            ->callAction(TestAction::make('approve_leave')->table($request), ['periods' => $periods])
+            ->assertHasNoActionErrors();
+
+        $this->assertSame(-5.0, app(LeaveBalanceService::class)->balance($party->id));
+        $this->assertSame(0.0, $request->fresh()->unpaidDays());
     }
 
     public function test_an_approved_leave_has_its_types_changed_from_the_queue(): void

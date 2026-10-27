@@ -3172,7 +3172,6 @@
     "Flight tickets can only be changed on a draft payroll run.": "لا يمكن تعديل تذاكر السفر إلا في مسير رواتب بحالة مسودة.",
     "This ticket is already paid.": "هذه التذكرة مدفوعة بالفعل.",
     "This ticket is in a payroll run; take it out of the run first.": "هذه التذكرة ضمن مسير رواتب؛ أخرجها من المسير أولاً.",
-    "Only :balance annual leave days are left in the balance; book the rest as unpaid leave.": "المتبقي في الرصيد :balance يوماً فقط من الإجازة السنوية؛ سجّل الباقي كإجازة بدون أجر.",
     "Flight Ticket :year": "تذكرة سفر :year",
     "Sub Role": "الدور الفرعي",
     "EOSG": "مكافأة نهاية الخدمة",
@@ -4870,5 +4869,12 @@
     "Pay the ticket with salary": "صرف التذكرة مع الراتب",
     "The ticket is added to the employee's payslip in the payroll run chosen, and marked paid when the run is disbursed.": "تُضاف التذكرة إلى قسيمة راتب الموظف في مسير الرواتب المختار، وتُعلَّم مدفوعة عند صرف المسير.",
     "Ticket added to the :period payroll run.": "أُضيفت التذكرة إلى مسير رواتب :period.",
-    "This ticket is already paid or in a payroll run.": "هذه التذكرة مدفوعة أو ضمن مسير رواتب بالفعل."
+    "This ticket is already paid or in a payroll run.": "هذه التذكرة مدفوعة أو ضمن مسير رواتب بالفعل.",
+    "Incentive Calculation Type": "نوع حساب الحافز",
+    "Not linked": "غير مربوط",
+    "The incentive calculation skips its fees until its type is linked to one.": "يتجاوز حساب الحوافز أتعاب هذه القضية حتى يُربط نوعها بنوع حساب حافز.",
+    "{1} 1 matter type has no incentive calculation type|[2,*] :count matter types have no incentive calculation type": "{1} نوع قضية واحد بلا نوع حساب حافز|[2,*] :count أنواع قضايا بلا نوع حساب حافز",
+    "The incentive calculation skips the fees of their matters. Open each and choose its incentive calculation type.": "يتجاوز حساب الحوافز أتعاب قضايا هذه الأنواع. افتح كل نوع واختر نوع حساب الحافز له.",
+    "Open matter types": "فتح أنواع القضايا",
+    ":days annual days are beyond the balance: the balance goes to :balance, and the next balance added makes them up.": "أيام سنوية تتجاوز الرصيد: :days. يصبح الرصيد :balance، وتُخصم من الرصيد التالي المضاف."
 }

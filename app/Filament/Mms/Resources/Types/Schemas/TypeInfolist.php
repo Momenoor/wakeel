@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Resources\Types\Schemas;
 use App\Enums\MatterDifficulty;
 use App\Filament\Mms\Resources\Incentive\MatterTypeIncentiveConfigs\MatterTypeIncentiveConfigResource;
 use App\Models\LetterTemplate;
+use App\Models\MatterTypeIncentiveConfig;
 use App\Models\Type;
 use App\Services\MMS\MatterOneDriveFolders;
 use Filament\Infolists\Components\IconEntry;
@@ -112,12 +113,7 @@ class TypeInfolist
                                 ->label(__('Calculation Type'))
                                 ->badge()
                                 ->placeholder('—')
-                                ->formatStateUsing(fn (?string $state): string => match ($state) {
-                                    'tiered' => __('Tiered — % by working days & difficulty'),
-                                    'fixed' => __('Fixed — fixed % for all fees'),
-                                    'committee' => __('Committee — tiered ± 2%'),
-                                    default => (string) $state,
-                                }),
+                                ->formatStateUsing(fn (?string $state): string => MatterTypeIncentiveConfig::calculationTypes()[$state] ?? (string) $state),
                             TextEntry::make('incentiveConfig.fixed_percentage')
                                 ->label(__('Fixed Percentage (%)'))
                                 ->suffix('%')

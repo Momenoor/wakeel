@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Resources\Incentive\MatterTypeIncentiveConfigs\Schema
 
 use App\Enums\MatterCommissiong;
 use App\Enums\MatterDifficulty;
+use App\Models\MatterTypeIncentiveConfig;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -22,11 +23,7 @@ class MatterTypeIncentiveConfigForm
                         TextInput::make('name')->label(__('Name'))->required(),
                         Select::make('calculation_type')
                             ->label(__('Calculation Type'))
-                            ->options([
-                                'tiered' => __('Tiered — % by working days & difficulty'),
-                                'fixed' => __('Fixed — fixed % for all fees'),
-                                'committee' => __('Committee — tiered ± 2%'),
-                            ])
+                            ->options(fn (): array => MatterTypeIncentiveConfig::calculationTypes())
                             ->required()
                             ->live()
                             ->helperText(__('Tiered: working days from received date to initial report. Fixed: e.g. liquidation/insolvency at 8%.')),

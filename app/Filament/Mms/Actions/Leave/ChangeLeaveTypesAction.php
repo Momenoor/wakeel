@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Actions\Leave;
 
+use App\Enums\LeaveType;
 use App\Filament\Mms\Concerns\PayrollRefresh;
 use App\Models\LeaveRequest;
 use App\Models\LeaveRequestPeriod;
@@ -55,5 +56,13 @@ class ChangeLeaveTypesAction extends ApproveLeaveAction
                 Notification::make()->success()->title(__('Leave types changed.'))->send();
                 $livewire->dispatch(PayrollRefresh::EVENT);
             });
+    }
+
+    /**
+     * With the annual days it holds already, given back when its types change.
+     */
+    protected static function annualAvailable(LeaveRequest $record): float
+    {
+        return parent::annualAvailable($record) + (float) $record->periods->where('leave_type', LeaveType::ANNUAL)->sum('day_count');
     }
 }

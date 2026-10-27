@@ -17,6 +17,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
@@ -171,6 +172,7 @@ class ApproveLeaveAction extends Action
                         ->step(0.5)
                         ->minValue(0.5)
                         ->required()
+                        ->live(onBlur: true)
                         // Counted from the dates but left editable, so a half day
                         // is expressible without a separate half-day control.
                         ->helperText(__('Use 0.5 for a half day.')),
@@ -187,6 +189,12 @@ class ApproveLeaveAction extends Action
 
                     return LeaveType::tryFrom((string) $leaveType)?->getLabel();
                 })
+                ->columnSpanFull(),
+
+            // Annual days beyond the balance are allowed here, at approval:
+            // said, with what they do to the balance.
+            Text::make(fn (Get $get, ?LeaveRequest $record): ?string => static::beyondBalanceNote($get('periods') ?? [], $record))
+                ->color('warning')
                 ->columnSpanFull(),
 
             Textarea::make('approved_comment')
@@ -221,6 +229,46 @@ class ApproveLeaveAction extends Action
                     |> (fn ($x) => rtrim($x, '0'))
                     |> (fn ($x) => rtrim($x, '.')),
         ]);
+    }
+
+    /**
+     * The annual days the periods give beyond the balance, if any: the
+     * balance goes below zero and the next grant makes them up.
+     *
+     * @param  array<array-key, array<string, mixed>>  $periods
+     */
+    public static function beyondBalanceNote(array $periods, ?LeaveRequest $record): ?string
+    {
+        if (! $record) {
+            return null;
+        }
+
+        $annual = collect($periods)
+            ->filter(fn (array $period): bool => ($period['leave_type'] ?? null) === LeaveType::ANNUAL || ($period['leave_type'] ?? null) === LeaveType::ANNUAL->value)
+            ->sum(fn (array $period): float => (float) ($period['day_count'] ?? 0));
+        $available = static::annualAvailable($record);
+
+        if ($annual <= $available + 0.001) {
+            return null;
+        }
+
+        return __(':days annual days are beyond the balance: the balance goes to :balance, and the next balance added makes them up.', [
+            'days' => self::days($annual - max(0.0, $available)),
+            'balance' => self::days($available - $annual),
+        ]);
+    }
+
+    /**
+     * The annual days this request can take from the balance.
+     */
+    protected static function annualAvailable(LeaveRequest $record): float
+    {
+        return app(LeaveBalanceService::class)->balance((int) $record->party_id);
+    }
+
+    private static function days(float $days): string
+    {
+        return rtrim(rtrim(number_format($days, 1), '0'), '.');
     }
 
     /**

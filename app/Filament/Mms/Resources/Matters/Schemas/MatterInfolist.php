@@ -12,6 +12,7 @@ use App\Filament\Mms\Actions\Request\RejectRequestAction;
 use App\Filament\Mms\Actions\Request\RequestChangesAction;
 use App\Filament\Mms\Actions\Request\ResubmitRequestAction;
 use App\Filament\Mms\Resources\CalendarEvents\CalendarEventResource;
+use App\Filament\Mms\Resources\Incentive\MatterTypeIncentiveConfigs\MatterTypeIncentiveConfigResource;
 use App\Filament\Mms\Resources\MatterRequests\Schemas\RequestHistoryEntry;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
@@ -514,6 +515,21 @@ class MatterInfolist
             ->schema([
                 TextEntry::make('court.name')->label(__('Court'))->icon('heroicon-o-building-library'),
                 TextEntry::make('type.name')->label(__('Type'))->icon('heroicon-o-rectangle-stack'),
+                // How its incentive is worked out, known before any calculation runs: its type's; a type linked to
+                // none is skipped by the calculation.
+                TextEntry::make('incentive_calculation_type')
+                    ->label(__('Incentive Calculation Type'))
+                    ->icon('heroicon-o-calculator')
+                    ->visible(fn (Matter $record): bool => $record->type !== null && ScreenPermissions::can(ScreenPermissions::MATTER_FEES_TAB))
+                    ->state(fn (Matter $record): string => $record->type->incentiveConfig?->name ?? __('Not linked'))
+                    ->color(fn (Matter $record): string => $record->type->incentiveConfig ? 'primary' : 'danger')
+                    ->url(fn (Matter $record): ?string => $record->type->incentiveConfig && MatterTypeIncentiveConfigResource::canView($record->type->incentiveConfig)
+                        ? MatterTypeIncentiveConfigResource::getUrl('view', ['record' => $record->type->incentiveConfig])
+                        : null)
+                    ->belowContent(fn (Matter $record): Text => Text::make($record->type->incentiveConfig?->calculationTypeLabel()
+                        ?? __('The incentive calculation skips its fees until its type is linked to one.'))
+                        ->color($record->type->incentiveConfig ? 'gray' : 'danger')
+                        ->size(TextSize::ExtraSmall)),
                 TextEntry::make('level')->label(__('Level'))->badge(),
                 TextEntry::make('difficulty')->label(__('Difficulty'))->badge(),
                 Group::make()

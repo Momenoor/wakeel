@@ -131,16 +131,23 @@ class LeaveBalanceAndFlightTicketTest extends TestCase
         ], app(LeaveRequestService::class)->suggestSplit($request));
     }
 
-    public function test_annual_days_beyond_the_balance_are_refused(): void
+    public function test_annual_days_approved_beyond_the_balance_come_off_the_next_grant(): void
     {
         $party = $this->employee(2);
         $request = $this->request($party, '2026-10-05', '2026-10-07');
 
-        $this->expectException(RuntimeException::class);
+        // The request suggests the balance's 2 days, the rest unpaid …
+        $this->assertSame(['annual', 'unpaid'], array_column(app(LeaveRequestService::class)->suggestSplit($request), 'leave_type'));
 
+        // … the approver gives all 3 as annual: one below zero, made up on 1 January.
         app(LeaveRequestService::class)->approve($request, User::factory()->create(), [
             ['leave_type' => 'annual', 'start_date' => '2026-10-05', 'end_date' => '2026-10-07', 'day_count' => 3],
         ]);
+        $this->assertSame(-1.0, $this->balances->balance($party->id));
+        $this->assertSame(0.0, $request->fresh()->unpaidDays());
+
+        $this->balances->grantDue(Carbon::parse('2027-01-01'));
+        $this->assertSame(29.0, $this->balances->balance($party->id));
     }
 
     public function test_thirty_days_are_added_every_first_of_january_once(): void
