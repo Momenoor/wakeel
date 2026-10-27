@@ -2,7 +2,9 @@
 
 namespace App\Filament\Mms\Pages\Schemas;
 
+use App\Enums\LeaveType;
 use App\Support\Currency;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -134,6 +136,13 @@ class PayrollSettingsForm
                         ->step(0.1)
                         ->required()
                         ->default(2),
+
+                    CheckboxList::make(LeaveType::FROM_BALANCE_SETTING)
+                        ->label(__('Also taken off the balance'))
+                        ->helperText(__('Besides annual leave. Their days are given by hand: the employee\'s Leave Balance tab → Adjust balance.'))
+                        ->options(collect(LeaveType::optionallyFromBalance())->mapWithKeys(fn (LeaveType $type): array => [$type->value => $type->getLabel()])->all())
+                        ->columns(3)
+                        ->columnSpanFull(),
                 ]),
 
             Section::make(__('Sick Leave — Federal Decree-Law 33/2021, Article 31'))

@@ -2,6 +2,7 @@
 
 namespace App\Enums;
 
+use App\Models\Setting;
 use Filament\Support\Contracts\HasColor;
 use Filament\Support\Contracts\HasLabel;
 
@@ -30,8 +31,8 @@ enum LeaveType: string implements HasColor, HasLabel
     case ABSENT = 'absent';
 
     /**
-     * Granted for an event, not drawn from anything: a new baby, a family member's death. Paid in full, and not
-     * taken off the annual balance — like casual leave.
+     * Granted for an event: a new baby, a family member's death. Paid in full; taken off the annual balance like
+     * casual leave unless Settings → Payroll says otherwise, HR adding the days to it by hand (an adjustment).
      */
     case NEW_BABY = 'new_baby';
     case BEREAVEMENT = 'bereavement';
@@ -84,13 +85,43 @@ enum LeaveType: string implements HasColor, HasLabel
         return $this->payFactor() > 0.0;
     }
 
+    /** The setting naming the types besides annual leave taken off the balance. */
+    public const FROM_BALANCE_SETTING = 'payroll_leave_types_from_balance';
+
     /**
-     * Types that draw down the annual balance.
+     * The types that may be taken off the balance besides annual leave, which always is: the paid ones granted
+     * for a reason, their days given by hand (Adjust balance).
      *
-     * @return array<int, self>
+     * @return list<self>
+     */
+    public static function optionallyFromBalance(): array
+    {
+        return [self::CASUAL, self::NEW_BABY, self::BEREAVEMENT];
+    }
+
+    /**
+     * Types that draw down the annual balance: annual leave, and those Settings → Payroll names (all of
+     * optionallyFromBalance() until it is saved).
+     *
+     * @return list<self>
      */
     public static function deductingFromAnnualBalance(): array
     {
-        return [self::ANNUAL];
+        $chosen = (array) Setting::get(self::FROM_BALANCE_SETTING, array_map(fn (self $type): string => $type->value, self::optionallyFromBalance()));
+
+        return [self::ANNUAL, ...array_values(array_filter(self::optionallyFromBalance(), fn (self $type): bool => in_array($type->value, $chosen, true)))];
+    }
+
+    public function takesFromBalance(): bool
+    {
+        return in_array($this, self::deductingFromAnnualBalance(), true);
+    }
+
+    /** A type, or its value as a form holds it, taken off the balance. */
+    public static function fromBalance(self|string|null $type): bool
+    {
+        $type = $type instanceof self ? $type : self::tryFrom((string) $type);
+
+        return $type?->takesFromBalance() ?? false;
     }
 }

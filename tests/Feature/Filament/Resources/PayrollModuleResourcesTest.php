@@ -28,10 +28,10 @@ use App\Models\Party;
 use App\Models\PartyLeave;
 use App\Models\PayrollRun;
 use App\Models\User;
+use App\Services\MMS\LeaveBalanceService;
 use App\Services\MMS\LoanScheduleService;
 use App\Services\MMS\PayrollJournalVoucherService;
 use App\Services\MMS\PayrollService;
-use App\Services\MMS\LeaveBalanceService;
 use Database\Seeders\PayrollModulePermissionsSeeder;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
@@ -315,7 +315,7 @@ class PayrollModuleResourcesTest extends TestCase
 
         // The form says what the days beyond the balance do to it.
         $this->assertSame(
-            __(':days annual days are beyond the balance: the balance goes to :balance, and the next balance added makes them up.', ['days' => '5', 'balance' => '-5']),
+            __(':days days taken off the balance are beyond it: the balance goes to :balance, and the next balance added makes them up.', ['days' => '5', 'balance' => '-5']),
             ApproveLeaveAction::beyondBalanceNote($periods, $request),
         );
         $this->assertNull(ApproveLeaveAction::beyondBalanceNote([['leave_type' => LeaveType::UNPAID->value, 'day_count' => 5]], $request));
@@ -347,6 +347,40 @@ class PayrollModuleResourcesTest extends TestCase
 
         $this->assertSame(0.0, $request->fresh()->unpaidDays());
         $this->assertSame([LeaveType::NEW_BABY], PartyLeave::where('party_id', $party->id)->pluck('leave_type')->all());
+    }
+
+    public function test_an_approved_leave_is_ended_early_or_cancelled_from_the_queue(): void
+    {
+        $party = $this->employee();
+        $request = $this->pendingRequest($party);
+        $annual = [['leave_type' => LeaveType::ANNUAL->value, 'start_date' => '2026-06-01', 'end_date' => '2026-06-05', 'day_count' => 5]];
+
+        Livewire::test(ListLeaveRequests::class)
+            ->assertActionHidden(TestAction::make('end_leave_early')->table($request))
+            ->callAction(TestAction::make('approve_leave')->table($request), ['periods' => $annual]);
+
+        // A last day after its own last is refused.
+        Livewire::test(ListLeaveRequests::class)
+            ->filterTable('status', [RequestStatus::APPROVED->value])
+            ->callAction(TestAction::make('end_leave_early')->table($request->fresh()), ['mode' => 'end_early', 'last_day' => '2026-06-05'])
+            ->assertHasActionErrors(['last_day']);
+
+        Livewire::test(ListLeaveRequests::class)
+            ->filterTable('status', [RequestStatus::APPROVED->value])
+            ->callAction(TestAction::make('end_leave_early')->table($request->fresh()), ['mode' => 'end_early', 'last_day' => '2026-06-02'])
+            ->assertHasNoActionErrors();
+
+        $this->assertSame('2026-06-02', $request->fresh()->end_date->toDateString());
+        $this->assertSame(-2.0, app(LeaveBalanceService::class)->balance($party->id));
+
+        Livewire::test(ListLeaveRequests::class)
+            ->filterTable('status', [RequestStatus::APPROVED->value])
+            ->callAction(TestAction::make('end_leave_early')->table($request->fresh()), ['mode' => 'cancel', 'reason' => 'Not travelling'])
+            ->assertHasNoActionErrors();
+
+        $this->assertSame(RequestStatus::CANCELLED, $request->fresh()->status);
+        $this->assertSame(0.0, app(LeaveBalanceService::class)->balance($party->id));
+        $this->assertSame(0, PartyLeave::where('party_id', $party->id)->count());
     }
 
     public function test_rejecting_from_the_queue_requires_a_reason(): void

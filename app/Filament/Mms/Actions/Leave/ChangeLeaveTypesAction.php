@@ -59,10 +59,10 @@ class ChangeLeaveTypesAction extends ApproveLeaveAction
     }
 
     /**
-     * With the annual days it holds already, given back when its types change.
+     * With the days it took off the balance already, given back when its types change.
      */
     protected static function annualAvailable(LeaveRequest $record): float
     {
-        return parent::annualAvailable($record) + (float) $record->periods->where('leave_type', LeaveType::ANNUAL)->sum('day_count');
+        return parent::annualAvailable($record) + (float) $record->periods->filter(fn ($period): bool => LeaveType::fromBalance($period->leave_type))->sum('day_count');
     }
 }

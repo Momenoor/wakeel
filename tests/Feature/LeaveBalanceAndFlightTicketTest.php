@@ -274,6 +274,16 @@ class LeaveBalanceAndFlightTicketTest extends TestCase
 
         $this->assertSame(7.5, $this->balances->balance($party->id));
 
+        // Each entry with the balance after it: the opening 10, then the adjustment's 7.5, and the newest first.
+        $entries = LeaveBalanceEntry::where('party_id', $party->id)->get()->keyBy(fn (LeaveBalanceEntry $entry): string => $entry->kind->value);
+        $this->assertSame([
+            $entries[LeaveBalanceEntryKind::OPENING->value]->id => 10.0,
+            $entries[LeaveBalanceEntryKind::ADJUSTMENT->value]->id => 7.5,
+        ], $this->balances->runningBalances($party->id));
+        Livewire::test(LeaveBalanceRelationManager::class, $owner)
+            ->assertTableColumnStateSet('balance_after', 7.5, $entries[LeaveBalanceEntryKind::ADJUSTMENT->value])
+            ->assertCanSeeTableRecords([$entries[LeaveBalanceEntryKind::ADJUSTMENT->value], $entries[LeaveBalanceEntryKind::OPENING->value]], inOrder: true);
+
         Livewire::test(FlightTicketsRelationManager::class, $owner)
             ->callAction(TestAction::make('create')->table(), ['year' => 2026, 'amount' => 1800])
             ->assertHasNoActionErrors();

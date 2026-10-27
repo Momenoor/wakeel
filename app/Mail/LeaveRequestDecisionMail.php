@@ -31,7 +31,7 @@ class LeaveRequestDecisionMail extends Mailable
     {
         if ($leaveRequest->isApproved()) {
             $this->fromBalance = (float) $leaveRequest->periods()->get()
-                ->filter(fn (LeaveRequestPeriod $period): bool => $period->leave_type === LeaveType::ANNUAL)
+                ->filter(fn (LeaveRequestPeriod $period): bool => LeaveType::fromBalance($period->leave_type))
                 ->sum('day_count');
             // Taken off already: what it was, before them.
             $this->balanceBefore = app(LeaveBalanceService::class)->balance((int) $leaveRequest->party_id) + $this->fromBalance;

@@ -2,17 +2,20 @@
 
 namespace Tests\Feature;
 
+use App\Enums\LeaveBalanceEntryKind;
 use App\Enums\LeaveType;
 use App\Enums\PayrollRunStatus;
 use App\Enums\RequestStatus;
 use App\Enums\SalaryComponent;
 use App\Models\EmployeeProfile;
 use App\Models\EmployeeSalaryComponent;
+use App\Models\LeaveBalanceEntry;
 use App\Models\LeaveRequest;
 use App\Models\LeaveRequestPeriod;
 use App\Models\Party;
 use App\Models\PartyLeave;
 use App\Models\PayrollRun;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\MMS\LeaveBalanceService;
 use App\Services\MMS\LeaveEntitlementService;
@@ -188,8 +191,11 @@ class LeaveRequestTest extends TestCase
         $this->assertSame(25.0, app(LeaveBalanceService::class)->balance($party->id));
     }
 
-    public function test_new_baby_and_bereavement_leave_take_nothing_off_the_balance_or_the_salary(): void
+    public function test_new_baby_and_bereavement_leave_left_off_the_balance_take_nothing_off_it_or_the_salary(): void
     {
+        // Settings → Payroll: neither taken off the balance.
+        Setting::set(LeaveType::FROM_BALANCE_SETTING, [], 'payroll');
+        Setting::clearCache();
         $party = $this->employee();
 
         $request = $this->request($party, '2026-06-01', '2026-06-08');
@@ -212,6 +218,9 @@ class LeaveRequestTest extends TestCase
 
     public function test_an_approved_annual_leave_changed_to_bereavement_gives_its_days_back(): void
     {
+        // Bereavement leave not taken off the balance (Settings → Payroll).
+        Setting::set(LeaveType::FROM_BALANCE_SETTING, [], 'payroll');
+        Setting::clearCache();
         $party = $this->employee();
         $request = $this->request($party, '2026-06-01', '2026-06-05');
         $this->service->approve($request, User::factory()->create(), $this->split([
@@ -239,6 +248,76 @@ class LeaveRequestTest extends TestCase
             ->first();
         $this->assertSame(['5.0', '1000.00'], [$payslip->unpaid_days, $payslip->unpaid_deduction]);
         $this->assertSame(1, PartyLeave::where('party_id', $party->id)->count());
+    }
+
+    public function test_new_baby_leave_comes_off_the_balance_hr_adds_its_days_by_hand(): void
+    {
+        $party = $this->employee();
+        $this->assertTrue(LeaveType::NEW_BABY->takesFromBalance());
+
+        // HR gives the five days (Adjust balance), the leave takes them off: back where it was, still paid.
+        LeaveBalanceEntry::create(['party_id' => $party->id, 'kind' => LeaveBalanceEntryKind::ADJUSTMENT, 'days' => 5, 'entry_date' => '2026-06-01', 'note' => 'New baby']);
+        $request = $this->request($party, '2026-06-01', '2026-06-05');
+        $this->service->approve($request, User::factory()->create(), $this->split([
+            [LeaveType::NEW_BABY, '2026-06-01', '2026-06-05', 5],
+        ]));
+
+        $this->assertSame(30.0, app(LeaveBalanceService::class)->balance($party->id));
+        $this->assertSame(0.0, $request->fresh()->unpaidDays());
+
+        // Unless Settings → Payroll leaves it out.
+        Setting::set(LeaveType::FROM_BALANCE_SETTING, ['casual'], 'payroll');
+        Setting::clearCache();
+        $this->assertFalse(LeaveType::NEW_BABY->takesFromBalance());
+        $this->assertTrue(LeaveType::CASUAL->takesFromBalance());
+    }
+
+    public function test_a_leave_ended_early_gives_the_days_not_taken_back(): void
+    {
+        $party = $this->employee();
+        $request = $this->request($party, '2026-06-01', '2026-06-07');
+        $this->service->approve($request, User::factory()->create(), $this->split([
+            [LeaveType::ANNUAL, '2026-06-01', '2026-06-05', 5],
+            [LeaveType::UNPAID, '2026-06-06', '2026-06-07', 2],
+        ]));
+        $this->assertSame(25.0, app(LeaveBalanceService::class)->balance($party->id));
+
+        // Back at work on 4 June: 1–3 June taken, the rest not.
+        $this->service->endEarly($request->fresh(), User::factory()->create(['name' => 'Manager']), Carbon::parse('2026-06-03'), 'Called back');
+
+        $request->refresh();
+        $this->assertSame('2026-06-03', $request->end_date->toDateString());
+        $this->assertSame(27.0, app(LeaveBalanceService::class)->balance($party->id));
+        $this->assertSame('3.0', app(LeaveEntitlementService::class)->forDate($party, Carbon::parse('2026-06-01'))->annual_taken_days);
+        $this->assertSame([['2026-06-01', '2026-06-03']], PartyLeave::where('party_id', $party->id)->get()
+            ->map(fn (PartyLeave $leave): array => [$leave->start_date->toDateString(), $leave->end_date->toDateString()])->all());
+        $this->assertSame(0.0, $request->unpaidDays());
+        $this->assertStringContainsString('Manager: its last day 03/06/2026, not 07/06/2026: Called back', $request->approved_comment);
+
+        // Its last day must be within it, before its end.
+        $this->expectException(RuntimeException::class);
+        $this->service->endEarly($request, null, Carbon::parse('2026-06-03'));
+    }
+
+    public function test_a_cancelled_leave_gives_all_its_days_back(): void
+    {
+        $party = $this->employee();
+        $request = $this->request($party, '2026-06-01', '2026-06-05');
+        $this->service->approve($request, User::factory()->create(), $this->split([
+            [LeaveType::ANNUAL, '2026-06-01', '2026-06-05', 5],
+        ]));
+
+        $this->service->cancel($request->fresh(), null, 'Trip called off');
+
+        $request->refresh();
+        $this->assertSame(RequestStatus::CANCELLED, $request->status);
+        $this->assertSame(30.0, app(LeaveBalanceService::class)->balance($party->id));
+        $this->assertSame(0, PartyLeave::where('party_id', $party->id)->count());
+        $this->assertStringContainsString('5 '.LeaveType::ANNUAL->getLabel(), $request->approved_comment);
+
+        // Cancelled once: not again.
+        $this->expectException(RuntimeException::class);
+        $this->service->cancel($request, null);
     }
 
     public function test_only_an_approved_request_has_its_types_changed(): void

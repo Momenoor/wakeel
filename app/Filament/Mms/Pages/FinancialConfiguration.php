@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Pages;
 
+use App\Enums\LeaveType;
 use App\Filament\Mms\Pages\Schemas\IncentiveSettingsForm;
 use App\Filament\Mms\Pages\Schemas\PayrollSettingsForm;
 use App\Filament\Mms\Widgets\IncentiveExtraRulesOverviewWidget;
@@ -122,6 +123,7 @@ class FinancialConfiguration extends Page
 
                 'payroll_annual_leave_days' => Setting::get('payroll_annual_leave_days', 30),
                 'payroll_annual_leave_days_per_month' => Setting::get('payroll_annual_leave_days_per_month', 2),
+                LeaveType::FROM_BALANCE_SETTING => array_values(array_map(fn (LeaveType $type): string => $type->value, array_slice(LeaveType::deductingFromAnnualBalance(), 1))),
 
                 'payroll_sick_full_pay_days' => Setting::get('payroll_sick_full_pay_days', 15),
                 'payroll_sick_half_pay_days' => Setting::get('payroll_sick_half_pay_days', 30),

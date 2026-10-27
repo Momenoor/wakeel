@@ -16,6 +16,9 @@ enum RequestStatus: string implements HasColor, HasLabel
     /** A reviewer asked for changes to the report: it goes back to the assistant, then to review again. */
     case NEEDS_CHANGES = 'needs_changes';
 
+    /** An approved leave called off before it was taken: its days given back. */
+    case CANCELLED = 'cancelled';
+
     public function getLabel(): ?string
     {
         return match ($this) {
@@ -24,6 +27,7 @@ enum RequestStatus: string implements HasColor, HasLabel
             self::PENDING => __('Pending'),
             self::DISPUTED => __('Disputed'),
             self::NEEDS_CHANGES => __('Needs changes'),
+            self::CANCELLED => __('Cancelled'),
         };
     }
 
@@ -35,6 +39,7 @@ enum RequestStatus: string implements HasColor, HasLabel
             self::PENDING => 'warning',
             self::DISPUTED => 'info',
             self::NEEDS_CHANGES => 'primary',
+            self::CANCELLED => 'gray',
         };
     }
 }

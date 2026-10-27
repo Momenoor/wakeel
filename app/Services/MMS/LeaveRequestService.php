@@ -18,6 +18,7 @@ use App\Services\Notifications\Notifier;
 use App\Support\Addresses;
 use App\Support\Dates;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -120,38 +121,133 @@ class LeaveRequestService
         }
 
         $this->assertPeriodsCoverTheRequest($request, $periods);
-        $old = $request->periods()->get();
 
-        return DB::transaction(function () use ($request, $by, $periods, $comment, $old): LeaveRequest {
-            foreach ($old as $period) {
-                $this->recordAgainstEntitlement($request, $period, release: true);
-            }
-            PartyLeave::query()->whereIn('leave_request_period_id', $old->modelKeys())->delete();
-            LeaveBalanceEntry::query()->whereIn('leave_request_period_id', $old->modelKeys())->delete();
-            $request->periods()->delete();
-
-            foreach ($periods as $period) {
-                $saved = LeaveRequestPeriod::create([
-                    'leave_request_id' => $request->getKey(),
-                    'leave_type' => $period['leave_type'],
-                    'start_date' => $period['start_date'],
-                    'end_date' => $period['end_date'],
-                    'day_count' => $period['day_count'],
-                ]);
-
-                $this->publishToLedger($request, $saved);
-                $this->recordAgainstEntitlement($request, $saved);
-                $this->balances->recordTaken($request, $saved);
-            }
-
-            $note = __('Leave types changed on :date by :user', [
-                'date' => now()->format(Dates::dateTimeFormat()),
-                'user' => $by?->display_name ?: ($by?->name ?? '—'),
-            ]).(filled($comment) ? ': '.$comment : '.');
-            $request->forceFill(['approved_comment' => trim(((string) $request->getAttribute('approved_comment'))."\n".$note)])->save();
+        return DB::transaction(function () use ($request, $by, $periods, $comment): LeaveRequest {
+            $this->rewritePeriods($request, $periods);
+            $this->addNote($request, __('Leave types changed on :date by :user', $this->noteBy($by)), $comment);
 
             return $request->load('periods');
         });
+    }
+
+    /**
+     * An approved leave the employee came back from early: it ends on the last day taken, its periods cut there
+     * (and their effects with them: the absence ledger, the entitlements, the annual balance), the days not taken
+     * given back. Said on the request, by whom and when.
+     */
+    public function endEarly(LeaveRequest $request, ?User $by, CarbonInterface $lastDay, ?string $reason = null): LeaveRequest
+    {
+        $this->assertApproved($request);
+        $lastDay = CarbonImmutable::parse($lastDay)->startOfDay();
+        $start = CarbonImmutable::parse($request->getAttribute('start_date'))->startOfDay();
+        $end = CarbonImmutable::parse($request->getAttribute('end_date'))->startOfDay();
+
+        if ($lastDay->lessThan($start) || $lastDay->greaterThanOrEqualTo($end)) {
+            throw new RuntimeException(__('The last day taken must be from the first day of the leave to the day before its last; to take none of it, cancel it.'));
+        }
+
+        // Each period cut at the last day: those after it gone, the one across it shortened by the days after it.
+        $periods = $request->periods()->orderBy('start_date')->get()
+            ->filter(fn (LeaveRequestPeriod $period): bool => $period->start_date->startOfDay()->lessThanOrEqualTo($lastDay))
+            ->map(function (LeaveRequestPeriod $period) use ($lastDay): array {
+                $periodEnd = CarbonImmutable::parse($period->end_date)->startOfDay();
+                $cut = $periodEnd->greaterThan($lastDay) ? (float) $lastDay->diffInDays($periodEnd) : 0.0;
+
+                return [
+                    'leave_type' => $period->leave_type,
+                    'start_date' => $period->start_date->toDateString(),
+                    'end_date' => ($cut > 0 ? $lastDay : $periodEnd)->toDateString(),
+                    'day_count' => max(0.5, (float) $period->day_count - $cut),
+                ];
+            })->values()->all();
+
+        return DB::transaction(function () use ($request, $by, $periods, $lastDay, $end, $reason): LeaveRequest {
+            $request->forceFill(['end_date' => $lastDay->toDateString()])->save();
+            $this->rewritePeriods($request, $periods);
+            $this->addNote($request, __('Leave ended early on :date by :user: its last day :last, not :end', [
+                ...$this->noteBy($by),
+                'last' => $lastDay->format(Dates::dateFormat()),
+                'end' => $end->format(Dates::dateFormat()),
+            ]), $reason);
+
+            return $request->load('periods');
+        });
+    }
+
+    /**
+     * An approved leave called off before any of it was taken: its periods and their effects undone (the days
+     * back in the balance) and the request cancelled, what it was said on it.
+     */
+    public function cancel(LeaveRequest $request, ?User $by, ?string $reason = null): LeaveRequest
+    {
+        $this->assertApproved($request);
+
+        return DB::transaction(function () use ($request, $by, $reason): LeaveRequest {
+            $was = $request->periods()->orderBy('start_date')->get()
+                ->map(fn (LeaveRequestPeriod $period): string => rtrim(rtrim(number_format((float) $period->day_count, 1), '0'), '.').' '.$period->leave_type?->getLabel())
+                ->implode('، ');
+
+            $this->rewritePeriods($request, []);
+            $request->forceFill(['status' => RequestStatus::CANCELLED])->save();
+            $this->addNote($request, __('Leave cancelled on :date by :user (it was approved as :was)', [...$this->noteBy($by), 'was' => $was ?: '—']), $reason);
+
+            return $request->load('periods');
+        });
+    }
+
+    private function assertApproved(LeaveRequest $request): void
+    {
+        if (! $request->isApproved()) {
+            throw new RuntimeException(__('Only an approved leave request can be ended early or cancelled.'));
+        }
+    }
+
+    /**
+     * An approved request's periods replaced: the old ones undone everywhere they were written (the entitlement
+     * counters, the absence ledger payroll reads, the annual balance), the new ones written as an approval writes them.
+     *
+     * @param  list<array{leave_type: string|LeaveType, start_date: string, end_date: string, day_count: float|string}>  $periods
+     */
+    private function rewritePeriods(LeaveRequest $request, array $periods): void
+    {
+        $old = $request->periods()->get();
+
+        foreach ($old as $period) {
+            $this->recordAgainstEntitlement($request, $period, release: true);
+        }
+        PartyLeave::query()->whereIn('leave_request_period_id', $old->modelKeys())->delete();
+        LeaveBalanceEntry::query()->whereIn('leave_request_period_id', $old->modelKeys())->delete();
+        $request->periods()->delete();
+
+        foreach ($periods as $period) {
+            $saved = LeaveRequestPeriod::create([
+                'leave_request_id' => $request->getKey(),
+                'leave_type' => $period['leave_type'],
+                'start_date' => $period['start_date'],
+                'end_date' => $period['end_date'],
+                'day_count' => $period['day_count'],
+            ]);
+
+            $this->publishToLedger($request, $saved);
+            $this->recordAgainstEntitlement($request, $saved);
+            $this->balances->recordTaken($request, $saved);
+        }
+    }
+
+    /** @return array{date: string, user: string} */
+    private function noteBy(?User $by): array
+    {
+        return [
+            'date' => now()->format(Dates::dateTimeFormat()),
+            'user' => $by?->display_name ?: ($by?->name ?? '—'),
+        ];
+    }
+
+    /** A line added to the request's comment: what was done, and why when given. */
+    private function addNote(LeaveRequest $request, string $note, ?string $reason): void
+    {
+        $note .= filled($reason) ? ': '.$reason : '.';
+        $request->forceFill(['approved_comment' => trim(((string) $request->getAttribute('approved_comment'))."\n".$note)])->save();
     }
 
     /**

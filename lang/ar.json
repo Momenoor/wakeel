@@ -4876,5 +4876,22 @@
     "{1} 1 matter type has no incentive calculation type|[2,*] :count matter types have no incentive calculation type": "{1} نوع قضية واحد بلا نوع حساب حافز|[2,*] :count أنواع قضايا بلا نوع حساب حافز",
     "The incentive calculation skips the fees of their matters. Open each and choose its incentive calculation type.": "يتجاوز حساب الحوافز أتعاب قضايا هذه الأنواع. افتح كل نوع واختر نوع حساب الحافز له.",
     "Open matter types": "فتح أنواع القضايا",
-    ":days annual days are beyond the balance: the balance goes to :balance, and the next balance added makes them up.": "أيام سنوية تتجاوز الرصيد: :days. يصبح الرصيد :balance، وتُخصم من الرصيد التالي المضاف."
+    "The last day taken must be from the first day of the leave to the day before its last; to take none of it, cancel it.": "يجب أن يكون آخر يوم مأخوذ بين أول يوم في الإجازة واليوم السابق لآخر يوم فيها؛ وإن لم يُؤخذ منها شيء فألغِها.",
+    "Leave ended early on :date by :user: its last day :last, not :end": "أُنهيت الإجازة مبكرًا في :date بواسطة :user: آخر يوم فيها :last بدلًا من :end",
+    "Leave cancelled on :date by :user (it was approved as :was)": "أُلغيت الإجازة في :date بواسطة :user (كانت معتمدة: :was)",
+    "Only an approved leave request can be ended early or cancelled.": "لا يمكن إنهاء الإجازة مبكرًا أو إلغاؤها إلا إذا كان طلبها معتمدًا.",
+    "End early / Cancel": "إنهاء مبكر / إلغاء",
+    "End the leave early, or cancel it": "إنهاء الإجازة مبكرًا أو إلغاؤها",
+    "The days not taken go back to the balance, and come off the vacation calendar, the incentive and payroll. A payroll already generated for those days needs generating again.": "تعود الأيام غير المأخوذة إلى الرصيد، وتُحذف من تقويم الإجازات ومن حساب الحوافز والرواتب. وإن أُنشئ كشف رواتب لتلك الأيام فأعد إنشاءه.",
+    "Leave cancelled.": "أُلغيت الإجازة.",
+    "Leave ended early.": "أُنهيت الإجازة مبكرًا.",
+    "Came back early: some of it was taken": "عاد مبكرًا: أُخذ جزء منها",
+    "Cancel it: none of it was taken": "إلغاؤها: لم يُؤخذ منها شيء",
+    "Last day of leave taken": "آخر يوم إجازة مأخوذ",
+    "Back at work the day after.": "يعود إلى العمل في اليوم التالي.",
+    ":days days taken off the balance are beyond it: the balance goes to :balance, and the next balance added makes them up.": "أيام من الرصيد تتجاوزه: :days. يصبح الرصيد :balance، وتُخصم من الرصيد التالي المضاف.",
+    ":days days back to the balance.": "أُعيد :days يوم إلى الرصيد.",
+    "Paid in full; taken off the balance.": "مدفوعة بالكامل؛ تُخصم من الرصيد.",
+    "Also taken off the balance": "تُخصم من الرصيد أيضًا",
+    "Besides annual leave. Their days are given by hand: the employee's Leave Balance tab → Adjust balance.": "إضافةً إلى الإجازة السنوية. تُضاف أيامها يدويًا: تبويب رصيد الإجازات للموظف ← تعديل الرصيد."
 }

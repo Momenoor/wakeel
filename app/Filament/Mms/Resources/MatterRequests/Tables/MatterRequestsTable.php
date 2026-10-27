@@ -65,7 +65,7 @@ class MatterRequestsTable
             ])
             ->filters([
                 SelectFilter::make('status')
-                    ->options(RequestStatus::class)
+                    ->options(collect(RequestStatus::cases())->reject(fn (RequestStatus $status): bool => $status === RequestStatus::CANCELLED)->mapWithKeys(fn (RequestStatus $status): array => [$status->value => $status->getLabel()])->all())
                     ->multiple()
                     ->label(__('Status'))
                     ->default([RequestStatus::PENDING, RequestStatus::DISPUTED, RequestStatus::NEEDS_CHANGES]),

@@ -54,7 +54,7 @@ class LeaveRequestSubmittedMail extends Mailable
 
         $this->annualLeaveBalance = app(LeaveBalanceService::class)->balance((int) $leaveRequest->party_id);
         $this->fromBalance = (float) collect(app(LeaveRequestService::class)->suggestSplit($leaveRequest))
-            ->where('leave_type', LeaveType::ANNUAL->value)
+            ->filter(fn (array $period): bool => LeaveType::fromBalance($period['leave_type']))
             ->sum('day_count');
     }
 

@@ -191,7 +191,7 @@ class ApproveLeaveAction extends Action
                 })
                 ->columnSpanFull(),
 
-            // Annual days beyond the balance are allowed here, at approval:
+            // Days beyond the balance are allowed here, at approval:
             // said, with what they do to the balance.
             Text::make(fn (Get $get, ?LeaveRequest $record): ?string => static::beyondBalanceNote($get('periods') ?? [], $record))
                 ->color('warning')
@@ -232,7 +232,7 @@ class ApproveLeaveAction extends Action
     }
 
     /**
-     * The annual days the periods give beyond the balance, if any: the
+     * The days taken off the balance beyond it, if any: the
      * balance goes below zero and the next grant makes them up.
      *
      * @param  array<array-key, array<string, mixed>>  $periods
@@ -244,7 +244,7 @@ class ApproveLeaveAction extends Action
         }
 
         $annual = collect($periods)
-            ->filter(fn (array $period): bool => ($period['leave_type'] ?? null) === LeaveType::ANNUAL || ($period['leave_type'] ?? null) === LeaveType::ANNUAL->value)
+            ->filter(fn (array $period): bool => LeaveType::fromBalance($period['leave_type'] ?? null))
             ->sum(fn (array $period): float => (float) ($period['day_count'] ?? 0));
         $available = static::annualAvailable($record);
 
@@ -252,7 +252,7 @@ class ApproveLeaveAction extends Action
             return null;
         }
 
-        return __(':days annual days are beyond the balance: the balance goes to :balance, and the next balance added makes them up.', [
+        return __(':days days taken off the balance are beyond it: the balance goes to :balance, and the next balance added makes them up.', [
             'days' => self::days($annual - max(0.0, $available)),
             'balance' => self::days($available - $annual),
         ]);
@@ -296,6 +296,7 @@ class ApproveLeaveAction extends Action
         }
 
         return match (true) {
+            $enum->payFactor() >= 1.0 && $enum->takesFromBalance() => __('Paid in full; taken off the balance.'),
             $enum->payFactor() >= 1.0 => __('Paid in full.'),
             $enum->payFactor() > 0.0 => __('Paid at half rate; the balance is deducted.'),
             default => __('Unpaid; deducted at the whole salary ÷ 30 per day.'),

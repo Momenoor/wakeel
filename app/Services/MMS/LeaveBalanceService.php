@@ -37,6 +37,30 @@ class LeaveBalanceService
     }
 
     /**
+     * The balance after each of an employee's entries, by entry id, in one
+     * query: the opening balance first, then by date, as entered.
+     *
+     * @return array<int, float>
+     */
+    public function runningBalances(int $partyId): array
+    {
+        $balance = 0.0;
+
+        return LeaveBalanceEntry::query()
+            ->where('party_id', $partyId)
+            ->orderByRaw('kind = ? desc', [LeaveBalanceEntryKind::OPENING->value])
+            ->orderBy('entry_date')
+            ->orderBy('id')
+            ->get(['id', 'days'])
+            ->mapWithKeys(function (LeaveBalanceEntry $entry) use (&$balance): array {
+                $balance = round($balance + (float) $entry->days, 1);
+
+                return [$entry->getKey() => $balance];
+            })
+            ->all();
+    }
+
+    /**
      * The day tracking began — grants are only given after it: the date of
      * the first opening balance (written for everyone when tracking was
      * installed). A `leave_balance_started_on` setting overrides it.
@@ -117,11 +141,12 @@ class LeaveBalanceService
     }
 
     /**
-     * Take an approved period's annual days off the balance.
+     * Take an approved period's days off the balance — annual leave, and the
+     * types Settings → Payroll takes off it (LeaveType::deductingFromAnnualBalance()).
      */
     public function recordTaken(LeaveRequest $request, LeaveRequestPeriod $period): void
     {
-        if ($period->getAttribute('leave_type') !== LeaveType::ANNUAL) {
+        if (! LeaveType::fromBalance($period->getAttribute('leave_type'))) {
             return;
         }
 
