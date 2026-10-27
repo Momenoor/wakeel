@@ -346,7 +346,22 @@ class Updater
             AppUpdate::recordInstalled($version, trim($head['output']));
         }
 
-        return $output.$this->forgetCompiled();
+        return $output.$this->forgetCompiled().$this->forgetCompiledCode();
+    }
+
+    /**
+     * The code PHP keeps compiled in memory (OPcache) dropped: a server that does not look at files for changes
+     * (validate_timestamps off, common on shared hosting) would otherwise go on running the previous version's
+     * code after the update — its fixes not there though the version says they are. Done when the new code is
+     * put in, and again when the update is done (the steps between ran in requests of their own).
+     */
+    private function forgetCompiledCode(): string
+    {
+        if (! function_exists('opcache_reset') || ! (bool) ini_get('opcache.enable')) {
+            return '';
+        }
+
+        return @opcache_reset() ? __('The compiled PHP code (OPcache) cleared.')."\n" : '';
     }
 
     /**
@@ -488,7 +503,7 @@ class Updater
 
         Setting::set('last_updated_at', now()->toDateTimeString(), 'system');
 
-        return __('Updated to version :version.', ['version' => AppUpdate::currentVersion()])."\n";
+        return $this->forgetCompiledCode().__('Updated to version :version.', ['version' => AppUpdate::currentVersion()])."\n";
     }
 
     private function restoreOfflineMode(): void

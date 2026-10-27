@@ -8,6 +8,7 @@ use App\Helpers\HtmlFormatter;
 use App\Models\BulkMailCampaign;
 use App\Models\BulkMailLog;
 use App\Models\BulkMailRecipient;
+use App\Support\EmailText;
 use Carbon\CarbonInterface;
 use Closure;
 use Illuminate\Support\Carbon;
@@ -197,9 +198,7 @@ class SentMailImporter
      */
     public static function addressee(string $html): ?string
     {
-        $text = html_entity_decode(strip_tags(preg_replace('~<(br|/p|/div|/tr|/li|/h[1-6])\b[^>]*>~i', '
-', $html) ?? $html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $text = str_replace(' ', ' ', $text);
+        $text = EmailText::plain($html);
 
         foreach (preg_split('~\R~u', $text) ?: [] as $line) {
             $line = trim(preg_replace('~[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}\x{FEFF}]~u', '', $line) ?? $line);

@@ -60,6 +60,9 @@ class ForwardedEmailFiler
     /** Still being read this long after: the run that had it died — another reads it again. */
     private const STUCK_MINUTES = 30;
 
+    /** The matter numbers a forward naming no matter had written in it (told to the forwarder). */
+    private array $written = [];
+
     /**
      * A forward read in the filing mailbox, once: what came of it — null when it was read before.
      *
@@ -81,6 +84,7 @@ class ForwardedEmailFiler
         }
 
         $user = self::userOf((string) ($message['from'] ?? ''));
+        $this->written = [];
 
         try {
             $outcome = $this->outcome($message, $senderKey, $user, $forward, $collector);
@@ -110,13 +114,16 @@ class ForwardedEmailFiler
         }
 
         $original = ForwardedEmail::original($message);
-        $ids = ForwardedEmail::matterIds($message, (string) (SenderMailer::all()[$senderKey]['address'] ?? ''), $original);
+        $mailbox = (string) (SenderMailer::all()[$senderKey]['address'] ?? '');
+        $ids = ForwardedEmail::matterIds($message, $mailbox, $original);
 
         $matters = Matter::query()->whereKey($ids)->get();
         $matter = $matters->first();
         $forward->update(['matter_id' => $matter?->getKey()]);
 
         if ($matter === null) {
+            $this->written = ForwardedEmail::numbersWritten($message, $mailbox, $original);
+
             return self::NO_MATTER;
         }
 
@@ -291,7 +298,10 @@ class ForwardedEmailFiler
 
         $title = match ($outcome) {
             self::UNVERIFIED => __('The email you forwarded to be filed was not filed: it could not be confirmed that it was sent by you.'),
-            self::NO_MATTER => __('The email you forwarded to be filed was not filed: no matter in the system was found in its subject, first line or address.'),
+            // A number read, but no matter has it — else none read at all.
+            self::NO_MATTER => $this->written !== []
+                ? __('The email you forwarded to be filed was not filed: :numbers is not a matter in the system.', ['numbers' => implode('، ', $this->written)])
+                : __('The email you forwarded to be filed was not filed: no matter in the system was found in its subject, first line or address.'),
             self::HELD => __('The email you forwarded names more than one matter: it is waiting in Unfiled emails for its matter to be chosen.'),
             self::NOT_ALLOWED => __('The email you forwarded to be filed was not filed: you may not work on matter :matter.', ['matter' => $reference]),
             self::NO_ORIGINAL => __('The email you forwarded to be filed was not filed: the email in it could not be read. Forward it as an attachment instead.'),
@@ -299,9 +309,11 @@ class ForwardedEmailFiler
             self::FAILED => __('The email you forwarded to be filed could not be filed just now. Forward it again in a while.'),
             default => __('The email you forwarded to be filed was not filed.'),
         };
-        $hint = $outcome === self::NO_MATTER
-            ? __('Write the matter number (e.g. 1200/2026) in the subject or the first line, or send it to the filing address with +1200-2026 before the @.')
-            : null;
+        $hint = match (true) {
+            $outcome !== self::NO_MATTER => null,
+            $this->written !== [] => __('Check the matter number, or add the matter first.'),
+            default => __('Write the matter number (e.g. 1200/2026) in the subject or the first line, or send it to the filing address with +1200-2026 before the @.'),
+        };
         $url = match (true) {
             $matter !== null && $outcome === self::ALREADY_FILED => MatterResource::getUrl('view', ['record' => $matter], panel: 'mms'),
             // Read in the scheduled run: the forwarder's own permission, not the signed-in user's.

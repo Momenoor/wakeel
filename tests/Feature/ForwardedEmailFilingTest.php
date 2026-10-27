@@ -194,6 +194,18 @@ class ForwardedEmailFilingTest extends TestCase
         $this->assertEqualsCanonicalizing([$this->first->id, $this->second->id], array_map('intval', (array) $email->fresh()->candidates));
     }
 
+    public function test_the_style_sheet_outlook_puts_above_the_note_is_not_read_and_a_number_no_matter_has_is_named(): void
+    {
+        // Outlook's style sheet, a number in it: not the forwarder's words — 986/2026 below is.
+        $this->read($this->forward([], '<html><head><style>P {margin-top:0;} /* 987/2026 */</style></head><body><!-- 987/2026 --><p>986/2026</p></body>'));
+        $this->assertSame($this->first->id, MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->sole()->matter_id);
+
+        // A number read, but no matter has it: the forwarder told which.
+        $this->read($this->forward([], '<p>555/2026</p>'));
+        $this->assertSame(ForwardedEmailFiler::NO_MATTER, EmailForward::query()->latest('id')->first()->outcome);
+        $this->assertStringContainsString('555/2026 is not a matter', (string) $this->told($this->me));
+    }
+
     public function test_nothing_is_filed_from_a_stranger_from_someone_using_an_address_or_on_a_matter_not_theirs(): void
     {
         $colleague = User::factory()->create(['email' => 'sara@jpa.ae']);

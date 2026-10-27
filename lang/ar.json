@@ -4896,5 +4896,8 @@
     "Approved leave changed": "تعديل على إجازة معتمدة",
     "Approved leave cancelled": "إلغاء إجازة معتمدة",
     "Your approved leave was changed: :change": "عُدّلت إجازتك المعتمدة: :change",
-    "Classify the approved days again: the balance follows the new types, days now of a type not taken off it going back to it. A payroll already generated for those days needs generating again.": "صنّف الأيام المعتمدة من جديد: يتبع الرصيد الأنواع الجديدة، فتعود إليه الأيام التي صار نوعها لا يُخصم منه. وإن أُنشئ كشف رواتب لتلك الأيام فأعد إنشاءه."
+    "Classify the approved days again: the balance follows the new types, days now of a type not taken off it going back to it. A payroll already generated for those days needs generating again.": "صنّف الأيام المعتمدة من جديد: يتبع الرصيد الأنواع الجديدة، فتعود إليه الأيام التي صار نوعها لا يُخصم منه. وإن أُنشئ كشف رواتب لتلك الأيام فأعد إنشاءه.",
+    "The email you forwarded to be filed was not filed: :numbers is not a matter in the system.": "لم تتم أرشفة البريد الذي أعدت توجيهه: :numbers ليست قضية في النظام.",
+    "Check the matter number, or add the matter first.": "تحقق من رقم القضية، أو أضف القضية أولاً.",
+    "The compiled PHP code (OPcache) cleared.": "مُسحت شيفرة PHP المترجمة (OPcache)."
 }

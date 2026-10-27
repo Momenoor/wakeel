@@ -7,6 +7,7 @@ use App\Models\MatterEmail;
 use App\Models\MatterParty;
 use App\Models\Party;
 use App\Services\MMS\Calendar\MatterReferenceMatcher;
+use App\Support\EmailText;
 use Closure;
 
 /**
@@ -249,13 +250,10 @@ class IncomingEmailMatcher
         return array_keys($found);
     }
 
-    /** An email's HTML as its words. */
+    /** An email's HTML as its words (EmailText). */
     public static function plain(string $html): string
     {
-        $html = (string) preg_replace('~<(style|script|head)\b.*?</\1>~is', ' ', $html);
-        $text = html_entity_decode(strip_tags(str_replace(['<br', '</p>', '</div>'], ["\n<br", "\n</p>", "\n</div>"], $html)), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-
-        return trim((string) preg_replace('/[ \t\x{00A0}]+/u', ' ', $text));
+        return EmailText::plain($html);
     }
 
     /** For comparing names: one way of writing Arabic letters, no marks, one space. */

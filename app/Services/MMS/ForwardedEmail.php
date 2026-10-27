@@ -3,6 +3,7 @@
 namespace App\Services\MMS;
 
 use App\Services\MMS\Calendar\MatterReferenceMatcher;
+use App\Support\EmailText;
 use App\Support\Tolerant;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -48,50 +49,62 @@ class ForwardedEmail
      */
     public static function matterIds(array $message, string $mailbox, ?array $original = null): array
     {
-        $addressed = self::addressed($message, $mailbox);
-
-        if ($addressed !== []) {
-            return $addressed;
+        foreach (self::written($message, $mailbox, $original) as $text) {
+            if (($ids = MatterReferenceMatcher::matterIds($text)) !== []) {
+                return $ids;
+            }
         }
 
-        $note = self::note((string) ($message['body'] ?? ''));
-        $ids = MatterReferenceMatcher::matterIds($note);
+        return [];
+    }
 
-        if ($ids !== []) {
-            return $ids;
+    /**
+     * The matter numbers written where matterIds() looks — "571/2009" — whether a matter has them or not: what the
+     * forwarder is told was read when none is a matter.
+     *
+     * @param  array<string, mixed>  $message
+     * @return list<string>
+     */
+    public static function numbersWritten(array $message, string $mailbox, ?array $original = null): array
+    {
+        return collect(self::written($message, $mailbox, $original))
+            ->flatMap(fn (string $text): array => MatterReferenceMatcher::references($text))
+            ->map(fn (array $reference): string => $reference['number'].'/'.$reference['year'])
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Where the forwarder writes the matter, in the order looked at: the address ("files+1200-2026@jpa.ae" sent to
+     * the filing mailbox "files@jpa.ae"), their note above the quoted email, the forward's subject less the
+     * original's own (which may carry another matter's number).
+     *
+     * @param  array<string, mixed>  $message
+     * @return list<string>
+     */
+    private static function written(array $message, string $mailbox, ?array $original): array
+    {
+        [$local, $domain] = array_pad(explode('@', mb_strtolower(trim($mailbox)), 2), 2, '');
+        $texts = [];
+
+        foreach ([...(array) ($message['to'] ?? []), ...(array) ($message['cc'] ?? [])] as $address) {
+            if (preg_match('/^'.preg_quote($local, '/').'\+([^@]+)@'.preg_quote($domain, '/').'$/i', trim((string) $address), $m)) {
+                // "1200-2026", "1200_2026", "1200.2026": the matter's number and year.
+                $texts[] = (string) preg_replace('/[-_.]/', '/', $m[1]);
+            }
         }
 
-        // The forward's subject, less the original's own (which may carry another matter's number).
+        $texts[] = self::note((string) ($message['body'] ?? ''));
+
         $subject = preg_replace(self::SUBJECT_MARKS, '', (string) ($message['subject'] ?? '')) ?? '';
         $originalSubject = trim((string) ($original['subject'] ?? ''));
         if ($originalSubject !== '') {
             $subject = str_replace(preg_replace(self::SUBJECT_MARKS, '', $originalSubject) ?? $originalSubject, ' ', $subject);
         }
+        $texts[] = $subject;
 
-        return MatterReferenceMatcher::matterIds($subject);
-    }
-
-    /**
-     * The matter in the address: "files+1200-2026@jpa.ae" sent to the filing mailbox "files@jpa.ae".
-     *
-     * @return list<int>
-     */
-    private static function addressed(array $message, string $mailbox): array
-    {
-        [$local, $domain] = array_pad(explode('@', mb_strtolower(trim($mailbox)), 2), 2, '');
-
-        foreach ([...(array) ($message['to'] ?? []), ...(array) ($message['cc'] ?? [])] as $address) {
-            if (preg_match('/^'.preg_quote($local, '/').'\+([^@]+)@'.preg_quote($domain, '/').'$/i', trim((string) $address), $m)) {
-                // "1200-2026", "1200_2026", "1200.2026": the matter's number and year.
-                $ids = MatterReferenceMatcher::matterIds(preg_replace('/[-_.]/', '/', $m[1]));
-
-                if ($ids !== []) {
-                    return $ids;
-                }
-            }
-        }
-
-        return [];
+        return $texts;
     }
 
     /**
@@ -300,14 +313,10 @@ class ForwardedEmail
         return null;
     }
 
-    /** HTML as plain lines: each break, paragraph and block a new line. */
+    /** HTML as plain lines (EmailText), no empty ones. */
     private static function text(string $html): string
     {
-        $html = preg_replace('#<(br|/p|/div|/tr|/li|/h[1-6])\b[^>]*>#i', "\n", $html) ?? $html;
-        $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $text = str_replace(["\u{00A0}", "\r"], [' ', ''], $text);
-
-        return trim(preg_replace("/[ \t]+/u", ' ', preg_replace("/\n\s*\n+/u", "\n", $text) ?? $text) ?? $text);
+        return trim((string) preg_replace("/\n\s*\n+/u", "\n", EmailText::plain($html)));
     }
 
     /** "Name <a@b>", "Name [mailto:a@b]", "a@b" — or a name alone (Outlook for a colleague). */
