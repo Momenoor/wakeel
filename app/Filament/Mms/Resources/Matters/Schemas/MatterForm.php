@@ -14,6 +14,7 @@ use App\Models\Party;
 use App\Models\Type;
 use App\Services\MMS\IncentiveReversals;
 use App\Services\MMS\MarketingCommissions;
+use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
@@ -230,7 +231,7 @@ class MatterForm
                                                     ->columnSpan(1),
 
                                                 // No ->live() — nothing downstream reads party_id changes
-                                                Select::make('party_id')
+                                                self::addsParty(fn (Get $get): array => ['role' => ['expert'], 'type' => [$get('type')]], Select::make('party_id')
                                                     ->label(__('Expert Name'))
                                                     ->relationship('party', 'name', function ($query, Get $get) {
                                                         $type = $get('type');
@@ -240,23 +241,11 @@ class MatterForm
                                                             $query->whereJsonContains('role', [['role' => 'expert']]);
                                                         }
                                                     })
-                                                    ->createOptionForm(fn (Schema $schema) => PartyForm::configure($schema, picking: true))
-                                                    ->createOptionAction(function (Action $action, Get $get) {
-                                                        $type = $get('type') ?? null;
-
-                                                        return $action->fillForm([
-                                                            'role' => [
-                                                                'role' => ['expert'],
-                                                                'type' => [$type],
-                                                            ],
-                                                        ]);
-                                                    })
-                                                    ->createOptionUsing(fn (array $data): int => PartyForm::createOrUse($data))
                                                     ->disableOptionsWhenSelectedInSiblingRepeaterItems()
                                                     ->columnSpan(2)
                                                     ->searchable()
                                                     ->preload()
-                                                    ->required(),
+                                                    ->required(), editable: false),
 
                                                 TextInput::make('commission_percentage')
                                                     ->label(__('Commission %'))
@@ -303,28 +292,18 @@ class MatterForm
                                                     }),
 
                                                 // Live: the party's latest phone and email show under it.
-                                                Select::make('party_id')
+                                                self::addsParty(['role' => ['party']], Select::make('party_id')
                                                     ->label(__('Party Name'))
                                                     ->relationship('party', 'name', function ($query) {
                                                         $query->whereJsonContains('role', [['role' => 'party']]);
                                                     })
-                                                    ->createOptionForm(fn (Schema $schema) => PartyForm::configure($schema, picking: true))
-                                                    ->editOptionForm(fn (Schema $schema) => PartyForm::configure($schema))
-                                                    ->createOptionAction(function (Action $action) {
-                                                        return $action->fillForm([
-                                                            'role' => [
-                                                                'role' => ['party'],
-                                                            ],
-                                                        ]);
-                                                    })
-                                                    ->createOptionUsing(fn (array $data): int => PartyForm::createOrUse($data))
                                                     ->searchable()
                                                     // Not preloaded: found by typing. 50 names fetched for every row of
                                                     // the form (thousands of parties) made each open of a matter slow.
                                                     ->live()
                                                     ->helperText(fn (Get $get): ?string => self::contactLine($get('party_id')))
                                                     ->columnSpan(2)
-                                                    ->required(),
+                                                    ->required()),
 
                                                 Hidden::make('matter_id'),
                                                 Hidden::make('role')->default('party'),
@@ -341,21 +320,11 @@ class MatterForm
                                                     ->columns(2)
                                                     // ->compact()
                                                     ->schema([
-                                                        Select::make('party_id')
+                                                        self::addsParty(['role' => ['representative']], Select::make('party_id')
                                                             ->label(__('Representative'))
                                                             ->relationship('party', 'name', function ($query) {
                                                                 $query->whereJsonContains('role', [['role' => 'representative']]);
                                                             })
-                                                            ->createOptionForm(fn (Schema $schema) => PartyForm::configure($schema, picking: true))
-                                                            ->editOptionForm(fn (Schema $schema) => PartyForm::configure($schema))
-                                                            ->createOptionAction(function (Action $action) {
-                                                                return $action->fillForm([
-                                                                    'role' => [
-                                                                        'role' => ['representative'],
-                                                                    ],
-                                                                ]);
-                                                            })
-                                                            ->createOptionUsing(fn (array $data): int => PartyForm::createOrUse($data))
                                                             ->afterStateUpdated(function (Get $get, Set $set) {
                                                                 $party = Party::find($get('party_id'));
                                                                 $set('party_email', $party?->latestEmail());
@@ -367,7 +336,7 @@ class MatterForm
                                                             ->required()
                                                             ->searchable()
                                                             ->disableOptionsWhenSelectedInSiblingRepeaterItems()
-                                                            ->columnSpanFull(),
+                                                            ->columnSpanFull()),
                                                         // The representative's latest email and phone — shown, not saved
                                                         // here (they're kept on the party).
                                                         TextInput::make('party_email')
@@ -434,13 +403,13 @@ class MatterForm
                                             ->mutateRelationshipDataBeforeCreateUsing(fn (array $data): array => [...$data, ...self::marketerKind($data)])
                                             ->mutateRelationshipDataBeforeSaveUsing(fn (array $data): array => [...$data, ...self::marketerKind($data)])
                                             ->schema([
-                                                Select::make('party_id')
+                                                self::addsParty(['role' => ['marketer']], Select::make('party_id')
                                                     ->label(__('Marketer'))
                                                     ->relationship('party', 'name', fn ($query) => $query->where(fn ($q) => $q->withRole('marketer')->orWhere(fn ($e) => $e->withRole('employee'))))
                                                     ->disableOptionsWhenSelectedInSiblingRepeaterItems()
                                                     ->searchable()
                                                     ->preload()
-                                                    ->required(),
+                                                    ->required()),
                                                 TextInput::make('marketing_part')
                                                     ->label(__('Part of the share'))
                                                     ->numeric()
@@ -556,6 +525,21 @@ class MatterForm
         $parts = array_filter(['📞 '.($party?->latestPhone() ?? ''), '✉ '.($party?->latestEmail() ?? '')], fn (string $part): bool => mb_strlen($part) > 2);
 
         return $parts !== [] ? implode(' · ', $parts) : __('No phone or email yet');
+    }
+
+    /**
+     * A party chosen in the form, and added there when it is not in the system yet: the add form finds one already
+     * there by its name, phone or email and uses it (PartyForm::createOrUse()), with the role it is added for.
+     *
+     * @param  array<string, mixed>|Closure(Get): array<string, mixed>  $role  the role (and type) it is added with
+     */
+    private static function addsParty(array|Closure $role, Select $select, bool $editable = true): Select
+    {
+        return $select
+            ->createOptionForm(fn (Schema $schema) => PartyForm::configure($schema, picking: true))
+            ->when($editable, fn (Select $select) => $select->editOptionForm(fn (Schema $schema) => PartyForm::configure($schema)))
+            ->createOptionAction(fn (Action $action, Get $get) => $action->fillForm(['role' => $role instanceof Closure ? $role($get) : $role]))
+            ->createOptionUsing(fn (array $data): int => PartyForm::createOrUse($data));
     }
 
     /**

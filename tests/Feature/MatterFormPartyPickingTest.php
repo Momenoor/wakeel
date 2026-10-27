@@ -7,6 +7,7 @@ use App\Filament\Mms\Resources\Parties\Schemas\PartyForm;
 use App\Models\Matter;
 use App\Models\Party;
 use App\Models\User;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
@@ -51,6 +52,22 @@ class MatterFormPartyPickingTest extends TestCase
         $new = PartyForm::createOrUse(['name' => 'New Party', 'role' => ['role' => ['party']], 'phone' => ['0507776655']]);
         $this->assertNotSame($salem->id, $new);
         $this->assertSame('New Party', Party::find($new)->name);
+    }
+
+    public function test_a_marketer_added_on_the_form_is_the_party_already_in_the_system(): void
+    {
+        $matter = Matter::factory()->create();
+        $salem = Party::factory()->create(['name' => 'Salem Office', 'role' => ['role' => ['party']], 'phone' => ['0501112233']]);
+
+        // Added from the marketer's list by a phone already on Salem: Salem, a marketer now, chosen in the row.
+        Livewire::test(EditMatter::class, ['record' => $matter->getRouteKey()])
+            ->set('data.marketers', ['row' => ['party_id' => null, 'marketing_part' => null]])
+            ->callAction(TestAction::make('createOption')->schemaComponent('marketers.row.party_id'), ['name' => 'Riyada Marketing', 'phone' => ['0501112233'], 'email' => []])
+            ->assertHasNoActionErrors()
+            ->assertSet('data.marketers.row.party_id', $salem->id);
+
+        $this->assertContains('marketer', $salem->fresh()->role['role']);
+        $this->assertSame(0, Party::where('name', 'Riyada Marketing')->count());
     }
 
     public function test_a_matter_edited_keeps_its_year_however_old(): void

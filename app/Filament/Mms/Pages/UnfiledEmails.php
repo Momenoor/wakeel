@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Services\MMS\Calendar\MatterReferenceMatcher;
 use App\Services\MMS\MatterReplyCollector;
 use App\Services\MMS\SenderMailer;
+use App\Support\Dates;
 use App\Support\MatterSearch;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -29,6 +30,7 @@ use Filament\Resources\Concerns\HasTabs;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\TextSize;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
@@ -254,9 +256,11 @@ class UnfiledEmails extends Page implements HasTable
             ->pluralModelLabel(__('Unfiled emails'))
             ->defaultSort('at', 'desc')
             ->columns([
+                // The date, and the time under it: narrow, so the subject has the room.
                 TextColumn::make('at')
                     ->label(__('Received'))
-                    ->dateTime()
+                    ->date()
+                    ->description(fn (MatterEmail $record): ?string => $record->at?->format(Dates::timeFormat()))
                     ->sortable(),
                 TextColumn::make('from')
                     ->label(__('From'))
@@ -275,6 +279,9 @@ class UnfiledEmails extends Page implements HasTable
                     ->state(fn (MatterEmail $record): array => array_values(array_intersect_key($this->candidateLabels(), array_flip(array_map('intval', (array) $record->candidates)))))
                     ->listWithLineBreaks()
                     ->bulleted()
+                    // Long names (parties, court, kind): small, and wrapped rather than widening the table.
+                    ->size(TextSize::ExtraSmall)
+                    ->wrap()
                     // A sender on no matter: any matter can be chosen by its number.
                     ->placeholder(__('No matter found')),
             ])
