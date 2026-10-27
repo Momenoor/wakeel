@@ -48,14 +48,22 @@ class DockTest extends TestCase
         $this->assertSame(['todo' => false, 'chat' => true], Dock::state($this->user->refresh()));
     }
 
-    public function test_pinned_they_are_open_on_every_page_whatever_was_left(): void
+    public function test_pinned_they_come_as_left_on_this_device_the_page_opening_them_on_a_wide_screen(): void
     {
         Dock::set($this->user, Dock::TODO, true);
         Dock::set($this->user, Dock::CHAT, true);
-        session(['wakeel.todo.open' => false]);
 
-        Livewire::test(TodoNote::class)->assertSet('isOpen', true);
-        Livewire::test(ChatWidget::class, ['mode' => 'popup'])->assertSet('isOpen', true);
+        // Shut on this phone: shut here (the page opens them on a wide screen — dock-script's restoreOpen()).
+        $left = fn (string $open): array => ['wakeel_todo_open_'.$this->user->id => $open, 'wakeel_chat_open_'.$this->user->id => $open];
+        Livewire::withCookies($left('0'))->test(TodoNote::class)->assertSet('isOpen', false);
+        Livewire::withCookies($left('0'))->test(ChatWidget::class, ['mode' => 'popup'])->assertSet('isOpen', false);
+
+        // Left open on this device: open.
+        Livewire::withCookies($left('1'))->test(TodoNote::class)->assertSet('isOpen', true);
+        Livewire::withCookies($left('1'))->test(ChatWidget::class, ['mode' => 'popup'])->assertSet('isOpen', true);
+
+        Filament::setCurrentPanel('mms');
+        $this->get(Filament::getPanel('mms')->getUrl())->assertSee("this.\$watch('docked()'", false);
     }
 
     public function test_the_columns_width_is_dragged_and_kept_for_the_user(): void

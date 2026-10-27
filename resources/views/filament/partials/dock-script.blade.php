@@ -16,6 +16,7 @@
         // The same width the pin buttons appear from (Tailwind's lg: 64rem).
         const wide = () => window.matchMedia('(min-width: 64rem)').matches;
         const html = document.documentElement;
+        const rtl = () => getComputedStyle(html).direction === 'rtl';
 
         // At once, before the page is drawn: no jump when Alpine starts.
         html.style.setProperty('--wakeel-dock-w', '{{ \App\Support\Dock::width(auth()->user()) }}px');
@@ -42,14 +43,45 @@
             clamp() {
                 if (! this.pos) { return; }
                 this.pos = {
+                    ...this.pos,
                     x: Math.max(8, Math.min(this.pos.x, window.innerWidth - 64)),
                     y: Math.max(8, Math.min(this.pos.y, window.innerHeight - 64)),
                 };
             },
             startDrag(e) {
-                if (e.button !== undefined && e.button !== 0) { return; }
+                if (this.drag || (e.button !== undefined && e.button !== 0)) { return; }
                 const r = e.currentTarget.getBoundingClientRect();
                 this.drag = { dx: e.clientX - r.left, dy: e.clientY - r.top, sx: e.clientX, sy: e.clientY };
+                this.moved = false;
+                e.currentTarget.setPointerCapture(e.pointerId);
+            },
+            // The open panel dragged by its header ([data-drag-handle]) — not
+            // by a button or a field on it: the bubble goes with it, the panel
+            // kept on the side of the bubble it is (pos.left, pos.top — a
+            // bubble dragged alone lets its place choose again) and on the
+            // screen, top and bottom (fit() keeps it there sideways). Its
+            // place is the corner placement() measures from: the bubble's
+            // own, or (never dragged) the one the page's CSS puts it in.
+            startPanelDrag(e) {
+                if (this.drag || this.docked() || (e.button !== undefined && e.button !== 0)) { return; }
+                if (! e.target.closest('[data-drag-handle]') || e.target.closest('button, a, input, textarea, select, label')) { return; }
+                e.preventDefault();
+                const panel = this.$refs.panel;
+                const box = panel.parentElement.getBoundingClientRect();
+                // The panel and its bubble, both kept in sight — where they are now.
+                const r = panel.getBoundingClientRect();
+                const b = this.$refs.bubble.getBoundingClientRect();
+                const p = { top: Math.min(r.top, b.top), bottom: Math.max(r.bottom, b.bottom) };
+                const side = this.pos
+                    ? { left: this.pos.left ?? (this.pos.x < 384), top: this.pos.top ?? (this.pos.y < 540) }
+                    : { left: rtl(), top: false };
+                const x = side.left ? box.left : box.right - 56;
+                const y = side.top ? box.top : box.bottom - 56;
+                this.drag = {
+                    dx: e.clientX - x, dy: e.clientY - y, sx: e.clientX, sy: e.clientY, side,
+                    minY: y + 8 - p.top,
+                    maxY: y + window.innerHeight - 8 - p.bottom,
+                };
                 this.moved = false;
                 e.currentTarget.setPointerCapture(e.pointerId);
             },
@@ -57,7 +89,12 @@
                 if (! this.drag) { return; }
                 if (! this.moved && Math.hypot(e.clientX - this.drag.sx, e.clientY - this.drag.sy) < 5) { return; }
                 this.moved = true;
-                this.pos = { x: e.clientX - this.drag.dx, y: e.clientY - this.drag.dy };
+                let y = e.clientY - this.drag.dy;
+                if (this.drag.side) {
+                    // Its top kept in sight first, should the panel be taller than the screen.
+                    y = Math.max(this.drag.minY, Math.min(y, this.drag.maxY));
+                }
+                this.pos = { x: e.clientX - this.drag.dx, y, ...(this.drag.side ?? {}) };
                 this.clamp();
             },
             endDrag() {
@@ -84,33 +121,60 @@
             // Open or minimised, kept for this tab's next pages: the browser's
             // own word wins — the server's session could be written back by
             // another request running at the same time, and the bubble opened
-            // again on the next page. Pinned: always open.
+            // again on the next page. Pinned, on a wide screen: always open —
+            // also once the window is widened; a phone or a narrow window
+            // keeps the bubble as it was left there (the server's, by device).
             storeOpen(open) {
                 try { sessionStorage.setItem('wakeel.' + name + '.open', open ? '1' : '0'); } catch (e) {}
             },
             restoreOpen() {
                 let stored = null;
                 try { stored = sessionStorage.getItem('wakeel.' + name + '.open'); } catch (e) {}
-                if (stored !== null && ! this.docked() && (stored === '1') !== this.$wire.isOpen) {
-                    this.$wire.isOpen = stored === '1';
-                    this.$wire.setOpen(stored === '1');
+                const open = this.docked() || (stored === null ? this.$wire.isOpen : stored === '1');
+                if (open !== this.$wire.isOpen) {
+                    this.toggle(open);
                 }
+                this.$watch('docked()', (docked) => { if (docked && ! this.$wire.isOpen) { this.toggle(true); } });
                 // Opened by the page itself (a new message): kept too.
                 this.$wire.$watch('isOpen', (open) => this.storeOpen(open));
             },
-            // Kept on the screen: the panel (x-ref="panel") moved sideways as far
-            // as it would run past either edge — a narrow phone, or the bubble
-            // near the side the panel opens toward. Again whenever the bubble
-            // moves or the panel is shown, filled or resized.
+            // Kept on the screen, on any screen: the panel (x-ref="panel") moved
+            // sideways (shiftX), and the panel and its bubble together up or
+            // down (shiftY, where()), as far as they would run past an edge — a
+            // small phone, or the bubble near the side the panel opens toward.
+            // Again whenever the bubble moves or the panel is shown, filled or
+            // resized, or the window is.
             shiftX: 0,
+            shiftY: 0,
             fit() {
                 const panel = this.$refs.panel;
-                if (! panel || this.docked() || ! panel.offsetWidth || ! panel.offsetParent) { this.shiftX = 0; return; }
-                const left = panel.offsetParent.getBoundingClientRect().left + panel.offsetLeft - this.shiftX;
-                const right = left + panel.offsetWidth;
-                // 16px from each edge; wider than that leaves, centred.
-                const edge = Math.min(16, (window.innerWidth - panel.offsetWidth) / 2);
-                this.shiftX = Math.round(left < edge ? edge - left : Math.min(0, window.innerWidth - edge - right));
+                if (! panel || this.docked() || ! panel.offsetWidth || ! panel.offsetParent) { this.shiftX = 0; this.shiftY = 0; return; }
+                const box = panel.offsetParent.getBoundingClientRect();
+                // Where it is unshifted, and how far it must move to stay 16px from
+                // each edge (less, centred, when there is not the room).
+                const shift = (start, size, room) => {
+                    const edge = Math.min(16, (room - size) / 2);
+                    return Math.round(start < edge ? edge - start : Math.min(0, room - edge - (start + size)));
+                };
+                this.shiftX = shift(box.left + panel.offsetLeft - this.shiftX, panel.offsetWidth, window.innerWidth);
+                const top = box.top + panel.offsetTop - this.shiftY;
+                const bubble = this.$refs.bubble?.getBoundingClientRect();
+                const start = bubble ? Math.min(top, bubble.top - this.shiftY) : top;
+                const end = bubble ? Math.max(top + panel.offsetHeight, bubble.bottom - this.shiftY) : top + panel.offsetHeight;
+                this.shiftY = shift(start, end - start, window.innerHeight);
+            },
+            // The bubble and its panel's place (placement()), moved up or down as
+            // fit() found they must be — by margins: a transform would hold the
+            // chat's own pop-ups (position: fixed) inside it.
+            where() {
+                if (this.docked()) { return ''; }
+                return [this.placement(), 'margin-top:' + this.shiftY + 'px', 'margin-bottom:' + (-this.shiftY) + 'px'].filter(Boolean).join('; ');
+            },
+            // The bubble at the panel's left or right edge, whichever its place
+            // (placement()) is measured from — in Arabic too, where flex-start
+            // is the right: the bubble was left off the screen there.
+            alignTo(left) {
+                return 'align-items:' + (left !== rtl() ? 'flex-start' : 'flex-end');
             },
             // The distance between two fingers, for a pinch.
             gap(e) {
@@ -135,8 +199,7 @@
                     }
                     // The column is at the page's end: dragging toward the start widens it.
                     const dx = e.clientX - this.resizing.x;
-                    const rtl = getComputedStyle(html).direction === 'rtl';
-                    const w = this.resizing.w + (rtl ? dx : -dx);
+                    const w = this.resizing.w + (rtl() ? dx : -dx);
                     this.width = Math.round(Math.min(Math.max({{ \App\Support\Dock::MIN_WIDTH }}, w), Math.min({{ \App\Support\Dock::MAX_WIDTH }}, window.innerWidth / 2)));
                     html.style.setProperty('--wakeel-dock-w', this.width + 'px');
                 },

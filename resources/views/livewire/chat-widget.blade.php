@@ -66,13 +66,14 @@
         },
         placement() {
             if (! this.pos || this.docked()) { return ''; }
-            const left = this.pos.x < 384;
-            const top = this.pos.y < 540;
+            {{-- Dragged by its header: on the side of the bubble it was (dock-script's startPanelDrag()). --}}
+            const left = this.pos.left ?? (this.pos.x < 384);
+            const top = this.pos.top ?? (this.pos.y < 540);
             return [
                 left ? 'left:' + this.pos.x + 'px; right:auto' : 'right:' + (window.innerWidth - this.pos.x - 56) + 'px; left:auto',
                 top ? 'top:' + this.pos.y + 'px; bottom:auto' : 'bottom:' + (window.innerHeight - this.pos.y - 56) + 'px; top:auto',
                 'flex-direction:' + (top ? 'column-reverse' : 'column'),
-                'align-items:' + (left ? 'flex-start' : 'flex-end'),
+                this.alignTo(left),
             ].join('; ');
         },
     })"
@@ -120,7 +121,7 @@
     @endif
     @if ($isPopup)
         wire:key="chat-widget-popup"
-        :style="placement()"
+        :style="where()"
         :class="docked() ? 'wakeel-docked wakeel-docked-chat' : ''"
     @endif
     class="fi-chat-widget {{ $isPopup ? 'fixed bottom-6 end-6 z-50 flex flex-col items-end gap-3' : '' }}"
@@ -140,7 +141,7 @@
         x-text="(($store.chatOnline?.ids) ?? $wire.onlineUserIds ?? []).map((id) => `[data-chat-dot='${id}'] { background: #22c55e !important; box-shadow: 0 0 6px 2px rgba(34, 197, 94, .55) !important; } [data-chat-status='${id}']::after { content: attr(data-online); } [data-chat-status='${id}'][data-online-green] { color: #16a34a; }`).join(' ')"
     ></style>
     @if ($isPopup)
-        {{-- Floating launcher bubble — click to open, drag to move --}}
+        {{-- Floating launcher bubble — click to open, drag to move (or the popup, by its header) --}}
         <button
             type="button"
             x-ref="bubble"
@@ -189,6 +190,10 @@
             x-on:touchmove.passive="pinchMove($event)"
             x-on:touchend.passive="pinchEnd($event)"
             x-on:touchcancel.passive="pinchEnd($event)"
+            x-on:pointerdown="startPanelDrag($event)"
+            x-on:pointermove="onDrag($event)"
+            x-on:pointerup="endDrag()"
+            x-on:pointercancel="endDrag()"
             class="wakeel-dock-panel relative flex h-[32rem] w-[23rem] max-w-[calc(100vw-3rem)] origin-bottom-end flex-col overflow-hidden rounded-3xl border border-gray-950/5 bg-white shadow-2xl shadow-gray-950/20 dark:border-white/10 dark:bg-gray-900"
         >
             {{-- Pinned: its edge toward the page drags the column wider or narrower. --}}
@@ -232,11 +237,13 @@
             style="grid-auto-rows: minmax(0, 1fr);"
             class="fi-chat-page grid grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[20rem_1fr]"
         >
-            <div class="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-gray-950/5 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900">
+            {{-- A phone: one at a time, each the whole of it — the list, or the conversation opened from it (its
+                 back button, chat-back, to the list again). Both side by side from 64rem. --}}
+            <div @class(['flex min-h-0 flex-col overflow-hidden rounded-2xl border border-gray-950/5 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900', 'max-lg:hidden' => $activeConversationId !== null])>
                 @include('livewire.partials.chat-sidebar')
             </div>
 
-            <div class="relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-gray-950/5 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900">
+            <div @class(['relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-gray-950/5 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900', 'max-lg:hidden' => $activeConversationId === null])>
                 {{-- Switching conversation: seen at once, while the next one loads. --}}
                 <div wire:loading.flex wire:target="selectConversation,backToList,startConversationWith" class="absolute inset-0 z-20 items-center justify-center bg-white/60 dark:bg-gray-900/60">
                     <x-filament::loading-indicator class="h-7 w-7 text-primary-600" />

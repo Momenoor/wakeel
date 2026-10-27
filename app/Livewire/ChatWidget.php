@@ -18,12 +18,15 @@ use App\Services\Notifications\NotificationPreferences;
 use App\Services\Notify\UserAlert;
 use App\Support\Dock;
 use BezhanSalleh\FilamentShield\Support\Utils;
+use Filament\Actions\Action;
+use Filament\Notifications\Notification;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Attributes\On;
 use Livewire\Component;
 use Throwable;
 
@@ -132,8 +135,8 @@ class ChatWidget extends Component
         // on the same conversation — after a refresh, on the next page, or the next time they sign in here.
         if ($mode === 'popup') {
             $state = session(self::POPUP_STATE, []);
-            // Pinned to the page: always open.
-            $this->isOpen = Dock::wasOpen(Dock::CHAT) || Dock::pinned(auth()->user(), Dock::CHAT);
+            // Pinned, the page opens it on a wide screen (dock-script's restoreOpen()); a phone keeps it as it was left there.
+            $this->isOpen = Dock::wasOpen(Dock::CHAT);
             $this->activeConversationId = $state['conversation'] ?? null;
 
             if ($this->activeConversationId !== null && $this->activeConversation === null) {
@@ -207,14 +210,28 @@ class ChatWidget extends Component
         // Nor when chat messages are turned off in the bell (the desktop one follows it).
         $onScreen = (int) $latest->chat_conversation_id === (int) $this->activeConversationId && ($this->isOpen || $this->mode !== 'popup');
         if (! $onScreen && NotificationPreferences::wants(Auth::user(), NotificationType::CHAT_MESSAGE, NotificationChannel::BELL)) {
-            $this->dispatch(
-                'wakeel-desktop-notification',
-                id: 'chat-'.$latest->chat_conversation_id,
-                // In a group: the group, then who wrote.
-                title: ($latest->conversation?->is_group ? $latest->conversation->name.' — ' : '').(string) ($latest->sender?->display_name ?: $latest->sender?->name ?: __('Chat')),
-                body: $latest->preview(),
-                url: ChatMessenger::chatUrl($latest),
-            );
+            // In a group: the group, then who wrote.
+            $title = ($latest->conversation?->is_group ? $latest->conversation->name.' — ' : '').(string) ($latest->sender?->display_name ?: $latest->sender?->name ?: __('Chat'));
+            $this->dispatch('wakeel-desktop-notification', id: 'chat-'.$latest->chat_conversation_id, title: $title, body: $latest->preview(), url: ChatMessenger::chatUrl($latest));
+
+            // Another conversation open (the Chat page, or the popup on one): told here too, Wakeel in front — the
+            // push is shut at once then (push-sw.js) and the desktop one is for a background tab. The popup shut, or on
+            // its list, opens on the message itself below.
+            if ($this->mode !== 'popup' || ($this->isOpen && $this->activeConversationId !== null)) {
+                Notification::make()
+                    ->title($title)
+                    ->body($latest->preview())
+                    ->icon('heroicon-o-chat-bubble-left-right')
+                    ->info()
+                    ->actions([
+                        Action::make('open')
+                            ->label(__('Open'))
+                            ->button()
+                            ->dispatch('wakeel-chat-open', ['conversationId' => (int) $latest->chat_conversation_id])
+                            ->close(),
+                    ])
+                    ->send();
+            }
         }
 
         // A conversation on screen is being read as its messages arrive —
@@ -436,6 +453,16 @@ class ChatWidget extends Component
         $this->showMembers = false;
         $this->replyToId = null;
         $this->rememberState();
+    }
+
+    /** "Open" on a new message's toast: its conversation, the popup opened on it. */
+    #[On('wakeel-chat-open')]
+    public function openConversation(int $conversationId): void
+    {
+        if ($this->mode === 'popup' && ! $this->isOpen) {
+            $this->isOpen = true;
+        }
+        $this->selectConversation($conversationId);
     }
 
     public function selectConversation(int $conversationId): void

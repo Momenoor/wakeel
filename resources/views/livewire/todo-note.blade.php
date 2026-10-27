@@ -58,27 +58,29 @@
         },
         placement() {
             if (! this.pos || this.docked()) { return ''; }
-            const left = this.pos.x < 384;
-            const top = this.pos.y < 540;
+            {{-- Dragged by its header: on the side of the bubble it was (dock-script's startPanelDrag()). --}}
+            const left = this.pos.left ?? (this.pos.x < 384);
+            const top = this.pos.top ?? (this.pos.y < 540);
             return [
                 left ? 'left:' + this.pos.x + 'px; right:auto' : 'right:' + (window.innerWidth - this.pos.x - 56) + 'px; left:auto',
                 top ? 'top:' + this.pos.y + 'px; bottom:auto' : 'bottom:' + (window.innerHeight - this.pos.y - 56) + 'px; top:auto',
                 {{-- The note opens away from the edge it is near. --}}
                 'flex-direction:' + (top ? 'column' : 'column-reverse'),
-                'align-items:' + (left ? 'flex-start' : 'flex-end'),
+                this.alignTo(left),
             ].join('; ');
         },
     })"
     x-init="loadPos(); restoreOpen(); window.addEventListener('resize', () => { clamp(); fit() })"
     x-on:keydown.escape.window="if ($wire.isOpen && ! docked()) { toggle(false) }"
-    :style="placement()"
+    :style="where()"
     :class="docked() ? 'wakeel-docked wakeel-docked-todo' : ''"
     wire:key="todo-note-body"
     class="fi-todo-note fixed bottom-6 end-24 z-40 flex flex-col-reverse items-end gap-3"
 >
-    {{-- The bubble: click to show or hide, drag to move. --}}
+    {{-- The bubble: click to show or hide, drag to move (or the note, by its header). --}}
     <button
         type="button"
+        x-ref="bubble"
         x-show="! docked()"
         x-on:pointerdown="startDrag($event)"
         x-on:pointermove="onDrag($event)"
@@ -120,6 +122,10 @@
         x-on:touchmove.passive="pinchMove($event)"
         x-on:touchend.passive="pinchEnd($event)"
         x-on:touchcancel.passive="pinchEnd($event)"
+        x-on:pointerdown="startPanelDrag($event)"
+        x-on:pointermove="onDrag($event)"
+        x-on:pointerup="endDrag()"
+        x-on:pointercancel="endDrag()"
         class="wakeel-dock-panel relative flex max-h-[min(32rem,calc(100vh-7rem))] max-w-[calc(100vw-2rem)] -rotate-[0.4deg] flex-col overflow-hidden rounded-md border shadow-2xl shadow-purple-900/20 dark:shadow-black/40 border-purple-300 dark:border-purple-500/30 bg-purple-100 dark:bg-[#0d001f] text-purple-950 dark:text-purple-50"
     >
 {{-- Pinned: its edge toward the page drags the column wider or narrower. --}}
@@ -148,7 +154,7 @@
             ></div>
         @endforeach
 
-        <div class="flex items-center gap-2 border-b px-4 py-2.5 border-purple-300 dark:border-purple-500/30 bg-purple-200 dark:bg-[#1a0035]">
+        <div data-drag-handle :style="docked() ? '' : 'cursor: grab; touch-action: none'" class="flex items-center gap-2 border-b px-4 py-2.5 border-purple-300 dark:border-purple-500/30 bg-purple-200 dark:bg-[#1a0035]">
             <x-filament::icon icon="heroicon-o-clipboard-document-check" class="h-5 w-5" />
             <h2 class="flex-1 text-sm font-semibold">{{ __('To-do list') }}</h2>
             {{-- The text smaller or larger, kept for the user. --}}

@@ -1,6 +1,10 @@
 @if (! $isPopup)
     @php($other = $this->activeConversation && ! $this->activeConversation->is_group ? $this->otherParticipant($this->activeConversation) : null)
     <div class="flex items-center gap-3 border-b border-gray-100 px-4 py-3 dark:border-white/10">
+        {{-- A phone: the conversation alone, the list behind it (chat-widget's page). --}}
+        @if ($this->activeConversation)
+            @include('livewire.partials.chat-back', ['class' => 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5', 'ring' => 'ring-white dark:ring-gray-900', 'narrowOnly' => true])
+        @endif
         @if ($this->activeConversation?->is_group)
             @include('livewire.partials.chat-group-avatar', ['conversation' => $this->activeConversation, 'size' => 36])
             <span class="flex min-w-0 flex-1 flex-col">

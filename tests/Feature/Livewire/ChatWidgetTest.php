@@ -404,11 +404,22 @@ class ChatWidgetTest extends TestCase
 
     public function test_back_to_list_clears_the_active_conversation(): void
     {
+        // The Chat page on a phone: the list alone, then the conversation alone with its way back (max-lg:hidden on
+        // the other; both side by side on a wide screen).
+        $list = '<div class="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-gray-950/5 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900';
+        $thread = '<div class="relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-gray-950/5 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900';
+
         Livewire::test(ChatWidget::class)
+            ->assertSeeHtml($list.'">')
+            ->assertSeeHtml($thread.' max-lg:hidden">')
             ->call('startConversationWith', $this->colleague->id)
             ->assertSet('activeConversationId', fn ($id) => $id !== null)
+            ->assertSeeHtml($list.' max-lg:hidden">')
+            ->assertSeeHtml($thread.'">')
+            ->assertSeeHtml('x-show="! $store.dock?.wide"')
             ->call('backToList')
-            ->assertSet('activeConversationId', null);
+            ->assertSet('activeConversationId', null)
+            ->assertSeeHtml($list.'">');
     }
 
     public function test_a_user_online_within_the_last_minute_is_reported_online(): void

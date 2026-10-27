@@ -55,8 +55,9 @@ class TodoNote extends Component
     /** @param  bool  $open  opened from a notification (?todo=1) */
     public function mount(bool $open = false): void
     {
-        // Pinned to the page: always open. Else as this user left it on this device (Dock::wasOpen()).
-        $this->isOpen = $open || Dock::pinned(auth()->user(), Dock::TODO) || Dock::wasOpen(Dock::TODO);
+        // As this user left it on this device (Dock::wasOpen()). Pinned, the page opens it on a wide screen
+        // (dock-script's restoreOpen()); a phone keeps it as it was left there.
+        $this->isOpen = $open || Dock::wasOpen(Dock::TODO);
         if ($open) {
             Dock::rememberOpen(Dock::TODO, true);
         }

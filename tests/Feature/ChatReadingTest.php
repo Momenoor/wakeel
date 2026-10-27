@@ -65,6 +65,25 @@ class ChatReadingTest extends TestCase
         $this->assertSame(1, $this->me->notifications()->count());
     }
 
+    public function test_a_message_in_another_conversation_than_the_one_open_is_told_on_screen(): void
+    {
+        $sara = User::factory()->create(['name' => 'Sara']);
+        $withSara = ChatConversation::betweenUsers($this->me, $sara);
+
+        // The Chat page on Ali's conversation: his message is seen arriving — no toast.
+        $page = Livewire::test(ChatWidget::class, ['mode' => 'page', 'conversation' => $this->conversation->id]);
+        $this->aliWrites('are you there?');
+        $page->call('checkForNewMessages')->assertNotNotified();
+
+        // Sara's, in another: a toast, its Open on her conversation.
+        app(ChatMessenger::class)->send($withSara->fresh('participants'), $sara, 'a question');
+        $page->call('checkForNewMessages')
+            ->assertNotified('Sara')
+            ->assertDispatched('wakeel-desktop-notification')
+            ->dispatch('wakeel-chat-open', conversationId: $withSara->id)
+            ->assertSet('activeConversationId', $withSara->id);
+    }
+
     public function test_the_bubble_reads_only_while_open_on_the_conversation(): void
     {
         $bubble = Livewire::test(ChatWidget::class, ['mode' => 'popup'])
