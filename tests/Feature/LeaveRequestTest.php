@@ -188,6 +188,28 @@ class LeaveRequestTest extends TestCase
         $this->assertSame(25.0, app(LeaveBalanceService::class)->balance($party->id));
     }
 
+    public function test_new_baby_and_bereavement_leave_take_nothing_off_the_balance_or_the_salary(): void
+    {
+        $party = $this->employee();
+
+        $request = $this->request($party, '2026-06-01', '2026-06-08');
+
+        $this->service->approve($request, User::factory()->create(), $this->split([
+            [LeaveType::NEW_BABY, '2026-06-01', '2026-06-05', 5],
+            [LeaveType::BEREAVEMENT, '2026-06-06', '2026-06-08', 3],
+        ]));
+
+        // The 30 opening days untouched, paid in full.
+        $this->assertSame(30.0, app(LeaveBalanceService::class)->balance($party->id));
+        $payslip = app(PayrollService::class)
+            ->generate(PayrollRun::create(['period' => '2026-06', 'status' => PayrollRunStatus::DRAFT]))
+            ->first();
+        $this->assertSame(['0.0', '0.00'], [$payslip->unpaid_days, $payslip->unpaid_deduction]);
+        $this->assertSame(['إجازة مولود جديد', 'إجازة وفاة أحد الأقارب'], [
+            trans('New Baby Leave', [], 'ar'), trans('Bereavement Leave', [], 'ar'),
+        ]);
+    }
+
     public function test_unpaid_leave_draws_on_no_balance(): void
     {
         $party = $this->employee();

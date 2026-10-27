@@ -43,7 +43,8 @@ class MatterForm
                                 Section::make(__('Basic Data'))->schema([
                                     TextInput::make('year')
                                         ->label(__('Year'))
-                                        ->minValue(now()->subYears(5)->year)
+                                        // A new matter: of the last five years; one being edited keeps its year, however old.
+                                        ->minValue(fn (string $operation): ?int => $operation === 'create' ? now()->subYears(5)->year : null)
                                         ->maxValue(now()->year)
                                         ->length(4)
                                         ->numeric()
@@ -239,7 +240,7 @@ class MatterForm
                                                             $query->whereJsonContains('role', [['role' => 'expert']]);
                                                         }
                                                     })
-                                                    ->createOptionForm(fn (Schema $schema) => PartyForm::configure($schema))
+                                                    ->createOptionForm(fn (Schema $schema) => PartyForm::configure($schema, picking: true))
                                                     ->createOptionAction(function (Action $action, Get $get) {
                                                         $type = $get('type') ?? null;
 
@@ -250,9 +251,7 @@ class MatterForm
                                                             ],
                                                         ]);
                                                     })
-                                                    ->createOptionUsing(function (array $data) {
-                                                        return Party::create($data)->id;
-                                                    })
+                                                    ->createOptionUsing(fn (array $data): int => PartyForm::createOrUse($data))
                                                     ->disableOptionsWhenSelectedInSiblingRepeaterItems()
                                                     ->columnSpan(2)
                                                     ->searchable()
@@ -309,7 +308,7 @@ class MatterForm
                                                     ->relationship('party', 'name', function ($query) {
                                                         $query->whereJsonContains('role', [['role' => 'party']]);
                                                     })
-                                                    ->createOptionForm(fn (Schema $schema) => PartyForm::configure($schema))
+                                                    ->createOptionForm(fn (Schema $schema) => PartyForm::configure($schema, picking: true))
                                                     ->editOptionForm(fn (Schema $schema) => PartyForm::configure($schema))
                                                     ->createOptionAction(function (Action $action) {
                                                         return $action->fillForm([
@@ -318,9 +317,7 @@ class MatterForm
                                                             ],
                                                         ]);
                                                     })
-                                                    ->createOptionUsing(function (array $data) {
-                                                        return Party::create($data)->id;
-                                                    })
+                                                    ->createOptionUsing(fn (array $data): int => PartyForm::createOrUse($data))
                                                     ->searchable()
                                                     // Not preloaded: found by typing. 50 names fetched for every row of
                                                     // the form (thousands of parties) made each open of a matter slow.
@@ -349,7 +346,7 @@ class MatterForm
                                                             ->relationship('party', 'name', function ($query) {
                                                                 $query->whereJsonContains('role', [['role' => 'representative']]);
                                                             })
-                                                            ->createOptionForm(fn (Schema $schema) => PartyForm::configure($schema))
+                                                            ->createOptionForm(fn (Schema $schema) => PartyForm::configure($schema, picking: true))
                                                             ->editOptionForm(fn (Schema $schema) => PartyForm::configure($schema))
                                                             ->createOptionAction(function (Action $action) {
                                                                 return $action->fillForm([
@@ -358,9 +355,7 @@ class MatterForm
                                                                     ],
                                                                 ]);
                                                             })
-                                                            ->createOptionUsing(function (array $data) {
-                                                                return Party::create($data)->id;
-                                                            })
+                                                            ->createOptionUsing(fn (array $data): int => PartyForm::createOrUse($data))
                                                             ->afterStateUpdated(function (Get $get, Set $set) {
                                                                 $party = Party::find($get('party_id'));
                                                                 $set('party_email', $party?->latestEmail());

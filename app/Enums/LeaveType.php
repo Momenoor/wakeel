@@ -29,6 +29,13 @@ enum LeaveType: string implements HasColor, HasLabel
     case UNPAID = 'unpaid';
     case ABSENT = 'absent';
 
+    /**
+     * Granted for an event, not drawn from anything: a new baby, a family member's death. Paid in full, and not
+     * taken off the annual balance — like casual leave.
+     */
+    case NEW_BABY = 'new_baby';
+    case BEREAVEMENT = 'bereavement';
+
     public function getLabel(): ?string
     {
         return match ($this) {
@@ -39,6 +46,8 @@ enum LeaveType: string implements HasColor, HasLabel
             self::SICK_UNPAID => __('Sick Leave (Unpaid)'),
             self::UNPAID => __('Unpaid Leave'),
             self::ABSENT => __('Unauthorised Absence'),
+            self::NEW_BABY => __('New Baby Leave'),
+            self::BEREAVEMENT => __('Bereavement Leave'),
         };
     }
 
@@ -46,7 +55,7 @@ enum LeaveType: string implements HasColor, HasLabel
     {
         return match ($this) {
             self::ANNUAL => 'success',
-            self::CASUAL => 'info',
+            self::CASUAL, self::NEW_BABY, self::BEREAVEMENT => 'info',
             self::SICK_FULL, self::SICK_HALF => 'warning',
             self::SICK_UNPAID, self::UNPAID, self::ABSENT => 'danger',
         };
@@ -58,7 +67,7 @@ enum LeaveType: string implements HasColor, HasLabel
     public function payFactor(): float
     {
         return match ($this) {
-            self::ANNUAL, self::CASUAL, self::SICK_FULL => 1.0,
+            self::ANNUAL, self::CASUAL, self::SICK_FULL, self::NEW_BABY, self::BEREAVEMENT => 1.0,
             self::SICK_HALF => 0.5,
             self::SICK_UNPAID, self::UNPAID, self::ABSENT => 0.0,
         };
