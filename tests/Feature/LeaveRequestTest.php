@@ -210,6 +210,45 @@ class LeaveRequestTest extends TestCase
         ]);
     }
 
+    public function test_an_approved_annual_leave_changed_to_bereavement_gives_its_days_back(): void
+    {
+        $party = $this->employee();
+        $request = $this->request($party, '2026-06-01', '2026-06-05');
+        $this->service->approve($request, User::factory()->create(), $this->split([
+            [LeaveType::ANNUAL, '2026-06-01', '2026-06-05', 5],
+        ]));
+        $this->assertSame(25.0, app(LeaveBalanceService::class)->balance($party->id));
+
+        // A death in the family, learnt after: the five days are bereavement leave — back in the balance.
+        $manager = User::factory()->create(['name' => 'Manager']);
+        $this->service->reclassify($request->fresh(), $manager, $this->split([
+            [LeaveType::BEREAVEMENT, '2026-06-01', '2026-06-05', 5],
+        ]), 'Father passed away');
+
+        $this->assertSame(30.0, app(LeaveBalanceService::class)->balance($party->id));
+        $this->assertSame('0.0', app(LeaveEntitlementService::class)->forDate($party, Carbon::parse('2026-06-01'))->annual_taken_days);
+        $this->assertSame([LeaveType::BEREAVEMENT], PartyLeave::where('party_id', $party->id)->pluck('leave_type')->all());
+        $this->assertStringContainsString('Manager: Father passed away', $request->fresh()->approved_comment);
+
+        // Changed again, to unpaid: deducted in payroll.
+        $this->service->reclassify($request->fresh(), $manager, $this->split([
+            [LeaveType::UNPAID, '2026-06-01', '2026-06-05', 5],
+        ]));
+        $payslip = app(PayrollService::class)
+            ->generate(PayrollRun::create(['period' => '2026-06', 'status' => PayrollRunStatus::DRAFT]))
+            ->first();
+        $this->assertSame(['5.0', '1000.00'], [$payslip->unpaid_days, $payslip->unpaid_deduction]);
+        $this->assertSame(1, PartyLeave::where('party_id', $party->id)->count());
+    }
+
+    public function test_only_an_approved_request_has_its_types_changed(): void
+    {
+        $request = $this->request($this->employee(), '2026-06-01', '2026-06-02');
+
+        $this->expectException(RuntimeException::class);
+        $this->service->reclassify($request, null, $this->split([[LeaveType::CASUAL, '2026-06-01', '2026-06-02', 2]]));
+    }
+
     public function test_unpaid_leave_draws_on_no_balance(): void
     {
         $party = $this->employee();

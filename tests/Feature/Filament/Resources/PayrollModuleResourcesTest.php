@@ -304,6 +304,27 @@ class PayrollModuleResourcesTest extends TestCase
         $this->assertSame(5.0, $request->fresh()->unpaidDays());
     }
 
+    public function test_an_approved_leave_has_its_types_changed_from_the_queue(): void
+    {
+        $party = $this->employee();
+        $request = $this->pendingRequest($party);
+        $period = fn (LeaveType $type): array => [['leave_type' => $type->value, 'start_date' => '2026-06-01', 'end_date' => '2026-06-05', 'day_count' => 5]];
+
+        Livewire::test(ListLeaveRequests::class)
+            // Not before it is approved.
+            ->assertActionHidden(TestAction::make('change_leave_types')->table($request))
+            ->callAction(TestAction::make('approve_leave')->table($request), ['periods' => $period(LeaveType::UNPAID)]);
+
+        // The queue shows pending requests; an approved one is found by its status.
+        Livewire::test(ListLeaveRequests::class)
+            ->filterTable('status', [RequestStatus::APPROVED->value])
+            ->callAction(TestAction::make('change_leave_types')->table($request->fresh()), ['periods' => $period(LeaveType::NEW_BABY)])
+            ->assertHasNoActionErrors();
+
+        $this->assertSame(0.0, $request->fresh()->unpaidDays());
+        $this->assertSame([LeaveType::NEW_BABY], PartyLeave::where('party_id', $party->id)->pluck('leave_type')->all());
+    }
+
     public function test_rejecting_from_the_queue_requires_a_reason(): void
     {
         $party = $this->employee();

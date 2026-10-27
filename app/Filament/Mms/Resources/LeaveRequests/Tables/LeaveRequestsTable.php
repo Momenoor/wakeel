@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Resources\LeaveRequests\Tables;
 use App\Enums\LeaveType;
 use App\Enums\RequestStatus;
 use App\Filament\Mms\Actions\Leave\ApproveLeaveAction;
+use App\Filament\Mms\Actions\Leave\ChangeLeaveTypesAction;
 use App\Filament\Mms\Actions\Leave\RejectLeaveAction;
 use App\Models\LeaveRequest;
 use App\Models\LeaveRequestPeriod;
@@ -103,6 +104,7 @@ class LeaveRequestsTable
             ])
             ->recordActions([
                 ApproveLeaveAction::make(),
+                ChangeLeaveTypesAction::make(),
                 RejectLeaveAction::make(),
                 EditAction::make()
                     ->iconButton()

@@ -2,6 +2,7 @@
 
 namespace App\Services\MMS;
 
+use App\Enums\FlightTicketStatus;
 use App\Models\EmployeeProfile;
 use App\Models\FlightTicket;
 use App\Models\PayrollRun;
@@ -119,6 +120,29 @@ class FlightTicketService
                 ->whereIn('id', $ticketIds)
                 ->whereNull('payroll_run_id')
                 ->update(['payroll_run_id' => $run->getKey()]);
+        });
+    }
+
+    /**
+     * One due ticket paid with a draft run's salaries, the run chosen from the ticket: on its employee's
+     * payslip (the run's payslips rebuilt, if it has them already) and paid when the run is disbursed.
+     */
+    public function addToRun(FlightTicket $ticket, PayrollRun $run): void
+    {
+        if (! $run->isEditable()) {
+            throw new RuntimeException(__('Flight tickets can only be changed on a draft payroll run.'));
+        }
+
+        if ($ticket->status() !== FlightTicketStatus::DUE) {
+            throw new RuntimeException(__('This ticket is already paid or in a payroll run.'));
+        }
+
+        DB::transaction(function () use ($ticket, $run): void {
+            $ticket->update(['payroll_run_id' => $run->getKey()]);
+
+            if ($run->payslips()->exists()) {
+                app(PayrollService::class)->generate($run);
+            }
         });
     }
 

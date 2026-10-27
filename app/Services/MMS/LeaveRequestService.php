@@ -7,6 +7,7 @@ use App\Enums\NotificationChannel;
 use App\Enums\NotificationType;
 use App\Enums\RequestStatus;
 use App\Mail\LeaveRequestDecisionMail;
+use App\Models\LeaveBalanceEntry;
 use App\Models\LeaveRequest;
 use App\Models\LeaveRequestPeriod;
 use App\Models\PartyLeave;
@@ -98,6 +99,58 @@ class LeaveRequestService
             }
 
             DB::afterCommit(fn () => $this->tellRequester($request, approved: true));
+
+            return $request->load('periods');
+        });
+    }
+
+    /**
+     * An approved request's days classified again — annual leave that turns out to be a new baby's, or a death in
+     * the family: the periods it was approved with undone everywhere they were written (the absence ledger payroll
+     * reads, the entitlement counters, the annual balance) and the new ones written as an approval writes them. Its
+     * annual days given back to the balance, those now annual taken; said on the request, by whom and when.
+     *
+     * @param  list<array{leave_type: string|LeaveType, start_date: string, end_date: string, day_count: float|string}>  $periods
+     */
+    public function reclassify(LeaveRequest $request, ?User $by, array $periods, ?string $comment = null): LeaveRequest
+    {
+        if ($request->getAttribute('status') !== RequestStatus::APPROVED) {
+            throw new RuntimeException('Only an approved leave request can have its leave types changed.');
+        }
+
+        $this->assertPeriodsCoverTheRequest($request, $periods);
+        $old = $request->periods()->get();
+        // Its own annual days come back first: the new split may use them again.
+        $released = (float) $old->filter(fn (LeaveRequestPeriod $period): bool => $period->getAttribute('leave_type') === LeaveType::ANNUAL)->sum('day_count');
+        $this->assertAnnualWithinBalance($request, $periods, $released);
+
+        return DB::transaction(function () use ($request, $by, $periods, $comment, $old): LeaveRequest {
+            foreach ($old as $period) {
+                $this->recordAgainstEntitlement($request, $period, release: true);
+            }
+            PartyLeave::query()->whereIn('leave_request_period_id', $old->modelKeys())->delete();
+            LeaveBalanceEntry::query()->whereIn('leave_request_period_id', $old->modelKeys())->delete();
+            $request->periods()->delete();
+
+            foreach ($periods as $period) {
+                $saved = LeaveRequestPeriod::create([
+                    'leave_request_id' => $request->getKey(),
+                    'leave_type' => $period['leave_type'],
+                    'start_date' => $period['start_date'],
+                    'end_date' => $period['end_date'],
+                    'day_count' => $period['day_count'],
+                ]);
+
+                $this->publishToLedger($request, $saved);
+                $this->recordAgainstEntitlement($request, $saved);
+                $this->balances->recordTaken($request, $saved);
+            }
+
+            $note = __('Leave types changed on :date by :user', [
+                'date' => now()->format(Dates::dateTimeFormat()),
+                'user' => $by?->display_name ?: ($by?->name ?? '—'),
+            ]).(filled($comment) ? ': '.$comment : '.');
+            $request->forceFill(['approved_comment' => trim(((string) $request->getAttribute('approved_comment'))."\n".$note)])->save();
 
             return $request->load('periods');
         });
@@ -325,7 +378,7 @@ class LeaveRequestService
      *
      * @param  list<array{leave_type: string|LeaveType, start_date: string, end_date: string, day_count: float|string}>  $periods
      */
-    private function assertAnnualWithinBalance(LeaveRequest $request, array $periods): void
+    private function assertAnnualWithinBalance(LeaveRequest $request, array $periods, float $released = 0.0): void
     {
         $annual = 0.0;
 
@@ -337,7 +390,8 @@ class LeaveRequestService
             }
         }
 
-        $balance = $this->balances->balance((int) $request->getAttribute('party_id'));
+        // With the days this request gives back, its types changed (reclassify()).
+        $balance = $this->balances->balance((int) $request->getAttribute('party_id')) + $released;
 
         if ($annual > 0 && $annual > $balance + 0.001) {
             throw new RuntimeException(__('Only :balance annual leave days are left in the balance; book the rest as unpaid leave.', [
@@ -365,9 +419,9 @@ class LeaveRequestService
     }
 
     /**
-     * Draw the period's days down from the relevant balance.
+     * Draw the period's days down from the relevant balance — or, $release, give them back (its types changed).
      */
-    private function recordAgainstEntitlement(LeaveRequest $request, LeaveRequestPeriod $period): void
+    private function recordAgainstEntitlement(LeaveRequest $request, LeaveRequestPeriod $period, bool $release = false): void
     {
         $type = $period->getAttribute('leave_type');
 
@@ -391,6 +445,8 @@ class LeaveRequestService
             $period->getAttribute('start_date'),
         );
 
-        $entitlement->increment($column, (float) $period->getAttribute('day_count'));
+        $release
+            ? $entitlement->decrement($column, min((float) $period->getAttribute('day_count'), (float) $entitlement->getAttribute($column)))
+            : $entitlement->increment($column, (float) $period->getAttribute('day_count'));
     }
 }

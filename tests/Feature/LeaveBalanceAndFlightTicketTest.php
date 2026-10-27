@@ -291,6 +291,35 @@ class LeaveBalanceAndFlightTicketTest extends TestCase
         $this->assertTrue($ticket->fresh()->isPaid());
     }
 
+    public function test_a_ticket_is_paid_with_the_salary_of_the_run_chosen_on_it(): void
+    {
+        Gate::before(fn () => true);
+        Filament::setCurrentPanel('mms');
+        $this->actingAs(User::factory()->create());
+
+        $party = $this->employee(0, '2020-01-01', ['flight_ticket_entitled' => true, 'flight_ticket_amount' => 1500]);
+        $ticket = FlightTicket::create(['party_id' => $party->id, 'year' => 2026, 'amount' => 1500]);
+        PayrollRun::create(['period' => '2026-09', 'status' => PayrollRunStatus::DISBURSED]);
+        $run = PayrollRun::create(['period' => '2026-10', 'status' => PayrollRunStatus::DRAFT]);
+        app(PayrollService::class)->generate($run);
+
+        // Only a draft run is offered, and it is chosen already.
+        Livewire::test(FlightTickets::class)
+            ->mountTableAction('payWithSalary', $ticket)
+            ->assertFormFieldExists('payroll_run_id', fn ($field): bool => array_keys($field->getOptions()) === [$run->id])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+
+        // On the payslip already generated — and no longer offered.
+        $this->assertSame($run->id, $ticket->fresh()->payroll_run_id);
+        $this->assertSame('1500.00', $run->payslips()->sole()->flight_ticket_amount);
+        Livewire::test(FlightTicketsRelationManager::class, ['ownerRecord' => $party->employeeProfile, 'pageClass' => EditEmployeeProfile::class])
+            ->assertTableActionHidden('payWithSalary', $ticket);
+
+        $this->expectException(RuntimeException::class);
+        app(FlightTicketService::class)->addToRun($ticket->fresh(), $run);
+    }
+
     public function test_the_run_page_adds_the_chosen_tickets(): void
     {
         Gate::before(fn () => true);

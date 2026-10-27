@@ -92,6 +92,7 @@ class FlightTickets extends Page implements HasTable
                     ->options(fn (): array => FlightTicket::query()->distinct()->orderByDesc('year')->pluck('year', 'year')->all()),
             ])
             ->recordActions([
+                FlightTicketTable::payWithSalaryAction(fn (): bool => auth()->user()?->can('Update:EmployeeProfile') ?? false),
                 FlightTicketTable::markPaidAction(fn (): bool => auth()->user()?->can('Update:EmployeeProfile') ?? false),
             ])
             ->emptyStateHeading(__('No flight tickets yet'));

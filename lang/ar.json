@@ -1920,7 +1920,6 @@
     "Unpaid Leave": "إجازة بدون أجر",
     "Unpaid Leave Recovery": "استرداد الإجازات بدون أجر",
     "Unpaid Matters": "ملفات غير مدفوعة",
-    "Unpaid; deducted at basic salary ÷ 30 per day.": "بدون أجر، ويُخصم عن كل يوم الراتب الأساسي ÷ 30.",
     "Unprocessable Entity": "كيان غير قابل للمعالجة",
     "Unsettled fees on non-owner matters": "رسوم غير مُسوّاة في ملفات خبير آخر",
     "Unsubscribe": "إلغاء الاشتراك",
@@ -4860,5 +4859,16 @@
     "Saving uses it — with the role and any new phone or email added — and chooses it in the list.": "الحفظ يستخدمه — مع إضافة الصفة وأي هاتف أو بريد جديد — ويختاره في القائمة.",
     ":name is already in the system: chosen.": ":name مسجّل في النظام بالفعل: تم اختياره.",
     "New Baby Leave": "إجازة مولود جديد",
-    "Bereavement Leave": "إجازة وفاة أحد الأقارب"
+    "Bereavement Leave": "إجازة وفاة أحد الأقارب",
+    "Leave types changed on :date by :user": "عُدّلت أنواع الإجازة في :date بواسطة :user",
+    "Change leave types": "تعديل أنواع الإجازة",
+    "Classify the approved days again: annual days changed to another type go back to the balance. A payroll already generated for those days needs generating again.": "صنّف الأيام المعتمدة من جديد: الأيام السنوية التي تُغيَّر إلى نوع آخر تعود إلى الرصيد. وإن أُنشئ كشف رواتب لتلك الأيام فأعد إنشاءه.",
+    "Could not change the leave types": "تعذّر تعديل أنواع الإجازة",
+    "Leave types changed.": "عُدّلت أنواع الإجازة.",
+    "Unpaid; deducted at the whole salary ÷ 30 per day.": "بلا راتب؛ يُخصم الراتب كله ÷ 30 عن كل يوم.",
+    "Pay with salary": "صرف مع الراتب",
+    "Pay the ticket with salary": "صرف التذكرة مع الراتب",
+    "The ticket is added to the employee's payslip in the payroll run chosen, and marked paid when the run is disbursed.": "تُضاف التذكرة إلى قسيمة راتب الموظف في مسير الرواتب المختار، وتُعلَّم مدفوعة عند صرف المسير.",
+    "Ticket added to the :period payroll run.": "أُضيفت التذكرة إلى مسير رواتب :period.",
+    "This ticket is already paid or in a payroll run.": "هذه التذكرة مدفوعة أو ضمن مسير رواتب بالفعل."
 }

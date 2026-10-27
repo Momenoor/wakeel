@@ -124,6 +124,7 @@ class FlightTicketsRelationManager extends RelationManager
                     ->visible(fn (): bool => $this->canManage()),
             ])
             ->recordActions([
+                FlightTicketTable::payWithSalaryAction(fn (): bool => $this->canManage()),
                 FlightTicketTable::markPaidAction(fn (): bool => $this->canManage()),
                 // Only while it is due: a ticket in a run or paid is part of
                 // that run's figures.

@@ -198,7 +198,7 @@ class ApproveLeaveAction extends Action
     /**
      * The employee's remaining entitlements for the service year in question.
      */
-    private static function describeBalances(?LeaveRequest $record): string
+    protected static function describeBalances(?LeaveRequest $record): string
     {
         if (! $record || ! $record->party || ! $record->start_date) {
             return '';
@@ -226,7 +226,7 @@ class ApproveLeaveAction extends Action
     /**
      * Recompute a period's day count from its dates.
      */
-    private static function recountDays(Get $get, Set $set): void
+    protected static function recountDays(Get $get, Set $set): void
     {
         $start = $get('start_date');
         $end = $get('end_date');
@@ -240,7 +240,7 @@ class ApproveLeaveAction extends Action
         $set('day_count', max(0.5, $days));
     }
 
-    private static function payDescription(LeaveType|string $type): ?string
+    protected static function payDescription(LeaveType|string $type): ?string
     {
         $enum = $type instanceof LeaveType ? $type : LeaveType::tryFrom((string) $type);
         if (! $enum) {
@@ -250,7 +250,7 @@ class ApproveLeaveAction extends Action
         return match (true) {
             $enum->payFactor() >= 1.0 => __('Paid in full.'),
             $enum->payFactor() > 0.0 => __('Paid at half rate; the balance is deducted.'),
-            default => __('Unpaid; deducted at basic salary ÷ 30 per day.'),
+            default => __('Unpaid; deducted at the whole salary ÷ 30 per day.'),
         };
     }
 }
