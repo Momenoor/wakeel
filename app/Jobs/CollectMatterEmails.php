@@ -7,16 +7,18 @@ use App\Models\Matter;
 use App\Models\User;
 use App\Services\MMS\MatterReplyCollector;
 use Filament\Notifications\Notification;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\HtmlString;
 
 /**
- * One matter's inboxes read now (the Progress tab's "Check for emails"), on the queue: reading a
- * mailbox can take a minute, and a page request held that long kept the server's other requests
- * waiting. Whoever asked is told what came of it, in their notifications.
+ * The mailboxes read now, not waiting for the scheduled round: one matter's (the Progress tab's "Check for
+ * emails"), or all of them (Unfiled emails → "Check mail now") — on the queue: reading a mailbox can take a
+ * minute, and a page request held that long kept the server's other requests waiting. One at a time for each
+ * (asked for again while waiting, not queued twice). Whoever asked is told what came of it, in their notifications.
  */
-class CollectMatterEmails implements ShouldQueue
+class CollectMatterEmails implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
@@ -25,15 +27,41 @@ class CollectMatterEmails implements ShouldQueue
 
     public int $timeout = 300;
 
-    public function __construct(public int $matterId, public ?int $userId = null) {}
+    /** All the mailboxes: stopped this long in, the rest read by the next round (as the scheduled one does). */
+    private const ALL_SECONDS = 240;
+
+    /** Not queued again while one is: for as long as one may run. */
+    public int $uniqueFor = 300;
+
+    /** @param  int|null  $matterId  null: every mailbox */
+    public function __construct(public ?int $matterId = null, public ?int $userId = null) {}
+
+    /**
+     * Asked for from a page: queued, and the person told it is under way.
+     */
+    public static function start(?int $matterId = null): void
+    {
+        static::dispatch($matterId, auth()->id());
+
+        Notification::make()
+            ->title(__('Checking for emails'))
+            ->body(__('This takes up to a minute or two; what comes of it appears in your notifications.'))
+            ->info()
+            ->send();
+    }
+
+    public function uniqueId(): string
+    {
+        return (string) ($this->matterId ?? 'all');
+    }
 
     public function handle(MatterReplyCollector $collector): void
     {
-        if (! Matter::query()->whereKey($this->matterId)->exists()) {
+        if ($this->matterId !== null && ! Matter::query()->whereKey($this->matterId)->exists()) {
             return;
         }
 
-        $result = $collector->collect($this->matterId);
+        $result = $collector->collect($this->matterId, $this->matterId === null ? self::ALL_SECONDS : null);
         $user = $this->userId ? User::find($this->userId) : null;
 
         if ($user) {
@@ -51,6 +79,8 @@ class CollectMatterEmails implements ShouldQueue
     {
         $points = [
             $result['emails'] ? trans_choice(':count other email from the parties kept.|:count other emails from the parties kept.', $result['emails'], ['count' => $result['emails']]) : null,
+            ($result['unfiled'] ?? 0) ? trans_choice(':count email waiting for its matter in Unfiled emails.|:count emails waiting for their matter in Unfiled emails.', $result['unfiled'], ['count' => $result['unfiled']]) : null,
+            ($result['stopped'] ?? false) ? __('Stopped for time; the rest is read on the next run.') : null,
             // No folder to find them in: the matter, and the emails to download and keep by hand.
             ...array_map(fn (array $matter): HtmlString => new HtmlString(
                 e(__('Matter :matter is not linked to a OneDrive folder: its emails were kept in the system only.', ['matter' => $matter['label']]))

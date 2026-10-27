@@ -18,7 +18,6 @@ use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
@@ -143,15 +142,7 @@ class ProgressRelationManager extends RelationManager
                     ->color('gray')
                     ->visible(fn (): bool => MatterEmail::query()->where('direction', MatterEmail::SENT)->exists())
                     // On the queue: reading the mailboxes can take a minute, and the page must not wait on it.
-                    ->action(function (): void {
-                        CollectMatterEmails::dispatch($this->getOwnerRecord()->getKey(), auth()->id());
-
-                        Notification::make()
-                            ->title(__('Checking for emails'))
-                            ->body(__('This takes up to a minute or two; what comes of it appears in your notifications.'))
-                            ->info()
-                            ->send();
-                    }),
+                    ->action(fn () => CollectMatterEmails::start((int) $this->getOwnerRecord()->getKey())),
                 CreateAction::make()
                     ->label(__('Add progress'))
                     ->icon('heroicon-o-plus')

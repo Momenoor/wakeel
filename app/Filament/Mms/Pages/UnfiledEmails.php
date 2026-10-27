@@ -6,6 +6,7 @@ use App\Filament\Concerns\RendersFreshContent;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager;
 use App\Filament\Support\RegenerateEmailAction;
+use App\Jobs\CollectMatterEmails;
 use App\Jobs\EmailJob;
 use App\Jobs\FileUnfiledEmail;
 use App\Models\Matter;
@@ -78,6 +79,20 @@ class UnfiledEmails extends Page implements HasTable
     public static function canAccess(): bool
     {
         return auth()->user()?->can('View:UnfiledEmails') ?? false;
+    }
+
+    /** @return list<Action> */
+    protected function getHeaderActions(): array
+    {
+        return [
+            // Every mailbox read now, not waiting for the next round (every ten minutes) — on the queue.
+            Action::make('checkMail')
+                ->label(__('Check mail now'))
+                ->icon('heroicon-o-arrow-path')
+                ->color('gray')
+                ->tooltip(fn (): string => __('Last automatic check: :when', ['when' => MatterReplyCollector::lastRunSummary()]))
+                ->action(fn () => CollectMatterEmails::start()),
+        ];
     }
 
     public static function getNavigationBadge(): ?string

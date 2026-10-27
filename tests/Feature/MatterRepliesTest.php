@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\NotificationType as Type;
 use App\Enums\ProgressType;
+use App\Filament\Mms\Pages\UnfiledEmails;
 use App\Filament\Mms\Resources\BulkMailCampaigns\Pages\ViewBulkMailCampaign;
 use App\Filament\Mms\Resources\BulkMailCampaigns\RelationManagers\RecipientsRelationManager;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
@@ -575,6 +576,28 @@ class MatterRepliesTest extends TestCase
         // One no longer there: the next choice.
         Setting::set(EmailSendFields::DEFAULT_SENDER, 'gone', 'mail');
         $this->assertSame(array_key_first(SenderMailer::options()), EmailSendFields::defaultSender());
+    }
+
+    public function test_every_mailbox_is_read_now_from_unfiled_emails(): void
+    {
+        MailSender::create(['driver' => MailSender::MICROSOFT, 'address' => 'no_reply@jpa.ae', 'name' => 'JPA', 'key' => 'noreply', 'is_active' => true]);
+        $this->sentEmail(['sender_key' => 'noreply']);
+        $this->inbox = [[
+            'id' => 'AAMk7', 'subject' => 'RE: طلب بيانات — JPA/2026/986/1', 'internetMessageId' => '<now@police>', 'hasAttachments' => false,
+            'from' => ['emailAddress' => ['address' => 'info@dubaipolice.gov.ae', 'name' => 'شرطة دبي']],
+            'toRecipients' => [['emailAddress' => ['address' => 'no_reply@jpa.ae']]], 'receivedDateTime' => now()->toIso8601String(),
+            'body' => ['contentType' => 'html', 'content' => '<p>تم.</p>'], 'internetMessageHeaders' => [],
+        ]];
+
+        // Not waiting for the next round: read on the queue, whoever asked told what came of it.
+        Livewire::test(UnfiledEmails::class)
+            ->callAction('checkMail')
+            ->assertNotified(__('Checking for emails'));
+
+        $this->assertSame(1, MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->count());
+        $this->assertContains(trans_choice('No new replies.|:count new reply kept.|:count new replies kept.', 1, ['count' => 1]), auth()->user()->notifications()->get()->pluck('data.title')->all());
+        // As the scheduled round: recorded as the last run.
+        $this->assertNotNull(Setting::get(MatterReplyCollector::LAST_RUN)['finished_at'] ?? null);
     }
 
     public function test_a_microsoft_365_inbox_is_read_and_a_refusal_says_what_to_grant(): void
