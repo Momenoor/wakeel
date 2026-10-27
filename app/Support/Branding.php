@@ -132,13 +132,15 @@ class Branding
     }
 
     /**
-     * For the emails: their logo sits on a dark header (navy, or green / red
-     * for a decision), so the dark-background logo — then the light one, then
+     * For the emails: their logo sits on a dark navy header, so the
+     * dark-background logo — then the light one, then
      * the shipped dark one. The light logo alone could vanish into the header.
+     * Never an SVG: neither Outlook shows one.
      */
     public static function emailLogoUrl(): string
     {
-        $path = static::path(self::LOGO_DARK) ?? static::path(self::LOGO);
+        $path = collect([static::path(self::LOGO_DARK), static::path(self::LOGO)])
+            ->first(fn (?string $path): bool => $path !== null && ! str_ends_with(strtolower($path), '.svg'));
 
         return $path !== null
             ? Storage::disk('public')->url($path)

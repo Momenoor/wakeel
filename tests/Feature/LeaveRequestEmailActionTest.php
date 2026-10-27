@@ -106,13 +106,13 @@ class LeaveRequestEmailActionTest extends TestCase
         $this->assertSame((float) $days, $submitted->fromBalance);
         $html = $submitted->render();
         $this->assertStringContainsString('الرصيد قبل الإجازة', $html);
-        $this->assertMatchesRegularExpression('#'.preg_quote('الرصيد بعد الإجازة', '#').':</td>\s*<td>'.preg_quote($after, '#').'</td>#u', $html);
+        $this->assertMatchesRegularExpression('#'.preg_quote('الرصيد بعد الإجازة', '#').':</td>\s*<td[^>]*>'.preg_quote($after, '#').'</td>#u', $html);
 
         // Approved: the same, as taken.
         $this->post(URL::signedRoute('leave-request.email-action.approve', ['leaveRequest' => $request->id]))->assertOk();
         $decision = Mail::queued(LeaveRequestDecisionMail::class)->first();
         $this->assertSame(12.5, $decision->balanceBefore);
-        $this->assertMatchesRegularExpression('#'.preg_quote('الرصيد بعد الإجازة', '#').':</td>\s*<td>'.preg_quote($after, '#').'</td>#u', $decision->render());
+        $this->assertMatchesRegularExpression('#'.preg_quote('الرصيد بعد الإجازة', '#').':</td>\s*<td[^>]*>'.preg_quote($after, '#').'</td>#u', $decision->render());
 
         // Leave not from the balance: no before and after — its balance as it stands when asked for.
         $sick = $this->request($party, LeaveType::SICK_FULL);
@@ -206,5 +206,29 @@ class LeaveRequestEmailActionTest extends TestCase
         $this->post($url)->assertForbidden();
 
         $this->assertTrue($request->fresh()->isPending());
+    }
+
+    public function test_the_emails_read_the_same_in_classic_and_new_outlook(): void
+    {
+        app()->setLocale('ar');
+        $request = $this->request($this->employee());
+        $submitted = (new LeaveRequestSubmittedMail($request))->render();
+
+        $this->post(URL::signedRoute('leave-request.email-action.approve', ['leaveRequest' => $request->id]))->assertOk();
+        $request->refresh()->forceFill(['approved_comment' => "Approved\nLeave types changed"])->save();
+        $decision = (new LeaveRequestDecisionMail($request->fresh()))->render();
+
+        foreach (['submitted' => $submitted, 'decision' => $decision] as $name => $html) {
+            // Nothing laid out by a class (a <style> some clients drop), every table right to left itself (classic
+            // Outlook ignores a parent's direction for a table's columns), and the header's colour on its cell.
+            $this->assertDoesNotMatchRegularExpression('/ class=/', $html, $name);
+            $this->assertSame(substr_count($html, '<table'), substr_count($html, '<table role="presentation" dir="rtl"'), $name);
+            $this->assertMatchesRegularExpression('/<td align="center" bgcolor="#1B3A5C"/', $html, $name);
+        }
+
+        // The buttons: coloured cells, which classic Outlook draws.
+        $this->assertMatchesRegularExpression('/bgcolor="#16a34a" style="[^"]*mso-padding-alt[^"]*">\s*<a href="[^"]+approve/', $submitted);
+        // The note keeps its lines.
+        $this->assertStringContainsString('Approved<br />', $decision);
     }
 }

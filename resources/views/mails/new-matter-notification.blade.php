@@ -1,69 +1,18 @@
-<!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" dir="{{ app()->getLocale() == 'ar' ? 'rtl' : 'ltr' }}">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<x-mail.layout :title="__('Matter Received Date Confirmation')" :subtitle="__('Matter Received Date Confirmation')">
+    <x-mail.p><strong>{{ __('Dear :name', ['name' => $assistant->name]) }}،</strong></x-mail.p>
+    <x-mail.p>{{ __('A new matter has been assigned to you. Please review the received date below and confirm or dispute it.') }}</x-mail.p>
 
-    <link rel="stylesheet" href="{{asset('fonts/Boutros.css')}}">
-    <title>{{ __('Matter Received Date Confirmation') }}</title>
-    <style>
-        @include('mails.partials.notification-styles')
-    </style>
-</head>
-<body>
-<div class="wrapper">
-    <div class="header">
-        <img src="{{ \App\Support\Branding::emailLogoUrl() }}" alt="Logo" style="max-width:200px!important;width: 200px!important; height: auto;">
-        <h1>{{ config('app.name') }}</h1>
-        <p>{{ __('Matter Received Date Confirmation') }}</p>
-    </div>
+    <x-mail.info>
+        <x-mail.row :label="__('Matter')" :value="$matter->year.'/'.$matter->number" />
+        <x-mail.row :label="__('Court')" :value="$matter->court?->name ?? '—'" />
+        <x-mail.row :label="__('Type')" :value="$matter->type?->name ?? '—'" />
+        <x-mail.row :label="__('Received Date')" :value="\Carbon\Carbon::parse($matter->distributed_at)->locale('ar')->format(\App\Support\Dates::dateFormat())" />
+    </x-mail.info>
 
-    <div class="body">
-        <p><strong>{{ __('Dear :name', ['name' => $assistant->name]) }}،</strong></p>
-        <p>
-            {{ __('A new matter has been assigned to you. Please review the received date below and confirm or dispute it.') }}
-        </p>
+    <x-mail.actions>
+        <x-mail.button :href="$acceptUrl" color="#16a34a">✓ {{ __('Accept Received Date') }}</x-mail.button>
+        <x-mail.button :href="$disputeUrl" color="#dc2626">✗ {{ __('Dispute Received Date') }}</x-mail.button>
+    </x-mail.actions>
 
-        <div class="info-box">
-            <table>
-                <tr>
-                    <td>{{ __('Matter') }}:</td>
-                    <td>{{ $matter->year }}/{{ $matter->number }}</td>
-                </tr>
-                <tr>
-                    <td>{{ __('Court') }}:</td>
-                    <td>{{ $matter->court?->name ?? '—' }}</td>
-                </tr>
-                <tr>
-                    <td>{{ __('Type') }}:</td>
-                    <td>{{ $matter->type?->name ?? '—' }}</td>
-                </tr>
-                <tr>
-                    <td>{{ __('Received Date') }}:</td>
-                    <td>{{ \Carbon\Carbon::parse($matter->distributed_at)->locale('ar')->format(\App\Support\Dates::dateFormat()) }}</td>
-                </tr>
-            </table>
-        </div>
-
-        <div class="actions">
-            <a href="{{ $acceptUrl }}" class="btn btn-accept">
-                ✓ {{ __('Accept Received Date') }}
-            </a>
-            <a href="{{ $disputeUrl }}" class="btn btn-dispute">
-                ✗ {{ __('Dispute Received Date') }}
-            </a>
-        </div>
-
-        <div class="note">
-            ⚠ {{ __('If you choose to dispute, you will be asked to provide the correct date and a reason. The request will be reviewed by the administration.') }}
-        </div>
-    </div>
-
-    <div class="footer">
-        {{ config('app.name') }} · {{ now()->format('Y') }}<br>
-        {{ __('All rights reserved.') }}<br>
-        {{ __('This email was sent automatically. Do not reply.') }}
-    </div>
-</div>
-</body>
-</html>
+    <x-mail.note>⚠ {{ __('If you choose to dispute, you will be asked to provide the correct date and a reason. The request will be reviewed by the administration.') }}</x-mail.note>
+</x-mail.layout>

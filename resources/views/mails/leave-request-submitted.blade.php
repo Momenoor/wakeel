@@ -1,77 +1,20 @@
-<!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" dir="{{ app()->getLocale() == 'ar' ? 'rtl' : 'ltr' }}">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<x-mail.layout :title="__('New Leave Request')" :subtitle="__('New Leave Request')">
+    <x-mail.p>{{ __('A new leave request has been submitted and requires your review.') }}</x-mail.p>
 
-    <link rel="stylesheet" href="{{ asset('fonts/Boutros.css') }}">
-    <title>{{ __('New Leave Request') }}</title>
-    <style>
-        @include('mails.partials.notification-styles')
-    </style>
-</head>
-<body>
-<div class="wrapper">
-    <div class="header">
-        <img src="{{ \App\Support\Branding::emailLogoUrl() }}" alt="Logo" style="max-width:200px!important;width: 200px!important; height: auto;">
-        <h1>{{ config('app.name') }}</h1>
-        <p>{{ __('New Leave Request') }}</p>
-    </div>
+    <x-mail.info>
+        <x-mail.row :label="__('Employee')" :value="$leaveRequest->party->name" />
+        <x-mail.row :label="__('From')" :value="$leaveRequest->start_date->locale('ar')->format(\App\Support\Dates::dateFormat())" />
+        <x-mail.row :label="__('To')" :value="$leaveRequest->end_date->locale('ar')->format(\App\Support\Dates::dateFormat())" />
+        <x-mail.row :label="__('Requested Leave Type')" :value="$leaveRequest->requested_leave_type?->getLabel() ?? '—'" />
+        <x-mail.row :label="__('Days Requested')" :value="rtrim(rtrim(number_format($leaveRequest->requestedDays(), 1), '0'), '.')" />
+        @include('mails.partials.leave-balance', ['fromBalance' => $fromBalance, 'balanceBefore' => $annualLeaveBalance, 'showBalance' => true])
+        <x-mail.row :label="__('Reason')" :value="$leaveRequest->comment ?: '—'" />
+    </x-mail.info>
 
-    <div class="body">
-        <p>
-            {{ __('A new leave request has been submitted and requires your review.') }}
-        </p>
+    <x-mail.actions>
+        <x-mail.button :href="$approveUrl" color="#16a34a">✓ {{ __('Approve') }}</x-mail.button>
+        <x-mail.button :href="$rejectUrl" color="#dc2626">✗ {{ __('Reject') }}</x-mail.button>
+    </x-mail.actions>
 
-        <div class="info-box">
-            <table>
-                <tr>
-                    <td>{{ __('Employee') }}:</td>
-                    <td>{{ $leaveRequest->party->name }}</td>
-                </tr>
-                <tr>
-                    <td>{{ __('From') }}:</td>
-                    <td>{{ $leaveRequest->start_date->locale('ar')->format(\App\Support\Dates::dateFormat()) }}</td>
-                </tr>
-                <tr>
-                    <td>{{ __('To') }}:</td>
-                    <td>{{ $leaveRequest->end_date->locale('ar')->format(\App\Support\Dates::dateFormat()) }}</td>
-                </tr>
-                <tr>
-                    <td>{{ __('Requested Leave Type') }}:</td>
-                    <td>{{ $leaveRequest->requested_leave_type?->getLabel() ?? '—' }}</td>
-                </tr>
-                <tr>
-                    <td>{{ __('Days Requested') }}:</td>
-                    <td>{{ rtrim(rtrim(number_format($leaveRequest->requestedDays(), 1), '0'), '.') }}</td>
-                </tr>
-                @include('mails.partials.leave-balance', ['fromBalance' => $fromBalance, 'balanceBefore' => $annualLeaveBalance, 'showBalance' => true])
-                <tr>
-                    <td>{{ __('Reason') }}:</td>
-                    <td>{{ $leaveRequest->comment ?: '—' }}</td>
-                </tr>
-            </table>
-        </div>
-
-        <div class="actions">
-            <a href="{{ $approveUrl }}" class="btn btn-accept">
-                ✓ {{ __('Approve') }}
-            </a>
-            <a href="{{ $rejectUrl }}" class="btn btn-dispute">
-                ✗ {{ __('Reject') }}
-            </a>
-        </div>
-
-        <div class="note">
-            ⚠ {{ __('Clicking a button decides this request immediately and notifies the employee — no login required.') }}
-        </div>
-    </div>
-
-    <div class="footer">
-        {{ config('app.name') }} · {{ now()->format('Y') }}<br>
-        {{ __('All rights reserved.') }}<br>
-        {{ __('This email was sent automatically. Do not reply.') }}
-    </div>
-</div>
-</body>
-</html>
+    <x-mail.note>⚠ {{ __('Clicking a button decides this request immediately and notifies the employee — no login required.') }}</x-mail.note>
+</x-mail.layout>
