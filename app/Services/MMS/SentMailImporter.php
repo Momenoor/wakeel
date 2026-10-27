@@ -484,7 +484,7 @@ class SentMailImporter
 
                 if (self::subjectMatches((string) ($message['subject'] ?? ''), $subjectContains)) {
                     if (! $attachmentsSaved && ($message['hasAttachments'] ?? false)) {
-                        $message['attachments'] = $this->saveGraphAttachments($mailbox, (string) $message['id']);
+                        $message['attachments'] = $this->saveGraphAttachments($mailbox, (string) $message['id'], (string) ($message['body']['content'] ?? ''));
                         $attachmentsSaved = $message['attachments'] !== [];
                     }
 
@@ -505,17 +505,18 @@ class SentMailImporter
     }
 
     /**
-     * An email's real attachments (not inline signature images), saved
-     * where campaign attachments live.
+     * An email's real attachments (not the pictures of its text — a signature's logo:
+     * MatterReplyCollector::isPartOfText()), saved where campaign attachments live.
      *
      * @return list<string> paths on the public disk
      */
     private function saveImapAttachments(Message $message): array
     {
         $files = [];
+        $html = $message->hasHTMLBody() ? (string) $message->getHTMLBody() : '';
 
         foreach ($message->getAttachments() as $attachment) {
-            if ($attachment->disposition === 'inline' && filled($attachment->id)) {
+            if (MatterReplyCollector::isPartOfTextPart($attachment, $html)) {
                 continue;
             }
 
@@ -528,7 +529,7 @@ class SentMailImporter
     /**
      * @return list<string> paths on the public disk
      */
-    private function saveGraphAttachments(string $mailbox, string $messageId): array
+    private function saveGraphAttachments(string $mailbox, string $messageId, string $html): array
     {
         $response = Http::withToken($this->graph->getAccessToken())
             ->get('https://graph.microsoft.com/v1.0/users/'.rawurlencode($mailbox).'/messages/'.rawurlencode($messageId).'/attachments');
@@ -536,7 +537,8 @@ class SentMailImporter
         $files = [];
 
         foreach ($response->successful() ? ($response->json()['value'] ?? []) : [] as $attachment) {
-            if (($attachment['isInline'] ?? false) || ! isset($attachment['contentBytes'])) {
+            if (! isset($attachment['contentBytes'])
+                || MatterReplyCollector::isPartOfText((string) ($attachment['name'] ?? ''), (string) ($attachment['contentType'] ?? ''), (string) ($attachment['contentId'] ?? ''), (int) ($attachment['size'] ?? 0), (bool) ($attachment['isInline'] ?? false), $html)) {
                 continue;
             }
 

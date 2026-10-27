@@ -161,7 +161,7 @@ class ForwardedEmail
         $files = [];
 
         foreach ($email->getAttachments() as $attachment) {
-            if ($attachment->disposition === 'inline' && MatterReplyCollector::isShownInText((string) $attachment->content_type, (string) $attachment->id, $html)) {
+            if (MatterReplyCollector::isPartOfTextPart($attachment, $html)) {
                 continue;
             }
 

@@ -13,6 +13,7 @@ use App\Models\Concerns\AnnouncesChanges;
 use App\Models\Concerns\HasAttachments;
 use App\Models\Contracts\AttachmentOwner;
 use App\Observers\MatterObserver;
+use App\Services\MMS\Calendar\MatterReferenceMatcher;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -150,6 +151,13 @@ class Matter extends Model implements AttachmentOwner
 
     protected static function booted()
     {
+        // A year before the oldest: the matter numbers read in emails and events go back to it.
+        static::saved(function (Matter $matter) {
+            if (($matter->wasRecentlyCreated || $matter->wasChanged('year')) && (int) $matter->year < MatterReferenceMatcher::firstYear()) {
+                MatterReferenceMatcher::forgetFirstYear();
+            }
+        });
+
         static::saved(function (Matter $matter) {
             if ($matter->isDirty('custom_fields') || $matter->wasRecentlyCreated) {
                 $customFields = $matter->custom_fields ?? [];

@@ -5,6 +5,7 @@ namespace App\Services\MMS\Calendar;
 use App\Models\Matter;
 use App\Support\MatterSearch;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Finds the matters an event title talks about, by the way the office
@@ -12,13 +13,16 @@ use Illuminate\Support\Collection;
  * "639 of 2025" and "639 لسنة 2025", in Western or Arabic-Indic digits.
  *
  * A date is never read as a matter: "29/09/2026" or "2026/09/29" is not
- * matter 9 of 2026. Nor is a year before the first matters (2018) or after
- * the current one.
+ * matter 9 of 2026. Nor is a year before the oldest matter's (firstYear())
+ * or after the current one.
  */
 class MatterReferenceMatcher
 {
-    /** The year the office's first matter was opened. */
+    /** The first year while there are no matters yet. */
     public const FIRST_YEAR = 2018;
+
+    /** firstYear()'s cache: cleared when a matter is saved with an older year (Matter::booted()). */
+    public const FIRST_YEAR_CACHE = 'matters.first-year';
 
     /** Between a number and its year: "/", or "\" as some type it (shown the other way round in Arabic text). */
     private const SLASH = '[/\\\\]';
@@ -54,6 +58,7 @@ class MatterReferenceMatcher
         ];
 
         $thisYear = now()->year;
+        $firstYear = self::firstYear();
         $spans = [];
 
         foreach ($patterns as [$pattern, $numberGroup, $yearGroup, $preference]) {
@@ -68,10 +73,10 @@ class MatterReferenceMatcher
                     continue;
                 }
 
-                // Matters start in FIRST_YEAR and never run ahead of this
-                // year: any other "year" is something else (1957 in 2026/1957,
-                // a date, a number that happens to start with 20…).
-                if ($year < self::FIRST_YEAR || $year > $thisYear) {
+                // Matters start in the oldest matter's year and never run ahead
+                // of this year: any other "year" is something else (1957 in
+                // 2026/1957, a date, a number that happens to start with 20…).
+                if ($year < $firstYear || $year > $thisYear) {
                     continue;
                 }
 
@@ -93,7 +98,7 @@ class MatterReferenceMatcher
             $year = (int) $m[3][0];
             $digits = strlen(ltrim($m[2][0], '0'));
 
-            if ($year < self::FIRST_YEAR || $year > $thisYear) {
+            if ($year < $firstYear || $year > $thisYear) {
                 continue;
             }
 
@@ -130,6 +135,27 @@ class MatterReferenceMatcher
     private static function looksLikeYear(string $number): bool
     {
         return (bool) preg_match('~^(?:19|20)\d{2}$~', $number);
+    }
+
+    /**
+     * The first year a matter number is read of: FIRST_YEAR, or the oldest matter's when older — 2009 for one
+     * carried over from then. Read once and kept.
+     */
+    public static function firstYear(): int
+    {
+        // Kept on the app too: the cache is a table, and a page reads many texts.
+        if (! app()->bound(self::FIRST_YEAR_CACHE)) {
+            app()->instance(self::FIRST_YEAR_CACHE, (int) Cache::rememberForever(self::FIRST_YEAR_CACHE, fn (): int => min(self::FIRST_YEAR, (int) (Matter::query()->min('year') ?: self::FIRST_YEAR))));
+        }
+
+        return app(self::FIRST_YEAR_CACHE);
+    }
+
+    /** A matter saved with a year before the first: read again. */
+    public static function forgetFirstYear(): void
+    {
+        app()->forgetInstance(self::FIRST_YEAR_CACHE);
+        Cache::forget(self::FIRST_YEAR_CACHE);
     }
 
     /**

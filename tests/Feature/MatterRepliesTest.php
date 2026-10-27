@@ -269,7 +269,7 @@ class MatterRepliesTest extends TestCase
             $names = [];
 
             foreach ($message->getAttachments() as $a) {
-                if ($a->disposition === 'inline' && MatterReplyCollector::isShownInText((string) $a->content_type, (string) $a->id, $html)) {
+                if (MatterReplyCollector::isPartOfTextPart($a, $html)) {
                     continue;
                 }
                 $names[] = $a->name ?: $a->filename;
@@ -288,11 +288,21 @@ class MatterRepliesTest extends TestCase
         $this->assertSame([], $kept($logo));
         $this->assertSame(['photo.png'], $kept(str_replace(['logo.png', '<logo@x>'], ['photo.png', '<other@x>'], $logo)));
 
+        // A reply's signature picture Outlook sent as an attachment, the text still showing it: not a file.
+        $this->assertSame([], $kept(str_replace('Content-Disposition: inline', 'Content-Disposition: attachment', $logo)));
+        // Outlook's own name for a signature picture the text no longer shows: not a file — unless large (pasted in).
+        $signature = "--B\r\nContent-Type: image/png; name=\"image001.png\"\r\nContent-Disposition: attachment; filename=\"image001.png\"\r\nContent-ID: <image001.png@01DA>\r\nContent-Transfer-Encoding: base64\r\n\r\n{$png}\r\n";
+        $this->assertSame([], $kept($signature));
+
         // The rule itself.
-        $this->assertTrue(MatterReplyCollector::isShownInText('image/png', '<logo@x>', '<img src="cid:logo@x">'));
-        $this->assertFalse(MatterReplyCollector::isShownInText('application/pdf', 'abc@mac', 'cid:abc@mac'));
-        $this->assertTrue(MatterReplyCollector::isShownInText('image/png', '', '<p>no pictures</p>'));
-        $this->assertFalse(MatterReplyCollector::isShownInText('image/png', '<other@x>', '<img src="cid:logo@x">'));
+        $this->assertTrue(MatterReplyCollector::isPartOfText('logo.png', 'image/png', '<logo@x>', 100, false, '<img src="cid:logo@x">'));
+        $this->assertFalse(MatterReplyCollector::isPartOfText('b.pdf', 'application/pdf', 'abc@mac', 100, true, 'cid:abc@mac'));
+        $this->assertTrue(MatterReplyCollector::isPartOfText('logo.png', 'image/png', '', 100, true, '<p>no pictures</p>'));
+        $this->assertFalse(MatterReplyCollector::isPartOfText('photo.png', 'image/png', '<other@x>', 100, true, '<img src="cid:logo@x">'));
+        $this->assertTrue(MatterReplyCollector::isPartOfText('image002.jpg', 'application/octet-stream', '', 9_000, false, ''));
+        $this->assertTrue(MatterReplyCollector::isPartOfText('Outlook-ab12cd.png', 'image/png', '', 9_000, false, ''));
+        $this->assertFalse(MatterReplyCollector::isPartOfText('image001.png', 'image/png', '', 400_000, false, ''));
+        $this->assertFalse(MatterReplyCollector::isPartOfText('scan001.png', 'image/png', '', 9_000, false, ''));
     }
 
     public function test_a_run_out_of_time_stops_before_the_next_message_and_says_how_far_it_got(): void

@@ -21,6 +21,7 @@ use App\Models\Party;
 use App\Models\Setting;
 use App\Models\Type;
 use App\Models\User;
+use App\Services\MMS\Calendar\MatterReferenceMatcher;
 use App\Services\MMS\CollectedEmailUndo;
 use App\Services\MMS\EmailDownloadLinks;
 use App\Services\MMS\IncomingEmailMatcher;
@@ -464,6 +465,35 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertSame($this->second->id, MatterEmail::where('direction', MatterEmail::RECEIVED)->sole()->matter_id);
         $this->assertSame(1, TabbedDatabaseNotifications::onlyEmails($theirs->notifications())->count());
         $this->assertSame(0, $wrong->notifications()->count());
+    }
+
+    public function test_a_matter_of_an_old_year_is_named_too(): void
+    {
+        // Carried over from 2009: 571/2009 read, while years before it are still not matters.
+        $old = Matter::factory()->create(['number' => '571', 'year' => '2009']);
+        $this->assertSame(2009, MatterReferenceMatcher::firstYear());
+        $this->assertSame([$old->id], MatterReferenceMatcher::matterIds('571/2009'));
+        $this->assertSame([], MatterReferenceMatcher::references('571/2008'));
+
+        $this->assertSame(1, $this->collect($this->email(['body' => '<p>571/2009</p><p>مرفق المستند.</p>'])));
+        $this->assertSame($old->id, MatterEmail::where('direction', MatterEmail::RECEIVED)->sole()->matter_id);
+    }
+
+    public function test_one_email_sent_to_two_of_our_mailboxes_as_two_copies_is_kept_once(): void
+    {
+        MailSenders::add('assistant', ['username' => 'amr@jpa.ae', 'address' => 'amr@jpa.ae', 'name' => 'Amr', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
+        $email = $this->email(['subject' => 'مستندات القضية 987/2026', 'to' => ['amr@jpa.ae', 'iflas@jpa.ae'], 'at' => '2026-10-27T09:00:00+04:00']);
+
+        // The sender's server made a copy for each address, each its own Message-ID, a minute apart.
+        $this->assertSame(1, app(MatterReplyCollector::class)->handle([$email], collect(), 'assistant'));
+        $copy = [...$email, 'message_id' => '<copy-'.uniqid().'@albanna.ae>', 'to' => ['iflas@jpa.ae', 'amr@jpa.ae'], 'at' => '2026-10-27T09:01:00+04:00'];
+        $this->assertSame(0, $this->collect($copy));
+        $this->assertSame(1, MatterEmail::where('direction', MatterEmail::RECEIVED)->count());
+
+        // Sent again later, or to the same mailbox: another email, kept.
+        $this->assertSame(1, $this->collect([...$copy, 'message_id' => '<again-'.uniqid().'@albanna.ae>', 'at' => '2026-10-27T10:00:00+04:00']));
+        $this->assertSame(1, app(MatterReplyCollector::class)->handle([[...$email, 'message_id' => '<same-box-'.uniqid().'@albanna.ae>']], collect(), 'assistant'));
+        $this->assertSame(3, MatterEmail::where('direction', MatterEmail::RECEIVED)->count());
     }
 
     public function test_one_email_in_two_of_our_mailboxes_is_kept_once(): void

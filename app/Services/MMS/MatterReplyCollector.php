@@ -33,6 +33,7 @@ use Illuminate\Support\HtmlString;
 use RuntimeException;
 use Throwable;
 use Webklex\PHPIMAP\Address;
+use Webklex\PHPIMAP\Attachment as ImapAttachment;
 use Webklex\PHPIMAP\Folder;
 use Webklex\PHPIMAP\Message;
 
@@ -77,6 +78,15 @@ class MatterReplyCollector
 
     /** Minutes between automatic runs (sooner while a backlog is left). */
     private const EVERY_MINUTES = 10;
+
+    /** The names Outlook gives the pictures of an email's text: image001.png, Outlook-ab12cd.png (isPartOfText()). */
+    private const OUTLOOK_PICTURE = '/^(?:image\d{3}|Outlook-[\w-]+)\.(?:png|jpe?g|gif|bmp)$/i';
+
+    /** No bigger than a signature's picture: one Outlook named, larger, is a picture pasted in, kept. */
+    private const SIGNATURE_PICTURE_BYTES = 100 * 1024;
+
+    /** How far apart one email's copies may arrive in two of our mailboxes (twinKept()). */
+    private const TWIN_MINUTES = 5;
 
     /** @var array<int, array{matter: int, label: string, url: string, downloads: list<array{name: string, url: string}>}> matters whose emails were kept in the system only (they have no OneDrive folder), with the files to download and put there by hand */
     private array $unlinked = [];
@@ -391,6 +401,16 @@ class MatterReplyCollector
                     continue;
                 }
 
+                // Sent to two of our addresses, some senders' servers send each its own copy, each with its own
+                // Message-ID: the one kept from the other mailbox stands — this copy read here, not kept again.
+                if (self::twinKept($message, $senderKey)) {
+                    if (($message['was_read'] ?? null) === false) {
+                        $this->markRead($message);
+                    }
+
+                    continue;
+                }
+
                 if ($answers = self::answers($message, $sent)) {
                     if ($matterId === null || (int) $answers->matter_id === $matterId) {
                         $this->keep($answers, $message, $id);
@@ -621,6 +641,37 @@ class MatterReplyCollector
         if ($keptFrom !== null && $keptFrom !== $senderKey) {
             $this->markRead($message);
         }
+    }
+
+    /**
+     * The same email kept already from another of our mailboxes under another Message-ID: from the same sender,
+     * with the same subject, To and Cc, within minutes — a copy the sender's server made for each of our addresses.
+     *
+     * @param  array<string, mixed>  $message
+     */
+    private static function twinKept(array $message, ?string $senderKey): bool
+    {
+        $from = mb_strtolower(trim((string) ($message['from'] ?? '')));
+        $subject = mb_substr((string) ($message['subject'] ?? ''), 0, 500);
+
+        if ($senderKey === null || $from === '' || trim($subject) === '') {
+            return false;
+        }
+
+        $at = self::arrivedAt($message);
+        $addresses = fn (mixed $list): array => collect((array) $list)->map(fn ($address): string => mb_strtolower(trim((string) $address)))->filter()->unique()->sort()->values()->all();
+        $to = $addresses($message['to'] ?? []);
+        $cc = $addresses($message['cc'] ?? []);
+
+        return MatterEmail::query()
+            ->where('direction', MatterEmail::RECEIVED)
+            ->where('sender_key', '!=', $senderKey)
+            ->where('subject', $subject)
+            ->whereBetween('at', [$at->copy()->subMinutes(self::TWIN_MINUTES), $at->copy()->addMinutes(self::TWIN_MINUTES)])
+            ->get(['from', 'to', 'cc'])
+            ->contains(fn (MatterEmail $kept): bool => (mb_strtolower((string) $kept->from) === $from || str_ends_with(mb_strtolower((string) $kept->from), '<'.$from.'>'))
+                && $addresses($kept->to) === $to
+                && $addresses($kept->cc) === $cc);
     }
 
     private function markRead(array $message): void
@@ -1213,17 +1264,39 @@ class MatterReplyCollector
     }
 
     /**
-     * Whether an inline part is only a picture the email's own text shows ("cid:…") — a
-     * signature's logo — and not a file that came with it. Anything else the mail program
-     * marked "inline" (a PDF from Apple Mail, Outlook for Mac or an iPhone) is a file.
+     * Whether a part of an email is only a picture of its text — a signature's logo — and not a file that came with
+     * it: a picture the text shows by its Content-ID ("cid:…"), however the mail program marked it (Outlook sends
+     * a reply's signature pictures as attachments, not "inline"); one marked inline with no Content-ID at all (it
+     * can only be decoration); or one Outlook named itself (image001.png, Outlook-ab12cd.png), small as a
+     * signature's picture is. Anything else — a PDF Apple Mail or an iPhone sent "inline", a photo attached — is
+     * a file.
      */
-    public static function isShownInText(string $mime, string $contentId, string $html): bool
+    public static function isPartOfText(string $name, string $mime, string $contentId, int $bytes, bool $inline, string $html): bool
     {
+        $name = trim($name);
+
+        if (! str_starts_with(strtolower($mime), 'image/') && preg_match('/\.(?:png|jpe?g|gif|bmp)$/i', $name) !== 1) {
+            return false;
+        }
+
         $contentId = trim($contentId, " <>\t\r\n");
 
-        // A picture the text shows by its Content-ID, or one with no Content-ID at all (it can only be decoration).
-        return str_starts_with(strtolower($mime), 'image/')
-            && ($contentId === '' || stripos($html, 'cid:'.$contentId) !== false);
+        return ($contentId !== '' && stripos($html, 'cid:'.$contentId) !== false)
+            || ($inline && $contentId === '')
+            || (preg_match(self::OUTLOOK_PICTURE, $name) === 1 && $bytes <= self::SIGNATURE_PICTURE_BYTES);
+    }
+
+    /** A part of an email read over IMAP (or carried in a forward): only a picture of its text (isPartOfText()). */
+    public static function isPartOfTextPart(ImapAttachment $part, string $html): bool
+    {
+        return self::isPartOfText(
+            SentMailImporter::decodeHeader((string) ($part->name ?: $part->filename)),
+            (string) $part->content_type,
+            (string) $part->id,
+            strlen((string) $part->content),
+            $part->disposition === 'inline',
+            $html,
+        );
     }
 
     /** A message's body or files, read the first time asked for only. */
@@ -1517,9 +1590,9 @@ class MatterReplyCollector
                     $html = $message->hasHTMLBody() ? (string) $message->getHTMLBody() : '';
 
                     foreach ($message->getAttachments() as $attachment) {
-                        // Not a picture the email's own text shows (a signature's logo) — but a PDF
-                        // that Apple Mail or Outlook sent "inline" is a file it came with.
-                        if ($attachment->disposition === 'inline' && self::isShownInText((string) $attachment->content_type, (string) $attachment->id, $html)) {
+                        // Not a picture of the email's text (a signature's logo) — but a PDF that Apple
+                        // Mail or Outlook sent "inline" is a file it came with.
+                        if (self::isPartOfTextPart($attachment, $html)) {
                             continue;
                         }
 
@@ -1664,7 +1737,7 @@ class MatterReplyCollector
 
                 return collect($response->successful() ? ($response->json()['value'] ?? []) : [])
                     ->filter(fn ($a) => isset($a['contentBytes']) || ($a['@odata.type'] ?? '') === '#microsoft.graph.itemAttachment')
-                    ->reject(fn ($a) => ($a['isInline'] ?? false) && self::isShownInText((string) ($a['contentType'] ?? ''), (string) ($a['contentId'] ?? ''), (string) ($item['body']['content'] ?? '')))
+                    ->reject(fn ($a) => self::isPartOfText((string) ($a['name'] ?? ''), (string) ($a['contentType'] ?? ''), (string) ($a['contentId'] ?? ''), (int) ($a['size'] ?? strlen((string) base64_decode((string) ($a['contentBytes'] ?? '')))), (bool) ($a['isInline'] ?? false), (string) ($item['body']['content'] ?? '')))
                     ->map(fn ($a): ?array => isset($a['contentBytes'])
                         ? ['name' => (string) ($a['name'] ?? 'attachment'), 'contents' => (string) base64_decode($a['contentBytes']), 'mime' => (string) ($a['contentType'] ?? 'application/octet-stream')]
                         // An email attached to the email (forwarded as an attachment): no bytes in the list — the
