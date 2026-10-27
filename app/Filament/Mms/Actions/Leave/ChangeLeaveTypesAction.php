@@ -13,8 +13,8 @@ use RuntimeException;
 
 /**
  * An approved request's days classified again, with the approval's own form filled with how it was approved —
- * annual leave that turns out to be a new baby's or a death in the family: those days back in the balance, the
- * payroll's absence ledger and the entitlements written again (LeaveRequestService::reclassify()).
+ * annual leave that turns out to be unpaid, say: the balance following the new types (days now of a type not taken
+ * off it back in it), the payroll's absence ledger and the entitlements written again (LeaveRequestService::reclassify()).
  */
 class ChangeLeaveTypesAction extends ApproveLeaveAction
 {
@@ -32,7 +32,7 @@ class ChangeLeaveTypesAction extends ApproveLeaveAction
             ->icon('heroicon-o-arrows-right-left')
             ->color('warning')
             ->modalHeading(__('Change leave types'))
-            ->modalDescription(__('Classify the approved days again: annual days changed to another type go back to the balance. A payroll already generated for those days needs generating again.'))
+            ->modalDescription(__('Classify the approved days again: the balance follows the new types, days now of a type not taken off it going back to it. A payroll already generated for those days needs generating again.'))
             ->modalSubmitActionLabel(__('Save'))
             ->authorize('approve')
             ->visible(fn (LeaveRequest $record): bool => $record->isApproved())

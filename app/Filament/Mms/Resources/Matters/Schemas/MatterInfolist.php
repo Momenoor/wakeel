@@ -299,6 +299,21 @@ class MatterInfolist
                     ->label(__('Type'))
                     ->icon('heroicon-o-rectangle-stack')
                     ->placeholder('—'),
+                // How its incentive is worked out, known before any calculation runs: its type's; a type linked to
+                // none is left out of the calculation.
+                TextEntry::make('incentive_calculation_type')
+                    ->label(__('Incentive Calculation Type'))
+                    ->icon('heroicon-o-calculator')
+                    ->visible(fn (Matter $record): bool => $record->type !== null && ScreenPermissions::can(ScreenPermissions::MATTER_FEES_TAB))
+                    ->state(fn (Matter $record): string => $record->type->incentiveConfig?->name ?? __('Not linked'))
+                    ->color(fn (Matter $record): string => $record->type->incentiveConfig ? 'primary' : 'danger')
+                    ->url(fn (Matter $record): ?string => $record->type->incentiveConfig && MatterTypeIncentiveConfigResource::canView($record->type->incentiveConfig)
+                        ? MatterTypeIncentiveConfigResource::getUrl('view', ['record' => $record->type->incentiveConfig])
+                        : null)
+                    ->belowContent(fn (Matter $record): Text => Text::make($record->type->incentiveConfig?->calculationTypeLabel()
+                        ?? __('The incentive calculation skips its fees until its type is linked to one.'))
+                        ->color($record->type->incentiveConfig ? 'gray' : 'danger')
+                        ->size(TextSize::ExtraSmall)),
                 TextEntry::make('next_session_summary')
                     ->label(__('Next Session'))
                     ->icon('heroicon-o-calendar')
@@ -515,21 +530,6 @@ class MatterInfolist
             ->schema([
                 TextEntry::make('court.name')->label(__('Court'))->icon('heroicon-o-building-library'),
                 TextEntry::make('type.name')->label(__('Type'))->icon('heroicon-o-rectangle-stack'),
-                // How its incentive is worked out, known before any calculation runs: its type's; a type linked to
-                // none is skipped by the calculation.
-                TextEntry::make('incentive_calculation_type')
-                    ->label(__('Incentive Calculation Type'))
-                    ->icon('heroicon-o-calculator')
-                    ->visible(fn (Matter $record): bool => $record->type !== null && ScreenPermissions::can(ScreenPermissions::MATTER_FEES_TAB))
-                    ->state(fn (Matter $record): string => $record->type->incentiveConfig?->name ?? __('Not linked'))
-                    ->color(fn (Matter $record): string => $record->type->incentiveConfig ? 'primary' : 'danger')
-                    ->url(fn (Matter $record): ?string => $record->type->incentiveConfig && MatterTypeIncentiveConfigResource::canView($record->type->incentiveConfig)
-                        ? MatterTypeIncentiveConfigResource::getUrl('view', ['record' => $record->type->incentiveConfig])
-                        : null)
-                    ->belowContent(fn (Matter $record): Text => Text::make($record->type->incentiveConfig?->calculationTypeLabel()
-                        ?? __('The incentive calculation skips its fees until its type is linked to one.'))
-                        ->color($record->type->incentiveConfig ? 'gray' : 'danger')
-                        ->size(TextSize::ExtraSmall)),
                 TextEntry::make('level')->label(__('Level'))->badge(),
                 TextEntry::make('difficulty')->label(__('Difficulty'))->badge(),
                 Group::make()

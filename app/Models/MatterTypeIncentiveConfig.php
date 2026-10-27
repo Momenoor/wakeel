@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Cache;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
@@ -22,6 +23,12 @@ class MatterTypeIncentiveConfig extends Model
         'fixed_percentage' => 'decimal:2',
         'assistant_rate' => 'decimal:2',
     ];
+
+    /** Its types left unlinked when it goes: the pop-up's list read again (Type::withoutIncentiveConfig()). */
+    protected static function booted(): void
+    {
+        static::deleted(fn () => Cache::forget(Type::WITHOUT_INCENTIVE_CACHE));
+    }
 
     public function getActivitylogOptions(): LogOptions
     {

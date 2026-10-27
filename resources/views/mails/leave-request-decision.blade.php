@@ -1,7 +1,11 @@
 @php $approved = $leaveRequest->isApproved(); @endphp
 <x-mail.layout :title="__('Leave Request')" :subtitle="$leaveRequest->status->getLabel()">
     <x-mail.p><strong>{{ __('Dear :name', ['name' => $leaveRequest->party->name]) }}،</strong></x-mail.p>
-    <x-mail.p>{{ $approved ? __('Your leave request has been approved.') : __('Your leave request has been rejected.') }}</x-mail.p>
+    <x-mail.p>{{ match (true) {
+        filled($change) => __('Your approved leave was changed: :change', ['change' => $change]),
+        $approved => __('Your leave request has been approved.'),
+        default => __('Your leave request has been rejected.'),
+    } }}</x-mail.p>
 
     <x-mail.info>
         <x-mail.row :label="__('From')" :value="$leaveRequest->start_date->locale('ar')->format(\App\Support\Dates::dateFormat())" />

@@ -197,17 +197,17 @@ class MmsPanelProvider extends PanelProvider
                     return '';
                 }
 
-                $types = Type::query()->where('active', true)->whereNull('incentive_config_id')->orderBy('name')->get(['id', 'name']);
+                $types = Type::withoutIncentiveConfig();
 
-                if ($types->isEmpty()) {
+                if ($types === []) {
                     return '';
                 }
 
                 return view('filament.partials.types-without-incentive-popup', [
-                    'types' => $types->map(fn (Type $type): array => [
-                        'name' => $type->name,
-                        'url' => TypeResource::getUrl('edit', ['record' => $type], panel: 'mms'),
-                    ])->all(),
+                    'types' => collect($types)->map(fn (string $name, int $id): array => [
+                        'name' => $name,
+                        'url' => TypeResource::getUrl('edit', ['record' => $id], panel: 'mms'),
+                    ])->values()->all(),
                     'typesUrl' => TypeResource::getUrl(panel: 'mms'),
                 ])->render();
             }

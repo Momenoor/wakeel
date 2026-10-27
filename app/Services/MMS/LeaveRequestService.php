@@ -24,6 +24,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Str;
 use RuntimeException;
 use Throwable;
 
@@ -44,6 +45,15 @@ use Throwable;
  */
 class LeaveRequestService
 {
+    /** What the employee is told of (tellRequester()): a decision, or a change to an approved leave. */
+    private const APPROVED = 'approved';
+
+    private const REJECTED = 'rejected';
+
+    private const CHANGED = 'changed';
+
+    private const CANCELLED = 'cancelled';
+
     public function __construct(
         private readonly LeaveEntitlementService $entitlements,
         private readonly LeaveBalanceService $balances,
@@ -83,24 +93,12 @@ class LeaveRequestService
 
             // Replaced wholesale rather than merged. A request approved twice is
             // already refused above, so the only way rows exist here is a earlier
-            // draft split, and keeping them would double the days.
+            // draft split — never written anywhere, so nothing to undo — and
+            // keeping them would double the days.
             $request->periods()->delete();
+            $this->writePeriods($request, $periods);
 
-            foreach ($periods as $period) {
-                $saved = LeaveRequestPeriod::create([
-                    'leave_request_id' => $request->getKey(),
-                    'leave_type' => $period['leave_type'],
-                    'start_date' => $period['start_date'],
-                    'end_date' => $period['end_date'],
-                    'day_count' => $period['day_count'],
-                ]);
-
-                $this->publishToLedger($request, $saved);
-                $this->recordAgainstEntitlement($request, $saved);
-                $this->balances->recordTaken($request, $saved);
-            }
-
-            DB::afterCommit(fn () => $this->tellRequester($request, approved: true));
+            DB::afterCommit(fn () => $this->tellRequester($request, self::APPROVED));
 
             return $request->load('periods');
         });
@@ -109,8 +107,9 @@ class LeaveRequestService
     /**
      * An approved request's days classified again — annual leave that turns out to be a new baby's, or a death in
      * the family: the periods it was approved with undone everywhere they were written (the absence ledger payroll
-     * reads, the entitlement counters, the annual balance) and the new ones written as an approval writes them. Its
-     * annual days given back to the balance, those now annual taken; said on the request, by whom and when.
+     * reads, the entitlement counters, the balance) and the new ones written as an approval writes them. The balance
+     * follows the new types: days now of a type not taken off it go back to it, days now of one taken off it come off
+     * it. Said on the request, by whom and when, and the employee told.
      *
      * @param  list<array{leave_type: string|LeaveType, start_date: string, end_date: string, day_count: float|string}>  $periods
      */
@@ -125,6 +124,7 @@ class LeaveRequestService
         return DB::transaction(function () use ($request, $by, $periods, $comment): LeaveRequest {
             $this->rewritePeriods($request, $periods);
             $this->addNote($request, __('Leave types changed on :date by :user', $this->noteBy($by)), $comment);
+            DB::afterCommit(fn () => $this->tellRequester($request, self::CHANGED));
 
             return $request->load('periods');
         });
@@ -169,6 +169,7 @@ class LeaveRequestService
                 'last' => $lastDay->format(Dates::dateFormat()),
                 'end' => $end->format(Dates::dateFormat()),
             ]), $reason);
+            DB::afterCommit(fn () => $this->tellRequester($request, self::CHANGED));
 
             return $request->load('periods');
         });
@@ -190,6 +191,7 @@ class LeaveRequestService
             $this->rewritePeriods($request, []);
             $request->forceFill(['status' => RequestStatus::CANCELLED])->save();
             $this->addNote($request, __('Leave cancelled on :date by :user (it was approved as :was)', [...$this->noteBy($by), 'was' => $was ?: '—']), $reason);
+            DB::afterCommit(fn () => $this->tellRequester($request, self::CANCELLED));
 
             return $request->load('periods');
         });
@@ -219,6 +221,17 @@ class LeaveRequestService
         LeaveBalanceEntry::query()->whereIn('leave_request_period_id', $old->modelKeys())->delete();
         $request->periods()->delete();
 
+        $this->writePeriods($request, $periods);
+    }
+
+    /**
+     * Approved periods written: each saved, mirrored into the absence ledger, drawn from its entitlement and,
+     * when its type is taken off the balance, off it.
+     *
+     * @param  list<array{leave_type: string|LeaveType, start_date: string, end_date: string, day_count: float|string}>  $periods
+     */
+    private function writePeriods(LeaveRequest $request, array $periods): void
+    {
         foreach ($periods as $period) {
             $saved = LeaveRequestPeriod::create([
                 'leave_request_id' => $request->getKey(),
@@ -282,7 +295,7 @@ class LeaveRequestService
                 $request->periods()->pluck('id'),
             )->delete();
 
-            DB::afterCommit(fn () => $this->tellRequester($request, approved: false));
+            DB::afterCommit(fn () => $this->tellRequester($request, self::REJECTED));
 
             return $request;
         });
@@ -294,12 +307,14 @@ class LeaveRequestService
      * notifications — the decision email, WhatsApp. One with no user has the email. The office it was
      * announced to is copied in on it (to them, when the employee isn't sent it).
      */
-    private function tellRequester(LeaveRequest $request, bool $approved): void
+    private function tellRequester(LeaveRequest $request, string $outcome): void
     {
         $user = $request->party?->user;
+        // A change's own line: the last added to the comment (addNote()).
+        $change = $outcome === self::APPROVED || $outcome === self::REJECTED ? null : Str::afterLast((string) $request->approved_comment, "\n");
 
         if (! $user) {
-            $this->mailDecision($request, Addresses::emails((array) ($request->party?->email ?? [])));
+            $this->mailDecision($request, Addresses::emails((array) ($request->party?->email ?? [])), $change);
 
             return;
         }
@@ -308,16 +323,27 @@ class LeaveRequestService
             'start' => $request->start_date?->format(Dates::dateFormat()) ?? '—',
             'end' => $request->end_date?->format(Dates::dateFormat()) ?? '—',
         ]);
-        $status = $approved ? 'success' : 'danger';
+        $status = match ($outcome) {
+            self::APPROVED => 'success',
+            self::REJECTED => 'danger',
+            default => 'warning',
+        };
         $type = NotificationType::LEAVE_DECIDED;
 
         Notifier::send(
             $type,
             [$user],
-            $approved ? __('Leave request approved') : __('Leave request rejected'),
-            $approved
-                ? __('Your leave request for :period was approved.', ['period' => $period])
-                : __('Your leave request for :period was rejected: :reason', ['period' => $period, 'reason' => (string) $request->approved_comment]),
+            match ($outcome) {
+                self::APPROVED => __('Leave request approved'),
+                self::REJECTED => __('Leave request rejected'),
+                self::CHANGED => __('Approved leave changed'),
+                default => __('Approved leave cancelled'),
+            },
+            match ($outcome) {
+                self::APPROVED => __('Your leave request for :period was approved.', ['period' => $period]),
+                self::REJECTED => __('Your leave request for :period was rejected: :reason', ['period' => $period, 'reason' => (string) $request->approved_comment]),
+                default => (string) $change,
+            },
             // The request itself, for whoever may open it; the list otherwise.
             match (true) {
                 $user->can('update', $request) && Route::has('filament.mms.resources.leave-requests.edit') => route('filament.mms.resources.leave-requests.edit', $request),
@@ -331,7 +357,7 @@ class LeaveRequestService
         // To the address the employee gave as a party, else their user's.
         $this->mailDecision($request, NotificationPreferences::wants($user, $type, NotificationChannel::MAIL)
             ? Addresses::emails(filled($request->party->email) ? (array) $request->party->email : [$user->email])
-            : []);
+            : [], $change);
     }
 
     /**
@@ -339,7 +365,7 @@ class LeaveRequestService
      *
      * @param  list<string>  $employee
      */
-    private function mailDecision(LeaveRequest $request, array $employee): void
+    private function mailDecision(LeaveRequest $request, array $employee, ?string $change = null): void
     {
         $office = Addresses::without(LeaveRequestObserver::mailed(), $employee);
 
@@ -351,7 +377,7 @@ class LeaveRequestService
             Mail::to($employee !== [] ? $employee : $office)
                 ->cc($employee !== [] ? $office : [])
                 ->locale('ar')
-                ->queue(new LeaveRequestDecisionMail($request));
+                ->queue(new LeaveRequestDecisionMail($request, $change));
         } catch (Throwable $e) {
             report($e);
         }

@@ -7,6 +7,7 @@ use App\Enums\LeaveType;
 use App\Enums\PayrollRunStatus;
 use App\Enums\RequestStatus;
 use App\Enums\SalaryComponent;
+use App\Mail\LeaveRequestDecisionMail;
 use App\Models\EmployeeProfile;
 use App\Models\EmployeeSalaryComponent;
 use App\Models\LeaveBalanceEntry;
@@ -23,6 +24,7 @@ use App\Services\MMS\LeaveRequestService;
 use App\Services\MMS\PayrollService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Mail;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -301,7 +303,9 @@ class LeaveRequestTest extends TestCase
 
     public function test_a_cancelled_leave_gives_all_its_days_back(): void
     {
+        Mail::fake();
         $party = $this->employee();
+        $party->update(['email' => ['employee@example.com']]);
         $request = $this->request($party, '2026-06-01', '2026-06-05');
         $this->service->approve($request, User::factory()->create(), $this->split([
             [LeaveType::ANNUAL, '2026-06-01', '2026-06-05', 5],
@@ -314,6 +318,11 @@ class LeaveRequestTest extends TestCase
         $this->assertSame(30.0, app(LeaveBalanceService::class)->balance($party->id));
         $this->assertSame(0, PartyLeave::where('party_id', $party->id)->count());
         $this->assertStringContainsString('5 '.LeaveType::ANNUAL->getLabel(), $request->approved_comment);
+
+        // The employee told: the decision, then the cancellation as its own line.
+        Mail::assertQueued(LeaveRequestDecisionMail::class, fn (LeaveRequestDecisionMail $mail): bool => $mail->change === null);
+        Mail::assertQueued(LeaveRequestDecisionMail::class, fn (LeaveRequestDecisionMail $mail): bool => str_contains((string) $mail->change, 'Trip called off')
+            && str_contains($mail->render(), 'Trip called off'));
 
         // Cancelled once: not again.
         $this->expectException(RuntimeException::class);

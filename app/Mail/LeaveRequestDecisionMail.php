@@ -27,7 +27,11 @@ class LeaveRequestDecisionMail extends Mailable
     /** The balance before them. */
     public float $balanceBefore = 0;
 
-    public function __construct(public LeaveRequest $leaveRequest)
+    /**
+     * @param  string|null  $change  what was changed on an approved leave (its types, its end, its cancellation) —
+     *                               null for the decision itself
+     */
+    public function __construct(public LeaveRequest $leaveRequest, public ?string $change = null)
     {
         if ($leaveRequest->isApproved()) {
             $this->fromBalance = (float) $leaveRequest->periods()->get()

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Cache;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
@@ -20,6 +21,32 @@ class Type extends Model
     {
         return LogOptions::defaults()
             ->logAll();
+    }
+
+    /** withoutIncentiveConfig()'s cache: cleared when a type or an incentive configuration changes. */
+    public const WITHOUT_INCENTIVE_CACHE = 'types.without-incentive-config';
+
+    protected static function booted(): void
+    {
+        $forget = fn () => Cache::forget(self::WITHOUT_INCENTIVE_CACHE);
+        static::saved($forget);
+        static::deleted($forget);
+    }
+
+    /**
+     * The active types linked to no incentive configuration — the calculation skips their matters' fees — by name:
+     * read once and kept, since the admins' pop-up asks on every page.
+     *
+     * @return array<int, string> name by id
+     */
+    public static function withoutIncentiveConfig(): array
+    {
+        return Cache::rememberForever(self::WITHOUT_INCENTIVE_CACHE, fn (): array => static::query()
+            ->where('active', true)
+            ->whereNull('incentive_config_id')
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all());
     }
 
     protected $casts = [

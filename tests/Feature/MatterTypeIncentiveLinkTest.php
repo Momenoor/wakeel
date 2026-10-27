@@ -10,6 +10,7 @@ use App\Models\Type;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
@@ -81,8 +82,10 @@ class MatterTypeIncentiveLinkTest extends TestCase
         $this->actingAs($this->user(email: 'staff@firm.ae'));
         $this->get(AdminDashboard::getUrl(panel: 'mms'))->assertDontSee('wakeel-types-without-incentive', false);
 
-        // Linked: no more pop-up.
+        // Read once and kept for every page; linked: read again, and no more pop-up.
+        $this->assertSame([$new->id => 'Arbitration'], Cache::get(Type::WITHOUT_INCENTIVE_CACHE));
         $new->update(['incentive_config_id' => $config->id]);
+        $this->assertFalse(Cache::has(Type::WITHOUT_INCENTIVE_CACHE));
         $this->actingAs(User::query()->where('email', 'someone@firm.ae')->sole());
         $this->get(AdminDashboard::getUrl(panel: 'mms'))->assertDontSee('wakeel-types-without-incentive', false);
     }
