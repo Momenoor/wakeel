@@ -9,7 +9,9 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\TimePicker;
 use Filament\Schemas\Schema;
+use Filament\Support\Facades\FilamentView;
 use Filament\Tables\Table;
+use Filament\View\PanelsRenderHook;
 use Illuminate\Support\Carbon;
 use Throwable;
 
@@ -114,7 +116,14 @@ final class Dates
             if (! $picker instanceof DatePicker && self::twelveHours()) {
                 $picker->locale('en');
             }
+
+            // Typed as well as picked (typed-dates): the format it is read in, as the picker writes it.
+            $picker->extraTriggerAttributes(fn (DateTimePicker $component): array => [
+                'data-typed-date' => convert_date_format($component->getDisplayFormat())->to('day.js'),
+            ], merge: true);
         });
+
+        FilamentView::registerRenderHook(PanelsRenderHook::BODY_END, fn (): string => view('filament.partials.typed-dates')->render());
     }
 
     /** @param  list<string>  $allowed */

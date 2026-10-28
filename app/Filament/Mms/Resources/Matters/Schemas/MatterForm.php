@@ -445,15 +445,22 @@ class MatterForm
                                         Repeater::make('fees')
                                             ->label(__('Fees'))
                                             ->relationship('fees')
+                                            // Fixed shares of the width, whatever is typed (wk-fixed-columns, the theme); long
+                                            // headings and the split wrap. The rest of the width for the move and delete buttons.
                                             ->table([
-                                                Repeater\TableColumn::make(__('Type')),
-                                                Repeater\TableColumn::make(__('Amount')),
+                                                Repeater\TableColumn::make(__('Type'))->width('22%')->wrapHeader(),
+                                                Repeater\TableColumn::make(__('Amount'))->width('16%')->wrapHeader(),
                                                 Repeater\TableColumn::make(__('VAT not applicable'))
+                                                    ->width('11%')
+                                                    ->wrapHeader()
                                                     ->alignment(Alignment::Center),
                                                 Repeater\TableColumn::make(__('Including VAT'))
+                                                    ->width('11%')
+                                                    ->wrapHeader()
                                                     ->alignment(Alignment::Center),
-                                                Repeater\TableColumn::make(__('Basic · VAT · Total')),
+                                                Repeater\TableColumn::make(__('Basic · VAT · Total'))->width('28%')->wrapHeader(),
                                             ])
+                                            ->extraAttributes(['class' => 'wk-fixed-columns'])
                                             ->compact()
                                             // Each fee's VAT on the fee itself (FeeVatFields): shown as entered, kept split.
                                             ->mutateRelationshipDataBeforeFillUsing(fn (array $data): array => [

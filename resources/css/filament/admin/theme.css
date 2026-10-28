@@ -567,3 +567,18 @@ html {
 .fi-sc-wizard-footer:has(> .wk-wizard-save) > :nth-last-child(-n + 2) {
     order: 2;
 }
+
+/*
+ * A table repeater whose columns keep the shares of the width they are given (->width('22%')), whatever is
+ * typed in them (the matter form's fees): the table laid out by them, not by its contents; a long word in a
+ * cell wraps rather than widening it. On a narrow screen the rows stack as before.
+ */
+@media (min-width: 64rem) {
+    .wk-fixed-columns > table {
+        table-layout: fixed;
+    }
+}
+
+.wk-fixed-columns > table td {
+    overflow-wrap: break-word;
+}
