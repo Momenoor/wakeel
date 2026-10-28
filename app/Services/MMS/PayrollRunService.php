@@ -123,6 +123,9 @@ class PayrollRunService
             ->with('party.employeeProfile')
             ->get();
 
+        $now = now();
+        $rows = [];
+
         foreach ($payslips as $payslip) {
             $joinedOn = $payslip->party->employeeProfile?->getAttribute('date_of_joining');
 
@@ -136,19 +139,23 @@ class PayrollRunService
 
             $basic = (float) $payslip->getAttribute('basic_snapshot');
 
-            EosgAccrual::updateOrCreate(
-                [
-                    'party_id' => $payslip->getAttribute('party_id'),
-                    'period' => $run->getAttribute('period'),
-                ],
-                [
-                    'service_days' => $serviceDays,
-                    'basic_snapshot' => $basic,
-                    'accrued_this_month' => (float) $payslip->getAttribute('eosg_accrued'),
-                    // What settlement would cost today, cap already applied.
-                    'cumulative_liability' => $gratuity->gratuityAsOf($joinedOn, $periodEnd, $basic, $unpaidDays),
-                ],
-            );
+            $rows[] = [
+                'party_id' => $payslip->getAttribute('party_id'),
+                'period' => $run->getAttribute('period'),
+                'service_days' => $serviceDays,
+                'basic_snapshot' => $basic,
+                'accrued_this_month' => (float) $payslip->getAttribute('eosg_accrued'),
+                // What settlement would cost today, cap already applied.
+                'cumulative_liability' => $gratuity->gratuityAsOf($joinedOn, $periodEnd, $basic, $unpaidDays),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }
+
+        // Written at once — the period's row for each employee, again if the run was disbursed before (one row an
+        // employee and period, eosg_party_period_unique); the run's disbursement is its entry in the activity log.
+        if ($rows !== []) {
+            EosgAccrual::query()->upsert($rows, ['party_id', 'period'], ['service_days', 'basic_snapshot', 'accrued_this_month', 'cumulative_liability', 'updated_at']);
         }
     }
 

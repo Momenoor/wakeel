@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Support\Permissions;
 use BezhanSalleh\FilamentShield\Facades\FilamentShield;
 use Illuminate\Database\Seeder;
-use Spatie\Permission\Models\Permission;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
@@ -50,23 +50,10 @@ class AllPermissionsSeeder extends Seeder
             ->filter()
             ->values();
 
-        $createdCount = 0;
-
-        foreach ($allPermissions as $permissionName) {
-            $permission = Permission::firstOrCreate([
-                'name' => $permissionName,
-                'guard_name' => 'web',
-            ]);
-
-            if ($permission->wasRecentlyCreated) {
-                $createdCount++;
-            }
-        }
+        // 4. Read once, the missing written at once; the cache cleared so they take effect immediately.
+        $createdCount = Permissions::ensure($allPermissions);
 
         $this->command?->info("Processed {$allPermissions->count()} total permissions ({$createdCount} newly created).");
-
-        // 4. Clear permission cache so changes take effect immediately
-        app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         $this->command?->info('✓ All permissions seeded and cache cleared successfully.');
     }

@@ -71,7 +71,7 @@ class PayrollRunsTable
                     ->iconButton()
                     ->color('gray')
                     ->authorize('viewJournalVoucher')
-                    ->visible(fn (PayrollRun $record): bool => $record->payslips()->exists())
+                    ->visible(fn (PayrollRun $record): bool => $record->payslips_count > 0)
                     ->modalHeading(fn (PayrollRun $record): string => __('Journal Voucher — :period', ['period' => $record->period]))
                     ->schema(fn (PayrollRun $record): array => JournalVoucherEntries::voucher(app(PayrollJournalVoucherService::class)->forRun($record)))
                     ->modalSubmitAction(false)
@@ -86,7 +86,7 @@ class PayrollRunsTable
                     ->iconButton()
                     ->color('gray')
                     ->authorize('viewJournalVoucher')
-                    ->visible(fn (PayrollRun $record): bool => $record->payslips()->exists())
+                    ->visible(fn (PayrollRun $record): bool => $record->payslips_count > 0)
                     ->url(fn (PayrollRun $record): string => route('payroll.run.journal-voucher.print', $record))
                     ->openUrlInNewTab(),
                 // The bank's own salary-upload form — a separate sheet, carrying
@@ -98,7 +98,7 @@ class PayrollRunsTable
                     ->iconButton()
                     ->color('gray')
                     ->authorize('viewJournalVoucher')
-                    ->visible(fn (PayrollRun $record): bool => $record->payslips()->exists() && auth()->user()->can('View:PayrollRun'))
+                    ->visible(fn (PayrollRun $record): bool => $record->payslips_count > 0 && auth()->user()->can('View:PayrollRun'))
                     ->url(fn (PayrollRun $record): string => route('payroll.run.salary-authorization-form.print', $record))
                     ->openUrlInNewTab(),
                 DeleteAction::make()

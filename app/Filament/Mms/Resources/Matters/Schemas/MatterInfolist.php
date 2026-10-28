@@ -338,7 +338,7 @@ class MatterInfolist
                 TextEntry::make('assistants_summary')
                     ->label(__('Assistants'))
                     ->icon('heroicon-o-user-group')
-                    ->state(fn ($record) => $record?->assistantsOnly()->with('party:id,name')->get()->pluck('party.name')->filter()->implode('، ') ?: null)
+                    ->state(fn ($record) => $record?->assistantList()->pluck('party.name')->filter()->implode('، ') ?: null)
                     ->placeholder('—'),
             ]);
     }
@@ -1004,14 +1004,16 @@ class MatterInfolist
 
     /**
      * Who brought the matter in: each marketer, staff or a third party, their part of the share and what they have
-     * earned of it so far — as the client paid (MarketingCommissions).
+     * earned of it so far — as the client paid (MarketingCommissions). An assistant of the matter sees no colleague
+     * of the office who marketed it — what a colleague earns is not theirs to see — only a third party, and
+     * themselves if they marketed it; none left to see, no section.
      */
     private static function marketingSection(): Section
     {
         return Section::make(__('Marketing'))
             ->key('marketingSection', isInheritable: false)
             ->icon('heroicon-o-megaphone')
-            ->visible(fn (Matter $record): bool => $record->marketers->isNotEmpty() || $record->marketingCommissions->isNotEmpty())
+            ->visible(fn (Matter $record): bool => static::marketingRows($record) !== [])
             ->collapsible()
             ->description(fn (Matter $record): string => $record->marketing_fixed !== null
                 ? __('Marketing share :amount fixed', ['amount' => Currency::text((float) $record->marketing_fixed)])
@@ -1019,19 +1021,7 @@ class MatterInfolist
             ->schema([
                 RepeatableEntry::make('marketing_rows')
                     ->hiddenLabel()
-                    ->state(function (Matter $record): array {
-                        $parts = MarketingCommissions::parts($record->marketers);
-                        $earned = $record->marketingCommissions->groupBy('party_id');
-
-                        return $parts->keys()->merge($earned->keys())->unique()->map(fn ($partyId): array => [
-                            'name' => $record->marketers->firstWhere('party_id', $partyId)?->party?->name ?? $earned->get($partyId)?->first()?->party?->name ?? '—',
-                            'kind' => MarketingCommission::kindLabel($parts->get($partyId)['kind'] ?? $earned->get($partyId)?->first()?->kind),
-                            'part' => isset($parts[$partyId]) ? round($parts[$partyId]['part'] * 100, 2).'%' : '—',
-                            'earned' => (float) $earned->get($partyId, collect())->sum('amount'),
-                            // Staff: paid in a calculation; external: marked paid.
-                            'settled' => (float) $earned->get($partyId, collect())->filter(fn (MarketingCommission $c): bool => $c->paid_at !== null || ($c->calculation?->isFinalized() ?? false))->sum('amount'),
-                        ])->values()->all();
-                    })
+                    ->state(fn (Matter $record): array => static::marketingRows($record))
                     ->columns(5)
                     ->schema([
                         TextEntry::make('name')->label(__('Marketer'))->weight(FontWeight::SemiBold),
@@ -1041,6 +1031,33 @@ class MatterInfolist
                         TextEntry::make('settled')->label(__('Paid so far'))->aed()->color('success'),
                     ]),
             ]);
+    }
+
+    /**
+     * The section's rows, those the viewer may see (marketingSection()).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function marketingRows(Matter $record): array
+    {
+        $parts = MarketingCommissions::parts($record->marketers);
+        $earned = $record->marketingCommissions->groupBy('party_id');
+        $kind = fn ($partyId): ?string => $parts->get($partyId)['kind'] ?? $earned->get($partyId)?->first()?->kind;
+
+        // The viewer an assistant of this matter: its staff marketers hidden, but for themselves.
+        $viewer = auth()->user()?->party?->getKey();
+        $assistant = $viewer !== null && $record->assistantList()->contains('party_id', $viewer);
+
+        return $parts->keys()->merge($earned->keys())->unique()
+            ->reject(fn ($partyId): bool => $assistant && $kind($partyId) === MarketingCommission::STAFF && (int) $partyId !== (int) $viewer)
+            ->map(fn ($partyId): array => [
+                'name' => $record->marketers->firstWhere('party_id', $partyId)?->party?->name ?? $earned->get($partyId)?->first()?->party?->name ?? '—',
+                'kind' => MarketingCommission::kindLabel($kind($partyId)),
+                'part' => isset($parts[$partyId]) ? round($parts[$partyId]['part'] * 100, 2).'%' : '—',
+                'earned' => (float) $earned->get($partyId, collect())->sum('amount'),
+                // Staff: paid in a calculation; external: marked paid.
+                'settled' => (float) $earned->get($partyId, collect())->filter(fn (MarketingCommission $c): bool => $c->paid_at !== null || ($c->calculation?->isFinalized() ?? false))->sum('amount'),
+            ])->values()->all();
     }
 
     /** The fields of an expense paid out, as added and as changed. */
@@ -1272,7 +1289,7 @@ class MatterInfolist
     {
         return $record && (
             static::visibleOneDriveFolders($record)->isNotEmpty()
-            || (MatterOneDriveFolders::enabled() && auth()->user()?->can('update', $record) && $record->assistantsOnly()->exists())
+            || (MatterOneDriveFolders::enabled() && auth()->user()?->can('update', $record) && $record->assistantList()->isNotEmpty())
         );
     }
 
@@ -1288,11 +1305,11 @@ class MatterInfolist
                     ->label(__('Create folders'))
                     ->icon('heroicon-o-folder-plus')
                     ->size('sm')
-                    ->visible(fn ($record) => auth()->user()?->can('update', $record) && $record->assistantsOnly()->exists())
+                    ->visible(fn ($record) => auth()->user()?->can('update', $record) && $record->assistantList()->isNotEmpty())
                     ->requiresConfirmation()
                     ->modalDescription(__('Makes the folder in each assistant\'s OneDrive where it is missing or failed. Folders already made are not changed.'))
                     ->action(function ($record, $livewire) {
-                        $queued = $record->assistantsOnly()->pluck('party_id')->unique()
+                        $queued = $record->assistantList()->pluck('party_id')->unique()
                             ->map(fn ($partyId) => MatterOneDriveFolders::queue($record, (int) $partyId))
                             ->filter(fn ($folder) => ! $folder->isCreated())
                             ->count();

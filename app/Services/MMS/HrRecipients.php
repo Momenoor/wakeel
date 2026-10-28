@@ -51,6 +51,8 @@ class HrRecipients
     {
         $recipients = self::recipients($permission);
         $users = User::whereIn('email', $recipients)->get();
+        // Their roles and choices read for them all at once, not as each address is asked about.
+        NotificationPreferences::make()->readFor($users);
 
         return array_values(array_filter($recipients, function (string $address) use ($users, $type): bool {
             $owners = $users->filter(fn (User $user): bool => strcasecmp((string) $user->email, $address) === 0);

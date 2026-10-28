@@ -13,13 +13,16 @@ use App\Models\Party;
 use App\Models\PartyLeave;
 use App\Models\PayrollRun;
 use App\Models\Payslip;
+use App\Models\PayslipLine;
 use App\Models\Setting;
 use App\Services\MMS\LoanScheduleService;
 use App\Services\MMS\PayrollJournalVoucherService;
 use App\Services\MMS\PayrollService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use RuntimeException;
+use Spatie\Activitylog\Models\Activity;
 use Tests\TestCase;
 
 /**
@@ -97,6 +100,36 @@ class PayrollRunTest extends TestCase
         $this->assertSame('10000.00', $payslip->gross);
         $this->assertSame('10000.00', $payslip->net_pay);
         $this->assertFalse($payslip->needs_review);
+    }
+
+    public function test_a_run_reads_once_for_everyone_and_logs_once(): void
+    {
+        // A run of the month with so many more employees, each with a loan instalment due: its queries.
+        $queries = function (int $more, string $period): int {
+            foreach (range(1, $more) as $i) {
+                $loan = EmployeeLoan::create(['party_id' => $this->employee()->id, 'kind' => LoanKind::LOAN, 'principal' => 600, 'months' => 6, 'starts_on' => '2026-06-01']);
+                app(LoanScheduleService::class)->generateFor($loan);
+            }
+            $run = $this->payrollRun($period);
+
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $this->payroll->generate($run);
+            DB::disableQueryLog();
+
+            return count(DB::getQueryLog());
+        };
+
+        $two = $queries(2, '2026-06');
+        $five = $queries(3, '2026-07');
+
+        // Each employee more: their payslip and instalment written — three queries at most — nothing read again.
+        $this->assertLessThanOrEqual($two + 3 * 3, $five);
+        $this->assertSame(5, Payslip::query()->whereHas('payrollRun', fn ($q) => $q->where('period', '2026-07'))->count());
+
+        // One entry in the activity log for each run, not one for each payslip, line and instalment.
+        $this->assertSame(2, Activity::query()->where('description', 'Payslips generated')->count());
+        $this->assertSame(0, Activity::query()->where('subject_type', (new PayslipLine)->getMorphClass())->count());
     }
 
     public function test_only_parties_holding_the_employee_role_are_paid(): void

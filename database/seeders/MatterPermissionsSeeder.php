@@ -3,8 +3,7 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Spatie\Permission\Models\Permission;
-use Spatie\Permission\PermissionRegistrar;
+use App\Support\Permissions;
 
 /**
  * Creates the Matter-domain permissions Shield's own discovery can't infer
@@ -56,17 +55,10 @@ class MatterPermissionsSeeder extends Seeder
 
     public function run(): void
     {
-        // 1. Clear cache first
-        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        // Read once, the missing written at once; the cache cleared so the new rows are visible immediately.
+        Permissions::ensure(self::PERMISSIONS);
 
-        // 2. Create all permissions
-        $created = collect(self::PERMISSIONS)->map(fn ($name) => Permission::firstOrCreate(['name' => $name, 'guard_name' => 'web'])
-        );
-
-        $this->command->info('✓ '.$created->count().' permissions ready.');
-
-        // 3. Final cache clear so the new rows are visible immediately
-        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        $this->command->info('✓ '.count(self::PERMISSIONS).' permissions ready.');
 
         $this->command->info('✓ Done. Permission cache cleared.');
     }

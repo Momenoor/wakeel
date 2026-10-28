@@ -61,6 +61,7 @@ class IncentiveCalculatorService
         // and per assistant-month: hundreds of the same queries).
         $this->leavesByParty = null;
         $this->firstAssistantOf = null;
+        $this->feeDates = [];
         $this->metaAdjustments = IncentiveMetaAdjustment::all();
 
         // Its lines are rebuilt on every run: one entry in the activity log for the run, not one per line.
@@ -283,6 +284,8 @@ class IncentiveCalculatorService
             $linesByMatter = $processedLines->groupBy(fn ($l) => $l['matter']->id);
             $assistantTotals = []; // party_id => cumulative share (quota-eligible matters only — the bonus/penalty basis)
             $allAssistantPartyIds = collect(); // every assistant with any line at all (incl. excluded matters)
+            $assistantRows = []; // their lines, written at once after the loop — one insert each was a query a line
+            $now = now();
             $quotaMatterIds = collect();
 
             foreach ($linesByMatter as $matterId => $matterLines) {
@@ -359,7 +362,7 @@ class IncentiveCalculatorService
                         $shareAmount = round($shareAmount + $matterLines->sum(fn ($l) => $l['line']->fee_amount_excl_vat * $marketedBonus / 100), 2);
                     }
 
-                    IncentiveAssistantLine::create([
+                    $assistantRows[] = [
                         'incentive_line_id' => $firstLine->id,
                         'party_id' => $mp->party_id,
                         'percentage_override' => $override,
@@ -371,7 +374,9 @@ class IncentiveCalculatorService
                         'minimum_penalty_pct' => 0,
                         'minimum_penalty_amount' => 0,
                         'total_amount' => $shareAmount,
-                    ]);
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
 
                     $allAssistantPartyIds->push($mp->party_id);
 
@@ -379,6 +384,10 @@ class IncentiveCalculatorService
                         $assistantTotals[$mp->party_id] = ($assistantTotals[$mp->party_id] ?? 0.0) + $shareAmount;
                     }
                 }
+            }
+
+            foreach (array_chunk($assistantRows, 500) as $chunk) {
+                IncentiveAssistantLine::query()->insert($chunk);
             }
 
             $allAssistantPartyIds = $allAssistantPartyIds->unique()->values();
@@ -537,6 +546,12 @@ class IncentiveCalculatorService
 
     /** Everyone's leave, by party, read once for a run (calculate()). */
     private ?Collection $leavesByParty = null;
+
+    /** @var array<int, Collection<int, mixed>> by calculation: each matter's first line's fee date (quotaTriggerDate()) */
+    private array $feeDates = [];
+
+    /** The achievement rules, for describing a line's bonus (describeExtraReason()). */
+    private ?Collection $extraRules = null;
 
     /** @var Collection<int, int>|null each matter's first assistant's party, for a run's lines */
     private ?Collection $firstAssistantOf = null;
@@ -849,7 +864,9 @@ class IncentiveCalculatorService
             return null;
         }
 
-        $rule = IncentiveExtraRule::where('extra_percentage', $extraPct)->first();
+        // The rules read once (few of them), not one query for each line the print describes.
+        $this->extraRules ??= IncentiveExtraRule::query()->orderBy('id')->get();
+        $rule = $this->extraRules->first(fn (IncentiveExtraRule $rule): bool => abs((float) $rule->extra_percentage - $extraPct) < 0.001);
 
         if (! $rule) {
             return __('Achievement bonus for that month').': +'.$extraPct.'%';
@@ -925,12 +942,17 @@ class IncentiveCalculatorService
         $triggerDate = $matter->final_report_memo_date ?? $matter->final_report_at;
 
         if (! $triggerDate) {
-            $line = IncentiveLine::where('incentive_calculation_id', $calculationId)
-                ->where('matter_id', $matter->id)
-                ->with('fee')
-                ->first();
+            // Each matter's first line's fee date, read once for the calculation — asked a matter at a time, it was
+            // a query for every one of them (and every month of a run).
+            $this->feeDates[$calculationId] ??= IncentiveLine::query()
+                ->where('incentive_calculation_id', $calculationId)
+                ->with('fee:id,date')
+                ->orderBy('id')
+                ->get(['id', 'matter_id', 'fee_id'])
+                ->unique('matter_id')
+                ->mapWithKeys(fn (IncentiveLine $line): array => [$line->matter_id => $line->fee?->date]);
 
-            $triggerDate = $line?->fee?->date;
+            $triggerDate = $this->feeDates[$calculationId]->get($matter->id);
         }
 
         $triggerDate ??= $matter->created_at;

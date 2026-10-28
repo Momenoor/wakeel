@@ -6,6 +6,7 @@ use App\Models\License;
 use App\Models\Setting;
 use App\Services\License\LicenseVerifier;
 use App\Support\AppUpdate;
+use App\Support\Permissions;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Process as ProcessRunner;
@@ -479,15 +480,14 @@ class Updater
             .$this->artisan('optimize:clear');
     }
 
+    /** Every permission the panels check, made sure of (Permissions): read once, the missing written at once. */
     private function refreshPermissions(): string
     {
-        $output = '';
+        $panels = array_keys(array_filter(['mms' => config('modules.mms'), 'pms' => config('modules.pms')]));
+        $names = Permissions::ofPanels($panels);
+        $added = Permissions::ensure($names);
 
-        foreach (array_keys(array_filter(['mms' => config('modules.mms'), 'pms' => config('modules.pms')])) as $panel) {
-            $output .= $this->artisan('shield:generate', ['--panel' => $panel, '--option' => 'permissions', '--all' => true]);
-        }
-
-        return $output;
+        return __(':count permissions checked, :added added.', ['count' => count($names), 'added' => $added])."\n";
     }
 
     private function finish(): string

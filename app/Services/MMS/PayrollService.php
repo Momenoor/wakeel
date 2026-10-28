@@ -13,6 +13,7 @@ use App\Models\PartyLeave;
 use App\Models\PayrollRun;
 use App\Models\Payslip;
 use App\Models\PayslipLine;
+use App\Support\ActivityLog;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -40,6 +41,17 @@ class PayrollService
     public function __construct(
         private readonly EndOfServiceGratuityService $gratuity,
     ) {}
+
+    /**
+     * Read once for a generation (generate()), by party: salaries in force, leave in the period, loan instalments
+     * due, the run's flight tickets — each employee's own read for each was over a thousand queries for a run.
+     *
+     * @var array{salaries: Collection, leaves: Collection, installments: Collection, tickets: Collection}|null
+     */
+    private ?array $forRun = null;
+
+    /** @var list<array<string, mixed>> the payslips' lines, written at once at the end of a generation */
+    private array $lines = [];
 
     /**
      * Regenerate every payslip in a run.
@@ -75,11 +87,19 @@ class PayrollService
 
             $this->clear($run);
 
-            return Party::withRole('employee')
+            $parties = Party::withRole('employee')
                 ->with('employeeProfile')
                 ->get()
                 ->filter(fn (Party $party): bool => $this->isOnPayroll($party, $periodEnd))
-                ->map(fn (Party $party): Payslip => $this->buildPayslip(
+                ->values();
+
+            $this->forRun = $this->readForRun($run, $parties->modelKeys(), $periodStart, $periodEnd);
+            $this->lines = [];
+
+            try {
+                // Its payslips are rebuilt on every generation: one entry in the activity log for the run, not one
+                // for each payslip, line, instalment and ticket.
+                $payslips = ActivityLog::quietly(fn (): Collection => $parties->map(fn (Party $party): Payslip => $this->buildPayslip(
                     $run,
                     $party,
                     $periodStart,
@@ -88,9 +108,60 @@ class PayrollService
                     (float) ($overridden[$party->getKey()] ?? $imported[$party->getKey()] ?? 0),
                     $overridden->has($party->getKey()),
                     (float) ($fromSalary[$party->getKey()] ?? 0),
-                ))
-                ->values();
+                )));
+
+                foreach (array_chunk($this->lines, 500) as $chunk) {
+                    PayslipLine::query()->insert($chunk);
+                }
+            } finally {
+                $this->forRun = null;
+                $this->lines = [];
+            }
+
+            activity()->performedOn($run)
+                ->withProperties(['payslips' => $payslips->count()])
+                ->log('Payslips generated');
+
+            return $payslips;
         });
+    }
+
+    /**
+     * Instalments falling due by the run's period that nothing has yet recovered are among them: earlier
+     * unrecovered ones are swept in as well as the current one — an employee who was skipped in March because they
+     * had no payslip still owes March's instalment in April, and leaving it behind would silently shorten the
+     * recovery.
+     *
+     * @param  list<int>  $partyIds
+     * @return array{salaries: Collection, leaves: Collection, installments: Collection, tickets: Collection}
+     */
+    private function readForRun(PayrollRun $run, array $partyIds, CarbonInterface $periodStart, CarbonInterface $periodEnd): array
+    {
+        return [
+            'salaries' => $this->salariesAt($partyIds, $periodEnd),
+            'leaves' => PartyLeave::query()
+                ->whereIn('party_id', $partyIds)
+                ->whereDate('start_date', '<=', $periodEnd->toDateString())
+                ->whereDate('end_date', '>=', $periodStart->toDateString())
+                ->with('leaveRequestPeriod')
+                ->get()
+                ->groupBy('party_id'),
+            'installments' => LoanInstallment::query()
+                ->whereNull('payslip_id')
+                ->where('due_period', '<=', $run->getAttribute('period'))
+                ->whereHas('loan', fn ($query) => $query->whereIn('party_id', $partyIds)->where('status', 'active'))
+                ->with('loan')
+                ->orderBy('due_period')
+                ->get()
+                ->groupBy(fn (LoanInstallment $installment): int => (int) $installment->loan->getAttribute('party_id')),
+            'tickets' => FlightTicket::query()
+                ->where('payroll_run_id', $run->getKey())
+                ->whereIn('party_id', $partyIds)
+                ->whereNull('paid_at')
+                ->orderBy('year')
+                ->get()
+                ->groupBy('party_id'),
+        ];
     }
 
     /**
@@ -194,10 +265,12 @@ class PayrollService
     {
         [$periodStart, $periodEnd] = $run->dateRange();
 
-        return Party::withRole('employee')
-            ->with('employeeProfile')
-            ->get()
-            ->map(function (Party $party) use ($periodEnd): ?array {
+        $parties = Party::withRole('employee')->with('employeeProfile')->get();
+        // Everyone's salary read once, not each employee's by itself.
+        $salaries = $this->salariesAt($parties->modelKeys(), $periodEnd);
+
+        return $parties
+            ->map(function (Party $party) use ($periodEnd, $salaries): ?array {
                 $profile = $party->employeeProfile;
 
                 if ($profile === null) {
@@ -208,7 +281,7 @@ class PayrollService
                     return ['party' => $party, 'reason' => (string) __('Not employed during this period')];
                 }
 
-                if (($this->salaryAt($party->getKey(), $periodEnd)[SalaryComponent::BASIC->value] ?? 0) <= 0) {
+                if (($salaries->get($party->getKey(), collect())[SalaryComponent::BASIC->value] ?? 0) <= 0) {
                     // Priced at nothing. The payslip would generate, but at zero,
                     // which is worth saying out loud before anyone approves it.
                     return ['party' => $party, 'reason' => (string) __('No basic salary in force')];
@@ -252,7 +325,8 @@ class PayrollService
      */
     public function unpaidDaysInPeriod(int $partyId, CarbonInterface $start, CarbonInterface $end): float
     {
-        $leaves = PartyLeave::query()
+        // A generation's, read once for everyone (readForRun()).
+        $leaves = $this->forRun !== null ? $this->forRun['leaves']->get($partyId, collect()) : PartyLeave::query()
             ->where('party_id', $partyId)
             ->whereDate('start_date', '<=', $end->toDateString())
             ->whereDate('end_date', '>=', $start->toDateString())
@@ -281,13 +355,25 @@ class PayrollService
      */
     public function salaryAt(int $partyId, CarbonInterface $on): Collection
     {
+        return $this->salariesAt([$partyId], $on)->get($partyId, collect());
+    }
+
+    /**
+     * Many employees' salary components in force at a date, read at once: by party, then by component.
+     *
+     * @param  list<int>  $partyIds
+     * @return Collection<int, Collection<string, float>>
+     */
+    public function salariesAt(array $partyIds, CarbonInterface $on): Collection
+    {
         return EmployeeSalaryComponent::query()
-            ->where('party_id', $partyId)
+            ->whereIn('party_id', $partyIds)
             ->effectiveOn($on->toDateString())
             ->get()
-            ->mapWithKeys(fn (EmployeeSalaryComponent $component): array => [
+            ->groupBy('party_id')
+            ->map(fn (Collection $components): Collection => $components->mapWithKeys(fn (EmployeeSalaryComponent $component): array => [
                 $component->getAttribute('component')->value => (float) $component->getAttribute('amount'),
-            ]);
+            ]));
     }
 
     private function buildPayslip(
@@ -300,7 +386,7 @@ class PayrollService
         bool $incentiveOverridden = false,
         float $incentiveDeduction = 0.0,
     ): Payslip {
-        $salary = $this->salaryAt($party->getKey(), $periodEnd);
+        $salary = $this->forRun['salaries']->get($party->getKey(), collect());
 
         $basic = $salary[SalaryComponent::BASIC->value] ?? 0.0;
         $allowances = (float) $salary->except(SalaryComponent::BASIC->value)->sum();
@@ -311,16 +397,11 @@ class PayrollService
         // the same on both figures; the gratuity itself stays on the basic.
         $unpaidDeduction = round(($grossSalary / $this->gratuity->daysPerMonth()) * $unpaidDays, 2);
 
-        $installments = $this->dueInstallments($party, $run->getAttribute('period'));
+        $installments = $this->forRun['installments']->get($party->getKey(), collect());
         $loanDeduction = round((float) $installments->sum('amount'), 2);
 
         // Flight tickets someone chose to pay in this run.
-        $tickets = FlightTicket::query()
-            ->where('payroll_run_id', $run->getKey())
-            ->where('party_id', $party->getKey())
-            ->whereNull('paid_at')
-            ->orderBy('year')
-            ->get();
+        $tickets = $this->forRun['tickets']->get($party->getKey(), collect());
         $ticketAmount = round((float) $tickets->sum('amount'), 2);
 
         $gross = round($basic + $allowances + $incentive + $ticketAmount, 2);
@@ -355,11 +436,13 @@ class PayrollService
             'review_note' => $net < 0 ? __('Deductions exceed gross pay for this period.') : null,
         ]);
 
-        $installments->each(fn (LoanInstallment $installment) => $installment
-            ->forceFill(['payslip_id' => $payslip->getKey()])->save());
+        if ($installments->isNotEmpty()) {
+            LoanInstallment::query()->whereKey($installments->modelKeys())->update(['payslip_id' => $payslip->getKey()]);
+        }
 
-        $tickets->each(fn (FlightTicket $ticket) => $ticket
-            ->forceFill(['payslip_id' => $payslip->getKey()])->save());
+        if ($tickets->isNotEmpty()) {
+            FlightTicket::query()->whereKey($tickets->modelKeys())->update(['payslip_id' => $payslip->getKey()]);
+        }
 
         $this->writeLines($payslip, $salary, $incentive, $unpaidDeduction, $installments, $manualDeduction, $tickets, $incentiveDeduction);
 
@@ -465,33 +548,19 @@ class PayrollService
             ];
         }
 
+        // Written with the run's others, at once (generate()).
+        $now = now();
         foreach ($lines as $line) {
-            PayslipLine::create(['payslip_id' => $payslip->getKey(), ...$line]);
+            $this->lines[] = [
+                'payslip_id' => $payslip->getKey(),
+                ...$line,
+                'kind' => $line['kind']->value,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
         }
     }
 
-    /**
-     * Instalments falling due by this period that nothing has yet recovered.
-     *
-     * Earlier unrecovered instalments are swept in as well as the current one:
-     * an employee who was skipped in March because they had no payslip still
-     * owes March's instalment in April, and leaving it behind would silently
-     * shorten the recovery.
-     *
-     * @return Collection<int, LoanInstallment>
-     */
-    private function dueInstallments(Party $party, string $period): Collection
-    {
-        return LoanInstallment::query()
-            ->whereNull('payslip_id')
-            ->where('due_period', '<=', $period)
-            ->whereHas('loan', fn ($query) => $query
-                ->where('party_id', $party->getKey())
-                ->where('status', 'active'))
-            ->with('loan')
-            ->orderBy('due_period')
-            ->get();
-    }
 
     private function accrueGratuity(
         Party $party,

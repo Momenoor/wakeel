@@ -81,7 +81,8 @@ class PayslipsRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn ($query) => $query->with('party'))
+            // Each payslip's instalments counted with the page (the loan column's tooltip), not asked for row by row.
+            ->modifyQueryUsing(fn ($query) => $query->with('party')->withCount('installments'))
             ->columns([
                 TextColumn::make('party.name')
                     ->label(__('Employee'))
@@ -117,7 +118,7 @@ class PayslipsRelationManager extends RelationManager
                     // instalment carried over from a month with no payslip, and
                     // that is exactly what HR gets asked about.
                     ->action($this->loanBreakdownAction())
-                    ->tooltip(fn (Payslip $record): ?string => $record->installments()->count() > 1
+                    ->tooltip(fn (Payslip $record): ?string => $record->installments_count > 1
                         ? __('Click for the breakdown')
                         : null),
                 TextColumn::make('manual_deduction')

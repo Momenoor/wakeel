@@ -42,6 +42,9 @@ class IncentiveSummaryTableWidget extends TableWidget
 
     private ?Collection $matterFeeTotalsCache = null;
 
+    /** The calculator the month column asks (its fee dates read once for the rows). */
+    private ?IncentiveCalculatorService $calculator = null;
+
     /**
      * Per-matter fee/base totals across ALL of a matter's incentive lines —
      * a matter with more than one fee gets one IncentiveLine per fee, but
@@ -238,7 +241,8 @@ class IncentiveSummaryTableWidget extends TableWidget
                 TextColumn::make('month_label')
                     ->label(__('Month'))
                     ->getStateUsing(fn ($record) => $record->incentiveLine?->matter
-                        ? app(IncentiveCalculatorService::class)->matterMonthLabel($record->incentiveLine->matter, $this->calculationId)
+                        // One calculator for the table's rows: its fee dates read once for them all.
+                        ? ($this->calculator ??= app(IncentiveCalculatorService::class))->matterMonthLabel($record->incentiveLine->matter, $this->calculationId)
                         : null)
                     ->description(fn ($record) => filled($record->incentiveLine?->completion_days)
                         ? __(':days days', ['days' => $record->incentiveLine->completion_days])

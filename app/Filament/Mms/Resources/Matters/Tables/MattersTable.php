@@ -549,16 +549,13 @@ class MattersTable
 
         // Each word to the fields it is found in; a word in one field only
         // joins that field's OR, one in several is its own OR across them.
-        $fields = [
-            'court' => fn (string $w): bool => Court::query()->where('name', 'like', '%'.$w.'%')->exists(),
-            'type' => fn (string $w): bool => Type::query()->where('name', 'like', '%'.$w.'%')->exists(),
-            'party' => fn (string $w): bool => Party::query()->where('name', 'like', '%'.$w.'%')->exists(),
-        ];
         $only = ['court' => [], 'type' => [], 'party' => []];
         $several = [];
 
         foreach ($texts as $word) {
-            $in = array_keys(array_filter($fields, fn (callable $found): bool => $found($word)));
+            // Asked once a request for each word: the table builds its query several times (the rows, their count,
+            // the filters), and each asked the courts, types and parties again.
+            $in = once(fn (): array => self::fieldsFound($word));
 
             match (count($in)) {
                 0 => $query->whereRaw('1 = 0'),
@@ -582,6 +579,22 @@ class MattersTable
         }
 
         return $query;
+    }
+
+    /**
+     * The fields a word is found in: courts, types, parties.
+     *
+     * @return list<string>
+     */
+    private static function fieldsFound(string $word): array
+    {
+        $like = '%'.$word.'%';
+
+        return array_keys(array_filter([
+            'court' => Court::query()->where('name', 'like', $like)->exists(),
+            'type' => Type::query()->where('name', 'like', $like)->exists(),
+            'party' => Party::query()->where('name', 'like', $like)->exists(),
+        ]));
     }
 
     /**

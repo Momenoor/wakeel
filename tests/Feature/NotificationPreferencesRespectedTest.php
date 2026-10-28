@@ -52,6 +52,8 @@ class NotificationPreferencesRespectedTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // The WhatsApp messages go after the answer (defer()): sent at once here, to be seen.
+        $this->withoutDefer();
 
         app()->setLocale('en');
         Mail::fake();

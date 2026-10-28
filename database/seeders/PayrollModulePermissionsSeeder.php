@@ -3,8 +3,7 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Spatie\Permission\Models\Permission;
-use Spatie\Permission\PermissionRegistrar;
+use App\Support\Permissions;
 
 /**
  * Permissions for the payroll and vacation module.
@@ -84,13 +83,8 @@ class PayrollModulePermissionsSeeder extends Seeder
             }
         }
 
-        foreach ($names as $name) {
-            Permission::findOrCreate($name, 'web');
-        }
-
-        // Spatie caches the permission map; without this the new grants are
-        // invisible until the cache expires or someone clears it by hand.
-        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        // Spatie caches the permission map: cleared there, the new grants seen at once.
+        Permissions::ensure($names);
 
         $this->command?->info(sprintf('%d payroll permissions ensured.', count($names)));
     }

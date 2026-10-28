@@ -327,6 +327,17 @@ class Matter extends Model implements AttachmentOwner
             ->where(['role' => 'expert', 'type' => 'assistant']);
     }
 
+    /**
+     * Its assistants with their names, read once for this matter — the page asked for them in four places, each
+     * render (whether it has any, their names, the OneDrive folders').
+     *
+     * @return Collection<int, MatterParty>
+     */
+    public function assistantList(): Collection
+    {
+        return $this->loadMissing('assistantsOnly.party:id,name')->assistantsOnly;
+    }
+
     public function isOfficeWork(): bool
     {
         return $this->is_office_work;

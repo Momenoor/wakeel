@@ -23,6 +23,13 @@ class NotifierTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // The WhatsApp messages go after the answer (defer()): sent at once here, to be seen.
+        $this->withoutDefer();
+    }
+
     public function test_each_user_is_told_by_the_channels_they_want(): void
     {
         Mail::fake();

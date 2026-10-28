@@ -7,6 +7,7 @@ use App\Enums\NotificationType;
 use App\Models\NotificationPreference;
 use App\Models\RoleNotificationDefault;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Role;
@@ -58,7 +59,37 @@ class NotificationPreferences
      */
     public static function wanting(NotificationType $type, iterable $users, NotificationChannel $channel): Collection
     {
-        return collect($users)->filter(fn (User $user): bool => self::wants($user, $type, $channel))->values();
+        $users = collect($users);
+        self::make()->readFor($users);
+
+        return $users->filter(fn (User $user): bool => self::wants($user, $type, $channel))->values();
+    }
+
+    /**
+     * Their roles and their own choices, read for them all at once — one user's after another was two queries each
+     * (a leave request's recipients, twice over).
+     *
+     * @param  Collection<int, User>  $users
+     */
+    public function readFor(Collection $users): void
+    {
+        (new EloquentCollection($users->all()))->loadMissing('roles');
+
+        $unread = $users->map(fn (User $user): int => (int) $user->getKey())
+            ->reject(fn (int $id): bool => isset($this->userChoices[$id]))
+            ->unique()->values();
+
+        if ($unread->isEmpty()) {
+            return;
+        }
+
+        $rows = NotificationPreference::query()->whereIn('user_id', $unread)->get()->groupBy('user_id');
+
+        foreach ($unread as $id) {
+            $this->userChoices[$id] = ($rows->get($id) ?? collect())
+                ->mapWithKeys(fn (NotificationPreference $row): array => [$row->type.'|'.$row->channel => $row->enabled])
+                ->all();
+        }
     }
 
     /** What the user has it as: on, off, locked or hidden. */

@@ -3,8 +3,7 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Spatie\Permission\Models\Permission;
-use Spatie\Permission\PermissionRegistrar;
+use App\Support\Permissions;
 
 /**
  * PMS-only permissions — separate from `AllPermissionsSeeder`/
@@ -57,8 +56,6 @@ class PMSPermissionsSeeder extends Seeder
 
     public function run(): void
     {
-        app(PermissionRegistrar::class)->forgetCachedPermissions();
-
         $permissionNames = collect(self::PMS_RESOURCES)
             ->crossJoin(self::ABILITIES)
             ->map(fn (array $pair): string => "{$pair[1]}:{$pair[0]}")
@@ -66,13 +63,9 @@ class PMSPermissionsSeeder extends Seeder
             ->concat(self::PMS_WIDGETS)
             ->values();
 
-        $permissions = $permissionNames->map(
-            fn (string $name) => Permission::firstOrCreate(['name' => $name, 'guard_name' => 'web']),
-        );
+        Permissions::ensure($permissionNames);
 
-        $this->command?->info('✓ '.$permissions->count().' PMS permissions ready.');
-
-        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        $this->command?->info('✓ '.$permissionNames->count().' PMS permissions ready.');
 
         $this->command?->info('✓ Done. Permission cache cleared.');
     }

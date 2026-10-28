@@ -276,6 +276,34 @@ class MarketersTest extends TestCase
             ->assertSee(['Staff Marketer', 'Outside Marketer', __('Marketing share :rate%', ['rate' => '20'])]);
     }
 
+    public function test_an_assistant_sees_a_third_party_marketer_and_no_colleague_of_the_office(): void
+    {
+        Gate::before(fn () => true);
+        Filament::setCurrentPanel('mms');
+        $staff = $this->employee('Staff Marketer');
+        $outsider = Party::factory()->create(['name' => 'Outside Marketer', 'role' => ['role' => ['marketer']]]);
+        $assistantUser = User::factory()->create();
+        $this->assistant->update(['user_id' => $assistantUser->id]);
+
+        // Marketed by a colleague alone: the assistant sees no marketing at all.
+        [$byStaff] = $this->matter('907', [[$staff, MarketingCommission::STAFF]]);
+        $this->actingAs($assistantUser);
+        Livewire::test(ViewMatter::class, ['record' => $byStaff->getRouteKey()])
+            ->assertDontSee('Staff Marketer')
+            ->assertDontSee(__('Marketing share :rate%', ['rate' => '25']));
+
+        // A third party too: they are seen, the colleague still not.
+        [$both] = $this->matter('908', [[$staff, MarketingCommission::STAFF], [$outsider, MarketingCommission::EXTERNAL]]);
+        Livewire::test(ViewMatter::class, ['record' => $both->getRouteKey()])
+            ->assertSee('Outside Marketer')
+            ->assertDontSee('Staff Marketer');
+
+        // Anyone not an assistant of it (the accountant): everyone.
+        $this->actingAs(User::query()->where('name', 'Accountant')->first());
+        Livewire::test(ViewMatter::class, ['record' => $byStaff->getRouteKey()])
+            ->assertSee('Staff Marketer');
+    }
+
     public function test_a_payments_date_changed_dates_what_it_earned_with_it_while_not_paid(): void
     {
         $marketer = $this->employee('Redated');

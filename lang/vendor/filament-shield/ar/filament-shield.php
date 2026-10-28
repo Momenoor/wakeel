@@ -189,6 +189,8 @@ return [
         'view_fix_matters_difficulty' => 'تصحيح صعوبة القضايا',
         'view_incentive_configuration' => 'تهيئة الحافز',
         'view_matter_quality_report' => 'الجودة وإعادة العمل',
+        'view_matter_expenses_report' => 'مصاريف الدعوى',
+        'view_marketing_commissions_report' => 'عمولات التسويق',
         'view_matters_monthly_report' => 'تقرير القضايا الشهري',
         'view_my_incentive' => 'حافزي',
         'view_my_matters_report' => 'قضاياي',

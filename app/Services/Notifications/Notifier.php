@@ -18,6 +18,8 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Throwable;
 
+use function Illuminate\Support\defer;
+
 /**
  * Tells users of something, each by the channels they want it by (NotificationPreferences): the bell
  * (with its pop-up and the phone push, which follow it), an email, a WhatsApp message. The same title,
@@ -100,23 +102,27 @@ class Notifier
         // Meta refuses a parameter with line breaks, tabs or a long run of spaces.
         $oneLine = fn (?string $text, int $limit): string => Str::limit(trim((string) preg_replace('/\s+/u', ' ', strip_tags((string) $text))), $limit, '…') ?: '—';
 
-        foreach ($users as $user) {
-            $phone = WhatsAppService::formatWhatsAppNumber($user->phone);
+        // Once the answer has gone back: each message is a call to Meta, and whoever approved a leave or filed a
+        // request waited a second or more for them all.
+        defer(function () use ($users, $template, $oneLine, $title, $body, $url): void {
+            foreach ($users as $user) {
+                $phone = WhatsAppService::formatWhatsAppNumber($user->phone);
 
-            if ($phone === null) {
-                continue;
-            }
+                if ($phone === null) {
+                    continue;
+                }
 
-            try {
-                app(WhatsAppCloud::class)->sendTemplate($phone, $template->meta_name, $template->language, $template->parameterValues([
-                    'user' => $oneLine($user->display_name ?: $user->name, 60),
-                    'title' => $oneLine($title, 100),
-                    'body' => $oneLine($body, 300),
-                    'link' => (string) ($url ?: config('app.url')),
-                ]));
-            } catch (Throwable $e) {
-                Log::warning('Notification not sent on WhatsApp', ['user' => $user->getKey(), 'error' => $e->getMessage()]);
+                try {
+                    app(WhatsAppCloud::class)->sendTemplate($phone, $template->meta_name, $template->language, $template->parameterValues([
+                        'user' => $oneLine($user->display_name ?: $user->name, 60),
+                        'title' => $oneLine($title, 100),
+                        'body' => $oneLine($body, 300),
+                        'link' => (string) ($url ?: config('app.url')),
+                    ]));
+                } catch (Throwable $e) {
+                    Log::warning('Notification not sent on WhatsApp', ['user' => $user->getKey(), 'error' => $e->getMessage()]);
+                }
             }
-        }
+        });
     }
 }
