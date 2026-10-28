@@ -496,6 +496,57 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertSame(3, MatterEmail::where('direction', MatterEmail::RECEIVED)->count());
     }
 
+    public function test_an_email_waiting_in_two_mailboxes_tabs_is_done_once_its_copies_set_aside_with_it(): void
+    {
+        // One email kept twice — each mailbox read at the same moment — waiting in two tabs: kept from one
+        // mailbox (as one mailbox keeps each email it has), then each put in the tab it came to.
+        $email = $this->email(['at' => '2026-10-27T09:00:00+04:00', 'to' => ['iflas@jpa.ae', 'amr@jpa.ae']]);
+        $boxes = [];
+        $keep = function (array $message, string $box) use (&$boxes): MatterEmail {
+            $this->collect($message);
+            $kept = MatterEmail::query()->latest('id')->first();
+            $boxes[$kept->id] = $box;
+
+            return $kept;
+        };
+        $inTabs = function () use (&$boxes): void {
+            foreach ($boxes as $id => $box) {
+                MatterEmail::whereKey($id)->update(['sender_key' => $box]);
+            }
+        };
+        $first = $keep($email, 'iflas');
+        $copy = $keep([...$email, 'message_id' => '<copy-'.uniqid().'@albanna.ae>', 'to' => ['AMR@jpa.ae', 'iflas@jpa.ae'], 'at' => '2026-10-27T09:02:00+04:00'], 'assistant');
+        // Not copies: other words, another file, another Cc, or received an hour later.
+        $others = [
+            $keep([...$email, 'message_id' => '<w-'.uniqid().'@albanna.ae>', 'body' => '<p>مرفق مستند آخر.</p>'], 'assistant'),
+            $keep([...$email, 'message_id' => '<f-'.uniqid().'@albanna.ae>', 'attachments' => [['name' => 'عقد.pdf', 'contents' => '%PDF-other']]], 'assistant'),
+            $keep([...$email, 'message_id' => '<c-'.uniqid().'@albanna.ae>', 'cc' => ['someone@albanna.ae']], 'assistant'),
+            $keep([...$email, 'message_id' => '<t-'.uniqid().'@albanna.ae>', 'at' => '2026-10-27T10:00:00+04:00'], 'assistant'),
+            // The same, twice in one mailbox: sent twice.
+            $keep([...$email, 'message_id' => '<s-'.uniqid().'@albanna.ae>', 'at' => '2026-10-27T09:01:00+04:00'], 'iflas'),
+        ];
+        $inTabs();
+        $first->refresh();
+        $this->assertSame(7, MatterEmail::pending()->count());
+        $this->assertSame([$copy->id], $first->copiesOf()->modelKeys());
+
+        // Filed from one tab: gone from the other too, its kept files with it.
+        app(MatterReplyCollector::class)->file($first, $this->first);
+
+        $this->assertSame(MatterEmail::DISMISSED, $copy->fresh()->status);
+        $this->assertSame([], $copy->fresh()->files);
+        $this->assertSame(MatterEmail::FILED, $first->fresh()->status);
+        $this->assertEqualsCanonicalizing(array_map(fn (MatterEmail $other) => $other->id, $others), MatterEmail::pending()->pluck('id')->all());
+
+        // Set aside: its copies too.
+        $again = $keep([...$email, 'message_id' => '<again-'.uniqid().'@albanna.ae>', 'at' => '2026-10-27T11:00:00+04:00'], 'iflas');
+        $againCopy = $keep([...$email, 'message_id' => '<again-copy-'.uniqid().'@albanna.ae>', 'at' => '2026-10-27T11:00:30+04:00'], 'assistant');
+        $inTabs();
+        $again->refresh();
+        app(MatterReplyCollector::class)->dismiss($again);
+        $this->assertSame(MatterEmail::DISMISSED, $againCopy->fresh()->status);
+    }
+
     public function test_one_email_in_two_of_our_mailboxes_is_kept_once(): void
     {
         MailSenders::add('assistant', ['username' => 'amr@jpa.ae', 'address' => 'amr@jpa.ae', 'name' => 'Amr', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);

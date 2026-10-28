@@ -1042,18 +1042,34 @@ class MatterReplyCollector
 
         MatterProgressRecorder::emailReceived($email, $userId);
         MatterContact::learn($email);
+        $this->setAsideCopies($email);
 
         // As for an email put on its matter by itself: its people hear of it — who chose it, already read.
         $this->answered($email);
         $this->tellMatter($email, $matter, max(count($kept) - 1, 0), $this->noteUnlinked($matter, $kept), $userId);
     }
 
-    /** A held email that is no matter's: set aside, its files gone. */
+    /** A held email that is no matter's: set aside, its files gone — and its copies waiting in other mailboxes' tabs. */
     public function dismiss(MatterEmail $email): void
+    {
+        $this->setAside($email);
+        $this->setAsideCopies($email);
+    }
+
+    private function setAside(MatterEmail $email): void
     {
         Documents::delete(array_values(array_filter(array_map(fn ($file) => $file['path'] ?? null, (array) ($email->files ?? [])))));
         $email->update(['status' => MatterEmail::DISMISSED, 'files' => []]);
         $this->answered($email);
+    }
+
+    /**
+     * The other copies of an email filed or set aside — it came to more than one of our mailboxes, each kept
+     * apart (MatterEmail::copiesOf()) — set aside with it: done once, not left waiting in the other tab.
+     */
+    private function setAsideCopies(MatterEmail $email): void
+    {
+        $email->copiesOf()->each(fn (MatterEmail $copy) => $this->setAside($copy));
     }
 
     /**
@@ -1113,6 +1129,8 @@ class MatterReplyCollector
     {
         $from = trim((string) ($message['from'] ?? ''));
         $fromName = trim((string) ($message['from_name'] ?? '')) ?: $from;
+        $body = $message['body'] ?? '';
+        $files = $message['attachments'] ?? [];
 
         return MatterEmail::create([
             'direction' => MatterEmail::RECEIVED,
@@ -1122,6 +1140,8 @@ class MatterReplyCollector
             'from' => mb_substr(trim($fromName.($fromName !== $from ? ' <'.$from.'>' : '')), 0, 255),
             'to' => array_values(array_filter((array) ($message['to'] ?? []))),
             'cc' => array_values(array_filter((array) ($message['cc'] ?? []))),
+            // Its words and files, to tell a copy of it that came to another of our mailboxes (MatterEmail::copiesOf()).
+            'content_hash' => MatterEmail::fingerprint($body instanceof Closure ? (string) $body() : (string) $body, (array) ($files instanceof Closure ? $files() : $files)),
             'at' => self::arrivedAt($message),
             // Unread in the mailbox before it was collected (null: not known).
             'was_unread' => isset($message['was_read']) ? ! $message['was_read'] : null,

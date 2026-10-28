@@ -5,11 +5,13 @@ namespace App\Models;
 use App\Models\Concerns\AnnouncesChanges;
 use App\Services\MMS\MatterEmailSentNotifier;
 use App\Support\Documents;
+use App\Support\EmailText;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
@@ -62,7 +64,7 @@ class MatterEmail extends Model
     /** Forwarded to the filing mailbox by someone in the office, naming its matter (ForwardedEmailFiler). */
     public const BY_FORWARD = 'forward';
 
-    protected $fillable = ['matter_id', 'direction', 'status', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'cc', 'files', 'links', 'onedrive', 'candidates', 'matched_by', 'at', 'user_id', 'was_unread'];
+    protected $fillable = ['matter_id', 'direction', 'status', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'cc', 'content_hash', 'files', 'links', 'onedrive', 'candidates', 'matched_by', 'at', 'user_id', 'was_unread'];
 
     protected function casts(): array
     {
@@ -333,6 +335,60 @@ class MatterEmail extends Model
         });
 
         return $paths;
+    }
+
+    /** How far apart two copies of one email may arrive in two of our mailboxes. */
+    public const COPY_MINUTES = 5;
+
+    /**
+     * An email's content as a fingerprint: its words as a reader sees them (spaces aside) and the files it came
+     * with (each name and contents) — the same for two copies of one email, whatever mailbox each came to.
+     *
+     * @param  list<array{name?: string, contents?: string}>  $files
+     */
+    public static function fingerprint(string $body, array $files): string
+    {
+        $words = mb_strtolower(trim((string) preg_replace('/\s+/u', ' ', EmailText::plain($body))));
+        $attached = collect($files)->map(fn (array $file): string => mb_strtolower((string) ($file['name'] ?? '')).':'.hash('sha256', (string) ($file['contents'] ?? '')))->sort()->implode("\n");
+
+        return hash('sha256', $words."\0".$attached);
+    }
+
+    /**
+     * Other copies of this received email waiting in Unfiled emails — it came to another of our mailboxes as
+     * well: the same Message-ID, or from the same sender with the same subject, content (content_hash), To and
+     * Cc, received within minutes of it. Those kept before content was fingerprinted are told by their
+     * Message-ID only.
+     *
+     * @return Collection<int, self>
+     */
+    public function copiesOf(): Collection
+    {
+        if ($this->direction !== self::RECEIVED) {
+            return collect();
+        }
+
+        $addresses = fn (mixed $list): array => collect((array) $list)->map(fn ($address): string => self::addressOf((string) $address))->filter()->unique()->sort()->values()->all();
+
+        return static::query()
+            ->where('direction', self::RECEIVED)
+            ->where('status', self::PENDING)
+            ->whereKeyNot($this->getKey())
+            ->where(fn (Builder $query) => $query
+                ->when($this->message_id, fn (Builder $q) => $q->orWhere('message_id', $this->message_id))
+                ->when($this->content_hash && $this->at, fn (Builder $q) => $q->orWhere(fn (Builder $same) => $same
+                    ->where('content_hash', $this->content_hash)
+                    ->where('subject', (string) $this->subject)
+                    ->whereBetween('at', [$this->at->copy()->subMinutes(self::COPY_MINUTES), $this->at->copy()->addMinutes(self::COPY_MINUTES)])))
+                ->when(! $this->message_id && ! $this->content_hash, fn (Builder $q) => $q->whereRaw('1 = 0')))
+            ->get()
+            // In another mailbox: the same words twice in one mailbox are two emails, sent twice.
+            ->filter(fn (self $copy): bool => $copy->sender_key !== $this->sender_key
+                && ($copy->message_id === $this->message_id && $this->message_id !== null
+                    || (self::addressOf((string) $copy->from) === self::addressOf((string) $this->from)
+                        && $addresses($copy->to) === $addresses($this->to)
+                        && $addresses($copy->cc) === $addresses($this->cc))))
+            ->values();
     }
 
     public static function messageId(?string $id): ?string
