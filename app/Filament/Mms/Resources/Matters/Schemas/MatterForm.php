@@ -529,13 +529,16 @@ class MatterForm
 
     /**
      * A party chosen in the form, and added there when it is not in the system yet: the add form finds one already
-     * there by its name, phone or email and uses it (PartyForm::createOrUse()), with the role it is added for.
+     * there by its name (only) and uses it (PartyForm::createOrUse()), with the role it is added for.
      *
      * @param  array<string, mixed>|Closure(Get): array<string, mixed>  $role  the role (and type) it is added with
      */
     private static function addsParty(array|Closure $role, Select $select, bool $editable = true): Select
     {
         return $select
+            // The chosen party named whatever its roles: looked up among those of the list's role only, one without
+            // it (added before it had the role, or given it in another way) showed as its id.
+            ->getOptionLabelUsing(fn ($value): ?string => filled($value) ? Party::query()->whereKey($value)->value('name') : null)
             ->createOptionForm(fn (Schema $schema) => PartyForm::configure($schema, picking: true))
             ->when($editable, fn (Select $select) => $select->editOptionForm(fn (Schema $schema) => PartyForm::configure($schema)))
             ->createOptionAction(fn (Action $action, Get $get) => $action->fillForm(['role' => $role instanceof Closure ? $role($get) : $role]))

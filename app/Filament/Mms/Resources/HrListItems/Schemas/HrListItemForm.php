@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Resources\HrListItems\Schemas;
 
+use App\Filament\Support\EnglishNameField;
 use App\Models\HrListItem;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
@@ -26,8 +27,9 @@ class HrListItemForm
     public static function names(): array
     {
         return [
-            TextInput::make('name_ar')->label(__('Name in Arabic'))->required()->maxLength(255)->extraInputAttributes(['dir' => 'rtl']),
-            TextInput::make('name_en')->label(__('Name in English'))->required()->maxLength(255)->extraInputAttributes(['dir' => 'ltr']),
+            // The English put in from the Arabic by Claude, when set.
+            EnglishNameField::source(TextInput::make('name_ar')->label(__('Name in Arabic'))->required()->maxLength(255)->extraInputAttributes(['dir' => 'rtl']), 'name_en'),
+            EnglishNameField::make(TextInput::make('name_en')->label(__('Name in English'))->required()->maxLength(255), 'name_ar'),
         ];
     }
 

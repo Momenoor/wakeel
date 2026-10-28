@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\EmployeeProfiles\Schemas;
 
 use App\Filament\Mms\Resources\HrListItems\Schemas\HrListItemForm;
+use App\Filament\Support\EnglishNameField;
 use App\Filament\Support\IbanField;
 use App\Models\HrListItem;
 use App\Models\Party;
@@ -45,9 +46,10 @@ class EmployeeProfileForm
                             ->label(__('Nationality'))
                             ->options(fn (): array => Nationalities::options())
                             ->searchable(),
-                        TextInput::make('display_name')
+                        // Spelt as on the WPS form — Translate (Claude, when set) gives it from the name in Arabic.
+                        EnglishNameField::make(TextInput::make('display_name')
                             ->label(__('Name as WPS From'))
-                            ->maxLength(255),
+                            ->maxLength(255), 'name_ar'),
                         // For Arabic letters (an employee's certificate); English ones take the name above.
                         TextInput::make('name_ar')
                             ->label(__('Name in Arabic'))

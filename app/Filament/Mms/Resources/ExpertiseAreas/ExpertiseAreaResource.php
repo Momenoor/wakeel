@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Resources\ExpertiseAreas;
 
 use App\Filament\Mms\Resources\ExpertiseAreas\Pages\ManageExpertiseAreas;
 use App\Filament\Shared\Clusters\Settings;
+use App\Filament\Support\EnglishNameField;
 use App\Models\ExpertiseArea;
 use BackedEnum;
 use Filament\Actions\CreateAction;
@@ -56,13 +57,14 @@ class ExpertiseAreaResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            TextInput::make('name_en')
+            // The English put in from the Arabic by Claude, when set.
+            EnglishNameField::make(TextInput::make('name_en')
                 ->label(__('Name (English)'))
                 ->required()
-                ->maxLength(255),
-            TextInput::make('name_ar')
+                ->maxLength(255), 'name_ar'),
+            EnglishNameField::source(TextInput::make('name_ar')
                 ->label(__('Name (Arabic)'))
-                ->maxLength(255),
+                ->maxLength(255), 'name_en'),
             TextInput::make('sort')
                 ->label(__('Order'))
                 ->numeric()

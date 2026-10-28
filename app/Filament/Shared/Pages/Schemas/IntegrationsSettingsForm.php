@@ -3,13 +3,17 @@
 namespace App\Filament\Shared\Pages\Schemas;
 
 use App\Jobs\CopyFilesToAzure;
+use App\Jobs\TranslateNames;
 use App\Services\Attachments\CopyToAzure;
 use App\Services\MMS\CollectedEmailUndo;
 use App\Services\MMS\MatterReplyCollector;
+use App\Services\Translation\EnglishNames;
+use App\Services\Translation\NameTranslator;
 use App\Support\Integrations;
 use BezhanSalleh\FilamentShield\Support\Utils;
 use Closure;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Infolists\Components\TextEntry;
@@ -24,7 +28,7 @@ use Throwable;
 
 /**
  * Settings → Integrations (the sections of that page): this office's own
- * Microsoft 365, Pusher, cron-job.org link, WhatsApp and Azure Blob Storage. Each is off until it
+ * Microsoft 365, Pusher, cron-job.org link, WhatsApp, Claude and Azure Blob Storage. Each is off until it
  * is filled in. Only the super admin sees the page — it holds the office's
  * keys. Saved secrets never come back to the page; a blank secret field keeps
  * the saved one.
@@ -110,6 +114,24 @@ class IntegrationsSettingsForm
                     self::status('whatsapp', fn (): bool => Integrations::whatsappOn()),
                     TextInput::make(Integrations::WHATSAPP_PHONE)->label(__('Phone number ID'))->extraInputAttributes(['dir' => 'ltr']),
                     self::secret(Integrations::WHATSAPP_TOKEN, __('Access token')),
+                ]),
+
+            Section::make('Claude (Anthropic)')
+                ->description(__('Names in Arabic put into English — parties (for English letters), employees, the HR lists and expertise areas: filled in when one is saved without its English name, by the Translate button beside the field, or all at once below. An API key from console.anthropic.com (Settings → API keys); each name costs a fraction of a cent.'))
+                ->icon(Heroicon::Language)
+                ->headerActions([
+                    self::translateNamesAction(),
+                    self::turnOff('claude', [Integrations::CLAUDE_KEY, Integrations::CLAUDE_MODEL]),
+                ])
+                ->columns(2)
+                ->schema([
+                    self::status('claude', fn (): bool => Integrations::claudeOn()),
+                    self::secret(Integrations::CLAUDE_KEY, __('API key')),
+                    Select::make(Integrations::CLAUDE_MODEL)
+                        ->label(__('Model'))
+                        ->options(NameTranslator::MODELS)
+                        ->placeholder(NameTranslator::MODELS[config('services.anthropic.model')] ?? (string) config('services.anthropic.model'))
+                        ->helperText(__('Opus spells names best; Haiku costs the least.')),
                 ]),
 
             Section::make('Azure Blob Storage')
@@ -227,6 +249,57 @@ class IntegrationsSettingsForm
                         $stats['errors'] ? __('Not copied: :errors', ['errors' => implode(' | ', array_slice($stats['errors'], 0, 5))]) : null,
                     ])->filter()->implode(' '))
                     ->{$stats['failed'] ? 'warning' : 'success'}()
+                    ->persistent()
+                    ->send();
+            });
+    }
+
+    /**
+     * Every name without its English given it (EnglishNames): in the background, told in the bell when done
+     * (TranslateNames) — or, with nothing running the queue, for some seconds a press.
+     */
+    private static function translateNamesAction(): Action
+    {
+        $background = fn (): bool => config('queue.default') !== 'sync';
+
+        return Action::make('translateNames')
+            ->label(__('Translate names now'))
+            ->icon(Heroicon::Language)
+            ->link()
+            ->visible(fn (): bool => Integrations::claudeOn())
+            ->requiresConfirmation()
+            ->modalIcon(Heroicon::Language)
+            ->modalDescription(fn (): string => collect([
+                TranslateNames::running() ? __('Translating in the background now.') : null,
+                __('Names without English: :count.', ['count' => EnglishNames::left()]),
+                $background()
+                    ? __('They are translated in the background, a hundred at a time, and you are told in the bell when it is done.')
+                    : __('Each press translates for about :seconds seconds (set the cron link to translate them all in the background).', ['seconds' => self::COPY_SECONDS]),
+                __('A name in English already typed in is kept as it is.'),
+            ])->filter()->implode(' '))
+            ->modalSubmitActionLabel(__('Translate'))
+            ->databaseTransaction(false)
+            ->action(function () use ($background): void {
+                if ($background()) {
+                    TranslateNames::start(auth()->id())
+                        ? Notification::make()->success()->title(__('Translating in the background: you are told in the bell when it is done.'))->send()
+                        : Notification::make()->warning()->title(__('The names are being translated already. Try again in a minute.'))->send();
+
+                    return;
+                }
+
+                try {
+                    $stats = app(EnglishNames::class)->fill(self::COPY_SECONDS);
+                } catch (Throwable $e) {
+                    Notification::make()->danger()->title(__('Claude could not be reached'))->body(Str::limit($e->getMessage(), 300))->persistent()->send();
+
+                    return;
+                }
+
+                Notification::make()
+                    ->title(__(':count names translated to English.', ['count' => $stats['translated']]))
+                    ->body($stats['left'] ? __('Still without English: :count — translate again.', ['count' => $stats['left']]) : null)
+                    ->success()
                     ->persistent()
                     ->send();
             });

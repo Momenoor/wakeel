@@ -42,6 +42,10 @@ class PartyInfolist
                     ->hiddenLabel()
                     ->size(TextSize::Large)
                     ->weight(FontWeight::Bold),
+                TextEntry::make('name_en')
+                    ->label(__('Name in English'))
+                    ->extraAttributes(['dir' => 'ltr'])
+                    ->visible(fn (?Party $record): bool => filled($record?->name_en)),
                 TextEntry::make('legal_name')
                     ->label(__('Legal name'))
                     ->visible(fn (?Party $record): bool => filled($record?->legal_name)),

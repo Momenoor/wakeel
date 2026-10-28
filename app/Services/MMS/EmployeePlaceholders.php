@@ -40,7 +40,7 @@ class EmployeePlaceholders
 
         // Each in Arabic and English — the name the WPS form's in English, else as their party is named.
         $said = [
-            'name' => [(string) ($profile?->name_ar ?: $party?->name), (string) ($profile?->display_name ?: $party?->name)],
+            'name' => [(string) ($profile?->name_ar ?: $party?->name), (string) ($profile?->display_name ?: $party?->nameIn(false))],
             'designation' => [(string) ($profile?->designationItem?->name(true) ?: $profile?->designation), (string) ($profile?->designationItem?->name(false) ?: $profile?->designation)],
             'nationality' => [Nationalities::name($profile?->nationality, true), Nationalities::name($profile?->nationality, false)],
         ];

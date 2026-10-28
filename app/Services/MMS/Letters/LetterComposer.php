@@ -102,13 +102,13 @@ class LetterComposer
             $representatives = $rows->filter(fn (MatterParty $rep) => (int) $rep->parent_id === (int) $mp->id && $rep->role !== 'attendee');
 
             $candidates[$mp->id] = [
-                ...self::candidate($mp, $label),
-                'representatives' => $representatives->map(fn (MatterParty $rep) => Arr::except(self::candidate($rep, null), ['role', 'representatives', 'of']))->values()->all(),
+                ...self::candidate($mp, $label, $arabic),
+                'representatives' => $representatives->map(fn (MatterParty $rep) => Arr::except(self::candidate($rep, null, $arabic), ['role', 'representatives', 'of']))->values()->all(),
             ];
 
             foreach ($representatives as $rep) {
                 $candidates[$rep->id] = [
-                    ...self::candidate($rep, $label ? ($arabic ? 'وكيل '.$label : $label."'s representative") : null),
+                    ...self::candidate($rep, $label ? ($arabic ? 'وكيل '.$label : $label."'s representative") : null, $arabic),
                     // Whose representative: ticked with their party, they're not added twice.
                     'of' => $mp->id,
                 ];
@@ -121,13 +121,14 @@ class LetterComposer
     /**
      * @return array{name: string, role: ?string, emails: list<string>, party_id: int|null, representatives: list<array<string, mixed>>}
      */
-    private static function candidate(MatterParty $mp, ?string $role): array
+    private static function candidate(MatterParty $mp, ?string $role, bool $arabic): array
     {
         $emails = $mp->party?->email ?? [];
         $phones = $mp->party?->phone ?? [];
 
         return [
-            'name' => (string) $mp->party?->name,
+            // In an English letter, the English name when there is one.
+            'name' => (string) $mp->party?->nameIn($arabic),
             'role' => $role,
             'emails' => array_values(array_filter(is_array($emails) ? $emails : [$emails])),
             'phones' => array_values(array_filter(is_array($phones) ? $phones : [$phones], 'filled')),

@@ -4,9 +4,9 @@ namespace App\Filament\Mms\Resources\Parties\Schemas;
 
 use App\Filament\Support\AssistantSettingsFields;
 use App\Filament\Support\ContactFields;
+use App\Filament\Support\EnglishNameField;
 use App\Models\ExpertiseArea;
 use App\Models\Party;
-use App\Support\ContactSearch;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
@@ -30,9 +30,9 @@ use TomatoPHP\FilamentUsers\Filament\Resources\Users\UserResource;
 class PartyForm
 {
     /**
-     * $picking: added from a matter's form (a party, an expert, a representative to choose) — a name, phone or
-     * email of a party there already is not refused: it is said, its details shown, and saving uses that party
-     * (createOrUse()), chosen in the list, rather than another of the same.
+     * $picking: added from a matter's form (a party, an expert, a representative to choose) — the name of a party
+     * there already is not refused: it is said, its details shown, and saving uses that party (createOrUse()),
+     * chosen in the list, rather than another of the same.
      */
     public static function configure(Schema $schema, bool $picking = false): Schema
     {
@@ -41,7 +41,7 @@ class PartyForm
             ->components([
                 ...($picking ? [self::existingNotice()] : []),
                 self::identity($picking),
-                self::contact($picking),
+                self::contact(),
                 self::roles(),
                 self::assistant(),
                 self::notes(),
@@ -54,7 +54,9 @@ class PartyForm
             ->icon('heroicon-o-user')
             ->columnSpan(1)
             ->schema([
-                self::name($picking),
+                EnglishNameField::source(self::name($picking), 'name_en'),
+                // English letters name them by it (Claude puts it into English when set).
+                EnglishNameField::make(TextInput::make('name_en')->label(__('Name in English'))->maxLength(255), 'name'),
                 // As it must appear in letters and templates — an assistant's
                 // full registered name. Empty: the name above.
                 TextInput::make('legal_name')
@@ -83,11 +85,11 @@ class PartyForm
             : $name->unique(ignoreRecord: true);
     }
 
-    /** Picking one for a matter: a party there already is with that name, phone or email — said, and what saving does. */
+    /** Picking one for a matter: a party there already is with that name — said, and what saving does. */
     private static function existingNotice(): Text
     {
         return Text::make(function (Get $get): ?HtmlString {
-            $party = self::existingMatch($get('name'), (array) $get('phone'), (array) $get('email'));
+            $party = self::existingMatch($get('name'));
 
             return $party ? new HtmlString('<b>'.e(__(':name is already in the system.', ['name' => $party->name])).'</b> '
                 .e(__('Saving uses it — with the role and any new phone or email added — and chooses it in the list.'))) : null;
@@ -99,7 +101,7 @@ class PartyForm
     /** The name typed is of a party there already is: its phones, emails and address shown in the form, to use. */
     private static function fillFromExisting(Get $get, Set $set): void
     {
-        $party = self::existingMatch($get('name'), [], []);
+        $party = self::existingMatch($get('name'));
 
         if (! $party) {
             return;
@@ -107,7 +109,7 @@ class PartyForm
 
         $set('phone', array_values(array_unique([...(array) $party->phone, ...(array) $get('phone')])));
         $set('email', array_values(array_unique([...(array) $party->email, ...(array) $get('email')])));
-        foreach (['legal_name', 'fax', 'address'] as $field) {
+        foreach (['legal_name', 'name_en', 'fax', 'address'] as $field) {
             if (blank($get($field))) {
                 $set($field, $party->getAttribute($field));
             }
@@ -115,39 +117,24 @@ class PartyForm
     }
 
     /**
-     * A party there already is, by the name (as typed, any case), else by one of the phones (its last nine
-     * digits), else by one of the emails.
-     *
-     * @param  list<string>  $phones
-     * @param  list<string>  $emails
+     * A party there already is, by its name (as typed, any case) — by the name only: a phone or email may be
+     * another's too (a party's lawyer's), so a new name with one is a new party, keeping them.
      */
-    public static function existingMatch(?string $name, array $phones, array $emails): ?Party
+    public static function existingMatch(?string $name): ?Party
     {
-        if (filled($name) && ($party = Party::query()->whereRaw('LOWER(name) = ?', [mb_strtolower(trim($name))])->first())) {
-            return $party;
-        }
-
-        foreach ([...$phones, ...$emails] as $contact) {
-            $parsed = ContactSearch::parse((string) $contact);
-
-            if ($parsed !== null && ($party = tap(Party::query(), fn ($query) => ContactSearch::apply($query, $parsed))->first())) {
-                return $party;
-            }
-        }
-
-        return null;
+        return filled($name) ? Party::query()->whereRaw('LOWER(name) = ?', [mb_strtolower(trim($name))])->first() : null;
     }
 
     /**
-     * Added from a matter's form: a party there already is (existingMatch()) used — the role it is added for, and
-     * any new phone, email or detail, given to it — rather than another of the same; otherwise a new one. Its id,
-     * for the list to choose.
+     * Added from a matter's form: a party there already is by that name (existingMatch()) used — the role it is
+     * added for, and any new phone, email or detail, given to it — rather than another of the same; otherwise a
+     * new one, with the phones and emails typed. Its id, for the list to choose.
      *
      * @param  array<string, mixed>  $data
      */
     public static function createOrUse(array $data): int
     {
-        $party = self::existingMatch($data['name'] ?? null, (array) ($data['phone'] ?? []), (array) ($data['email'] ?? []));
+        $party = self::existingMatch($data['name'] ?? null);
 
         if (! $party) {
             return Party::create($data)->getKey();
@@ -162,7 +149,7 @@ class PartyForm
         $party->role = $role;
         $party->phone = array_values(array_unique([...(array) $party->phone, ...(array) ($data['phone'] ?? [])]));
         $party->email = array_values(array_unique(array_map('mb_strtolower', [...(array) $party->email, ...(array) ($data['email'] ?? [])])));
-        foreach (['legal_name', 'fax', 'address'] as $field) {
+        foreach (['legal_name', 'name_en', 'fax', 'address'] as $field) {
             if (blank($party->getAttribute($field)) && filled($data[$field] ?? null)) {
                 $party->setAttribute($field, $data[$field]);
             }
@@ -174,15 +161,14 @@ class PartyForm
         return $party->getKey();
     }
 
-    private static function contact(bool $picking = false): Section
+    private static function contact(): Section
     {
         return Section::make(__('Contact'))
             ->icon('heroicon-o-phone')
             ->columnSpan(1)
             ->schema([
-                // Picking one for a matter: a phone or email of a party there already is said as it is typed.
-                $picking ? self::phone()->live(onBlur: true) : self::phone(),
-                ($picking ? ContactFields::email()->live(onBlur: true) : ContactFields::email())
+                self::phone(),
+                ContactFields::email()
                     ->placeholder(__('Enter email addresses separated by comma')),
                 TextInput::make('fax')
                     ->label(__('Fax')),

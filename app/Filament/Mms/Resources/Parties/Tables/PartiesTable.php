@@ -20,9 +20,11 @@ class PartiesTable
     {
         return $table
             ->columns([
+                // The English name under it, when there is one; found by either.
                 TextColumn::make('name')
                     ->label(__('Name'))
-                    ->searchable(),
+                    ->description(fn (Party $record): ?string => $record->name_en)
+                    ->searchable(['name', 'name_en']),
                 TextColumn::make('phone')
                     ->label(__('Phone'))
                     ->badge()

@@ -65,4 +65,10 @@ return [
         'from' => env('WHATSAPP_FROM'),
         'app_secret' => env('WHATSAPP_APP_SECRET'),
     ],
+
+    // Claude (Anthropic): names translated from Arabic to English (App\Services\Translation\NameTranslator).
+    'anthropic' => [
+        'key' => env('ANTHROPIC_API_KEY'),
+        'model' => env('ANTHROPIC_MODEL', 'claude-opus-5-5'),
+    ],
 ];

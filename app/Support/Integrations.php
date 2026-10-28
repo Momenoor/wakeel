@@ -9,8 +9,9 @@ use Throwable;
  * The office's own outside services, entered in Settings →
  * Integrations: Microsoft 365 (OneDrive, Outlook calendar, Microsoft 365
  * mailboxes), Pusher (live updates), the cron-job.org link (scheduled tasks
- * and the queue), WhatsApp and Azure Blob Storage (where attached files are
- * kept). Each office has its own; nothing is shared.
+ * and the queue), WhatsApp, Azure Blob Storage (where attached files are
+ * kept) and Claude (names translated to English). Each office has its own;
+ * nothing is shared.
  *
  * Applied over the configuration on every request, ahead of .env (which
  * stays as the fallback for an installation set up before these settings).
@@ -50,6 +51,11 @@ class Integrations
     /** "1": new attached files are kept in Azure (those before stay where they are until copied). */
     public const AZURE_ATTACHMENTS = 'integration_azure_attachments';
 
+    public const CLAUDE_KEY = 'integration_claude_key';
+
+    /** The Claude model names are translated by (NameTranslator::MODELS); empty: config's. */
+    public const CLAUDE_MODEL = 'integration_claude_model';
+
     /** The storage Azure is, once set (config/filesystems.php has no such disk until then). */
     public const AZURE_DISK = 'azure';
 
@@ -62,10 +68,11 @@ class Integrations
         self::CRON_TOKEN,
         self::WHATSAPP_PHONE, self::WHATSAPP_TOKEN,
         self::AZURE_ACCOUNT, self::AZURE_KEY, self::AZURE_CONTAINER, self::AZURE_ATTACHMENTS,
+        self::CLAUDE_KEY, self::CLAUDE_MODEL,
     ];
 
     /** Kept encrypted; a blank field on save leaves the saved one as it is. */
-    public const SECRETS = [self::MS_SECRET, self::PUSHER_SECRET, self::CRON_TOKEN, self::WHATSAPP_TOKEN, self::AZURE_KEY];
+    public const SECRETS = [self::MS_SECRET, self::PUSHER_SECRET, self::CRON_TOKEN, self::WHATSAPP_TOKEN, self::AZURE_KEY, self::CLAUDE_KEY];
 
     public static function get(string $key): string
     {
@@ -187,6 +194,14 @@ class Integrations
             ]);
         }
 
+        if (($claude = self::get(self::CLAUDE_KEY)) !== '') {
+            config(['services.anthropic.key' => $claude]);
+        }
+
+        if (($model = self::get(self::CLAUDE_MODEL)) !== '') {
+            config(['services.anthropic.model' => $model]);
+        }
+
         $azure = [self::get(self::AZURE_ACCOUNT), self::get(self::AZURE_KEY), self::get(self::AZURE_CONTAINER)];
 
         if (! in_array('', $azure, true)) {
@@ -245,6 +260,11 @@ class Integrations
     public static function whatsappOn(): bool
     {
         return filled(config('services.whatsapp.token')) && filled(config('services.whatsapp.phone_id'));
+    }
+
+    public static function claudeOn(): bool
+    {
+        return filled(config('services.anthropic.key'));
     }
 
     public static function cronUrl(): ?string

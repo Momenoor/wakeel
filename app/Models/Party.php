@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Translation\EnglishNames;
 use App\Services\WhatsAppService;
 use App\Support\Sql;
 use Illuminate\Database\Eloquent\Builder;
@@ -29,6 +30,7 @@ class Party extends Model
     protected $fillable = [
         'name',
         'legal_name',
+        'name_en',
         'phone',
         'fax',
         'address',
@@ -42,6 +44,12 @@ class Party extends Model
         'onedrive_path',
         'onedrive_finished_path',
     ];
+
+    /** Saved without its name in English: given one once the answer has gone back, when Claude is set. */
+    protected static function booted(): void
+    {
+        static::saved(fn (Party $party) => EnglishNames::later($party));
+    }
 
     protected $casts = [
         'role' => 'array', // This tells Laravel to JSON encode/decode automatically
@@ -384,6 +392,12 @@ class Party extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /** The name in a letter's language: in English its English name, when it has one. */
+    public function nameIn(bool $arabic): string
+    {
+        return $arabic ? (string) $this->name : (trim((string) $this->name_en) ?: (string) $this->name);
     }
 
     /**
