@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Resources\CalendarEvents\Schemas;
 
 use App\Filament\Mms\Actions\Calendar\CalendarMatterActions;
 use App\Filament\Support\SameDayMeetings;
+use App\Filament\Support\TeamsAttendanceSection;
 use App\Models\CalendarEvent;
 use App\Models\Matter;
 use App\Models\Setting;
@@ -218,7 +219,10 @@ class CalendarEventForm
                             ->url(fn ($state) => $state)
                             ->openUrlInNewTab()
                     ), ])
-                ->hidden(fn ($record, Get $get) => ! ($record instanceof CalendarEvent ? filled($record->online_meeting_url) : self::outlookOn() && $get('sync_to_outlook'))), ];
+                ->hidden(fn ($record, Get $get) => ! ($record instanceof CalendarEvent ? filled($record->online_meeting_url) : self::outlookOn() && $get('sync_to_outlook'))),
+            // Who joined its Teams call, and when each joined and left: once it is held.
+            TeamsAttendanceSection::make(),
+        ];
     }
 
     /**

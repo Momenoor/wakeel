@@ -193,24 +193,13 @@ class OutlookCalendarService
         }
 
         try {
-            $token = $this->getAccessToken();
-            $userId = $this->mailboxUserId($token, $joinUrl);
+            $meeting = $this->onlineMeeting($joinUrl);
 
-            if (blank($userId)) {
+            if ($meeting === null) {
                 return false;
             }
 
-            // The filter written out: a space must be %20 (the client's own query encoding makes it "+", which Graph refuses).
-            $meetings = Http::withToken($token)->get("https://graph.microsoft.com/v1.0/users/{$userId}/onlineMeetings?\$filter=".rawurlencode("JoinWebUrl eq '".str_replace("'", "''", $joinUrl)."'"));
-            $meetingId = $meetings->json('value.0.id') ?: self::meetingId($userId, $joinUrl);
-
-            if (blank($meetingId)) {
-                Log::warning('Teams auto-record: the online meeting was not found', ['status' => $meetings->status(), 'body' => $meetings->body()]);
-
-                return false;
-            }
-
-            $patched = Http::withToken($token)->patch("https://graph.microsoft.com/v1.0/users/{$userId}/onlineMeetings/{$meetingId}", ['recordAutomatically' => true]);
+            $patched = Http::withToken($this->getAccessToken())->patch("https://graph.microsoft.com/v1.0/users/{$meeting['user']}/onlineMeetings/{$meeting['id']}", ['recordAutomatically' => true]);
 
             if ($patched->failed()) {
                 Log::warning('Teams auto-record: Teams refused', ['status' => $patched->status(), 'body' => $patched->body()]);
@@ -222,6 +211,38 @@ class OutlookCalendarService
 
             return false;
         }
+    }
+
+    /**
+     * The Teams meeting behind a join link, as the onlineMeetings API knows it: its organizer's user id and its
+     * id — the organizer the link names (a meeting another of the office's mailboxes made), else the calendar
+     * mailbox. Found by the link; else the id made from it (meetingId()). Null when it is not found.
+     *
+     * @return array{user: string, id: string}|null
+     */
+    public function onlineMeeting(string $joinUrl): ?array
+    {
+        $token = $this->getAccessToken();
+        $organizers = array_values(array_unique(array_filter([self::organizerId($joinUrl), $this->mailboxUserId($token, $joinUrl)])));
+
+        foreach ($organizers as $userId) {
+            // The filter written out: a space must be %20 (the client's own query encoding makes it "+", which Graph refuses).
+            $meetings = Http::withToken($token)->get("https://graph.microsoft.com/v1.0/users/{$userId}/onlineMeetings?\$filter=".rawurlencode("JoinWebUrl eq '".str_replace("'", "''", $joinUrl)."'"));
+
+            if (filled($id = $meetings->json('value.0.id'))) {
+                return ['user' => $userId, 'id' => (string) $id];
+            }
+        }
+
+        $userId = $organizers[0] ?? null;
+
+        if (filled($id = self::meetingId($userId, $joinUrl))) {
+            return ['user' => (string) $userId, 'id' => $id];
+        }
+
+        Log::warning('Teams: the online meeting was not found', ['join_url' => $joinUrl]);
+
+        return null;
     }
 
     /**

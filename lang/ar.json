@@ -4926,5 +4926,22 @@
     "There is no Arabic to translate.": "لا يوجد نص عربي للترجمة.",
     "Rounding": "التقريب",
     "Rounding (AED)": "التقريب (درهم)",
-    "Salary Fraction Differences": "فروقات كسور الرواتب"
+    "Salary Fraction Differences": "فروقات كسور الرواتب",
+    "The Teams meeting was not found.": "لم يُعثر على اجتماع Teams.",
+    "Microsoft refused to give the meeting's attendance: the app needs the OnlineMeetingArtifact.Read.All permission and an application access policy for the meeting's organizer.": "رفضت Microsoft إعطاء حضور الاجتماع: يحتاج التطبيق إلى صلاحية OnlineMeetingArtifact.Read.All وسياسة وصول للتطبيق لمنظّم الاجتماع.",
+    "Microsoft could not give the attendance: :error": "تعذّر على Microsoft إعطاء الحضور: :error",
+    "Teams attendance": "الحضور في Teams",
+    "Who joined the Teams meeting, and when each joined and left — read by itself once the meeting is over.": "من انضم إلى اجتماع Teams، ومتى انضم كلٌّ منهم وغادر — يُقرأ تلقائياً بعد انتهاء الاجتماع.",
+    "Read the attendance now": "قراءة الحضور الآن",
+    "The attendance was not read": "لم يُقرأ الحضور",
+    "Teams has no attendance of this meeting yet: it is there once the meeting is over.": "لا يوجد في Teams حضور لهذا الاجتماع بعد: يتوفر بعد انتهاء الاجتماع.",
+    "Add those not on the list": "إضافة غير المذكورين في القائمة",
+    "Times in the meeting": "فترات الحضور",
+    "Minutes attended": "دقائق الحضور",
+    "Last read :time.": "آخر قراءة :time.",
+    "Not read yet.": "لم يُقرأ بعد.",
+    "Joined at": "وقت الانضمام",
+    "Left at": "وقت المغادرة",
+    ":count joined the meeting.": "انضم :count إلى الاجتماع.",
+    "Those on the list are ticked as attended.": "أُشير إلى حضور المذكورين في القائمة."
 }

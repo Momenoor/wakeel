@@ -2,10 +2,14 @@
 
 namespace App\Filament\Mms\Resources\Matters\Schemas;
 
+use App\Filament\Support\TeamsAttendanceSection;
 use App\Models\MatterMinutes;
 use App\Models\Party;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\MinutesService;
+use App\Services\MMS\TeamsAttendance;
+use Closure;
+use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Repeater;
@@ -18,7 +22,9 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Components\Wizard\Step;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Str;
 
 /**
  * Recording a meeting (the Record the meeting page), in three steps:
@@ -77,6 +83,7 @@ class MinutesRecordForm
                                 ->columnSpanFull(),
                         ]),
                     self::attendance($minutes),
+                    self::teamsAttendance($minutes),
                     ...self::templateFields($minutes, 1),
                 ]),
             Step::make(__('Questions and answers'))
@@ -203,6 +210,38 @@ class MinutesRecordForm
                         TextInput::make('email')->label(__('Email'))->email()->extraInputAttributes(['dir' => 'ltr'])->columnSpan(5),
                     ]),
             ]);
+    }
+
+    /**
+     * Who joined the meeting's Teams call, and when each joined and left (TeamsAttendance) — read on its own once
+     * the meeting is over, or now; those found ticked as attended, those on no line to add.
+     */
+    private static function teamsAttendance(MatterMinutes $minutes): Section
+    {
+        return TeamsAttendanceSection::make(
+            $minutes,
+            afterRead: function (Get $get, Set $set, array $people): string {
+                $set('attendees', TeamsAttendance::markPresent((array) $get('attendees'), $people));
+
+                return __('Those on the list are ticked as attended.');
+            },
+            actions: fn (Closure $people): array => [
+                Action::make('addTeamsAttendees')
+                    ->label(__('Add those not on the list'))
+                    ->icon(Heroicon::UserPlus)
+                    ->link()
+                    ->visible(fn (Get $get): bool => TeamsAttendance::unlisted((array) $get('attendees'), $people()) !== [])
+                    ->action(function (Get $get, Set $set) use ($people): void {
+                        $lines = (array) $get('attendees');
+
+                        foreach (TeamsAttendance::unlisted($lines, $people()) as $person) {
+                            $lines[(string) Str::uuid()] = ['present' => true, 'name' => $person['name'], 'email' => $person['email'], 'party_id' => $person['party_id'] ?? null];
+                        }
+
+                        $set('attendees', $lines);
+                    }),
+            ],
+        );
     }
 
     /**

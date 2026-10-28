@@ -48,6 +48,8 @@ class CalendarEvent extends Model
         'imported_from_outlook',
         'is_teams_meeting',
         'online_meeting_url',
+        'attendance',
+        'attendance_read_at',
         'created_by',
         'is_all_day',
     ];
@@ -61,6 +63,9 @@ class CalendarEvent extends Model
         'is_teams_meeting' => 'boolean',
         'is_all_day' => 'boolean',
         'ignored_references' => 'array',
+        // Who joined its Teams call, and when (TeamsAttendance).
+        'attendance' => 'array',
+        'attendance_read_at' => 'datetime',
     ];
 
     /**
@@ -93,6 +98,12 @@ class CalendarEvent extends Model
     public function matters(): BelongsToMany
     {
         return $this->belongsToMany(Matter::class, 'calendar_event_matter')->using(CalendarEventMatter::class);
+    }
+
+    /** The minutes of the meeting, when it has some. */
+    public function minutes(): HasMany
+    {
+        return $this->hasMany(MatterMinutes::class, 'calendar_event_id');
     }
 
     public function createdBy(): BelongsTo

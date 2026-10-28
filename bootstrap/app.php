@@ -86,6 +86,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // items in their calendars, notifications when due, items that have rung taken away.
         $schedule->command('calendar:alarms')->everyMinute()->withoutOverlapping(10);
 
+        // Who joined each meeting's Teams call, and when each joined and left: onto its minutes once it is over.
+        $schedule->command('minutes:teams-attendance')->everyFifteenMinutes()->withoutOverlapping(10);
+
         // Super admins and admins hear about calendar events naming a matter
         // number that is not in the system — each morning, when there are any.
         $schedule->command('calendar:report-unmatched')->dailyAt('08:00')->withoutOverlapping(30);

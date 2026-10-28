@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\CalendarEvents\Schemas;
 
 use App\Filament\Mms\Resources\Matters\MatterResource;
+use App\Filament\Support\TeamsAttendanceSection;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -32,6 +33,9 @@ class CalendarEventInfolist
             ])->columns(2),
 
             CalendarEventEntries::syncStatusSection('online_meeting_url', fn ($record) => $record->online_meeting_url),
+
+            // Who joined its Teams call, and when each joined and left: once it is held.
+            TeamsAttendanceSection::make(),
 
         ]);
     }
