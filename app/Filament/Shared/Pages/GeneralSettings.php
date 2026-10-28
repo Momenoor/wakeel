@@ -134,7 +134,7 @@ class GeneralSettings extends SettingsFormPage
                         ->required()
                         ->default('ar'),
 
-                    // How every date and time is shown, everywhere: tables, pages, pickers, emails, PDFs.
+                    // How every date and time is shown, everywhere: tables, pages, emails, PDFs.
                     Select::make(Dates::DATE_SETTING)
                         ->label(__('Date format'))
                         ->options(Dates::options(Dates::DATE_FORMATS))
@@ -143,7 +143,7 @@ class GeneralSettings extends SettingsFormPage
                     Select::make(Dates::TIME_SETTING)
                         ->label(__('Time format'))
                         ->options(Dates::options(Dates::TIME_FORMATS))
-                        ->helperText(__('Used everywhere a date or time is shown: tables, pages, date pickers, emails and PDFs.'))
+                        ->helperText(__('Used everywhere a date or time is shown: tables, pages, emails and PDFs.'))
                         ->required()
                         ->default(Dates::TIME_FORMATS[0]),
 

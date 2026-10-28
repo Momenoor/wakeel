@@ -5,9 +5,6 @@ namespace App\Support;
 use App\Models\Setting;
 use Carbon\CarbonInterface;
 use Carbon\Translator;
-use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\DateTimePicker;
-use Filament\Forms\Components\TimePicker;
 use Filament\Schemas\Schema;
 use Filament\Tables\Table;
 use Illuminate\Support\Carbon;
@@ -15,9 +12,9 @@ use Throwable;
 
 /**
  * How a date and a time are shown, the same everywhere — as set for the whole system (Settings → General):
- * 22/10/2026 and 05:35 PM unless changed (AM/PM as written, not translated). Tables, pages and date pickers take
- * them as their defaults (configureFilament()); what is written by hand (emails, PDFs, notifications) uses the
- * helpers (date(), time(), dateTime()) or the formats.
+ * 22/10/2026 and 05:35 PM unless changed (AM/PM as written, not translated). Tables and pages take them as their
+ * defaults (configureFilament()) — date and time pickers are Filament's own, as the browser writes them; what is
+ * written by hand (emails, PDFs, notifications) uses the helpers (date(), time(), dateTime()) or the formats.
  */
 final class Dates
 {
@@ -79,7 +76,7 @@ final class Dates
         return collect($formats)->mapWithKeys(fn (string $format): array => [$format => $sample->format($format)])->all();
     }
 
-    /** Every table, page (infolist) and date or time picker of both panels. */
+    /** Every table and page (infolist) of both panels. */
     public static function configureFilament(): void
     {
         // AM and PM written so in Arabic too (05:35 PM, not 05:35 م): what a date written by the panel in
@@ -98,23 +95,6 @@ final class Dates
             ->defaultDateDisplayFormat(fn (): string => self::dateFormat())
             ->defaultDateTimeDisplayFormat(fn (): string => self::dateTimeFormat())
             ->defaultTimeDisplayFormat(fn (): string => self::timeFormat()));
-
-        // Not the browser's own picker, which writes the date as the device's language does (an iPhone: in
-        // words): the panel's, in these formats. Seconds are not asked. Each kind its own format — a date
-        // picker is a date-time picker too, so it is told after.
-        DateTimePicker::configureUsing(function (DateTimePicker $picker): void {
-            $picker->native(false)->seconds(false)->displayFormat(match (true) {
-                $picker instanceof DatePicker => self::dateFormat(),
-                $picker instanceof TimePicker => self::timeFormat(),
-                default => self::dateTimeFormat(),
-            });
-
-            // A time in 12 hours: its picker in English, which alone writes AM/PM so (in Arabic: ص/م). A date
-            // alone keeps the user's language.
-            if (! $picker instanceof DatePicker && self::twelveHours()) {
-                $picker->locale('en');
-            }
-        });
     }
 
     /** @param  list<string>  $allowed */

@@ -4697,7 +4697,7 @@
     "Each new event put on Outlook asks whether to email the matter's assistant an invitation. This is what it starts as; off unless turned on here. Events are kept in the shared calendar; a single event's reminders (24 hours and 1 hour before) go into its assistant's calendar either way.": "كل حدث جديد يُرسل إلى Outlook يسأل هل يُرسل بريد دعوة لمساعد الدعوى. هذا ما يبدأ به السؤال؛ غير مفعّل ما لم يُفعَّل هنا. الأحداث تُحفظ في التقويم المشترك، وتذكيرات الحدث الفردي (قبل 24 ساعة وقبل ساعة) تُضاف إلى تقويم مساعده في الحالتين.",
     "Date format": "صيغة التاريخ",
     "Time format": "صيغة الوقت",
-    "Used everywhere a date or time is shown: tables, pages, date pickers, emails and PDFs.": "تُستعمل في كل مكان يظهر فيه تاريخ أو وقت: الجداول والصفحات ومنتقيات التاريخ ورسائل البريد وملفات PDF.",
+    "Used everywhere a date or time is shown: tables, pages, emails and PDFs.": "تُستعمل في كل مكان يظهر فيه تاريخ أو وقت: الجداول والصفحات ورسائل البريد وملفات PDF.",
     "Court registration": "قيد لدى محكمة",
     "Filing mailbox": "بريد الأرشفة",
     "For emails whose matter cannot be told: someone in the office forwards the email here with the matter number (1200/2026) in the subject or first line, or in the address (name+1200-2026@…), and the original is filed on that matter as it came from its own sender. Keep it for this alone.": "للرسائل التي لا يمكن تحديد قضيتها: يعيد أحد موظفي المكتب توجيه البريد إلى هنا مع رقم القضية (1200/2026) في الموضوع أو في أول سطر، أو في العنوان (name+1200-2026@…)، فيُؤرشف البريد الأصلي على تلك القضية كأنه وصل من مرسله نفسه. خصّص هذا البريد لهذا الغرض فقط.",
