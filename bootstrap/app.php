@@ -89,6 +89,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // Who joined each meeting's Teams call, and when each joined and left: onto its minutes once it is over.
         $schedule->command('minutes:teams-attendance')->everyFifteenMinutes()->withoutOverlapping(10);
 
+        // Teams meetings made in the system that Teams has not yet taken as asked (recording by itself, co-organizers): asked again.
+        $schedule->command('calendar:ready-teams')->everyFifteenMinutes()->withoutOverlapping(10);
+
         // Super admins and admins hear about calendar events naming a matter
         // number that is not in the system — each morning, when there are any.
         $schedule->command('calendar:report-unmatched')->dailyAt('08:00')->withoutOverlapping(30);

@@ -127,14 +127,14 @@ class LetterMeeting
                 throw new RuntimeException(__('Outlook made the event but gave no Teams link: is Teams enabled for this mailbox?'));
             }
 
-            // The link may have come a moment after the event: told again, it is the same.
-            $this->outlook->autoRecord($joinUrl);
-
             $event->update([
                 'outlook_event_id' => $outlookEvent['id'] ?? null,
                 'synced_to_outlook' => true,
                 'online_meeting_url' => $joinUrl,
             ]);
+
+            // Recording by itself, its co-organizers — with the link, which may have come a moment after the event.
+            $this->outlook->prepare($event);
 
             return $event;
         } catch (Throwable $e) {

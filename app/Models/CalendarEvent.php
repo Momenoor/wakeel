@@ -50,6 +50,7 @@ class CalendarEvent extends Model
         'online_meeting_url',
         'attendance',
         'attendance_read_at',
+        'teams_ready_at',
         'created_by',
         'is_all_day',
     ];
@@ -66,6 +67,8 @@ class CalendarEvent extends Model
         // Who joined its Teams call, and when (TeamsAttendance).
         'attendance' => 'array',
         'attendance_read_at' => 'datetime',
+        // When Teams took it as asked: recording by itself, its co-organizers (OutlookCalendarService::prepare()).
+        'teams_ready_at' => 'datetime',
     ];
 
     /**

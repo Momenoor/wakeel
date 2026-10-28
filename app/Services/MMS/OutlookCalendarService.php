@@ -3,6 +3,7 @@
 namespace App\Services\MMS;
 
 use App\Models\CalendarEvent;
+use App\Models\Party;
 use App\Models\Setting;
 use App\Services\MMS\Calendar\CalendarAlarms;
 use Carbon\Carbon;
@@ -135,6 +136,45 @@ class OutlookCalendarService
             'synced_to_outlook' => true,
             'online_meeting_url' => $event->is_teams_meeting ? self::teamsLink($outlookEvent) : null,
         ]);
+
+        $this->prepare($event);
+    }
+
+    /**
+     * Who may end a Teams meeting made in the system for everyone, as its organizer (the calendar mailbox) may: the
+     * matter's assistant(s) (CalendarAlarms::people) and whoever made the event — made its co-organizers.
+     *
+     * @return list<string> their Microsoft accounts
+     */
+    public static function coOrganizers(CalendarEvent $event): array
+    {
+        return CalendarAlarms::people($event)
+            ->map(fn (Party $party): ?string => CalendarAlarms::mailbox($party))
+            ->push($event->createdBy?->msAccount())
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * A Teams meeting made in the system, made ready (prepareMeeting()): recording by itself, its co-organizers —
+     * teams_ready_at once Teams took it all; until then asked again every quarter of an hour (calendar:ready-teams),
+     * as a refusal (no access policy yet) is not the last word.
+     */
+    public function prepare(CalendarEvent $event): bool
+    {
+        if (! $event->is_teams_meeting || blank($event->online_meeting_url)) {
+            return false;
+        }
+
+        $ready = $this->prepareMeeting($event->online_meeting_url, self::coOrganizers($event));
+
+        if ($ready) {
+            $event->forceFill(['teams_ready_at' => now()])->saveQuietly();
+        }
+
+        return $ready;
     }
 
     public function createEvent(array $eventData): array
@@ -164,31 +204,27 @@ class OutlookCalendarService
             throw new \RuntimeException('Failed to create Outlook event: '.$response->body());
         }
 
-        $created = $response->json();
-
-        if ($payload['isOnlineMeeting']) {
-            $this->autoRecord(self::teamsLink($created));
-        }
-
-        return $created;
+        // Made ready by whoever keeps the event (prepare()): it has the link once saved.
+        return $response->json();
     }
 
     /**
-     * Makes a Teams meeting record itself when it starts: the online meeting
-     * behind the join link gets recordAutomatically (Microsoft Graph, the
-     * onlineMeetings API — it is not part of the calendar event). Done after
-     * the event is made and again after it is edited; it is idempotent.
+     * Makes a Teams meeting record itself when it starts, and gives it co-organizers — those who may end it for
+     * everyone: the online meeting behind the join link (Microsoft Graph, the onlineMeetings API — neither is part of
+     * the calendar event). Idempotent. Neither applies to a meeting already under way.
      *
-     * Never stops the meeting being made: when the tenant does not allow it
-     * (the OnlineMeetings.ReadWrite.All permission, an application access
-     * policy for the mailbox, a Teams licence that records automatically) it is
+     * Never stops the meeting being made: when the tenant does not allow it (the OnlineMeetings.ReadWrite.All
+     * permission, an application access policy for the mailbox, a Teams licence that records automatically) it is
      * logged and the meeting stays as it was.
      *
-     * @return bool whether Teams was told to record automatically
+     * @param  list<string>  $coOrganizers  Microsoft accounts of the office's people
+     * @return bool whether Teams took all asked of it — false with nothing to ask
      */
-    public function autoRecord(?string $joinUrl): bool
+    public function prepareMeeting(?string $joinUrl, array $coOrganizers = []): bool
     {
-        if (blank($joinUrl) || ! config('services.outlook.auto_record')) {
+        $record = (bool) config('services.outlook.auto_record');
+
+        if (blank($joinUrl) || (! $record && $coOrganizers === [])) {
             return false;
         }
 
@@ -199,18 +235,65 @@ class OutlookCalendarService
                 return false;
             }
 
-            $patched = Http::withToken($this->getAccessToken())->patch("https://graph.microsoft.com/v1.0/users/{$meeting['user']}/onlineMeetings/{$meeting['id']}", ['recordAutomatically' => true]);
+            $url = "https://graph.microsoft.com/v1.0/users/{$meeting['user']}/onlineMeetings/{$meeting['id']}";
+            // Apart: co-organizers Teams won't take don't keep the meeting from recording.
+            $recording = ! $record || $this->patchMeeting($url, ['recordAutomatically' => true]);
 
-            if ($patched->failed()) {
-                Log::warning('Teams auto-record: Teams refused', ['status' => $patched->status(), 'body' => $patched->body()]);
-            }
-
-            return $patched->successful();
+            return $recording && ($coOrganizers === [] || $this->coOrganize($url, $coOrganizers));
         } catch (Throwable $e) {
-            Log::warning('Teams auto-record failed: '.$e->getMessage());
+            Log::warning('Teams meeting not made ready: '.$e->getMessage());
 
             return false;
         }
+    }
+
+    /**
+     * The people made co-organizers: the meeting's attendees all sent again with them (Graph replaces the list),
+     * one already there given the role; its organizer left out.
+     *
+     * @param  list<string>  $emails
+     */
+    private function coOrganize(string $url, array $emails): bool
+    {
+        // "coorganizer" comes after unknownFutureValue in Graph's roles: given and taken only so asked.
+        $graph = fn () => Http::withToken($this->getAccessToken())->withHeaders(['Prefer' => 'include-unknown-enum-members']);
+        $current = $graph()->get($url);
+
+        if ($current->failed()) {
+            Log::warning('Teams co-organizers: the meeting was not read', ['status' => $current->status(), 'body' => $current->body()]);
+
+            return false;
+        }
+
+        $organizer = mb_strtolower((string) $current->json('participants.organizer.upn'));
+        $attendees = collect((array) $current->json('participants.attendees', []));
+        $changed = false;
+
+        foreach (array_diff($emails, [$organizer]) as $email) {
+            $at = $attendees->search(fn (array $attendee): bool => mb_strtolower((string) ($attendee['upn'] ?? '')) === $email);
+
+            if ($at === false) {
+                $attendees->push(['upn' => $email, 'role' => 'coorganizer']);
+                $changed = true;
+            } elseif (($attendees[$at]['role'] ?? null) !== 'coorganizer') {
+                $attendees[$at] = [...$attendees[$at], 'role' => 'coorganizer'];
+                $changed = true;
+            }
+        }
+
+        return ! $changed || $this->patchMeeting($url, ['participants' => ['attendees' => $attendees->values()->all()]], $graph());
+    }
+
+    /** @param  array<string, mixed>  $body */
+    private function patchMeeting(string $url, array $body, ?PendingRequest $request = null): bool
+    {
+        $patched = ($request ?? Http::withToken($this->getAccessToken()))->patch($url, $body);
+
+        if ($patched->failed()) {
+            Log::warning('Teams refused to change the meeting', ['change' => array_keys($body), 'status' => $patched->status(), 'body' => $patched->body()]);
+        }
+
+        return $patched->successful();
     }
 
     /**
@@ -396,7 +479,7 @@ class OutlookCalendarService
 
         // Edited: still recording by itself.
         if (! empty($eventData['is_teams_meeting'])) {
-            $this->autoRecord($eventData['online_meeting_url'] ?? null);
+            $this->prepareMeeting($eventData['online_meeting_url'] ?? null);
         }
 
         return $response->json();
