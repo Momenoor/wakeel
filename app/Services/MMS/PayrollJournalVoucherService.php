@@ -20,6 +20,7 @@ use App\Models\Setting;
  *   Dr  Basic salary, allowances, incentives   — the month's cost, salaries less
  *                                                 the pay withheld for unpaid leave
  *   Dr  Bank fees                              — the fixed monthly transfer charge
+ *   Dr  Salary fraction differences            — net pay rounded up to the dirham
  *     Cr  Loan and petty cash clearing         — advances recovered, per employee
  *     Cr  Other salary deductions              — fines and manual adjustments
  *     Cr  Net salary payable                   — what the bank transfer settles,
@@ -54,6 +55,9 @@ class PayrollJournalVoucherService
     public const GL_NET_SALARY_PAYABLE = 'Net Salary Payable';
 
     public const GL_BANK_FEES_EXPENSE = 'مصروفات رسوم التحويل';
+
+    /** What rounding each net pay up to the whole dirham added (PayrollService::roundedUp()). */
+    public const GL_ROUNDING = 'Salary Fraction Differences';
 
     private const DEFAULT_BANK_FEE_AMOUNT = 0.0;
 
@@ -132,6 +136,13 @@ class PayrollJournalVoucherService
         }
 
         $netPay = round((float) $run->payslips()->sum('net_pay'), 2);
+
+        // Net pay rounded up to the whole dirham: what it added, an expense of its own.
+        $rounding = round((float) $run->payslips()->sum('rounding'), 2);
+
+        if ($rounding > 0) {
+            $debits[] = ['account' => self::GL_ROUNDING, 'detail' => null, 'amount' => $rounding];
+        }
         $bankFee = round($this->bankFeeAmount(), 2);
 
         if ($bankFee > 0) {

@@ -4923,5 +4923,8 @@
     "Every name has its English now.": "لكل اسم ترجمته الإنجليزية الآن.",
     "Stopped: :error": "توقف: :error",
     "Translate from Arabic": "ترجمة من العربية",
-    "There is no Arabic to translate.": "لا يوجد نص عربي للترجمة."
+    "There is no Arabic to translate.": "لا يوجد نص عربي للترجمة.",
+    "Rounding": "التقريب",
+    "Rounding (AED)": "التقريب (درهم)",
+    "Salary Fraction Differences": "فروقات كسور الرواتب"
 }

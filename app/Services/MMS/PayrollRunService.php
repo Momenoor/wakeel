@@ -198,16 +198,17 @@ class PayrollRunService
     /**
      * Totals for a run, for the header and the voucher.
      *
-     * @return array{employees: int, gross: float, deductions: float, net: float, eosg: float}
+     * @return array{employees: int, gross: float, deductions: float, rounding: float, net: float, eosg: float}
      */
     public function totals(PayrollRun $run): array
     {
-        /** @var object{employees: int, gross: float|null, deductions: float|null, net: float|null, eosg: float|null} $row */
+        /** @var object{employees: int, gross: float|null, deductions: float|null, rounding: float|null, net: float|null, eosg: float|null} $row */
         $row = Payslip::query()
             ->where('payroll_run_id', $run->getKey())
             ->selectRaw('count(*) as employees')
             ->selectRaw('sum(gross) as gross')
             ->selectRaw('sum(total_deductions) as deductions')
+            ->selectRaw('sum(rounding) as rounding')
             ->selectRaw('sum(net_pay) as net')
             ->selectRaw('sum(eosg_accrued) as eosg')
             ->first();
@@ -216,6 +217,7 @@ class PayrollRunService
             'employees' => (int) $row->employees,
             'gross' => (float) ($row->gross ?? 0),
             'deductions' => (float) ($row->deductions ?? 0),
+            'rounding' => (float) ($row->rounding ?? 0),
             'net' => (float) ($row->net ?? 0),
             'eosg' => (float) ($row->eosg ?? 0),
         ];

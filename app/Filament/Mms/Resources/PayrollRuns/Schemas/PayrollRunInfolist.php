@@ -28,6 +28,11 @@ class PayrollRunInfolist
                         TextEntry::make('deductions')
                             ->label(Currency::label(__('Deductions (AED)')))
                             ->state(fn (PayrollRun $record): string => number_format(self::totals($record)['deductions'], 2)),
+                        // Each net pay rounded up to the whole dirham: what that added (runs made since it does).
+                        TextEntry::make('rounding')
+                            ->label(Currency::label(__('Rounding (AED)')))
+                            ->state(fn (PayrollRun $record): string => number_format(self::totals($record)['rounding'], 2))
+                            ->visible(fn (PayrollRun $record): bool => self::totals($record)['rounding'] > 0),
                         TextEntry::make('net')
                             ->label(Currency::label(__('Net Payable (AED)')))
                             ->weight('bold')
@@ -75,7 +80,7 @@ class PayrollRunInfolist
      * Seven entries each asking the database for its own aggregate would be
      * seven queries for one row of numbers.
      *
-     * @return array{employees: int, gross: float, deductions: float, net: float, eosg: float}
+     * @return array{employees: int, gross: float, deductions: float, rounding: float, net: float, eosg: float}
      */
     private static function totals(PayrollRun $record): array
     {

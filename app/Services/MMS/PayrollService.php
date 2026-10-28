@@ -377,6 +377,26 @@ class PayrollService
             ]));
     }
 
+    /**
+     * A net pay rounded up to the whole dirham, on a run that rounds (PayrollRun::$round_net_up), and what that
+     * added: 1,234.10 is paid 1,235.00, 0.90 added; a whole figure, or one below nothing (left for review), as it is.
+     *
+     * @return array{0: float, 1: float} the net pay, the rounding
+     */
+    public static function roundedUp(PayrollRun $run, float $net): array
+    {
+        // In fils, so 1,500.00 is never taken for a little over it.
+        $fils = (int) round($net * 100);
+
+        if (! $run->round_net_up || $fils <= 0 || $fils % 100 === 0) {
+            return [round($net, 2), 0.0];
+        }
+
+        $up = (intdiv($fils, 100) + 1) * 100;
+
+        return [$up / 100.0, ($up - $fils) / 100.0];
+    }
+
     private function buildPayslip(
         PayrollRun $run,
         Party $party,
@@ -407,7 +427,7 @@ class PayrollService
 
         $gross = round($basic + $allowances + $incentive + $ticketAmount, 2);
         $totalDeductions = round($unpaidDeduction + $loanDeduction + $manualDeduction + $incentiveDeduction, 2);
-        $net = round($gross - $totalDeductions, 2);
+        [$net, $rounding] = self::roundedUp($run, round($gross - $totalDeductions, 2));
 
         $profile = $party->employeeProfile;
 
@@ -426,6 +446,7 @@ class PayrollService
             'manual_deduction' => $manualDeduction,
             'incentive_deduction' => $incentiveDeduction,
             'total_deductions' => $totalDeductions,
+            'rounding' => $rounding,
             'net_pay' => $net,
             'eosg_accrued' => $this->accrueGratuity($party, $periodStart, $periodEnd, $basic, $unpaidDays),
             'iban_snapshot' => $profile?->getAttribute('iban'),

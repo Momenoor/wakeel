@@ -172,7 +172,9 @@ class PayrollRunTest extends TestCase
         // (6,000/30 = 200 a day).
         $this->assertSame('5.0', $payslip->unpaid_days);
         $this->assertSame('1666.67', $payslip->unpaid_deduction);
-        $this->assertSame('8333.33', $payslip->net_pay);
+        // Paid to the whole dirham: 8,333.33 rounded up.
+        $this->assertSame('8334.00', $payslip->net_pay);
+        $this->assertSame('0.67', $payslip->rounding);
     }
 
     public function test_half_pay_sick_leave_withholds_half_a_day_per_day(): void
@@ -537,6 +539,37 @@ class PayrollRunTest extends TestCase
         // the column opens a breakdown rather than just showing a total.
         $this->assertSame('300.00', $payslip->loan_deduction);
         $this->assertSame(2, $payslip->installments()->count());
+    }
+
+    public function test_a_new_run_rounds_each_net_pay_up_to_the_dirham_and_one_of_before_keeps_its_figures(): void
+    {
+        $party = $this->employee();
+        PartyLeave::create(['party_id' => $party->id, 'start_date' => '2026-06-10', 'end_date' => '2026-06-10', 'leave_type' => LeaveType::UNPAID, 'pay_factor' => 0]);
+
+        // 10,000 less a day of it (333.33): 9,666.67, paid 9,667.00.
+        $new = $this->payrollRun();
+        $this->assertTrue($new->round_net_up);
+        $payslip = $this->payroll->generate($new)->first();
+        $this->assertSame(['9667.00', '0.33'], [$payslip->net_pay, $payslip->rounding]);
+
+        // The rounding an expense line of its own in the voucher, the voucher still balanced.
+        $voucher = app(PayrollJournalVoucherService::class)->forRun($new);
+        $this->assertTrue($voucher['balanced']);
+        $this->assertSame(0.33, collect($voucher['debits'])->firstWhere('account', PayrollJournalVoucherService::GL_ROUNDING)['amount']);
+        $this->assertSame(9667.0, collect($voucher['credits'])->firstWhere('account', 'Net Salary Payable')['amount']);
+
+        // A run of before, generated again: its figures as they were, no rounding.
+        $old = $this->payrollRun('2026-07');
+        $old->forceFill(['round_net_up' => false])->save();
+        PartyLeave::create(['party_id' => $party->id, 'start_date' => '2026-07-10', 'end_date' => '2026-07-10', 'leave_type' => LeaveType::UNPAID, 'pay_factor' => 0]);
+        $payslip = $this->payroll->generate($old)->first();
+        $this->assertSame(['9666.67', '0.00'], [$payslip->net_pay, $payslip->rounding]);
+        $this->assertNull(collect(app(PayrollJournalVoucherService::class)->forRun($old)['debits'])->firstWhere('account', PayrollJournalVoucherService::GL_ROUNDING));
+
+        // A whole figure, or one below nothing, as it is.
+        $this->assertSame([10000.0, 0.0], PayrollService::roundedUp($new, 10000.0));
+        $this->assertSame([-12.5, 0.0], PayrollService::roundedUp($new, -12.5));
+        $this->assertSame([1501.0, 0.99], PayrollService::roundedUp($new, 1500.01));
     }
 
     public function test_the_journal_voucher_balances(): void

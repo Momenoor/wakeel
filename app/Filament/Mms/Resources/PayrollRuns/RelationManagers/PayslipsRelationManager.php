@@ -8,6 +8,7 @@ use App\Filament\Support\EntryTable;
 use App\Models\LoanInstallment;
 use App\Models\PayrollRun;
 use App\Models\Payslip;
+use App\Services\MMS\PayrollService;
 use App\Support\Currency;
 use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
@@ -128,6 +129,12 @@ class PayslipsRelationManager extends RelationManager
                 TextColumn::make('incentive_deduction')
                     ->label(__('Incentive deductions'))
                     ->aed()
+                    ->toggleable(),
+                // What rounding the net pay up to the whole dirham added (runs made since it does).
+                TextColumn::make('rounding')
+                    ->label(__('Rounding'))
+                    ->aed()
+                    ->summarize(Sum::make()->label(__('Total'))->aed())
                     ->toggleable(),
                 TextColumn::make('net_pay')
                     ->label(__('Net Pay'))
@@ -279,7 +286,7 @@ class PayslipsRelationManager extends RelationManager
             2,
         );
 
-        $net = round($gross - $deductions, 2);
+        [$net, $rounding] = PayrollService::roundedUp($this->payrollRun(), round($gross - $deductions, 2));
 
         $record->forceFill([
             'incentive_amount' => $incentive,
@@ -290,6 +297,7 @@ class PayslipsRelationManager extends RelationManager
             'manual_deduction' => $manual,
             'gross' => $gross,
             'total_deductions' => $deductions,
+            'rounding' => $rounding,
             'net_pay' => $net,
             'needs_review' => $net < 0,
             'review_note' => $data['review_note'] ?: ($net < 0

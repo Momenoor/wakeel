@@ -30,10 +30,17 @@ class PayrollRun extends Model
         'disbursed_at',
         'notes',
         'created_by',
+        'round_net_up',
+    ];
+
+    /** A run made from now on rounds each net pay up to the whole dirham; those made before keep their figures. */
+    protected $attributes = [
+        'round_net_up' => true,
     ];
 
     protected $casts = [
         'status' => PayrollRunStatus::class,
+        'round_net_up' => 'boolean',
         'hr_approved_at' => 'datetime',
         'finance_approved_at' => 'datetime',
         'disbursed_at' => 'datetime',
