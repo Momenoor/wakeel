@@ -32,7 +32,8 @@ class PayrollService
 {
     public const GL_INCENTIVE = 'Staff Incentive Expense';
 
-    public const GL_UNPAID_LEAVE = 'Unpaid Leave Recovery';
+    /** Unpaid leave lowers the salaries expense itself (PayrollJournalVoucherService nets it there): no account of its own. */
+    public const GL_UNPAID_LEAVE = 'Salaries Expense';
 
     public const GL_MANUAL_DEDUCTION = 'Other Salary Deductions';
 
@@ -560,7 +561,6 @@ class PayrollService
             ];
         }
     }
-
 
     private function accrueGratuity(
         Party $party,

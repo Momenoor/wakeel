@@ -17,15 +17,17 @@ use App\Models\Setting;
  *
  * The double entry it describes:
  *
- *   Dr  Basic salary, allowances, incentives   — the full cost of the month
+ *   Dr  Basic salary, allowances, incentives   — the month's cost, salaries less
+ *                                                 the pay withheld for unpaid leave
  *   Dr  Bank fees                              — the fixed monthly transfer charge
  *     Cr  Loan and petty cash clearing         — advances recovered, per employee
- *     Cr  Unpaid leave recovery                — pay withheld, contra to expense
  *     Cr  Other salary deductions              — fines and manual adjustments
  *     Cr  Net salary payable                   — what the bank transfer settles,
  *                                                 the bank fee folded in
  *
- * Earnings are debited GROSS and the withholdings credited back, rather than
+ * Unpaid leave is no cost to the office: it lowers the salaries expense debited
+ * rather than being credited to an account of its own (the office has none).
+ * The other withholdings are debited GROSS and credited back, rather than
  * debiting the net figure. That is what makes the sheet reconcilable: the salary
  * expense line matches the payroll register, and every deduction can be traced
  * to the account it landed in.
@@ -120,10 +122,12 @@ class PayrollJournalVoucherService
 
             // EMPLOYER_COST lines never reach here — the query above excludes
             // them, since gratuity posts only in the annual closing voucher.
-            match ($first->kind) {
-                PayslipLineKind::EARNING => $debits[] = ['account' => $account, 'detail' => $detail, 'amount' => $amount],
-                PayslipLineKind::DEDUCTION => $credits[] = ['account' => $account, 'detail' => $detail, 'amount' => $amount],
-                PayslipLineKind::EMPLOYER_COST => null,
+            match (true) {
+                $first->kind === PayslipLineKind::EARNING => $debits[] = ['account' => $account, 'detail' => $detail, 'amount' => $amount],
+                // Unpaid leave lowers the salaries expense debited, not credited to an account of its own.
+                $first->kind === PayslipLineKind::DEDUCTION && $account === PayrollService::GL_UNPAID_LEAVE => $debits[] = ['account' => $account, 'detail' => $detail, 'amount' => -$amount],
+                $first->kind === PayslipLineKind::DEDUCTION => $credits[] = ['account' => $account, 'detail' => $detail, 'amount' => $amount],
+                default => null,
             };
         }
 

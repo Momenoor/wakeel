@@ -576,7 +576,14 @@ class PayrollRunTest extends TestCase
         $credits = array_column($voucher['credits'], 'account');
         $this->assertContains('Net Salary Payable', $credits);
         $this->assertContains('Petty Cash Advances', $credits);
-        $this->assertContains('Unpaid Leave Recovery', $credits);
+        // Unpaid leave lowers the salaries expense: no account of its own, nothing credited back to salaries.
+        $this->assertNotContains('Unpaid Leave Recovery', $credits);
+        $this->assertNotContains('Salaries Expense', $credits);
+
+        $payslip = $run->payslips()->first();
+        $salaries = collect($voucher['debits'])->firstWhere('account', 'Salaries Expense')['amount'];
+        $this->assertGreaterThan(0, (float) $payslip->unpaid_deduction);
+        $this->assertSame(round(10000 - (float) $payslip->unpaid_deduction, 2), $salaries);
     }
 
     public function test_the_voucher_debits_gross_not_net(): void
