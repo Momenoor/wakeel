@@ -222,8 +222,11 @@ class TeamsAttendance
 
     private static function refusal(Response $response): string
     {
+        $error = (string) ($response->json('error.message') ?: $response->status());
+
+        // Microsoft's own words too: the permission, the access policy or a token from before either tell apart only by them.
         return in_array($response->status(), [401, 403], true)
-            ? __("Microsoft refused to give the meeting's attendance: the app needs the OnlineMeetingArtifact.Read.All permission and an application access policy for the meeting's organizer.")
-            : __('Microsoft could not give the attendance: :error', ['error' => (string) ($response->json('error.message') ?: $response->status())]);
+            ? __("Microsoft refused to give the meeting's attendance: the app needs the OnlineMeetingArtifact.Read.All permission and an application access policy for the meeting's organizer.").' ('.$error.')'
+            : __('Microsoft could not give the attendance: :error', ['error' => $error]);
     }
 }
