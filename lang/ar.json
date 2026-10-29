@@ -4992,5 +4992,11 @@
     "To :to, :at": "إلى :to، :at",
     "Not forwarded to :to: :error": "لم يُعَد توجيهها إلى :to: :error",
     "The email is no longer in the folder.": "لم تعد الرسالة في المجلد.",
-    "Every email that comes into this folder is forwarded from this mailbox to the address, its original attached as it came — a reply to it goes to its own sender.": "كل رسالة تصل إلى هذا المجلد يُعاد توجيهها من هذا الصندوق إلى العنوان، وأصلها مرفق كما وصل — والرد عليها يذهب إلى مرسلها نفسه."
+    "Every email that comes into this folder is forwarded from this mailbox to the address, its original attached as it came — a reply to it goes to its own sender.": "كل رسالة تصل إلى هذا المجلد يُعاد توجيهها من هذا الصندوق إلى العنوان، وأصلها مرفق كما وصل — والرد عليها يذهب إلى مرسلها نفسه.",
+    "Merge into another type": "دمج في نوع آخر",
+    "Merge :type into another type": "دمج :type في نوع آخر",
+    ":count matters of :type (deleted ones too), its custom fields and the letters offered for it go to the type chosen, then :type is deleted. That type keeps its own name, folders, party capacities and incentive settings. It cannot be undone.": "تنتقل :count قضية من :type (والمحذوفة منها أيضاً) وحقوله المخصصة والخطابات المتاحة له إلى النوع المختار، ثم يُحذف :type. ويحتفظ ذلك النوع باسمه ومجلداته وصفات أطرافه وإعدادات الحوافز. لا يمكن التراجع عن ذلك.",
+    "Merge into": "الدمج في",
+    ":type merged into :into": "دُمج :type في :into",
+    ":count matters moved.": "نُقلت :count قضية."
 }

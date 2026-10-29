@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
@@ -246,5 +247,41 @@ class Type extends Model
         $this->letterTemplates()->{$detach ? 'sync' : 'syncWithoutDetaching'}(
             array_fill_keys($offered, ['excluded' => false]) + array_fill_keys($excluded, ['excluded' => true]),
         );
+    }
+
+    /**
+     * This type merged into another — the same type written another way: its matters (deleted ones too), its custom
+     * fields and the letters and letter items offered for it go to that one (offered for either, still offered),
+     * then it is deleted. The other keeps its own name, folders, capacities and incentive settings. How many
+     * matters moved.
+     */
+    public function mergeInto(self $into): int
+    {
+        abort_if($into->is($this), 422);
+
+        $moved = DB::transaction(function () use ($into): int {
+            // As one change, not one a matter: the activity log says it once (below).
+            $moved = Matter::withTrashed()->where('type_id', $this->getKey())->toBase()->update(['type_id' => $into->getKey()]);
+
+            $into->fieldDefinitions()->syncWithoutDetaching($this->fieldDefinitions()->pluck('matter_field_definitions.id')->all());
+            $into->assignLetterTemplates(
+                [...$into->offeredLetterTemplates()->pluck('letter_templates.id')->all(), ...$this->offeredLetterTemplates()->pluck('letter_templates.id')->all()],
+                $into->excludedLetterTemplates()->pluck('letter_templates.id')->all(),
+            );
+            DB::table('letter_item_type')->insertOrIgnore(
+                DB::table('letter_item_type')->where('type_id', $this->getKey())->pluck('letter_item_id')
+                    ->map(fn ($item): array => ['letter_item_id' => $item, 'type_id' => $into->getKey()])->all(),
+            );
+
+            $this->delete();
+
+            return $moved;
+        });
+
+        activity()->performedOn($into)
+            ->withProperties(['merged' => ['id' => $this->getKey(), 'name' => $this->name], 'matters' => $moved])
+            ->log('Matter type merged into this one');
+
+        return $moved;
     }
 }

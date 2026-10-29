@@ -7,6 +7,7 @@ use App\Models\LetterTemplate;
 use App\Models\Setting;
 use App\Models\Type;
 use App\Services\MMS\MatterOneDriveFolders;
+use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -79,6 +80,32 @@ class TypesTable
             ->recordActions([
                 ViewAction::make(),
                 EditAction::make(),
+                // The same type written two ways: one of them, its matters and all, into the other.
+                Action::make('merge')
+                    ->label(__('Merge into another type'))
+                    ->icon('heroicon-o-arrows-pointing-in')
+                    ->color('warning')
+                    ->visible(fn (Type $record): bool => auth()->user()?->can('delete', $record) ?? false)
+                    ->modalHeading(fn (Type $record): string => __('Merge :type into another type', ['type' => $record->name]))
+                    ->modalDescription(fn (Type $record): string => __(':count matters of :type (deleted ones too), its custom fields and the letters offered for it go to the type chosen, then :type is deleted. That type keeps its own name, folders, party capacities and incentive settings. It cannot be undone.', ['count' => $record->matters()->withTrashed()->count(), 'type' => $record->name]))
+                    ->schema(fn (Type $record): array => [
+                        Select::make('into')
+                            ->label(__('Merge into'))
+                            ->options(Type::query()->whereKeyNot($record->getKey())->orderBy('name')->pluck('name', 'id'))
+                            ->searchable()
+                            ->required(),
+                    ])
+                    ->action(function (Type $record, array $data): void {
+                        $into = Type::query()->findOrFail($data['into']);
+                        abort_unless(auth()->user()?->can('update', $into), 403);
+                        $name = $record->name;
+                        $moved = $record->mergeInto($into);
+
+                        Notification::make()->success()
+                            ->title(__(':type merged into :into', ['type' => $name, 'into' => $into->name]))
+                            ->body(__(':count matters moved.', ['count' => $moved]))
+                            ->send();
+                    }),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

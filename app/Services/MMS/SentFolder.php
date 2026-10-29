@@ -133,21 +133,17 @@ class SentFolder
     }
 
     /**
-     * A folder of the mailbox by its name or path (named()) — empty or "INBOX": the Inbox. Not there: said so.
+     * A folder of the mailbox by its name or path (named()) — empty: the Inbox, whatever its case ("Inbox" on
+     * Yahoo). Not there: said so.
      *
      * @param  array<string, mixed>|null  $sender
      */
     public function folderNamed(string $senderKey, string $name, ?array $sender = null): Folder
     {
         $sender ??= SenderMailer::sender($senderKey);
-        $client = $this->client($senderKey, $sender);
-        $name = trim($name);
+        $name = trim($name) !== '' ? trim($name) : 'INBOX';
 
-        if ($name === '' || strcasecmp($name, 'INBOX') === 0) {
-            return $client->getFolder('INBOX');
-        }
-
-        return self::named($client->getFolders(false)->all(), $name)
+        return self::named($this->client($senderKey, $sender)->getFolders(false)->all(), $name)
             ?? throw new RuntimeException(__('The folder ":folder" is not in the mailbox :address.', ['folder' => $name, 'address' => (string) ($sender['address'] ?? $senderKey)]));
     }
 
@@ -161,7 +157,8 @@ class SentFolder
     {
         return collect($this->client($senderKey)->getFolders(false)->all())
             ->reject(fn ($folder) => $folder->no_select ?? false)
-            ->map(fn ($folder): string => (string) $folder->full_name)
+            // The Inbox as "INBOX" whatever its case on the server ("Inbox" on Yahoo): one name for it everywhere.
+            ->map(fn ($folder): string => strcasecmp((string) $folder->full_name, 'INBOX') === 0 ? 'INBOX' : (string) $folder->full_name)
             ->values()
             ->all();
     }

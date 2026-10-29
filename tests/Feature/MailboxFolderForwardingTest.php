@@ -95,6 +95,10 @@ class MailboxFolderForwardingTest extends TestCase
         $this->assertSame('Courts/Dubai', SentFolder::named($folders, 'Courts.Dubai')->full_name);
         $this->assertNull(SentFolder::named($folders, 'Archive'));
         $this->assertNull(SentFolder::named($folders, 'Nowhere'));
+
+        // Yahoo's Inbox is "Inbox": found as INBOX all the same.
+        $yahoo = [(object) ['full_name' => 'Inbox', 'name' => 'Inbox', 'no_select' => false], (object) ['full_name' => 'Wakeel', 'name' => 'Wakeel', 'no_select' => false]];
+        $this->assertSame('Inbox', SentFolder::named($yahoo, 'INBOX')->full_name);
     }
 
     public function test_its_mailboxes_are_not_among_the_mail_senders_nor_sent_from_nor_shared(): void
