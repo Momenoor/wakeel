@@ -8,6 +8,7 @@ use App\Models\LetterTemplate;
 use App\Models\MatterTypeIncentiveConfig;
 use App\Models\Type;
 use App\Services\MMS\MatterOneDriveFolders;
+use App\Services\MMS\ReceivedEmailFiling;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
@@ -82,6 +83,11 @@ class TypeInfolist
                             // Where the emails that come in, the emails sent and the signed minutes are saved: its own, or the default.
                             ...collect([
                                 ['onedrive_received_emails', __('Received emails folder structure'), fn () => MatterOneDriveFolders::receivedEmailsFolder() ?: __('Not saved in OneDrive')],
+                                ['onedrive_received_plaintiff', __('Emails from the plaintiff side — folder'), fn () => ReceivedEmailFiling::folderTemplate(null, ReceivedEmailFiling::PLAINTIFF) ?: __('Not saved in OneDrive')],
+                                ['onedrive_received_defendant', __('Emails from the defendant side — folder'), fn () => ReceivedEmailFiling::folderTemplate(null, ReceivedEmailFiling::DEFENDANT) ?: __('Not saved in OneDrive')],
+                                ['received_name', __('Received emails — file name'), fn () => ReceivedEmailFiling::nameTemplate(null, ReceivedEmailFiling::GENERAL) ?: ReceivedEmailFiling::DEFAULT_NAME],
+                                ['received_name_plaintiff', __('Emails from the plaintiff side — file name'), fn () => ReceivedEmailFiling::nameTemplate(null, ReceivedEmailFiling::PLAINTIFF) ?: ReceivedEmailFiling::DEFAULT_NAME],
+                                ['received_name_defendant', __('Emails from the defendant side — file name'), fn () => ReceivedEmailFiling::nameTemplate(null, ReceivedEmailFiling::DEFENDANT) ?: ReceivedEmailFiling::DEFAULT_NAME],
                                 ['onedrive_sent_emails', __('Sent emails folder'), fn () => MatterOneDriveFolders::sentEmailsFolder() ?: __('Not saved in OneDrive')],
                                 ['onedrive_signed_minutes', __('Signed minutes folder'), fn () => MatterOneDriveFolders::signedMinutesFolder()],
                             ])->map(fn (array $folder): TextEntry => TextEntry::make($folder[0])

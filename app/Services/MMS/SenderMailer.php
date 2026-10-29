@@ -43,14 +43,15 @@ class SenderMailer
     }
 
     /**
-     * The office's shared mailboxes, each as "Name <address>" — for choosing which a user may use.
+     * The office's shared mailboxes, each as "Name <address>" — for choosing which a user may use. Not a mailbox of
+     * Mailbox folders: the super administrator's alone.
      *
      * @return array<string, string> key => name and address
      */
     public static function sharedOptions(): array
     {
         return collect(self::all())
-            ->filter(fn (array $sender): bool => $sender['owner'] === null)
+            ->filter(fn (array $sender): bool => $sender['owner'] === null && ! ($sender['folders_only'] ?? false))
             ->map(fn (array $sender, $key): string => ($sender['name'] ?? (string) $key).' <'.($sender['address'] ?? '').'>')
             ->all();
     }

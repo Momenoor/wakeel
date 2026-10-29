@@ -28,4 +28,7 @@ return [
 
     'mms_calendar' => env('MODULE_MMS_CALENDAR_ENABLED', true),
 
+    // Mailbox folders: each folder of a mailbox read over IMAP forwarded on to its own address (the super administrator's).
+    'mms_mailbox_folders' => env('MODULE_MMS_MAILBOX_FOLDERS_ENABLED', true),
+
 ];

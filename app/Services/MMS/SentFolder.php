@@ -3,9 +3,13 @@
 namespace App\Services\MMS;
 
 use App\Models\BulkMailCampaign;
+use App\Support\Tolerant;
+use RuntimeException;
+use Webklex\PHPIMAP\Address;
 use Webklex\PHPIMAP\Client;
 use Webklex\PHPIMAP\ClientManager;
 use Webklex\PHPIMAP\Folder;
+use Webklex\PHPIMAP\Message;
 
 /**
  * Copies a sent mail into the sender mailbox's IMAP "Sent" folder, so it
@@ -117,10 +121,110 @@ class SentFolder
             ->all();
     }
 
-    /** The sender mailbox's inbox over IMAP, where replies arrive. */
+    /**
+     * The sender mailbox's inbox over IMAP, where replies arrive — or the folder it is set to be read from
+     * (Mail senders): one its own filter moves the emails it picks into (Yahoo's filters cannot forward).
+     */
     public function inbox(string $senderKey, ?array $sender = null): Folder
     {
-        return $this->client($senderKey, $sender)->getFolder('INBOX');
+        $sender ??= SenderMailer::sender($senderKey);
+
+        return $this->folderNamed($senderKey, (string) ($sender['folder'] ?? ''), $sender);
+    }
+
+    /**
+     * A folder of the mailbox by its name or path (named()) — empty or "INBOX": the Inbox. Not there: said so.
+     *
+     * @param  array<string, mixed>|null  $sender
+     */
+    public function folderNamed(string $senderKey, string $name, ?array $sender = null): Folder
+    {
+        $sender ??= SenderMailer::sender($senderKey);
+        $client = $this->client($senderKey, $sender);
+        $name = trim($name);
+
+        if ($name === '' || strcasecmp($name, 'INBOX') === 0) {
+            return $client->getFolder('INBOX');
+        }
+
+        return self::named($client->getFolders(false)->all(), $name)
+            ?? throw new RuntimeException(__('The folder ":folder" is not in the mailbox :address.', ['folder' => $name, 'address' => (string) ($sender['address'] ?? $senderKey)]));
+    }
+
+    /**
+     * Every folder of the mailbox that holds emails, by its whole path ("INBOX", "Wakeel", "INBOX.Courts") — to
+     * choose from (Settings → Mailbox folders).
+     *
+     * @return list<string>
+     */
+    public function folders(string $senderKey): array
+    {
+        return collect($this->client($senderKey)->getFolders(false)->all())
+            ->reject(fn ($folder) => $folder->no_select ?? false)
+            ->map(fn ($folder): string => (string) $folder->full_name)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * A folder's emails after the one given (by its IMAP UID): the oldest first — or the newest, for showing it —
+     * at most as many as asked. Each as a plain array: uid, message_id, subject, from, from_name, to, cc, at,
+     * seen; with $whole, html and raw (the email as it came) too.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function emails(string $senderKey, string $folder, int $afterUid = 0, int $limit = 20, bool $newestFirst = false, bool $whole = true): array
+    {
+        $query = $this->folderNamed($senderKey, $folder)->query()->leaveUnread()->setFetchBody($whole)->setFetchFlags(true)->limit($limit);
+        $query = $newestFirst ? $query->setFetchOrderDesc() : $query->setFetchOrderAsc();
+
+        // Decoded tolerantly: a badly encoded part must not lose the folder.
+        return Tolerant::run(fn () => $query->getByUidGreater($afterUid))
+            ->map(fn (Message $message): array => self::plain($message, $whole))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function plain(Message $message, bool $whole): array
+    {
+        $addresses = fn (string $header) => collect($message->get($header)?->all() ?? [])->filter(fn ($address) => $address instanceof Address)->values();
+        $from = $addresses('from')->first();
+        $date = $message->getDate()?->toDate();
+
+        return [
+            'uid' => (int) $message->uid,
+            'message_id' => trim((string) $message->getMessageId(), "<> \t"),
+            'subject' => SentMailImporter::decodeHeader((string) $message->getSubject()),
+            'from' => (string) ($from?->mail ?? ''),
+            'from_name' => SentMailImporter::decodeHeader((string) ($from?->personal ?? '')),
+            'to' => $addresses('to')->map(fn (Address $address): string => (string) $address->mail)->all(),
+            'cc' => $addresses('cc')->map(fn (Address $address): string => (string) $address->mail)->all(),
+            // An unreadable Date header comes back as 1970: none.
+            'at' => $date !== null && $date->year >= 1971 ? $date->toIso8601String() : null,
+            'seen' => $message->hasFlag('seen'),
+            'html' => $whole ? ($message->hasHTMLBody() ? (string) $message->getHTMLBody() : nl2br(e((string) $message->getTextBody()))) : '',
+            // The email as it came: its header, a blank line, its body.
+            'raw' => $whole ? rtrim((string) $message->getHeader()?->raw, "\r\n")."\r\n\r\n".$message->getRawBody() : '',
+        ];
+    }
+
+    /**
+     * A mailbox's folder by the name given it: its whole path ("INBOX.Wakeel", "Courts/Wakeel" — whichever
+     * separator the mailbox uses) or, failing that, its own name; letter case aside. Null when there is none.
+     *
+     * @param  iterable<object>  $folders  each with full_name, name and no_select
+     */
+    public static function named(iterable $folders, string $name): ?object
+    {
+        $plain = fn (string $path): string => mb_strtolower(trim((string) preg_replace('~[./\\\\]+~', '/', trim($path)), '/'));
+        $wanted = $plain($name);
+        $folders = collect($folders)->reject(fn ($folder) => $folder->no_select ?? false);
+
+        return $folders->first(fn ($folder) => $plain((string) $folder->full_name) === $wanted)
+            ?? $folders->first(fn ($folder) => $plain((string) $folder->name) === $wanted);
     }
 
     /**
@@ -159,6 +263,8 @@ class SentFolder
      */
     private function config(string $senderKey, array $sender): array
     {
+        $imap = MailboxDetector::imap($sender);
+
         return [
             // A message whose Date header cannot be read (spam often has one) gets a date of its own
             // instead of failing the whole fetch — and so the whole mailbox.
@@ -177,9 +283,9 @@ class SentFolder
             ],
             'accounts' => [
                 $senderKey => [
-                    'host' => $sender['host'],
+                    'host' => $imap['host'],
                     'port' => 993,
-                    'encryption' => $sender['encryption'],
+                    'encryption' => $imap['encryption'],
                     'username' => $sender['username'],
                     'password' => $sender['password'],
                     'protocol' => 'imap',

@@ -21,6 +21,7 @@ use Filament\Forms\Components\Toggle;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
@@ -29,6 +30,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
@@ -68,6 +70,12 @@ class MailSenderResource extends Resource
         return __('Mail senders');
     }
 
+    /** Not the mailboxes of Mailbox folders: theirs alone, neither sent from nor shared. */
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->where('folders_only', false);
+    }
+
     public static function graphConfigured(): bool
     {
         return filled(config('mail.mailers.microsoft-graph.tenant_id'))
@@ -84,34 +92,7 @@ class MailSenderResource extends Resource
                 ->columns(2)
                 ->columnSpanFull()
                 ->schema([
-                    // The address first: leaving it works out where the
-                    // mailbox lives and fills in the rest (MailboxDetector).
-                    TextInput::make('address')
-                        ->label(__('Email address'))
-                        ->email()
-                        ->required()
-                        ->placeholder('noreply@example.com')
-                        ->live(onBlur: true)
-                        ->afterStateUpdated(function ($state, Get $get, Set $set) {
-                            if (blank($state) || ! filter_var($state, FILTER_VALIDATE_EMAIL)) {
-                                return;
-                            }
-
-                            if (blank($get('key'))) {
-                                $set('key', Str::slug(Str::before((string) $state, '@'), '_'));
-                            }
-
-                            $found = app(MailboxDetector::class)->detect((string) $state);
-                            $set('driver', $found['driver']);
-                            $set('detection', $found['note']);
-
-                            if ($found['driver'] === MailSender::SMTP) {
-                                $set('host', $get('host') ?: $found['host']);
-                                $set('port', $get('port') ?: $found['port']);
-                                $set('encryption', $get('encryption') ?: $found['encryption']);
-                                $set('username', $get('username') ?: $state);
-                            }
-                        }),
+                    static::addressField(),
                     Radio::make('driver')
                         ->label(__('Hosted on'))
                         ->options([
@@ -168,20 +149,7 @@ class MailSenderResource extends Resource
                 ->columns(2)
                 ->columnSpanFull()
                 ->schema([
-                    TextInput::make('host')->label(__('SMTP Host'))->placeholder('mail.example.com')->required($smtp),
-                    TextInput::make('port')->label(__('SMTP Port'))->numeric()->default(587)->required($smtp),
-                    Select::make('encryption')
-                        ->label(__('Encryption'))
-                        ->options(['tls' => 'TLS', 'ssl' => 'SSL', 'none' => __('None')])
-                        ->default('tls'),
-                    TextInput::make('username')->label(__('SMTP Username'))->placeholder(__('Usually the email address')),
-                    TextInput::make('password')
-                        ->label(__('SMTP Password'))
-                        ->password()
-                        ->revealable()
-                        // Blank on edit keeps the saved one.
-                        ->dehydrated(fn ($state) => filled($state))
-                        ->required(fn (Get $get, ?MailSender $record) => $get('driver') === MailSender::SMTP && ! $record?->password),
+                    ...static::serverFields($smtp),
                 ]),
 
             Section::make(__('Signature'))
@@ -194,6 +162,66 @@ class MailSenderResource extends Resource
                     RichText::make('signature')->hiddenLabel()->email()->contentDirection('ltr'),
                 ]),
         ]);
+    }
+
+    /**
+     * The address, first: leaving it works out where the mailbox lives and fills in the rest (MailboxDetector) —
+     * here and for the mailboxes of Mailbox folders.
+     */
+    public static function addressField(): TextInput
+    {
+        return TextInput::make('address')
+            ->label(__('Email address'))
+            ->email()
+            ->required()
+            ->placeholder('noreply@example.com')
+            ->live(onBlur: true)
+            ->afterStateUpdated(function ($state, Get $get, Set $set) {
+                if (blank($state) || ! filter_var($state, FILTER_VALIDATE_EMAIL)) {
+                    return;
+                }
+
+                if (blank($get('key'))) {
+                    $set('key', Str::slug(Str::before((string) $state, '@'), '_'));
+                }
+
+                $found = app(MailboxDetector::class)->detect((string) $state);
+                $set('driver', $found['driver']);
+                $set('detection', $found['note']);
+
+                if ($found['driver'] === MailSender::SMTP) {
+                    $set('host', $get('host') ?: $found['host']);
+                    $set('port', $get('port') ?: $found['port']);
+                    $set('encryption', $get('encryption') ?: $found['encryption']);
+                    $set('username', $get('username') ?: $state);
+                }
+            });
+    }
+
+    /**
+     * The mail server a cPanel (or Yahoo, Gmail) mailbox is reached at, and its login — here and for the mailboxes
+     * of Mailbox folders.
+     *
+     * @return list<Component>
+     */
+    public static function serverFields(\Closure|bool $required = true): array
+    {
+        return [
+            TextInput::make('host')->label(__('SMTP Host'))->placeholder('mail.example.com')->required($required),
+            TextInput::make('port')->label(__('SMTP Port'))->numeric()->default(587)->required($required),
+            Select::make('encryption')
+                ->label(__('Encryption'))
+                ->options(['tls' => 'TLS', 'ssl' => 'SSL', 'none' => __('None')])
+                ->default('tls'),
+            TextInput::make('username')->label(__('SMTP Username'))->placeholder(__('Usually the email address')),
+            TextInput::make('password')
+                ->label(__('SMTP Password'))
+                ->password()
+                ->revealable()
+                // Blank on edit keeps the saved one.
+                ->dehydrated(fn ($state) => filled($state))
+                ->required(fn (Get $get, ?MailSender $record) => $get('driver') === MailSender::SMTP && ! $record?->password),
+        ];
     }
 
     public static function table(Table $table): Table

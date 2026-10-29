@@ -137,14 +137,17 @@ class UnfiledEmails extends Page implements HasTable
 
     /**
      * The office's shared mailboxes left unticked for someone who may use some of them: their unfiled emails are
-     * not theirs to see. One kept from them all still sees those that may be about their own matters.
+     * not theirs to see. One kept from them all still sees those that may be about their own matters. A mailbox of
+     * Mailbox folders: the super administrator's alone.
      *
      * @return list<string>
      */
     private static function sharedHiddenFrom(?User $user): array
     {
-        return ! $user?->shared_senders ? [] : collect(SenderMailer::all())
-            ->filter(fn (array $sender, $key): bool => $sender['owner'] === null && ! $user->mayUseSharedMailbox((string) $key))
+        return collect(SenderMailer::all())
+            ->filter(fn (array $sender, $key): bool => $sender['owner'] === null && (($sender['folders_only'] ?? false)
+                ? ! $user?->isSuperAdmin()
+                : $user?->shared_senders && ! $user->mayUseSharedMailbox((string) $key)))
             ->keys()->map(fn ($key): string => (string) $key)->values()->all();
     }
 

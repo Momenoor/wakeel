@@ -103,6 +103,24 @@ class MailSenderDetectionTest extends TestCase
         $this->assertSame('mail.example.com', $found['host']);
     }
 
+    public function test_a_yahoo_or_gmail_mailbox_is_sent_through_and_read_from_its_own_servers(): void
+    {
+        Http::fake();
+
+        $yahoo = $this->detector()->detect('office@yahoo.com');
+        $this->assertSame(MailSender::SMTP, $yahoo['driver']);
+        $this->assertSame(['smtp.mail.yahoo.com', 465, 'ssl'], [$yahoo['host'], $yahoo['port'], $yahoo['encryption']]);
+        $this->assertSame('smtp.mail.yahoo.com', $this->detector()->detect('office@ymail.com')['host']);
+        $this->assertSame('smtp.gmail.com', $this->detector()->detect('office@gmail.com')['host']);
+        // Not asked of Microsoft 365, which would say "not here" and make it a cPanel mailbox on mail.yahoo.com.
+        Http::assertNothingSent();
+
+        // Its inbox read at its own IMAP server, over SSL — a cPanel one at the server it sends through.
+        $this->assertSame(['host' => 'imap.mail.yahoo.com', 'encryption' => 'ssl'], MailboxDetector::imap(['host' => 'smtp.mail.yahoo.com', 'encryption' => 'tls']));
+        $this->assertSame(['host' => 'imap.gmail.com', 'encryption' => 'ssl'], MailboxDetector::imap(['host' => 'smtp.gmail.com', 'encryption' => 'ssl']));
+        $this->assertSame(['host' => 'mail.example.com', 'encryption' => 'tls'], MailboxDetector::imap(['host' => 'mail.example.com', 'encryption' => 'tls']));
+    }
+
     public function test_entering_the_address_fills_in_the_form(): void
     {
         $this->graphSays(404);

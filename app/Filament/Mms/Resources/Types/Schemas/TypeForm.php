@@ -6,6 +6,7 @@ use App\Models\LetterTemplate;
 use App\Models\Setting;
 use App\Models\Type;
 use App\Services\MMS\MatterOneDriveFolders;
+use App\Services\MMS\ReceivedEmailFiling;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -54,6 +55,9 @@ class TypeForm
                         ->schema([
                             self::oneDriveStructureField(),
                             self::receivedEmailsField(),
+                            // The emails from each side apart, each named as set.
+                            ...array_map(fn (string $side): TextInput => self::receivedSideFolderField($side), ReceivedEmailFiling::SIDES),
+                            ...array_map(fn (string $side): TextInput => self::receivedNameField($side), [ReceivedEmailFiling::GENERAL, ...ReceivedEmailFiling::SIDES]),
                             self::sentEmailsField(),
                             self::signedMinutesField(),
                             // Its group — the types with the same folders: changed with it, or left as they are (EditType).
@@ -125,6 +129,45 @@ class TypeForm
             ->placeholder(fn (): string => MatterOneDriveFolders::receivedEmailsFolder())
             ->maxLength(500)
             ->extraInputAttributes(['dir' => 'ltr']);
+    }
+
+    /**
+     * Where the emails from a side (ReceivedEmailFiling) are saved inside the matter's folder — for this type, or
+     * (not $forType) the setting. Empty: the setting's, else with the other received emails.
+     */
+    public static function receivedSideFolderField(string $side, bool $forType = true): TextInput
+    {
+        return TextInput::make($forType ? ReceivedEmailFiling::FOLDER_COLUMNS[$side] : ReceivedEmailFiling::FOLDER_SETTINGS[$side])
+            ->label($side === ReceivedEmailFiling::PLAINTIFF ? __('Emails from the plaintiff side — folder') : __('Emails from the defendant side — folder'))
+            ->helperText(__('Where the emails from this side are saved inside the matter\'s folder: its parties, their representatives (on the matter or at a meeting) and whoever they copied in. Written like the received emails folder structure. Leave empty to save them with the other received emails.'))
+            ->placeholder(fn (): string => $forType ? ReceivedEmailFiling::folderTemplate(null, $side) : MatterOneDriveFolders::receivedEmailsFolder())
+            ->maxLength(500)
+            ->extraInputAttributes(['dir' => 'ltr']);
+    }
+
+    /**
+     * The name of a received email's PDF, its original and the folder of its files — of a side, or the general one
+     * (ReceivedEmailFiling) — for this type, or (not $forType) the setting. Empty: the setting's, else the general one.
+     */
+    public static function receivedNameField(string $side, bool $forType = true): TextInput
+    {
+        $general = $side === ReceivedEmailFiling::GENERAL;
+
+        return TextInput::make($forType ? ReceivedEmailFiling::NAME_COLUMNS[$side] : ReceivedEmailFiling::NAME_SETTINGS[$side])
+            ->label(match ($side) {
+                ReceivedEmailFiling::PLAINTIFF => __('Emails from the plaintiff side — file name'),
+                ReceivedEmailFiling::DEFENDANT => __('Emails from the defendant side — file name'),
+                default => __('Received emails — file name'),
+            })
+            ->helperText(__('The name of each email\'s PDF, its original and the folder of its files. Placeholders: {{date}}, {{time}}, {{kind}} (incoming or reply), {{party}} (who sent it), {{subject}} (what it is about), {{side}} (the side\'s name) and the matter\'s, e.g. {{matter.number}}. A part with no value is left out with its " — ".')
+                .($general ? '' : ' '.__('Leave empty to name them as the other received emails.')))
+            ->placeholder(fn (): string => match (true) {
+                $forType => ReceivedEmailFiling::nameTemplate(null, $side) ?: ReceivedEmailFiling::DEFAULT_NAME,
+                $general => ReceivedEmailFiling::DEFAULT_NAME,
+                default => ReceivedEmailFiling::nameTemplate(null, ReceivedEmailFiling::GENERAL) ?: ReceivedEmailFiling::DEFAULT_NAME,
+            })
+            ->maxLength(500)
+            ->extraInputAttributes(['dir' => 'auto']);
     }
 
     /**

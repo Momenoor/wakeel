@@ -86,6 +86,11 @@ class Type extends Model
         'party_capacities',
         'onedrive_subfolders',
         'onedrive_received_emails',
+        'onedrive_received_plaintiff',
+        'onedrive_received_defendant',
+        'received_name',
+        'received_name_plaintiff',
+        'received_name_defendant',
         'onedrive_sent_emails',
         'onedrive_signed_minutes',
     ];
@@ -164,10 +169,10 @@ class Type extends Model
     }
 
     /** Its own OneDrive folders (Settings → OneDrive Folders): empty — the default one. */
-    public const FOLDER_FIELDS = ['onedrive_subfolders', 'onedrive_received_emails', 'onedrive_sent_emails', 'onedrive_signed_minutes'];
+    public const FOLDER_FIELDS = ['onedrive_subfolders', 'onedrive_received_emails', 'onedrive_received_plaintiff', 'onedrive_received_defendant', 'received_name', 'received_name_plaintiff', 'received_name_defendant', 'onedrive_sent_emails', 'onedrive_signed_minutes'];
 
     /**
-     * Its OneDrive folders as one value, to compare: types alike in all four are a group.
+     * Its OneDrive folders as one value, to compare: types alike in all of them are a group.
      *
      * @param  array<string, mixed>|null  $values  as given, else as it is
      */

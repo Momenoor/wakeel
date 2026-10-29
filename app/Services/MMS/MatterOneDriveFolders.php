@@ -433,8 +433,9 @@ class MatterOneDriveFolders
      */
     public function moveEmailFiles(MatterEmail $email, Matter $from, Matter $to): array
     {
-        $targetPath = self::receivedEmailsFolderFor($to, $email->at);
-        $result = ['pdf' => false, 'eml' => false, 'attachments' => 0, 'folder' => $targetPath, 'moved' => false];
+        // In the folder of its sender's side on the other matter.
+        $targetPath = self::receivedEmailsFolderFor($to, $email->at, ReceivedEmailFiling::side($to, MatterEmail::addressOf((string) $email->from)));
+        $result =['pdf' => false, 'eml' => false, 'attachments' => 0, 'folder' => $targetPath, 'moved' => false];
         $source = self::folderFor($from);
         $target = self::folderFor($to);
         $base = pathinfo((string) ($email->files[0]['name'] ?? ''), PATHINFO_FILENAME);
@@ -735,11 +736,12 @@ class MatterOneDriveFolders
 
     /**
      * The folder structure for this matter, inside its OneDrive folder: the setting, with
-     * its placeholders filled in from the matter (see resolvePath()).
+     * its placeholders filled in from the matter (see resolvePath()) — the one of the side
+     * the email came from, when it has one of its own (ReceivedEmailFiling).
      */
-    public static function receivedEmailsFolderFor(Matter $matter, ?CarbonInterface $at = null): string
+    public static function receivedEmailsFolderFor(Matter $matter, ?CarbonInterface $at = null, string $side = ReceivedEmailFiling::GENERAL): string
     {
-        $template = self::receivedEmailsTemplate($matter);
+        $template = ReceivedEmailFiling::folderTemplate($matter, $side);
 
         return $template === '' ? '' : self::resolvePath($template, $matter, $at ?? now());
     }

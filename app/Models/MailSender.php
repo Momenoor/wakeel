@@ -3,10 +3,12 @@
 namespace App\Models;
 
 use App\Filament\Support\EmailSendFields;
+use App\Services\MMS\MailboxFolderForwarder;
 use App\Services\MMS\SenderMailer;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * A mailbox letters and bulk mail can be sent from: a cPanel mailbox over
@@ -14,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * through Microsoft Graph with the app registration in .env
  * (MICROSOFT_GRAPH_TENANT_ID / CLIENT_ID / CLIENT_SECRET) — no password.
  */
-#[Fillable('user_id', 'key', 'name', 'address', 'driver', 'host', 'port', 'encryption', 'username', 'password', 'signature', 'is_active', 'collects', 'sends', 'keep_all_inbox', 'files_forwards')]
+#[Fillable('user_id', 'key', 'name', 'address', 'driver', 'host', 'port', 'encryption', 'username', 'password', 'signature', 'is_active', 'collects', 'sends', 'keep_all_inbox', 'files_forwards', 'inbox_folder', 'folders_only')]
 class MailSender extends Model
 {
     public const SMTP = 'smtp';
@@ -33,6 +35,7 @@ class MailSender extends Model
             'files_forwards' => 'boolean',
             'collects' => 'boolean',
             'sends' => 'boolean',
+            'folders_only' => 'boolean',
         ];
     }
 
@@ -45,6 +48,12 @@ class MailSender extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /** Its folders forwarded on, each to an address of its own (Settings → Mailbox folders). */
+    public function folderForwards(): HasMany
+    {
+        return $this->hasMany(MailboxFolderForward::class);
     }
 
     /** The mailboxes are read once a request (SenderMailer::all()): a change, read again. */
@@ -103,10 +112,15 @@ class MailSender extends Model
             'keep_all' => (bool) $this->keep_all_inbox,
             // The filing mailbox: what the office forwards to it, naming a matter, is filed as its original (ForwardedEmailFiler).
             'forwards' => (bool) ($this->files_forwards ?? false),
+            // The folder it is read from over IMAP — one its own filter moves emails into; empty (or the module off): the Inbox (SentFolder::inbox()).
+            'folder' => MailboxFolderForwarder::enabled() ? trim((string) $this->inbox_folder) : '',
             // A user's own (none: the office's shared one), and whether it is read and filed, and sent from.
             'owner' => $this->user_id !== null ? (int) $this->user_id : null,
-            'collects' => (bool) ($this->collects ?? true),
-            'sends' => (bool) ($this->sends ?? true),
+            // A mailbox of Mailbox folders alone: never sent from nor shared — read for the matters' emails only
+            // while the module is on.
+            'folders_only' => (bool) $this->folders_only,
+            'collects' => (bool) ($this->collects ?? true) && (! $this->folders_only || MailboxFolderForwarder::enabled()),
+            'sends' => (bool) ($this->sends ?? true) && ! $this->folders_only,
         ];
     }
 

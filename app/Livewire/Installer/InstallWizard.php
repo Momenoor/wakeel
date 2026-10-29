@@ -122,6 +122,8 @@ class InstallWizard extends Component
 
     public bool $module_mms_calendar = true;
 
+    public bool $module_mms_mailbox_folders = true;
+
     // Step 6 — optional integrations (WhatsApp, Microsoft Graph mail)
     public string $whatsapp_phone_id = '';
 
@@ -478,6 +480,7 @@ class InstallWizard extends Component
             $this->module_mms_payroll = false;
             $this->module_mms_communications = false;
             $this->module_mms_calendar = false;
+            $this->module_mms_mailbox_folders = false;
         }
 
         app(EnvironmentFileWriter::class)->set([
@@ -486,6 +489,7 @@ class InstallWizard extends Component
             'MODULE_MMS_PAYROLL_ENABLED' => $this->module_mms_payroll ? 'true' : 'false',
             'MODULE_MMS_COMMUNICATIONS_ENABLED' => $this->module_mms_communications ? 'true' : 'false',
             'MODULE_MMS_CALENDAR_ENABLED' => $this->module_mms_calendar ? 'true' : 'false',
+            'MODULE_MMS_MAILBOX_FOLDERS_ENABLED' => $this->module_mms_mailbox_folders ? 'true' : 'false',
         ]);
 
         config([
@@ -494,6 +498,7 @@ class InstallWizard extends Component
             'modules.mms_payroll' => $this->module_mms_payroll,
             'modules.mms_communications' => $this->module_mms_communications,
             'modules.mms_calendar' => $this->module_mms_calendar,
+            'modules.mms_mailbox_folders' => $this->module_mms_mailbox_folders,
         ]);
 
         $this->step = 6;

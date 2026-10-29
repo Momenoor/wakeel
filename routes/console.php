@@ -1,5 +1,6 @@
 <?php
 
+use App\Services\MMS\MailboxFolderForwarder;
 use App\Services\MMS\MatterReplyCollector;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -21,4 +22,10 @@ Schedule::command('mail:send-bulk-campaigns')
 Schedule::command('mail:collect-replies --max-seconds=30')
     ->everyMinute()
     ->when(fn (): bool => MatterReplyCollector::isDue())
+    ->withoutOverlapping(15);
+
+// Each mailbox folder set to be forwarded (Settings → Mailbox folders): its new emails sent on to its own address.
+Schedule::command('mail:forward-folders')
+    ->everyFiveMinutes()
+    ->when(fn (): bool => MailboxFolderForwarder::enabled())
     ->withoutOverlapping(15);

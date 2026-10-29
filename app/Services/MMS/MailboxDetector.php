@@ -25,12 +25,64 @@ class MailboxDetector
     public const GUESS = 'guess';
 
     /**
+     * Public mail services: their domains, where they send from and where their inbox is read — another server
+     * than the one sent through, unlike cPanel's (imap()). Each signed in to with an app password, not the
+     * account's own.
+     */
+    public const PROVIDERS = [
+        'Yahoo' => [
+            'domains' => '/^(yahoo\.[a-z.]+|ymail\.com|rocketmail\.com)$/',
+            'host' => 'smtp.mail.yahoo.com',
+            'imap' => 'imap.mail.yahoo.com',
+        ],
+        'Gmail' => [
+            'domains' => '/^(gmail\.com|googlemail\.com)$/',
+            'host' => 'smtp.gmail.com',
+            'imap' => 'imap.gmail.com',
+        ],
+    ];
+
+    /**
+     * Where a mailbox sent through SMTP is read (IMAP, port 993): a public service's own inbox server, over SSL;
+     * any other (cPanel) the server it sends through.
+     *
+     * @param  array<string, mixed>  $sender
+     * @return array{host: string, encryption: string}
+     */
+    public static function imap(array $sender): array
+    {
+        $host = Str::lower(trim((string) ($sender['host'] ?? '')));
+
+        foreach (self::PROVIDERS as $provider) {
+            if ($provider['host'] === $host) {
+                return ['host' => $provider['imap'], 'encryption' => 'ssl'];
+            }
+        }
+
+        return ['host' => (string) $sender['host'], 'encryption' => (string) $sender['encryption']];
+    }
+
+    /**
      * @return array{driver: string, confidence: string, note: string, host?: string, port?: int, encryption?: string, username?: string}
      */
     public function detect(string $address): array
     {
         $address = trim(Str::lower($address));
         $domain = Str::after($address, '@');
+
+        // Yahoo, Gmail: known — neither Microsoft 365 nor cPanel.
+        foreach (self::PROVIDERS as $name => $provider) {
+            if (preg_match($provider['domains'], $domain) === 1) {
+                return [
+                    'driver' => MailSender::SMTP,
+                    'confidence' => self::CERTAIN,
+                    'note' => __(':provider mailbox: sent through :host and its inbox read at :imap. Enter an app password made for it in the :provider account\'s security settings — the account\'s own password is refused.', ['provider' => $name, 'host' => $provider['host'], 'imap' => $provider['imap']]),
+                    'host' => $provider['host'],
+                    'port' => 465,
+                    'encryption' => 'ssl',
+                ];
+            }
+        }
 
         $inMicrosoft = $this->existsInMicrosoft365($address);
 

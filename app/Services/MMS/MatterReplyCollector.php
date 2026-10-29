@@ -30,6 +30,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\HtmlString;
+use Illuminate\Support\Str;
 use RuntimeException;
 use Throwable;
 use Webklex\PHPIMAP\Address;
@@ -735,7 +736,7 @@ class MatterReplyCollector
         $message = $this->findMessage($email)
             ?? throw new RuntimeException(__('This email is no longer in the mailbox it came to, so it cannot be made again.'));
 
-        [$pdf, $files, $name, $source, $links] = $this->rendered($message, (string) $email->sender_key, $email->parent_id !== null);
+        [$pdf, $files, $name, $source, $links, $side] = $this->rendered($message, (string) $email->sender_key, $email->parent_id !== null, $email->matter);
         // Its links read again — one of before read for them for the first time.
         $email->update(['links' => $links]);
 
@@ -767,7 +768,7 @@ class MatterReplyCollector
             return $done;
         }
 
-        $folder = (string) (((array) $email->onedrive)['folder'] ?? '') ?: MatterOneDriveFolders::receivedEmailsFolderFor($matter, $email->at);
+        $folder = (string) (((array) $email->onedrive)['folder'] ?? '') ?: MatterOneDriveFolders::receivedEmailsFolderFor($matter, $email->at, $side);
 
         // Its old copies in OneDrive, under the name it had, to the recycle bin — the new ones go under its name now.
         app(MatterOneDriveFolders::class)->removeEmailFiles($email, $matter);
@@ -882,11 +883,11 @@ class MatterReplyCollector
             // A reply on a matter is on it (listed in its Emails tab); one to a campaign with no matter is nobody's.
             'status' => $matter ? MatterEmail::FILED : null,
         ]);
-        [$pdf, $files, $name, $source, $links] = $this->rendered($message, (string) $answers->sender_key, true);
+        [$pdf, $files, $name, $source, $links, $side] = $this->rendered($message, (string) $answers->sender_key, true, $matter);
         $oneDrive = null;
 
         if ($matter) {
-            $kept = $this->keepOnMatter($matter, $pdf, $files, $name, $answers->user_id, $source, $oneDrive, self::arrivedAt($message));
+            $kept = $this->keepOnMatter($matter, $pdf, $files, $name, $answers->user_id, $source, $oneDrive, self::arrivedAt($message), $side);
         } else {
             // No matter: its PDF and the files it came with, in a folder of its own.
             $kept = $this->keepLoose('email-replies/'.$reply->getKey(), $pdf, $files, $name);
@@ -915,9 +916,9 @@ class MatterReplyCollector
     private function keepIncoming(Matter $matter, array $message, string $id, string $senderKey, ?string $by, ?int $userId = null): MatterEmail
     {
         $email = $this->record($message, $id, $senderKey, ['matter_id' => $matter->getKey(), 'status' => MatterEmail::FILED, 'matched_by' => $by]);
-        [$pdf, $files, $name, $source, $links] = $this->rendered($message, $senderKey, false);
+        [$pdf, $files, $name, $source, $links, $side] = $this->rendered($message, $senderKey, false, $matter);
 
-        $kept = $this->keepOnMatter($matter, $pdf, $files, $name, $userId, $source, $oneDrive, self::arrivedAt($message));
+        $kept = $this->keepOnMatter($matter, $pdf, $files, $name, $userId, $source, $oneDrive, self::arrivedAt($message), $side);
         $email->update(['files' => $kept, 'links' => $links, 'onedrive' => $oneDrive]);
         MatterProgressRecorder::emailReceived($email, $userId);
         MatterContact::learn($email);
@@ -992,9 +993,14 @@ class MatterReplyCollector
     public function file(MatterEmail $email, Matter $matter, ?int $userId = null): void
     {
         $stored = (array) ($email->files ?? []);
-        $pdf = $stored[0] ?? null;
         $kept = [];
-        $oneDrive = ['pdf' => false, 'eml' => false, 'attachments' => 0];
+        // The PDF in the received-emails folder of its sender's side, named as that side's are; the original (.eml)
+        // beside it, the files it came with in a folder of the PDF's name.
+        $from = MatterEmail::addressOf((string) $email->from);
+        $side = ReceivedEmailFiling::side($matter, $from);
+        $folder = MatterOneDriveFolders::receivedEmailsFolderFor($matter, $email->at, $side);
+        $name = ReceivedEmailFiling::name($matter, $side, self::partyName($from) ?? (trim(Str::before((string) $email->from, '<')) ?: $from), (string) $email->subject, $email->at ?? now(), $email->parent_id !== null);
+        $oneDrive = ['pdf' => false, 'eml' => false, 'attachments' => 0, 'folder' => $folder];
 
         foreach ($stored as $i => $file) {
             $path = (string) ($file['path'] ?? '');
@@ -1002,13 +1008,9 @@ class MatterReplyCollector
                 continue;
             }
 
-            // The PDF in the received-emails folder; the files it came with
-            // in a folder of the PDF's name beside it.
-            $folder = MatterOneDriveFolders::receivedEmailsFolderFor($matter, $email->at);
-            $oneDrive['folder'] = $folder;
             // The original email (.eml) goes to OneDrive only, beside the PDF; it is not kept in the system.
             if (($file['kind'] ?? null) === MatterEmail::SOURCE) {
-                $oneDrive['eml'] = $this->archive->keepInOneDrive($matter, (string) $file['name'], (string) $disk->get($path), 'message/rfc822', $folder);
+                $oneDrive['eml'] = $this->archive->keepInOneDrive($matter, $name.'.eml', (string) $disk->get($path), 'message/rfc822', $folder);
                 $disk->delete($path);
 
                 continue;
@@ -1019,11 +1021,11 @@ class MatterReplyCollector
 
             if ($i === 0) {
                 // The PDF: with the matter's attachments, and in OneDrive.
-                $kept[] = ['name' => (string) $file['name'], 'path' => $this->archive->keepFile($matter, (string) $file['name'], $contents, $mime, $folder, $userId, inOneDrive: $saved)];
+                $kept[] = ['name' => $name.'.pdf', 'path' => $this->archive->keepFile($matter, $name.'.pdf', $contents, $mime, $folder, $userId, inOneDrive: $saved)];
                 $oneDrive['pdf'] = (bool) $saved;
             } else {
                 // A file it came with: in OneDrive only, in a folder of the PDF's name.
-                $attachment = $this->keepAttachment($matter, (string) $file['name'], $contents, $mime, $folder !== '' ? $folder.'/'.pathinfo((string) ($pdf['name'] ?? ''), PATHINFO_FILENAME) : '', $userId);
+                $attachment = $this->keepAttachment($matter, (string) $file['name'], $contents, $mime, $folder !== '' ? $folder.'/'.$name : '', $userId);
                 $kept[] = ['name' => $attachment['name'], 'path' => $attachment['path']];
                 $oneDrive['attachments'] += $attachment['saved'] ? 1 : 0;
             }
@@ -1151,12 +1153,12 @@ class MatterReplyCollector
 
     /**
      * A received email as a PDF, the files it came with, and its name —
-     * for the party who sent it.
+     * for the party who sent it, by the pattern of their side on its matter (ReceivedEmailFiling).
      *
      * @param  array<string, mixed>  $message
-     * @return array{0: string, 1: list<array{name: string, contents: string, mime?: string}>, 2: string, 3: ?string, 4: list<array{url: string, label: string}>} the PDF, the files, the name, the original email (.eml) when the mailbox gives it, and the links in it to documents to download
+     * @return array{0: string, 1: list<array{name: string, contents: string, mime?: string}>, 2: string, 3: ?string, 4: list<array{url: string, label: string}>, 5: string} the PDF, the files, the name, the original email (.eml) when the mailbox gives it, the links in it to documents to download, and the side of the matter it came from
      */
-    private function rendered(array $message, string $senderKey, bool $reply): array
+    private function rendered(array $message, string $senderKey, bool $reply, ?Matter $matter = null): array
     {
         $body = $message['body'] instanceof Closure ? ($message['body'])() : (string) ($message['body'] ?? '');
         $files = $message['attachments'] instanceof Closure ? ($message['attachments'])() : (array) ($message['attachments'] ?? []);
@@ -1179,7 +1181,10 @@ class MatterReplyCollector
             received: true,
         );
 
-        return [$pdf, $files, SentEmailArchive::emailName(false, self::partyName($from) ?? $fromName, (string) ($message['subject'] ?? ''), $at, $reply), self::original($message), EmailDownloadLinks::in($body)];
+        $side = $matter ? ReceivedEmailFiling::side($matter, $from) : ReceivedEmailFiling::GENERAL;
+        $name = ReceivedEmailFiling::name($matter, $side, self::partyName($from) ?? $fromName, (string) ($message['subject'] ?? ''), $at, $reply);
+
+        return [$pdf, $files, $name, self::original($message), EmailDownloadLinks::in($body), $side];
     }
 
     /**
@@ -1191,9 +1196,9 @@ class MatterReplyCollector
      * @param  array<string, mixed>|null  $oneDrive  set to what reached the matter's OneDrive: {pdf, eml, attachments}
      * @return list<array{name: string, path: string}>
      */
-    private function keepOnMatter(Matter $matter, string $pdf, array $files, string $name, ?int $userId, ?string $source = null, &$oneDrive = null, ?CarbonInterface $at = null): array
+    private function keepOnMatter(Matter $matter, string $pdf, array $files, string $name, ?int $userId, ?string $source = null, &$oneDrive = null, ?CarbonInterface $at = null, string $side = ReceivedEmailFiling::GENERAL): array
     {
-        $folder = MatterOneDriveFolders::receivedEmailsFolderFor($matter, $at);
+        $folder = MatterOneDriveFolders::receivedEmailsFolderFor($matter, $at, $side);
         // The folder it goes in is kept with it, to say where it is.
         $oneDrive = ['pdf' => false, 'eml' => false, 'attachments' => 0, 'folder' => $folder];
         $kept = [['name' => $name.'.pdf', 'path' => $this->archive->keepFile($matter, $name.'.pdf', $pdf, 'application/pdf', $folder, $userId, inOneDrive: $oneDrive['pdf'])]];

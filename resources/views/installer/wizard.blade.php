@@ -282,6 +282,12 @@
                             {{ __('Calendar & Leave Requests') }}
                         </label>
                     </div>
+                    <div class="field">
+                        <label>
+                            <input type="checkbox" wire:model="module_mms_mailbox_folders">
+                            {{ __('Mailbox folders (forwarding each folder on)') }}
+                        </label>
+                    </div>
                 </div>
             @endif
 

@@ -13,6 +13,7 @@ use App\Models\Setting;
 use App\Models\Type;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\OneDriveClient;
+use App\Services\MMS\ReceivedEmailFiling;
 use App\Support\Dates;
 use App\Support\MatterSearch;
 use BackedEnum;
@@ -92,7 +93,19 @@ class OneDriveSettings extends Page implements HasTable
             'signed_minutes' => MatterOneDriveFolders::signedMinutesFolder(),
             'sent_emails' => MatterOneDriveFolders::sentEmailsFolder(),
             'received_emails' => MatterOneDriveFolders::receivedEmailsFolder(),
+            // Each side's folder and name, and the general name (ReceivedEmailFiling): the settings by their keys.
+            ...collect(self::receivedSettings())->mapWithKeys(fn (string $key): array => [$key => Setting::get($key, '')])->all(),
         ]);
+    }
+
+    /**
+     * The settings of the emails that come in from each side, and of their names (ReceivedEmailFiling).
+     *
+     * @return list<string>
+     */
+    private static function receivedSettings(): array
+    {
+        return [...array_values(ReceivedEmailFiling::FOLDER_SETTINGS), ...array_values(ReceivedEmailFiling::NAME_SETTINGS)];
     }
 
     /** The groups of types alike in their own folders: who is in each, and what their folders are. */
@@ -106,6 +119,11 @@ class OneDriveSettings extends Page implements HasTable
         $labels = [
             'onedrive_subfolders' => __('Standard subfolders'),
             'onedrive_received_emails' => __('Received emails folder structure'),
+            'onedrive_received_plaintiff' => __('Emails from the plaintiff side — folder'),
+            'onedrive_received_defendant' => __('Emails from the defendant side — folder'),
+            'received_name' => __('Received emails — file name'),
+            'received_name_plaintiff' => __('Emails from the plaintiff side — file name'),
+            'received_name_defendant' => __('Emails from the defendant side — file name'),
             'onedrive_sent_emails' => __('Sent emails subfolder'),
             'onedrive_signed_minutes' => __('Signed minutes subfolder'),
         ];
@@ -194,6 +212,9 @@ class OneDriveSettings extends Page implements HasTable
                             ))
                             ->live(debounce: 500)
                             ->extraInputAttributes(['dir' => 'ltr']),
+                        // The emails from each side apart, each named as set; a matter type may have its own.
+                        ...array_map(fn (string $side): TextInput => TypeForm::receivedSideFolderField($side, forType: false), ReceivedEmailFiling::SIDES),
+                        ...array_map(fn (string $side): TextInput => TypeForm::receivedNameField($side, forType: false), [ReceivedEmailFiling::GENERAL, ...ReceivedEmailFiling::SIDES]),
 
                         // The custom fields that exist, ready to use: the placeholder is the field's name as it is on the type.
                         Placeholder::make('custom_field_placeholders')
@@ -323,6 +344,10 @@ class OneDriveSettings extends Page implements HasTable
         Setting::set(MatterOneDriveFolders::SIGNED_MINUTES, trim((string) ($state['signed_minutes'] ?? '')), 'onedrive');
         Setting::set(MatterOneDriveFolders::SENT_EMAILS, trim((string) ($state['sent_emails'] ?? '')), 'onedrive');
         Setting::set(MatterOneDriveFolders::RECEIVED_EMAILS, trim((string) ($state['received_emails'] ?? '')), 'onedrive');
+
+        foreach (self::receivedSettings() as $key) {
+            Setting::set($key, trim((string) ($state[$key] ?? '')), 'onedrive');
+        }
 
         Notification::make()->title(__('Settings saved successfully'))->success()->send();
     }

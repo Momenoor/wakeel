@@ -17,7 +17,7 @@ use Illuminate\Support\Collection;
 class MatterContact extends Model
 {
     /** Mail providers: a mailbox there doesn't make everyone there the office. */
-    private const SHARED_DOMAINS = ['@gmail.com', '@hotmail.com', '@outlook.com', '@live.com', '@yahoo.com', '@icloud.com'];
+    public const SHARED_DOMAINS = ['@gmail.com', '@hotmail.com', '@outlook.com', '@live.com', '@yahoo.com', '@icloud.com'];
 
     protected $fillable = ['matter_id', 'party_id', 'owner_email', 'owner_name', 'email', 'matter_email_id'];
 
@@ -185,7 +185,7 @@ class MatterContact extends Model
     /**
      * @return Collection<int, int>
      */
-    private static function partiesWith(string $address): Collection
+    public static function partiesWith(string $address): Collection
     {
         $address = mb_strtolower(trim($address));
 
