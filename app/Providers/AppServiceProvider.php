@@ -17,6 +17,9 @@ use App\Services\MMS\MatterHistory;
 use App\Services\Notifications\NotificationPreferences;
 use App\Services\Push\WebPushSender;
 use App\Support\CachedAuditSchema;
+use App\Support\Database\MariaDbGrammar;
+use App\Support\Database\MySqlGrammar;
+use App\Support\Database\SQLiteGrammar;
 use App\Support\Currency;
 use App\Support\Dates;
 use App\Support\Integrations;
@@ -38,7 +41,11 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\MariaDbConnection;
+use Illuminate\Database\MySqlConnection;
+use Illuminate\Database\SQLiteConnection;
 use Illuminate\Foundation\Events\LocaleUpdated;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Notifications\Events\NotificationSent;
@@ -68,6 +75,20 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(ThemeManager::class);
         // Sign out: of this device only — "remember me" kept on the others (App\Http\Controllers\LogoutController).
         $this->app->bind(FilamentLogoutController::class, LogoutController::class);
+
+        // Arabic searched as it is meant: أحمد and احمد, علي and على, مهرة and مهره found alike (App\Support\ArabicSearch).
+        foreach ([
+            'mysql' => [MySqlConnection::class, MySqlGrammar::class],
+            'mariadb' => [MariaDbConnection::class, MariaDbGrammar::class],
+            'sqlite' => [SQLiteConnection::class, SQLiteGrammar::class],
+        ] as $driver => [$connection, $grammar]) {
+            Connection::resolverFor($driver, function ($pdo, string $database, string $prefix, array $config) use ($connection, $grammar): Connection {
+                $db = new $connection($pdo, $database, $prefix, $config);
+                $db->setQueryGrammar(new $grammar($db));
+
+                return $db;
+            });
+        }
     }
 
     /**
@@ -149,6 +170,9 @@ class AppServiceProvider extends ServiceProvider
 
         // The font that draws the Dirham sign, on every panel page.
         FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): string => (string) Currency::fontLink());
+
+        // A select's options filtered in the browser: Arabic searched as it is meant there too (App\Support\ArabicSearch).
+        FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): string => view('filament.partials.arabic-search-script')->render());
 
         // Every page opens at its top — the browser otherwise put a reloaded
         // page, or one returned to, back where it was scrolled. A link to a

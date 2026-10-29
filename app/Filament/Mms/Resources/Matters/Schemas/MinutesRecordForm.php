@@ -8,6 +8,7 @@ use App\Models\Party;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\MinutesService;
 use App\Services\MMS\TeamsAttendance;
+use App\Support\ArabicSearch;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
@@ -274,7 +275,8 @@ class MinutesRecordForm
     {
         $search = trim($search);
         $like = '%'.$search.'%';
-        $matches = fn (array $labels): array => array_keys(array_filter($labels, fn (string $label): bool => $search !== '' && mb_stripos($label, $search) !== false));
+        $searched = ArabicSearch::normalize($search);
+        $matches = fn (array $labels): array => array_keys(array_filter($labels, fn (string $label): bool => $searched !== '' && mb_stripos(ArabicSearch::normalize($label), $searched) !== false));
 
         return Party::query()->where(function (Builder $q) use ($like, $matches): void {
             $q->where('name', 'like', $like)
