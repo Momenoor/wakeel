@@ -28,6 +28,7 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\EmbeddedTable;
+use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
@@ -156,105 +157,130 @@ class OneDriveSettings extends Page implements HasTable
                             ->label(__('Matters created from'))
                             ->content(fn (): string => MatterOneDriveFolders::enabledAt()?->format(Dates::dateTimeFormat()) ?? __('Not switched on yet'))
                             ->helperText(__('Matters created before the feature was switched on are not touched.')),
-                        Textarea::make('subfolders')
-                            ->label(__('Standard subfolders'))
-                            ->helperText(__('One per line, in order. Use "/" for a folder inside another, e.g. "02 المستندات/من المدعي". Changes apply to folders made from now on; existing folders stay as they are.').' '.__('The default — a matter type can have its own (below, or on the type).').' '.__('A folder may use the matter\'s placeholders, like the letters do, e.g. {{matter.custom.phase}}/01 المراسلات; one the matter has no value for is left out.'))
-                            ->rows(10)
-                            ->extraInputAttributes(['dir' => 'auto']),
-                        // The types with folders of their own, in groups of those alike — one read: a group's are
-                        // changed together from any of its types (Settings → Matter types → its folders).
-                        Placeholder::make('type_structures')
-                            ->label(__('Matter types with folders of their own'))
-                            ->content(fn (): HtmlString => self::typeGroups())
-                            ->hintAction(
-                                Action::make('assignToTypes')
-                                    ->label(__('Assign a structure to matter types'))
-                                    ->icon(Heroicon::OutlinedFolder)
-                                    ->fillForm(fn (Get $get): array => ['structure' => $get('subfolders')])
-                                    ->schema([
-                                        Select::make('types')
-                                            ->label(__('Matter types'))
-                                            ->options(fn () => Type::query()->orderBy('name')->pluck('name', 'id'))
-                                            ->multiple()
-                                            ->searchable()
-                                            ->required(),
-                                        Toggle::make('use_default')
-                                            ->label(__('Use the default structure'))
-                                            ->live(),
-                                        TypeForm::oneDriveStructureField('structure')
-                                            ->hidden(fn (Get $get): bool => (bool) $get('use_default'))
-                                            ->required(fn (Get $get): bool => ! $get('use_default')),
-                                    ])
-                                    ->action(function (array $data): void {
-                                        $structure = ! empty($data['use_default']) ? null : (trim((string) ($data['structure'] ?? '')) ?: null);
-                                        Type::query()->whereIn('id', $data['types'] ?? [])->update(['onedrive_subfolders' => $structure]);
+                    ])
+                    ->columns(['default' => 1, 'lg' => 2]),
 
-                                        Notification::make()->success()->title(__('Folder structure set for :count types', ['count' => count($data['types'] ?? [])]))->send();
-                                    }),
-                            ),
-                        TextInput::make('signed_minutes')
-                            ->label(__('Signed minutes subfolder'))
-                            ->helperText(__('Signed minutes sent back on WhatsApp are saved here, inside the matter\'s folder (made when missing). Use "/" for a folder inside another.').' '.__('A folder may use the matter\'s placeholders, like the letters do; {{day}} is the day it is saved.'))
-                            ->required()
-                            ->extraInputAttributes(['dir' => 'auto']),
-                        TextInput::make('sent_emails')
-                            ->label(__('Sent emails subfolder'))
-                            ->helperText(__('Every email sent from a matter — letters, minutes, bulk mail — is saved here as a PDF, inside the matter\'s folder (made when missing). Leave empty not to save them in OneDrive.').' '.__('A folder may use the matter\'s placeholders, like the letters do; {{day}} is the day it is sent.'))
-                            ->extraInputAttributes(['dir' => 'auto']),
-                        TextInput::make('received_emails')
-                            ->label(__('Received emails folder structure'))
-                            ->helperText(new HtmlString(
-                                e(__('Where the emails that come in — replies and any other email from a matter\'s parties — are saved as a PDF with every file they came with, inside the matter\'s folder (made when missing). Folders are separated by "/", and each may use the matter\'s placeholders, like the letters do. Leave empty not to save them in OneDrive.'))
-                                .'<br><code dir="ltr">{{matter.custom.'.e(__('Phase')).'}}/01 system + 02/{{matter.plaintiff_capacity}}</code>'
-                                .'<br>'.e(__('"Phase" stands for the name of any custom field — pick from the list below.'))
-                                .'<br>'.e(__('A part with no value for the matter (e.g. a custom field it has none of) is left out.'))
-                                .'<br>'.e(__('{{day}} is the day the email reached us (2026-10-16), {{month}} the month and {{year}} the year: the emails of one day go in the same folder.'))
-                            ))
-                            ->live(debounce: 500)
-                            ->extraInputAttributes(['dir' => 'ltr']),
-                        // The emails from each side apart, each named as set; a matter type may have its own.
-                        ...array_map(fn (string $side): TextInput => TypeForm::receivedSideFolderField($side, forType: false), ReceivedEmailFiling::SIDES),
-                        ...array_map(fn (string $side): TextInput => TypeForm::receivedNameField($side, forType: false), [ReceivedEmailFiling::GENERAL, ...ReceivedEmailFiling::SIDES]),
+                // The folders and emails, group by group, two by two.
+                Grid::make(['default' => 1, 'lg' => 2])->schema([
+                    Section::make(__('OneDrive folder structure'))
+                        ->icon(Heroicon::OutlinedFolder)
+                        ->schema([
+                            Textarea::make('subfolders')
+                                ->label(__('Standard subfolders'))
+                                ->helperText(__('One per line, in order. Use "/" for a folder inside another, e.g. "02 المستندات/من المدعي". Changes apply to folders made from now on; existing folders stay as they are.').' '.__('The default — a matter type can have its own (below, or on the type).').' '.__('A folder may use the matter\'s placeholders, like the letters do, e.g. {{matter.custom.phase}}/01 المراسلات; one the matter has no value for is left out.'))
+                                ->rows(10)
+                                ->extraInputAttributes(['dir' => 'auto']),
+                            // The types with folders of their own, in groups of those alike — one read: a group's are
+                            // changed together from any of its types (Settings → Matter types → its folders).
+                            Placeholder::make('type_structures')
+                                ->label(__('Matter types with folders of their own'))
+                                ->content(fn (): HtmlString => self::typeGroups())
+                                ->hintAction(
+                                    Action::make('assignToTypes')
+                                        ->label(__('Assign a structure to matter types'))
+                                        ->icon(Heroicon::OutlinedFolder)
+                                        ->fillForm(fn (Get $get): array => ['structure' => $get('subfolders')])
+                                        ->schema([
+                                            Select::make('types')
+                                                ->label(__('Matter types'))
+                                                ->options(fn () => Type::query()->orderBy('name')->pluck('name', 'id'))
+                                                ->multiple()
+                                                ->searchable()
+                                                ->required(),
+                                            Toggle::make('use_default')
+                                                ->label(__('Use the default structure'))
+                                                ->live(),
+                                            TypeForm::oneDriveStructureField('structure')
+                                                ->hidden(fn (Get $get): bool => (bool) $get('use_default'))
+                                                ->required(fn (Get $get): bool => ! $get('use_default')),
+                                        ])
+                                        ->action(function (array $data): void {
+                                            $structure = ! empty($data['use_default']) ? null : (trim((string) ($data['structure'] ?? '')) ?: null);
+                                            Type::query()->whereIn('id', $data['types'] ?? [])->update(['onedrive_subfolders' => $structure]);
 
-                        // The custom fields that exist, ready to use: the placeholder is the field's name as it is on the type.
-                        Placeholder::make('custom_field_placeholders')
-                            ->label(__('Custom fields you can use'))
-                            ->content(function (): HtmlString {
-                                $labels = MatterFieldDefinition::query()->orderBy('label')->pluck('label')->unique()->values();
+                                            Notification::make()->success()->title(__('Folder structure set for :count types', ['count' => count($data['types'] ?? [])]))->send();
+                                        }),
+                                ),
+                        ]),
+                    Section::make(__('Sent emails and signed minutes'))
+                        ->icon(Heroicon::OutlinedPaperAirplane)
+                        ->schema([
+                            TextInput::make('signed_minutes')
+                                ->label(__('Signed minutes subfolder'))
+                                ->helperText(__('Signed minutes sent back on WhatsApp are saved here, inside the matter\'s folder (made when missing). Use "/" for a folder inside another.').' '.__('A folder may use the matter\'s placeholders, like the letters do; {{day}} is the day it is saved.'))
+                                ->required()
+                                ->extraInputAttributes(['dir' => 'auto']),
+                            TextInput::make('sent_emails')
+                                ->label(__('Sent emails subfolder'))
+                                ->helperText(__('Every email sent from a matter — letters, minutes, bulk mail — is saved here as a PDF, inside the matter\'s folder (made when missing). Leave empty not to save them in OneDrive.').' '.__('A folder may use the matter\'s placeholders, like the letters do; {{day}} is the day it is sent.'))
+                                ->extraInputAttributes(['dir' => 'auto']),
+                        ]),
+                    Section::make(__('Received emails — folders'))
+                        ->icon(Heroicon::OutlinedInboxArrowDown)
+                        ->schema([
+                            TextInput::make('received_emails')
+                                ->label(__('Received emails folder structure'))
+                                ->helperText(new HtmlString(
+                                    e(__('Where the emails that come in — replies and any other email from a matter\'s parties — are saved as a PDF with every file they came with, inside the matter\'s folder (made when missing). Folders are separated by "/", and each may use the matter\'s placeholders, like the letters do. Leave empty not to save them in OneDrive.'))
+                                    .'<br><code dir="ltr">{{matter.custom.'.e(__('Phase')).'}}/01 system + 02/{{matter.plaintiff_capacity}}</code>'
+                                    .'<br>'.e(__('"Phase" stands for the name of any custom field — pick from the list below.'))
+                                    .'<br>'.e(__('A part with no value for the matter (e.g. a custom field it has none of) is left out.'))
+                                    .'<br>'.e(__('{{day}} is the day the email reached us (2026-10-16), {{month}} the month and {{year}} the year: the emails of one day go in the same folder.'))
+                                ))
+                                ->live(debounce: 500)
+                                ->extraInputAttributes(['dir' => 'ltr']),
+                            // The emails from each side apart, each named as set; a matter type may have its own.
+                            ...array_map(fn (string $side): TextInput => TypeForm::receivedSideFolderField($side, forType: false), ReceivedEmailFiling::SIDES),
+                        ]),
+                    Section::make(__('Received emails — file names'))
+                        ->icon(Heroicon::OutlinedDocumentText)
+                        ->schema([
+                            ...array_map(fn (string $side): TextInput => TypeForm::receivedNameField($side, forType: false), [ReceivedEmailFiling::GENERAL, ...ReceivedEmailFiling::SIDES]),
+                        ]),
+                    Section::make(__('Placeholders'))
+                        ->icon(Heroicon::OutlinedVariable)
+                        ->columnSpanFull()
+                        ->schema([
+                            // The custom fields that exist, ready to use: the placeholder is the field's name as it is on the type.
+                            Placeholder::make('custom_field_placeholders')
+                                ->label(__('Custom fields you can use'))
+                                ->content(function (): HtmlString {
+                                    $labels = MatterFieldDefinition::query()->orderBy('label')->pluck('label')->unique()->values();
 
-                                return new HtmlString($labels->isEmpty()
-                                    ? e(__('No custom fields yet (Settings → Matter types).'))
-                                    : $labels->map(fn (string $label): string => '<code dir="auto" style="margin-inline-end: .75rem;">{{matter.custom.'.e($label).'}}</code>')->implode(' '));
-                            }),
-                        // Not saved: only to see what the structure above makes for a matter.
-                        Select::make('received_preview_matter')
-                            ->label(__('Try it on a matter'))
-                            ->searchable()
-                            ->live()
-                            ->dehydrated(false)
-                            ->getSearchResultsUsing(fn (string $search): array => MatterSearch::options($search))
-                            ->getOptionLabelUsing(fn ($value): ?string => MatterSearch::labels([(int) $value])[(int) $value] ?? null),
-                        Placeholder::make('received_preview')
-                            ->label(__('The folder for that matter'))
-                            ->visible(fn (Get $get): bool => filled($get('received_preview_matter')))
-                            ->content(function (Get $get): HtmlString {
-                                $matter = Matter::find($get('received_preview_matter'));
-                                $template = trim((string) $get('received_emails'));
+                                    return new HtmlString($labels->isEmpty()
+                                        ? e(__('No custom fields yet (Settings → Matter types).'))
+                                        : $labels->map(fn (string $label): string => '<code dir="auto" style="margin-inline-end: .75rem;">{{matter.custom.'.e($label).'}}</code>')->implode(' '));
+                                }),
+                            // Not saved: only to see what the structure above makes for a matter.
+                            Select::make('received_preview_matter')
+                                ->label(__('Try it on a matter'))
+                                ->searchable()
+                                ->live()
+                                ->dehydrated(false)
+                                ->getSearchResultsUsing(fn (string $search): array => MatterSearch::options($search))
+                                ->getOptionLabelUsing(fn ($value): ?string => MatterSearch::labels([(int) $value])[(int) $value] ?? null),
+                            Placeholder::make('received_preview')
+                                ->label(__('The folder for that matter'))
+                                ->visible(fn (Get $get): bool => filled($get('received_preview_matter')))
+                                ->content(function (Get $get): HtmlString {
+                                    $matter = Matter::find($get('received_preview_matter'));
+                                    $template = trim((string) $get('received_emails'));
 
-                                if (! $matter || $template === '') {
-                                    return new HtmlString('—');
-                                }
+                                    if (! $matter || $template === '') {
+                                        return new HtmlString('—');
+                                    }
 
-                                $path = '<code dir="auto">'.e(MatterOneDriveFolders::folderName($matter).'/'.MatterOneDriveFolders::resolvePath($template, $matter, now())).'</code>';
+                                    $path = '<code dir="auto">'.e(MatterOneDriveFolders::folderName($matter).'/'.MatterOneDriveFolders::resolvePath($template, $matter, now())).'</code>';
 
-                                // A folder the matter has no value for is left out of the path: said, so it is not a surprise.
-                                $empty = MatterOneDriveFolders::emptyPlaceholders($template, $matter, now());
+                                    // A folder the matter has no value for is left out of the path: said, so it is not a surprise.
+                                    $empty = MatterOneDriveFolders::emptyPlaceholders($template, $matter, now());
 
-                                return new HtmlString($path.($empty === []
-                                    ? ''
-                                    : '<div style="color: #b45309; margin-top: .35rem;">'.e(__('This matter has no value for :placeholders — its folder is left out.', ['placeholders' => implode('، ', $empty)])).'</div>'));
-                            }),
-                    ]),
+                                    return new HtmlString($path.($empty === []
+                                        ? ''
+                                        : '<div style="color: #b45309; margin-top: .35rem;">'.e(__('This matter has no value for :placeholders — its folder is left out.', ['placeholders' => implode('، ', $empty)])).'</div>'));
+                                }),
+                        ]),
+                ]),
 
                 Section::make(__('Test folder'))
                     ->description(__('Checks the whole set-up: makes a folder named ":name", with the standard subfolders, in every assistant\'s OneDrive, then removes it again (to their OneDrive recycle bin). Save the subfolder list first.', ['name' => MatterOneDriveFolders::TEST_FOLDER]))

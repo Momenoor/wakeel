@@ -4998,5 +4998,8 @@
     ":count matters of :type (deleted ones too), its custom fields and the letters offered for it go to the type chosen, then :type is deleted. That type keeps its own name, folders, party capacities and incentive settings. It cannot be undone.": "تنتقل :count قضية من :type (والمحذوفة منها أيضاً) وحقوله المخصصة والخطابات المتاحة له إلى النوع المختار، ثم يُحذف :type. ويحتفظ ذلك النوع باسمه ومجلداته وصفات أطرافه وإعدادات الحوافز. لا يمكن التراجع عن ذلك.",
     "Merge into": "الدمج في",
     ":type merged into :into": "دُمج :type في :into",
-    ":count matters moved.": "نُقلت :count قضية."
+    ":count matters moved.": "نُقلت :count قضية.",
+    "Sent emails and signed minutes": "المراسلات الصادرة والمحاضر الموقعة",
+    "Received emails — folders": "المراسلات الواردة — المجلدات",
+    "Received emails — file names": "المراسلات الواردة — أسماء الملفات"
 }
