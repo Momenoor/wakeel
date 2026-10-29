@@ -252,6 +252,8 @@ return [
                 'updateInitialReportDate',
                 'updateFinalReportDate',
                 'bulkUpdateFinalReportDate',
+                'updateDifficulty',
+                'updateOfficeWork',
                 'export',
                 'import',
                 'initialReport',

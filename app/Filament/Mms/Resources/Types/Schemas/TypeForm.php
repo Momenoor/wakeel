@@ -6,8 +6,10 @@ use App\Models\LetterTemplate;
 use App\Models\Setting;
 use App\Models\Type;
 use App\Services\MMS\MatterOneDriveFolders;
+use App\Services\MMS\PeriodicReports;
 use App\Services\MMS\ReceivedEmailFiling;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -41,6 +43,22 @@ class TypeForm
                                 ->label(__('Active'))
                                 ->default(true)
                                 ->required(),
+                            Toggle::make('has_phases')
+                                ->label(__('Has phases'))
+                                ->helperText(__('Each of its matters is in one of its phases, chosen when it is made (a supplementary matter: the next one) — {{matter.phase}} in letters and folders.'))
+                                ->live(),
+                            TagsInput::make('phases')
+                                ->label(__('Phases, in order'))
+                                ->placeholder(__('e.g. First phase'))
+                                ->helperText(__('Press Enter after each; drag to put them in order.'))
+                                ->splitKeys(['Enter'])
+                                ->reorderable()
+                                ->required(fn (Get $get): bool => (bool) $get('has_phases'))
+                                ->visible(fn (Get $get): bool => (bool) $get('has_phases')),
+                            Toggle::make('has_creditors')
+                                ->label(__('Has creditors'))
+                                ->helperText(__('Its matters keep a list of creditors and their agents, who are no parties (a bankruptcy\'s): on their Contacts tab, their emails saved in a folder of their own, exported for bulk mail.'))
+                                ->live(),
                         ]),
                     // What the sides are called.
                     Section::make(__('Party capacities'))
@@ -56,10 +74,11 @@ class TypeForm
                             self::oneDriveStructureField(),
                             self::receivedEmailsField(),
                             // The emails from each side apart, each named as set.
-                            ...array_map(fn (string $side): TextInput => self::receivedSideFolderField($side), ReceivedEmailFiling::SIDES),
-                            ...array_map(fn (string $side): TextInput => self::receivedNameField($side), [ReceivedEmailFiling::GENERAL, ...ReceivedEmailFiling::SIDES]),
+                            ...array_map(fn (string $side): TextInput => self::receivedSideFolderField($side), ReceivedEmailFiling::APART),
+                            ...array_map(fn (string $side): TextInput => self::receivedNameField($side), [ReceivedEmailFiling::GENERAL, ...ReceivedEmailFiling::APART]),
                             self::sentEmailsField(),
                             self::signedMinutesField(),
+                            self::periodicReportsField(),
                             // Its group — the types with the same folders: changed with it, or left as they are (EditType).
                             Toggle::make(self::FOLDERS_TO_GROUP)
                                 ->label(fn (?Type $record): string => __('Also for the types with the same folders: :types', [
@@ -137,12 +156,36 @@ class TypeForm
      */
     public static function receivedSideFolderField(string $side, bool $forType = true): TextInput
     {
+        $creditor = $side === ReceivedEmailFiling::CREDITOR;
+
         return TextInput::make($forType ? ReceivedEmailFiling::FOLDER_COLUMNS[$side] : ReceivedEmailFiling::FOLDER_SETTINGS[$side])
-            ->label($side === ReceivedEmailFiling::PLAINTIFF ? __('Emails from the plaintiff side — folder') : __('Emails from the defendant side — folder'))
-            ->helperText(__('Where the emails from this side are saved inside the matter\'s folder: its parties, their representatives (on the matter or at a meeting) and whoever they copied in. Written like the received emails folder structure. Leave empty to save them with the other received emails.'))
+            ->label(match ($side) {
+                ReceivedEmailFiling::PLAINTIFF => __('Emails from the plaintiff side — folder'),
+                ReceivedEmailFiling::DEFENDANT => __('Emails from the defendant side — folder'),
+                default => __('Emails from creditors — folder'),
+            })
+            ->helperText($creditor
+                ? __('Where the emails from the matter\'s creditors and their agents (its Contacts tab) are saved inside the matter\'s folder. Written like the received emails folder structure; {{creditor}} is the creditor\'s name — a folder for each, e.g. 07 مطالبات الدائنين/{{creditor}}. Leave empty to save them with the other received emails.')
+                : __('Where the emails from this side are saved inside the matter\'s folder: its parties, their representatives (on the matter or at a meeting) and whoever they copied in. Written like the received emails folder structure. Leave empty to save them with the other received emails.'))
             ->placeholder(fn (): string => $forType ? ReceivedEmailFiling::folderTemplate(null, $side) : MatterOneDriveFolders::receivedEmailsFolder())
+            // A type's creditors' only for a type that has them.
+            ->visible(fn (Get $get): bool => ! $forType || ! $creditor || (bool) $get('has_creditors'))
             ->maxLength(500)
             ->extraInputAttributes(['dir' => 'ltr']);
+    }
+
+    /**
+     * Where a periodic report's files are moved inside the matter's folder (PeriodicReports) — for this type, or (not
+     * $forType) the setting. Empty: the setting's, else the default one.
+     */
+    public static function periodicReportsField(string $name = PeriodicReports::COLUMN, bool $forType = true): TextInput
+    {
+        return TextInput::make($name)
+            ->label(__('Periodic report folder'))
+            ->helperText(__('Where the files of the progress steps put in a periodic report are moved, inside the matter\'s folder. {{number}} is the report\'s number; folders are separated by "/", and each may use the matter\'s placeholders, e.g. {{matter.custom.Phase}}/05 التقرير/تقرير دوري رقم {{number}}.').($forType ? ' '.__('Leave empty for the default one (Settings → OneDrive Folders).') : ''))
+            ->placeholder(fn (): string => $forType ? PeriodicReports::template() : PeriodicReports::DEFAULT_FOLDER)
+            ->maxLength(500)
+            ->extraInputAttributes(['dir' => 'auto']);
     }
 
     /**
@@ -152,15 +195,19 @@ class TypeForm
     public static function receivedNameField(string $side, bool $forType = true): TextInput
     {
         $general = $side === ReceivedEmailFiling::GENERAL;
+        $creditor = $side === ReceivedEmailFiling::CREDITOR;
 
         return TextInput::make($forType ? ReceivedEmailFiling::NAME_COLUMNS[$side] : ReceivedEmailFiling::NAME_SETTINGS[$side])
             ->label(match ($side) {
                 ReceivedEmailFiling::PLAINTIFF => __('Emails from the plaintiff side — file name'),
                 ReceivedEmailFiling::DEFENDANT => __('Emails from the defendant side — file name'),
+                ReceivedEmailFiling::CREDITOR => __('Emails from creditors — file name'),
                 default => __('Received emails — file name'),
             })
             ->helperText(__('The name of each email\'s PDF, its original and the folder of its files. Placeholders: {{date}}, {{time}}, {{kind}} (incoming or reply), {{party}} (who sent it), {{subject}} (what it is about), {{side}} (the side\'s name) and the matter\'s, e.g. {{matter.number}}. A part with no value is left out with its " — ".')
+                .($creditor ? ' '.__('{{creditor}} is the creditor\'s name, and {{side}} "Creditor" or "Creditor\'s agent".') : '')
                 .($general ? '' : ' '.__('Leave empty to name them as the other received emails.')))
+            ->visible(fn (Get $get): bool => ! $forType || ! $creditor || (bool) $get('has_creditors'))
             ->placeholder(fn (): string => match (true) {
                 $forType => ReceivedEmailFiling::nameTemplate(null, $side) ?: ReceivedEmailFiling::DEFAULT_NAME,
                 $general => ReceivedEmailFiling::DEFAULT_NAME,

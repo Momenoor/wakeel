@@ -105,6 +105,18 @@ class MatterPolicy
         return $authUser->can('BulkUpdateFinalReportDate:Matter');
     }
 
+    /** Its difficulty changed once it is made — not whoever may edit the matter: it weighs on the incentives. */
+    public function updateDifficulty(AuthUser $authUser, Matter $matter): bool
+    {
+        return $authUser->can('UpdateDifficulty:Matter');
+    }
+
+    /** Whether it is office work, changed once it is made. */
+    public function updateOfficeWork(AuthUser $authUser, Matter $matter): bool
+    {
+        return $authUser->can('UpdateOfficeWork:Matter');
+    }
+
     public function export(AuthUser $authUser, Matter $matter): bool
     {
         return $authUser->can('Export:Matter');

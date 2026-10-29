@@ -91,7 +91,8 @@ class MattersTable
                 // ── Court / Type ───────────────────────────────────────────────
                 TextColumn::make('court.name')
                     ->label(__('Court / Type'))
-                    ->description(fn ($record) => $record->type?->name)
+                    // Its phase beside its type, for a type with phases.
+                    ->description(fn ($record) => implode(' — ', array_filter([$record->type?->name, $record->phase])))
                     ->searchable(query: fn (Builder $query, string $search) => static::applyMultiWordSearch($query, $search, ['court.name', 'type.name'])
                     )
                     ->wrap()
@@ -238,6 +239,13 @@ class MattersTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
+
+                // The phases matters are in (their types' phases).
+                SelectFilter::make('phase')
+                    ->label(__('Phase'))
+                    ->options(fn (): array => Matter::query()->whereNotNull('phase')->distinct()->orderBy('phase')->pluck('phase', 'phase')->all())
+                    ->multiple()
+                    ->visible(fn (): bool => Type::query()->where('has_phases', true)->exists()),
 
                 SelectFilter::make('collection_status')
                     ->label(__('Collection Status'))

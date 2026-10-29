@@ -8,6 +8,7 @@ use App\Models\LetterTemplate;
 use App\Models\MatterTypeIncentiveConfig;
 use App\Models\Type;
 use App\Services\MMS\MatterOneDriveFolders;
+use App\Services\MMS\PeriodicReports;
 use App\Services\MMS\ReceivedEmailFiling;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\RepeatableEntry;
@@ -55,6 +56,13 @@ class TypeInfolist
                                 ->state(fn (Type $record): int => $record->matters()->whereNull('final_report_at')->count())
                                 ->icon(Heroicon::OutlinedBriefcase)
                                 ->numeric(),
+                            TextEntry::make('phases')
+                                ->label(__('Phases'))
+                                ->state(fn (Type $record): array => $record->phaseNames())
+                                ->badge()
+                                ->visible(fn (Type $record): bool => $record->phaseNames() !== [])
+                                ->columnSpanFull(),
+                            IconEntry::make('has_creditors')->label(__('Has creditors'))->boolean(),
                         ]),
                     Section::make(__('Party capacities'))
                         ->description(__('What each side is called in this type\'s matters — in letters, minutes and the matter page.'))
@@ -88,8 +96,11 @@ class TypeInfolist
                                 ['received_name', __('Received emails — file name'), fn () => ReceivedEmailFiling::nameTemplate(null, ReceivedEmailFiling::GENERAL) ?: ReceivedEmailFiling::DEFAULT_NAME],
                                 ['received_name_plaintiff', __('Emails from the plaintiff side — file name'), fn () => ReceivedEmailFiling::nameTemplate(null, ReceivedEmailFiling::PLAINTIFF) ?: ReceivedEmailFiling::DEFAULT_NAME],
                                 ['received_name_defendant', __('Emails from the defendant side — file name'), fn () => ReceivedEmailFiling::nameTemplate(null, ReceivedEmailFiling::DEFENDANT) ?: ReceivedEmailFiling::DEFAULT_NAME],
+                                ['onedrive_received_creditors', __('Emails from creditors — folder'), fn () => ReceivedEmailFiling::folderTemplate(null, ReceivedEmailFiling::CREDITOR) ?: __('Not saved in OneDrive')],
+                                ['received_name_creditor', __('Emails from creditors — file name'), fn () => ReceivedEmailFiling::nameTemplate(null, ReceivedEmailFiling::CREDITOR) ?: ReceivedEmailFiling::DEFAULT_NAME],
                                 ['onedrive_sent_emails', __('Sent emails folder'), fn () => MatterOneDriveFolders::sentEmailsFolder() ?: __('Not saved in OneDrive')],
                                 ['onedrive_signed_minutes', __('Signed minutes folder'), fn () => MatterOneDriveFolders::signedMinutesFolder()],
+                                ['onedrive_periodic_reports', __('Periodic report folder'), fn () => PeriodicReports::template()],
                             ])->map(fn (array $folder): TextEntry => TextEntry::make($folder[0])
                                 ->label($folder[1])
                                 ->state(fn (Type $record): string => filled($record->{$folder[0]}) ? $record->{$folder[0]} : (string) $folder[2]())

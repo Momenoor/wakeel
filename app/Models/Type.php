@@ -52,6 +52,9 @@ class Type extends Model
 
     protected $casts = [
         'active' => 'boolean',
+        'has_creditors' => 'boolean',
+        'has_phases' => 'boolean',
+        'phases' => 'array',
         'allow_current_status_import' => 'boolean',
         'exclude_from_incentive_count' => 'boolean',
         'incentive_config_id' => 'integer',
@@ -80,6 +83,9 @@ class Type extends Model
     protected $fillable = [
         'name',
         'active',
+        'has_creditors',
+        'has_phases',
+        'phases',
         'incentive_trigger_type',
         'allow_current_status_import',
         'exclude_from_incentive_count',
@@ -89,12 +95,47 @@ class Type extends Model
         'onedrive_received_emails',
         'onedrive_received_plaintiff',
         'onedrive_received_defendant',
+        'onedrive_received_creditors',
         'received_name',
         'received_name_plaintiff',
         'received_name_defendant',
+        'received_name_creditor',
         'onedrive_sent_emails',
         'onedrive_signed_minutes',
+        'onedrive_periodic_reports',
     ];
+
+    /**
+     * Its phases' names, in order — none for a type without phases.
+     *
+     * @return list<string>
+     */
+    public function phaseNames(): array
+    {
+        return $this->has_phases ? array_values(array_filter(array_map(fn ($phase): string => trim((string) $phase), (array) $this->phases), fn (string $phase): bool => $phase !== '')) : [];
+    }
+
+    /**
+     * Its phases to choose from — with the one a matter is in, should it be no longer one of them (renamed).
+     *
+     * @return array<string, string>
+     */
+    public function phaseOptions(?string $current = null): array
+    {
+        $names = $this->phaseNames();
+        $current = trim((string) $current);
+
+        return array_combine($names, $names) + ($current !== '' ? [$current => $current] : []);
+    }
+
+    /** The phase after this one (a supplementary matter's), else this one; the first for none. */
+    public function nextPhase(?string $phase): ?string
+    {
+        $names = $this->phaseNames();
+        $at = array_search(trim((string) $phase), $names, true);
+
+        return $at === false ? ($names[0] ?? null) : ($names[$at + 1] ?? $names[$at]);
+    }
 
     /**
      * What a side is called in this type's matters (in Arabic), or null
@@ -117,6 +158,7 @@ class Type extends Model
             'plaintiff' => __('Plaintiff'),
             'defendant' => __('Defendant'),
             'implicate-litigant' => __('Implicate Litigant'),
+            'creditor' => __('Creditor'),
             default => __(ucfirst(str_replace('-', ' ', (string) $side))),
         };
     }
@@ -170,7 +212,7 @@ class Type extends Model
     }
 
     /** Its own OneDrive folders (Settings → OneDrive Folders): empty — the default one. */
-    public const FOLDER_FIELDS = ['onedrive_subfolders', 'onedrive_received_emails', 'onedrive_received_plaintiff', 'onedrive_received_defendant', 'received_name', 'received_name_plaintiff', 'received_name_defendant', 'onedrive_sent_emails', 'onedrive_signed_minutes'];
+    public const FOLDER_FIELDS = ['onedrive_subfolders', 'onedrive_received_emails', 'onedrive_received_plaintiff', 'onedrive_received_defendant', 'onedrive_received_creditors', 'received_name', 'received_name_plaintiff', 'received_name_defendant', 'received_name_creditor', 'onedrive_sent_emails', 'onedrive_signed_minutes', 'onedrive_periodic_reports'];
 
     /**
      * Its OneDrive folders as one value, to compare: types alike in all of them are a group.

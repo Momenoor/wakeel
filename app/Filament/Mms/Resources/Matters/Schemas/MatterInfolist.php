@@ -299,6 +299,11 @@ class MatterInfolist
                     ->label(__('Type'))
                     ->icon('heroicon-o-rectangle-stack')
                     ->placeholder('—'),
+                TextEntry::make('phase')
+                    ->label(__('Phase'))
+                    ->icon('heroicon-o-queue-list')
+                    ->badge()
+                    ->visible(fn ($record): bool => filled($record?->phase)),
                 // How its incentive is worked out, known before any calculation runs: its type's; a type linked to
                 // none is left out of the calculation.
                 TextEntry::make('incentive_calculation_type')
@@ -530,6 +535,7 @@ class MatterInfolist
             ->schema([
                 TextEntry::make('court.name')->label(__('Court'))->icon('heroicon-o-building-library'),
                 TextEntry::make('type.name')->label(__('Type'))->icon('heroicon-o-rectangle-stack'),
+                TextEntry::make('phase')->label(__('Phase'))->icon('heroicon-o-queue-list')->badge()->visible(fn ($record): bool => filled($record?->phase)),
                 TextEntry::make('level')->label(__('Level'))->badge(),
                 TextEntry::make('difficulty')->label(__('Difficulty'))->badge(),
                 Group::make()

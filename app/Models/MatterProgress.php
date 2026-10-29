@@ -16,7 +16,7 @@ class MatterProgress extends Model
 {
     protected $table = 'matter_progress';
 
-    protected $fillable = ['matter_id', 'type', 'title', 'happened_at', 'details', 'source_type', 'source_id', 'user_id'];
+    protected $fillable = ['matter_id', 'type', 'title', 'happened_at', 'details', 'source_type', 'source_id', 'periodic_report_id', 'user_id'];
 
     protected function casts(): array
     {
@@ -45,6 +45,16 @@ class MatterProgress extends Model
     public function source(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    /**
+     * The periodic report it went in, if it has.
+     *
+     * @return BelongsTo<MatterPeriodicReport, $this>
+     */
+    public function periodicReport(): BelongsTo
+    {
+        return $this->belongsTo(MatterPeriodicReport::class);
     }
 
     /** Recorded by Wakeel as it happened (else added by hand). */

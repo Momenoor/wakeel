@@ -57,6 +57,7 @@ class BulkMailPlaceholders
             'matter.court_email' => __('Court email'),
             'matter.court_address' => __('Court address'),
             'matter.type' => __('Matter type'),
+            'matter.phase' => __('Phase'),
             'matter.level' => __('Level'),
             'matter.status' => __('Status'),
             'matter.difficulty' => __('Difficulty'),
@@ -164,6 +165,8 @@ class BulkMailPlaceholders
             'matter.court_email' => (string) $matter->court?->email,
             'matter.court_address' => (string) $matter->court?->address,
             'matter.type' => (string) $matter->type?->name,
+            // The phase it is in, one of its type's (a bankruptcy's first, second …): letters and folders alike.
+            'matter.phase' => (string) $matter->phase,
             'matter.level' => self::format($matter->level),
             'matter.status' => self::format($matter->status),
             'matter.difficulty' => self::format($matter->difficulty),

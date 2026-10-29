@@ -13,6 +13,7 @@ use App\Models\Setting;
 use App\Models\Type;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\OneDriveClient;
+use App\Services\MMS\PeriodicReports;
 use App\Services\MMS\ReceivedEmailFiling;
 use App\Support\Dates;
 use App\Support\MatterSearch;
@@ -94,19 +95,21 @@ class OneDriveSettings extends Page implements HasTable
             'signed_minutes' => MatterOneDriveFolders::signedMinutesFolder(),
             'sent_emails' => MatterOneDriveFolders::sentEmailsFolder(),
             'received_emails' => MatterOneDriveFolders::receivedEmailsFolder(),
-            // Each side's folder and name, and the general name (ReceivedEmailFiling): the settings by their keys.
-            ...collect(self::receivedSettings())->mapWithKeys(fn (string $key): array => [$key => Setting::get($key, '')])->all(),
+            // Each side's folder and name, and the general name (ReceivedEmailFiling), and a periodic report's
+            // folder: the settings by their keys.
+            ...collect(self::keyedSettings())->mapWithKeys(fn (string $key): array => [$key => Setting::get($key, '')])->all(),
         ]);
     }
 
     /**
-     * The settings of the emails that come in from each side, and of their names (ReceivedEmailFiling).
+     * The settings kept by their keys: of the emails that come in from each side and of their names
+     * (ReceivedEmailFiling), and of a periodic report's folder (PeriodicReports).
      *
      * @return list<string>
      */
-    private static function receivedSettings(): array
+    private static function keyedSettings(): array
     {
-        return [...array_values(ReceivedEmailFiling::FOLDER_SETTINGS), ...array_values(ReceivedEmailFiling::NAME_SETTINGS)];
+        return [...array_values(ReceivedEmailFiling::FOLDER_SETTINGS), ...array_values(ReceivedEmailFiling::NAME_SETTINGS), PeriodicReports::SETTING];
     }
 
     /** The groups of types alike in their own folders: who is in each, and what their folders are. */
@@ -125,8 +128,11 @@ class OneDriveSettings extends Page implements HasTable
             'received_name' => __('Received emails — file name'),
             'received_name_plaintiff' => __('Emails from the plaintiff side — file name'),
             'received_name_defendant' => __('Emails from the defendant side — file name'),
+            'onedrive_received_creditors' => __('Emails from creditors — folder'),
+            'received_name_creditor' => __('Emails from creditors — file name'),
             'onedrive_sent_emails' => __('Sent emails subfolder'),
             'onedrive_signed_minutes' => __('Signed minutes subfolder'),
+            'onedrive_periodic_reports' => __('Periodic report folder'),
         ];
 
         return new HtmlString($groups->values()->map(function ($types, int $i) use ($labels): string {
@@ -214,6 +220,7 @@ class OneDriveSettings extends Page implements HasTable
                                 ->label(__('Sent emails subfolder'))
                                 ->helperText(__('Every email sent from a matter — letters, minutes, bulk mail — is saved here as a PDF, inside the matter\'s folder (made when missing). Leave empty not to save them in OneDrive.').' '.__('A folder may use the matter\'s placeholders, like the letters do; {{day}} is the day it is sent.'))
                                 ->extraInputAttributes(['dir' => 'auto']),
+                            TypeForm::periodicReportsField(PeriodicReports::SETTING, forType: false),
                         ]),
                     Section::make(__('Received emails — folders'))
                         ->icon(Heroicon::OutlinedInboxArrowDown)
@@ -222,20 +229,20 @@ class OneDriveSettings extends Page implements HasTable
                                 ->label(__('Received emails folder structure'))
                                 ->helperText(new HtmlString(
                                     e(__('Where the emails that come in — replies and any other email from a matter\'s parties — are saved as a PDF with every file they came with, inside the matter\'s folder (made when missing). Folders are separated by "/", and each may use the matter\'s placeholders, like the letters do. Leave empty not to save them in OneDrive.'))
-                                    .'<br><code dir="ltr">{{matter.custom.'.e(__('Phase')).'}}/01 system + 02/{{matter.plaintiff_capacity}}</code>'
-                                    .'<br>'.e(__('"Phase" stands for the name of any custom field — pick from the list below.'))
+                                    .'<br><code dir="ltr">{{matter.phase}}/01 system + 02/{{matter.plaintiff_capacity}}</code>'
+                                    .'<br>'.e(__('{{matter.phase}} is the matter\'s phase, for a type with phases; a custom field is written {{matter.custom.<its name>}} — pick from the list below.'))
                                     .'<br>'.e(__('A part with no value for the matter (e.g. a custom field it has none of) is left out.'))
                                     .'<br>'.e(__('{{day}} is the day the email reached us (2026-10-16), {{month}} the month and {{year}} the year: the emails of one day go in the same folder.'))
                                 ))
                                 ->live(debounce: 500)
                                 ->extraInputAttributes(['dir' => 'ltr']),
                             // The emails from each side apart, each named as set; a matter type may have its own.
-                            ...array_map(fn (string $side): TextInput => TypeForm::receivedSideFolderField($side, forType: false), ReceivedEmailFiling::SIDES),
+                            ...array_map(fn (string $side): TextInput => TypeForm::receivedSideFolderField($side, forType: false), ReceivedEmailFiling::APART),
                         ]),
                     Section::make(__('Received emails — file names'))
                         ->icon(Heroicon::OutlinedDocumentText)
                         ->schema([
-                            ...array_map(fn (string $side): TextInput => TypeForm::receivedNameField($side, forType: false), [ReceivedEmailFiling::GENERAL, ...ReceivedEmailFiling::SIDES]),
+                            ...array_map(fn (string $side): TextInput => TypeForm::receivedNameField($side, forType: false), [ReceivedEmailFiling::GENERAL, ...ReceivedEmailFiling::APART]),
                         ]),
                     Section::make(__('Placeholders'))
                         ->icon(Heroicon::OutlinedVariable)
@@ -243,13 +250,14 @@ class OneDriveSettings extends Page implements HasTable
                         ->schema([
                             // The custom fields that exist, ready to use: the placeholder is the field's name as it is on the type.
                             Placeholder::make('custom_field_placeholders')
-                                ->label(__('Custom fields you can use'))
+                                ->label(__('The phase and the custom fields you can use'))
                                 ->content(function (): HtmlString {
+                                    // Its phase first; then the custom fields there are.
                                     $labels = MatterFieldDefinition::query()->orderBy('label')->pluck('label')->unique()->values();
 
-                                    return new HtmlString($labels->isEmpty()
+                                    return new HtmlString('<code dir="ltr" style="margin-inline-end: .75rem;">{{matter.phase}}</code> '.($labels->isEmpty()
                                         ? e(__('No custom fields yet (Settings → Matter types).'))
-                                        : $labels->map(fn (string $label): string => '<code dir="auto" style="margin-inline-end: .75rem;">{{matter.custom.'.e($label).'}}</code>')->implode(' '));
+                                        : $labels->map(fn (string $label): string => '<code dir="auto" style="margin-inline-end: .75rem;">{{matter.custom.'.e($label).'}}</code>')->implode(' ')));
                                 }),
                             // Not saved: only to see what the structure above makes for a matter.
                             Select::make('received_preview_matter')
@@ -371,7 +379,7 @@ class OneDriveSettings extends Page implements HasTable
         Setting::set(MatterOneDriveFolders::SENT_EMAILS, trim((string) ($state['sent_emails'] ?? '')), 'onedrive');
         Setting::set(MatterOneDriveFolders::RECEIVED_EMAILS, trim((string) ($state['received_emails'] ?? '')), 'onedrive');
 
-        foreach (self::receivedSettings() as $key) {
+        foreach (self::keyedSettings() as $key) {
             Setting::set($key, trim((string) ($state[$key] ?? '')), 'onedrive');
         }
 

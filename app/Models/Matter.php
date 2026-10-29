@@ -55,6 +55,7 @@ class Matter extends Model implements AttachmentOwner
         'final_report_at',
         'court_id',
         'type_id',
+        'phase',
         'level',
         'difficulty',
         'collection_status',
@@ -293,6 +294,36 @@ class Matter extends Model implements AttachmentOwner
     public function progress(): HasMany
     {
         return $this->hasMany(MatterProgress::class);
+    }
+
+    /**
+     * Its creditors — no parties of it (a bankruptcy's).
+     *
+     * @return HasMany<MatterCreditor, $this>
+     */
+    public function creditors(): HasMany
+    {
+        return $this->hasMany(MatterCreditor::class);
+    }
+
+    /**
+     * The addresses its creditors write from — theirs, and their agents'.
+     *
+     * @return HasMany<MatterCreditorAddress, $this>
+     */
+    public function creditorAddresses(): HasMany
+    {
+        return $this->hasMany(MatterCreditorAddress::class);
+    }
+
+    /**
+     * Its periodic reports, each with the progress steps it covers.
+     *
+     * @return HasMany<MatterPeriodicReport, $this>
+     */
+    public function periodicReports(): HasMany
+    {
+        return $this->hasMany(MatterPeriodicReport::class);
     }
 
     /**

@@ -9,6 +9,7 @@ use App\Jobs\RebuildCampaignPdfs;
 use App\Models\BulkMailRecipient;
 use App\Models\MatterEmail;
 use App\Services\MMS\BulkMailService;
+use App\Services\MMS\MatterCreditors;
 use App\Support\Dates;
 use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
@@ -182,6 +183,22 @@ class RecipientsRelationManager extends RelationManager
                 CreateAction::make()
                     ->after(function ($livewire) {
                         $livewire->getOwnerRecord()->increment('total_recipients');
+                    }),
+                // A matter's campaign: its creditors — and their agents — as they are on the matter, no Excel needed.
+                Action::make('fromCreditors')
+                    ->label(__('Add the matter\'s creditors'))
+                    ->icon('heroicon-o-banknotes')
+                    ->color('gray')
+                    ->visible(fn ($livewire): bool => ($matter = $livewire->getOwnerRecord()->matter) !== null
+                        && MatterCreditors::kept($matter)
+                        && (auth()->user()?->can('update', $livewire->getOwnerRecord()) ?? false))
+                    ->requiresConfirmation()
+                    ->modalDescription(__('Each creditor of the matter with an email is added — to it and its agents alike, its agent, phone and claim as {{agent}}, {{phone}} and {{claim_amount}} — but those already on the list.'))
+                    ->action(function ($livewire): void {
+                        $campaign = $livewire->getOwnerRecord();
+                        $added = MatterCreditors::addToCampaign($campaign, $campaign->matter);
+
+                        Notification::make()->success()->title(__(':count creditors added to the recipients.', ['count' => $added]))->send();
                     }),
                 ImportAction::make()
                     ->importer(BulkMailRecipientImporter::class)

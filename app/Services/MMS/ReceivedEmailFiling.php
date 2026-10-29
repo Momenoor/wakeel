@@ -4,6 +4,7 @@ namespace App\Services\MMS;
 
 use App\Models\Matter;
 use App\Models\MatterContact;
+use App\Models\MatterCreditorAddress;
 use App\Models\MatterMinutes;
 use App\Models\MatterParty;
 use App\Models\Party;
@@ -16,9 +17,10 @@ use Illuminate\Support\Str;
 
 /**
  * Where an email that came in on a matter is saved, and under what name — by whom it came from: the plaintiff's
- * side, the defendant's, or anyone else (the general one). Each its own folder structure and name, set for the whole
- * system (Settings → OneDrive Folders) and for a matter type of its own; a side left empty is filed as the general
- * one, a name left empty as it always was (SentEmailArchive::emailName()).
+ * side, the defendant's, a creditor of the matter (or its agent), or anyone else (the general one). Each its own
+ * folder structure and name, set for the whole system (Settings → OneDrive Folders) and for a matter type of its
+ * own; a side left empty is filed as the general one, a name left empty as it always was
+ * (SentEmailArchive::emailName()).
  */
 final class ReceivedEmailFiling
 {
@@ -28,18 +30,24 @@ final class ReceivedEmailFiling
 
     public const GENERAL = 'general';
 
+    /** A creditor of the matter, or its lawyer or agent (MatterCreditorAddress) — no party of it. */
+    public const CREDITOR = 'creditor';
+
     /** The sides that may be filed apart. */
     public const SIDES = [self::PLAINTIFF, self::DEFENDANT];
 
-    /** A side's folder structure: the setting, and the matter type's column. The general one is the received-emails folder (MatterOneDriveFolders). */
-    public const FOLDER_SETTINGS = [self::PLAINTIFF => 'onedrive_received_plaintiff_folder', self::DEFENDANT => 'onedrive_received_defendant_folder'];
+    /** Those filed apart from the general ones: the sides, and the creditors. */
+    public const APART = [...self::SIDES, self::CREDITOR];
 
-    public const FOLDER_COLUMNS = [self::PLAINTIFF => 'onedrive_received_plaintiff', self::DEFENDANT => 'onedrive_received_defendant'];
+    /** A side's folder structure: the setting, and the matter type's column. The general one is the received-emails folder (MatterOneDriveFolders). */
+    public const FOLDER_SETTINGS = [self::PLAINTIFF => 'onedrive_received_plaintiff_folder', self::DEFENDANT => 'onedrive_received_defendant_folder', self::CREDITOR => 'onedrive_received_creditors_folder'];
+
+    public const FOLDER_COLUMNS = [self::PLAINTIFF => 'onedrive_received_plaintiff', self::DEFENDANT => 'onedrive_received_defendant', self::CREDITOR => 'onedrive_received_creditors'];
 
     /** A side's name, and the general one: the setting, and the matter type's column. */
-    public const NAME_SETTINGS = [self::PLAINTIFF => 'received_email_name_plaintiff', self::DEFENDANT => 'received_email_name_defendant', self::GENERAL => 'received_email_name'];
+    public const NAME_SETTINGS = [self::PLAINTIFF => 'received_email_name_plaintiff', self::DEFENDANT => 'received_email_name_defendant', self::CREDITOR => 'received_email_name_creditor', self::GENERAL => 'received_email_name'];
 
-    public const NAME_COLUMNS = [self::PLAINTIFF => 'received_name_plaintiff', self::DEFENDANT => 'received_name_defendant', self::GENERAL => 'received_name'];
+    public const NAME_COLUMNS = [self::PLAINTIFF => 'received_name_plaintiff', self::DEFENDANT => 'received_name_defendant', self::CREDITOR => 'received_name_creditor', self::GENERAL => 'received_name'];
 
     /** The name as it always was, written as a pattern. */
     public const DEFAULT_NAME = '{{date}} {{time}} {{kind}} — {{party}} — {{subject}}';
@@ -47,7 +55,8 @@ final class ReceivedEmailFiling
     /**
      * Whose side the sender of an email is on, on this matter: a party of a side, or one of its representatives —
      * among the matter's parties, an address only one side copied in on the matter, or at a meeting of its (the
-     * minutes' attendees: for whom they stand, else their capacity). Anyone else: the general one.
+     * minutes' attendees: for whom they stand, else their capacity); else one of its creditors or their agents —
+     * before an address copied in or at a meeting, the list being kept by hand. Anyone else: the general one.
      */
     public static function side(Matter $matter, string $address): string
     {
@@ -64,6 +73,10 @@ final class ReceivedEmailFiling
             if (isset($sides[$party])) {
                 return $sides[$party];
             }
+        }
+
+        if (MatterCreditorAddress::query()->where('matter_id', $matter->getKey())->where('email', $address)->exists()) {
+            return self::CREDITOR;
         }
 
         // An address someone copied in on the matter: their side — only when everyone who copied it in is on one
@@ -120,11 +133,12 @@ final class ReceivedEmailFiling
 
     /**
      * An email's name, before ".pdf": its pattern with {{date}}, {{time}}, {{kind}} (incoming, reply), {{party}} (who
-     * sent it), {{subject}} (what about, shortened), {{side}} (the side's name on the matter's type) and the matter's
-     * placeholders filled in — a part that comes out empty left out, with its " — ". Kept short, nothing a file name
-     * can't hold (SentEmailArchive::NAME_LIMIT).
+     * sent it), {{subject}} (what about, shortened), {{side}} (the side's name on the matter's type; a creditor's or
+     * its agent's), {{creditor}} (the creditor's name, by its address $from) and the matter's placeholders filled in
+     * — a part that comes out empty left out, with its " — ". Kept short, nothing a file name can't hold
+     * (SentEmailArchive::NAME_LIMIT).
      */
-    public static function name(?Matter $matter, string $side, string $party, string $about, CarbonInterface $at, bool $reply): string
+    public static function name(?Matter $matter, string $side, string $party, string $about, CarbonInterface $at, bool $reply, string $from = ''): string
     {
         $template = self::nameTemplate($matter, $side);
 
@@ -141,13 +155,30 @@ final class ReceivedEmailFiling
             'party' => Str::limit(trim((string) preg_replace('/\s+/u', ' ', $party)), SentEmailArchive::PARTY_LIMIT, '…'),
             'subject' => SentEmailArchive::topic($about),
             'side' => $side === self::GENERAL ? '' : Type::sideLabel($matter?->type, $side),
+            ...self::creditorValues($matter, $side, $from),
         ];
 
         $name = (string) preg_replace('/\{\{[^{}]*\}\}/u', '', BulkMailPlaceholders::apply($template, $values));
         // An empty part's separator left out: "a —  — b" is "a — b".
-        $name = trim((string) preg_replace(['/\s*(?:—\s*)+/u', '/\s+/u'], [' — ', ' '], $name), " —-_");
+        $name = trim((string) preg_replace(['/\s*(?:—\s*)+/u', '/\s+/u'], [' — ', ' '], $name), ' —-_');
 
         return MatterOneDriveExplorer::cleanName(Str::limit($name !== '' ? $name : 'email', SentEmailArchive::NAME_LIMIT, '…'));
+    }
+
+    /**
+     * For a creditor's email: {{creditor}}, the creditor's name — whoever wrote for it — and {{side}}, the creditor's
+     * own or its agent's. Nothing for anyone else's.
+     *
+     * @return array<string, string>
+     */
+    public static function creditorValues(?Matter $matter, string $side, string $from): array
+    {
+        $address = $side === self::CREDITOR && $matter ? MatterCreditorAddress::of($matter, $from) : null;
+
+        return $address?->creditor ? [
+            'creditor' => Str::limit(trim((string) preg_replace('/\s+/u', ' ', $address->creditor->name)), SentEmailArchive::PARTY_LIMIT, '…'),
+            'side' => $address->agent ? __("Creditor's agent") : __('Creditor'),
+        ] : [];
     }
 
     /**

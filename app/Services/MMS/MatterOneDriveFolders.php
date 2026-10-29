@@ -382,22 +382,12 @@ class MatterOneDriveFolders
 
         $user = (string) $folder->party->onedrive_email;
 
-        // Emails saved in the same folder (a day's, say) are read from it together.
-        $byFolder = collect($emails)->groupBy(fn (MatterEmail $email): string => self::receivedEmailsFolderFor($matter, $email->at));
+        // Emails saved in the same folder (a day's, a side's, a report's) are read from it together.
+        $byFolder = collect($emails)->groupBy(fn (MatterEmail $email): string => self::emailFolder($email, $matter));
 
         foreach ($byFolder as $received => $inFolder) {
-            // The folder: down the path from the matter's folder.
-            $id = (string) $folder->drive_item_id;
-            foreach (OneDriveClient::segments((string) $received) as $segment) {
-                $next = collect($this->client->childFolders($user, $id))->first(fn (array $f): bool => mb_strtolower($f['name']) === mb_strtolower(self::clean($segment)));
-                $id = (string) ($next['id'] ?? '');
-
-                if ($id === '') {
-                    break;
-                }
-            }
-
-            $listing = $id !== '' ? collect($this->client->children($user, $id)) : collect();
+            $id = $this->walk($user, (string) $folder->drive_item_id, (string) $received);
+            $listing = $id !== null ? collect($this->client->children($user, $id)) : collect();
             $names = $listing->where('folder', false)->pluck('name')->map(fn ($n) => mb_strtolower((string) $n))->flip();
             $folders = $listing->where('folder', true)->keyBy(fn (array $f): string => mb_strtolower($f['name']));
 
@@ -411,7 +401,9 @@ class MatterOneDriveFolders
                     ? collect($this->client->children($user, $sub['id']))->where('folder', false)->pluck('name')->map(fn ($n) => mb_strtolower((string) $n))->flip()
                     : collect();
 
+                // Where it is (a report's, …) kept with it.
                 $email->update(['onedrive' => [
+                    ...array_intersect_key((array) $email->onedrive, array_flip(['folder', 'report', 'before_report'])),
                     'pdf' => $stem !== null && $names->has($stem.'.pdf'),
                     'eml' => $stem !== null && $names->has($stem.'.eml'),
                     'attachments' => $expected->filter(fn (string $name): bool => $inside->has($name))->count(),
@@ -434,8 +426,9 @@ class MatterOneDriveFolders
     public function moveEmailFiles(MatterEmail $email, Matter $from, Matter $to): array
     {
         // In the folder of its sender's side on the other matter.
-        $targetPath = self::receivedEmailsFolderFor($to, $email->at, ReceivedEmailFiling::side($to, MatterEmail::addressOf((string) $email->from)));
-        $result =['pdf' => false, 'eml' => false, 'attachments' => 0, 'folder' => $targetPath, 'moved' => false];
+        $address = MatterEmail::addressOf((string) $email->from);
+        $targetPath = self::receivedEmailsFolderFor($to, $email->at, ReceivedEmailFiling::side($to, $address), $address);
+        $result = ['pdf' => false, 'eml' => false, 'attachments' => 0, 'folder' => $targetPath, 'moved' => false];
         $source = self::folderFor($from);
         $target = self::folderFor($to);
         $base = pathinfo((string) ($email->files[0]['name'] ?? ''), PATHINFO_FILENAME);
@@ -452,8 +445,7 @@ class MatterOneDriveFolders
             return $result;
         }
 
-        $path = implode('/', array_map([self::class, 'clean'], OneDriveClient::segments($targetPath)));
-        $targetId = $path !== '' ? $this->client->ensureFolder($targetUser, $path, $target->drive_item_id)['id'] : (string) $target->drive_item_id;
+        $targetId = $this->ensurePath($targetUser, $target, $targetPath);
 
         foreach ($items as $item) {
             if ($item['folder']) {
@@ -501,8 +493,63 @@ class MatterOneDriveFolders
     }
 
     /**
-     * A received email's items in the matter's received-emails folder: its PDF, its original (.eml)
-     * and the folder of the files it came with — by the PDF's name. None when not found.
+     * An email's files moved to another folder of the same matter's OneDrive folder — a creditor's, a periodic
+     * report's — and that folder kept with it, as where it now is. False when none of it was found to move.
+     *
+     * @param  array<string, mixed>  $note  noted with it too
+     */
+    public function moveEmailWithin(MatterEmail $email, Matter $matter, string $targetPath, array $note = []): bool
+    {
+        $folder = self::folderFor($matter);
+        $items = $this->emailItems($email, $matter);
+
+        if (! $folder || $items->isEmpty()) {
+            return false;
+        }
+
+        $user = (string) $folder->party->onedrive_email;
+        $targetId = $this->ensurePath($user, $folder, $targetPath);
+        $items->each(fn (array $item) => $this->client->move($user, $item['id'], $targetId));
+
+        // With what else is to be noted of where it is (the report it went in) — a null taken off.
+        $email->update(['onedrive' => array_filter([...(array) $email->onedrive, ...$note, 'folder' => $targetPath], fn ($value): bool => $value !== null)]);
+
+        return true;
+    }
+
+    /**
+     * Files of a folder of the matter's OneDrive folder, known by their links (a signed copy of minutes), moved to
+     * another folder of it — their new links by the old; those not found there left out.
+     *
+     * @param  list<string>  $urls
+     * @return array<string, string>
+     */
+    public function moveFilesByUrl(Matter $matter, array $urls, string $fromPath, string $toPath): array
+    {
+        $folder = self::folderFor($matter);
+        $urls = array_values(array_filter($urls));
+
+        if (! $folder || $urls === []) {
+            return [];
+        }
+
+        $user = (string) $folder->party->onedrive_email;
+        $fromId = $this->walk($user, (string) $folder->drive_item_id, $fromPath);
+        $found = $fromId === null ? collect() : collect($this->client->children($user, $fromId))
+            ->filter(fn (array $item): bool => ! $item['folder'] && in_array($item['webUrl'], $urls, true));
+
+        if ($found->isEmpty()) {
+            return [];
+        }
+
+        $targetId = $this->ensurePath($user, $folder, $toPath);
+
+        return $found->mapWithKeys(fn (array $item): array => [$item['webUrl'] => $this->client->move($user, $item['id'], $targetId)['webUrl']])->all();
+    }
+
+    /**
+     * An email's items where it is in the matter's OneDrive folder (emailFolder()): its PDF, its original
+     * (.eml) and the folder of the files it came with — by the PDF's name. None when not found.
      *
      * @return \Illuminate\Support\Collection<int, array{id: string, name: string, folder: bool}>
      */
@@ -516,8 +563,7 @@ class MatterOneDriveFolders
         }
 
         $user = (string) $folder->party->onedrive_email;
-        $path = (string) (($email->onedrive['folder'] ?? null) ?: self::receivedEmailsFolderFor($matter, $email->at));
-        $folderId = $this->walk($user, (string) $folder->drive_item_id, $path);
+        $folderId = $this->walk($user, (string) $folder->drive_item_id, self::emailFolder($email, $matter));
 
         if ($folderId === null) {
             return collect();
@@ -528,6 +574,14 @@ class MatterOneDriveFolders
         return collect($this->client->children($user, $folderId))
             ->filter(fn (array $item): bool => in_array(mb_strtolower($item['name']), $item['folder'] ? [$stem] : [$stem.'.pdf', $stem.'.eml'], true))
             ->values();
+    }
+
+    /** A subfolder of the matter's folder ("a/b"), made when missing — its id; the matter's folder itself for none. */
+    private function ensurePath(string $user, MatterOneDriveFolder $folder, string $subfolder): string
+    {
+        $path = implode('/', array_map([self::class, 'clean'], OneDriveClient::segments($subfolder)));
+
+        return $path !== '' ? (string) $this->client->ensureFolder($user, $path, $folder->drive_item_id)['id'] : (string) $folder->drive_item_id;
     }
 
     /** A folder's id, down a path from a folder — null when a folder on the way is not there. */
@@ -739,11 +793,29 @@ class MatterOneDriveFolders
      * its placeholders filled in from the matter (see resolvePath()) — the one of the side
      * the email came from, when it has one of its own (ReceivedEmailFiling).
      */
-    public static function receivedEmailsFolderFor(Matter $matter, ?CarbonInterface $at = null, string $side = ReceivedEmailFiling::GENERAL): string
+    public static function receivedEmailsFolderFor(Matter $matter, ?CarbonInterface $at = null, string $side = ReceivedEmailFiling::GENERAL, string $from = ''): string
     {
         $template = ReceivedEmailFiling::folderTemplate($matter, $side);
 
-        return $template === '' ? '' : self::resolvePath($template, $matter, $at ?? now());
+        // A creditor's: {{creditor}}, its name, by the address it came from.
+        return $template === '' ? '' : self::resolvePath($template, $matter, $at ?? now(), extra: ReceivedEmailFiling::creditorValues($matter, $side, $from));
+    }
+
+    /**
+     * Where an email's files are in the matter's OneDrive folder: where they were put (or moved to), else — one
+     * kept before that was noted — the sent-emails folder for one sent, the received-emails one for one come in.
+     */
+    public static function emailFolder(MatterEmail $email, Matter $matter): string
+    {
+        $kept = (string) (((array) $email->onedrive)['folder'] ?? '');
+
+        if ($kept !== '') {
+            return $kept;
+        }
+
+        return $email->direction === MatterEmail::SENT
+            ? self::sentEmailsFolderFor($matter, $email->at)
+            : self::receivedEmailsFolderFor($matter, $email->at);
     }
 
     /**
@@ -782,8 +854,10 @@ class MatterOneDriveFolders
      * "/" in it ("2026/123") does not make folders; a part that comes out empty (a custom
      * field the matter has no value for) is left out, and so is a placeholder that is not
      * known. When nothing is left, the default folder.
+     *
+     * @param  array<string, string>  $extra  placeholders of its own: a creditor's {{creditor}}, a report's {{number}}
      */
-    public static function resolvePath(string $template, Matter $matter, ?CarbonInterface $at = null, string $fallback = self::DEFAULT_RECEIVED_EMAILS): string
+    public static function resolvePath(string $template, Matter $matter, ?CarbonInterface $at = null, string $fallback = self::DEFAULT_RECEIVED_EMAILS, array $extra = []): string
     {
         if (! str_contains($template, '{{')) {
             return $template;
@@ -797,7 +871,7 @@ class MatterOneDriveFolders
             $dates = ['day' => $at->format('Y-m-d'), 'month' => $at->format('Y-m'), 'year' => $at->format('Y')];
         }
 
-        $parts = self::resolveParts($template, $matter, [...BulkMailPlaceholders::forMatter($matter), ...$dates]);
+        $parts = self::resolveParts($template, $matter, [...BulkMailPlaceholders::forMatter($matter), ...$dates, ...$extra]);
 
         return $parts !== [] ? implode('/', $parts) : $fallback;
     }
@@ -961,8 +1035,7 @@ class MatterOneDriveFolders
         }
 
         $user = (string) $folder->party->onedrive_email;
-        $path = implode('/', array_map([self::class, 'clean'], OneDriveClient::segments($subfolder)));
-        $target = $path !== '' ? $this->client->ensureFolder($user, $path, $folder->drive_item_id)['id'] : $folder->drive_item_id;
+        $target = $this->ensurePath($user, $folder, $subfolder);
 
         // A name with no extension stays without one: "name." is refused ("illegal characters").
         $extension = pathinfo($name, PATHINFO_EXTENSION);

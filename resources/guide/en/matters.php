@@ -91,7 +91,7 @@ return [
             'steps' => [
                 ['text' => 'Open the matter and click the "Edit" button at the top of the page (or the pencil icon in the list).', 'shot' => 'edit-0'],
                 ['text' => 'The same form as for adding opens, filled with the matter\'s details. Extra fields appear for those allowed, such as the initial and final report dates and the number of reviews.', 'shot' => 'edit-1'],
-                ['text' => 'Change what you need, for example the difficulty.', 'shot' => 'edit-2'],
+                ['text' => 'Change what you need, for example the next session date. The difficulty and "Is Office Work" are set when the matter is added; after that only those with their permissions (UpdateDifficulty:Matter and UpdateOfficeWork:Matter) can change them — others see them but cannot edit them.', 'shot' => 'edit-2'],
                 ['text' => 'Click "Save changes". A "Saved" message appears and you return to the matter\'s page.', 'shot' => 'edit-3'],
             ],
             'tips' => ['Changing the difficulty or the distributed date after delivery may need a "request" approved by the person in charge. See the request actions below.'],

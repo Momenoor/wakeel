@@ -10,6 +10,7 @@ use App\Filament\Support\CustomFieldInput;
 use App\Filament\Support\FeeVatFields;
 use App\Models\Fee;
 use App\Models\MarketingCommission;
+use App\Models\Matter;
 use App\Models\Party;
 use App\Models\Type;
 use App\Services\MMS\IncentiveReversals;
@@ -69,9 +70,11 @@ class MatterForm
                                         ->afterOrEqual('received_at')
                                         ->label(__('Next Session Date'))
                                         ->live(),
+                                    // Set when the matter is made; changed after only with a permission of its own.
                                     Toggle::make('is_office_work')
                                         ->label(__('Is Office Work'))
-                                        ->default(false),
+                                        ->default(false)
+                                        ->disabled(fn (string $operation): bool => $operation === 'edit' && ! auth()->user()->can('UpdateOfficeWork:Matter')),
                                     DatePicker::make('initial_report_at')
                                         ->label(__('Initial Report Date'))
                                         ->visible(fn (string $operation, $record) => $operation === 'edit'
@@ -132,6 +135,12 @@ class MatterForm
                                         ->preload()
                                         ->required()
                                         ->live(),
+                                    // A type with phases: the one the matter is in — {{matter.phase}} in letters and folders.
+                                    Select::make('phase')
+                                        ->label(__('Phase'))
+                                        ->options(fn (Get $get, ?Matter $record): array => Type::remembered($get('type_id'))?->phaseOptions($record?->phase) ?? [])
+                                        ->visible(fn (Get $get): bool => (bool) Type::remembered($get('type_id'))?->has_phases)
+                                        ->required(),
                                     Group::make()
                                         ->schema(function (Get $get, Set $set) {
                                             $typeId = $get('type_id');
@@ -152,10 +161,12 @@ class MatterForm
                                         })
                                         ->columns(2)
                                         ->columnSpanFull(),
+                                    // Set when the matter is made; changed after only with a permission of its own (it weighs on the incentives).
                                     Select::make('difficulty')
                                         ->label(__('Difficulty'))
                                         ->options(MatterDifficulty::class)
-                                        ->required(),
+                                        ->required()
+                                        ->disabled(fn (string $operation): bool => $operation === 'edit' && ! auth()->user()->can('UpdateDifficulty:Matter')),
                                     // live() is needed here so expert type options
                                     // re-evaluate when commissioning changes
                                     Toggle::make('is_committee')

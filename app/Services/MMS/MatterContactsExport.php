@@ -6,6 +6,8 @@ use App\Models\BulkMailCampaign;
 use App\Models\Matter;
 use App\Models\MatterContact;
 use App\Models\MatterContactDetail;
+use App\Models\MatterCreditor;
+use App\Models\MatterCreditorAddress;
 use App\Models\MatterEmail;
 use App\Models\MatterParty;
 use App\Models\Party;
@@ -39,7 +41,24 @@ class MatterContactsExport
 
     public static function download(Matter $matter): BinaryFileResponse
     {
-        $rows = (new self($matter))->rows();
+        // Their claims, on a matter that has creditors.
+        $claims = $matter->creditors()->exists();
+
+        return self::sheet(
+            __('Contacts').' '.$matter->number.'-'.$matter->year.'.xlsx',
+            [...self::headings(), ...($claims ? [__('Claim amount')] : [])],
+            array_map(fn (array $row): array => [$row['name'], $row['capacity'], $row['for'], $row['source'], $row['phones'], $row['emails'], $row['theirs'], ...($claims ? [$row['claim']] : [])], (new self($matter))->rows()),
+        );
+    }
+
+    /**
+     * Rows as an Excel sheet, to download — right to left in Arabic.
+     *
+     * @param  list<string>  $headings
+     * @param  iterable<list<mixed>>  $rows
+     */
+    public static function sheet(string $fileName, array $headings, iterable $rows): BinaryFileResponse
+    {
         $path = storage_path('app/temp/'.Str::uuid().'.xlsx');
 
         if (! is_dir(dirname($path))) {
@@ -53,17 +72,15 @@ class MatterContactsExport
             $writer->getCurrentSheet()->setSheetView((new SheetView)->setRightToLeft(true));
         }
 
-        $writer->addRow(Row::fromValues(self::headings(), (new Style)->setFontBold()));
+        $writer->addRow(Row::fromValues($headings, (new Style)->setFontBold()));
 
         foreach ($rows as $row) {
-            $writer->addRow(Row::fromValues([$row['name'], $row['capacity'], $row['for'], $row['source'], $row['phones'], $row['emails'], $row['theirs']]));
+            $writer->addRow(Row::fromValues($row));
         }
 
         $writer->close();
 
-        return response()
-            ->download($path, __('Contacts').' '.$matter->number.'-'.$matter->year.'.xlsx')
-            ->deleteFileAfterSend();
+        return response()->download($path, $fileName)->deleteFileAfterSend();
     }
 
     /**
@@ -77,13 +94,15 @@ class MatterContactsExport
     /**
      * One line each: name, capacity, on behalf of, source, phones, emails,
      * the others they brought in — and, to change those, the line's key,
-     * party and own addresses.
+     * party and own addresses; a creditor's (or its agent's) creditor, and
+     * its claim.
      *
-     * @return list<array{key: string, name: string, capacity: string, for: string, source: string, phones: string, emails: string, theirs: string, party_id: ?int, own: list<string>}>
+     * @return list<array{key: string, name: string, capacity: string, for: string, source: string, phones: string, emails: string, theirs: string, party_id: ?int, own: list<string>, creditor_id: ?int, agent: bool, claim: ?string}>
      */
     public function rows(): array
     {
         $this->parties();
+        $this->creditors();
         $this->letters();
         $this->minutes();
         $this->bulkMail();
@@ -102,7 +121,30 @@ class MatterContactsExport
             'theirs' => implode(', ', Addresses::without(Addresses::emails($row['theirs']), $row['emails'])),
             'party_id' => str_starts_with($key, 'p:') ? (int) substr($key, 2) : null,
             'own' => Addresses::emails($row['emails']),
+            'creditor_id' => $row['creditor'] ?? null,
+            'agent' => (bool) ($row['agent'] ?? false),
+            'claim' => $row['claim'] ?? null,
         ], array_keys($this->rows), $this->rows));
+    }
+
+    /** Its creditors — each with its own addresses — and their agents, each agent once with the addresses it writes from. */
+    private function creditors(): void
+    {
+        foreach ($this->matter->creditors()->with('addresses')->orderBy('name')->get() as $creditor) {
+            /** @var MatterCreditor $creditor */
+            $key = $this->add('c:'.$creditor->getKey(), $creditor->name, $creditor->addresses->where('agent', false)->pluck('email')->all(), (array) $creditor->phones, __('Creditors'), __('Creditor'));
+            $this->rows[$key]['creditor'] = (int) $creditor->getKey();
+            $this->rows[$key]['claim'] = $creditor->claim_amount;
+
+            $agents = $creditor->addresses->where('agent', true)->groupBy(fn (MatterCreditorAddress $address): string => mb_strtolower(trim((string) $address->agent_name)) ?: $address->email);
+
+            foreach ($agents as $addresses) {
+                $first = $addresses->first();
+                $key = $this->add('a:'.$first->getKey(), (string) ($first->agent_name ?: $first->email), $addresses->pluck('email')->all(), [], __('Creditors'), __("Creditor's agent"), $creditor->name);
+                $this->rows[$key]['creditor'] = (int) $creditor->getKey();
+                $this->rows[$key]['agent'] = true;
+            }
+        }
     }
 
     /** Its parties, representatives, attendees, external entities — not its experts. */
@@ -206,7 +248,8 @@ class MatterContactsExport
             /** @var MatterContactDetail $detail */
             $key = $this->byEmail[$detail->email] ?? null;
 
-            if ($key === null || str_starts_with($key, 'p:')) {
+            // A party's on the party; a creditor's on its creditor.
+            if ($key === null || str_starts_with($key, 'p:') || isset($this->rows[$key]['creditor'])) {
                 continue;
             }
 

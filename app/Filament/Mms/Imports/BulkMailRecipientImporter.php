@@ -2,16 +2,25 @@
 
 namespace App\Filament\Mms\Imports;
 
+use App\Models\BulkMailCampaign;
 use App\Models\BulkMailRecipient;
+use App\Models\Matter;
 use App\Services\MMS\BulkMailPlaceholders;
+use App\Services\MMS\MatterCreditors;
 use Filament\Actions\Imports\ImportColumn;
 use Filament\Actions\Imports\Importer;
 use Filament\Actions\Imports\Models\Import;
+use Filament\Forms\Components\Toggle;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Number;
+use Throwable;
 
 class BulkMailRecipientImporter extends Importer
 {
     protected static ?string $model = BulkMailRecipient::class;
+
+    /** creditorsMatter(), once read: false until it is. */
+    private Matter|false|null $creditorsMatterRead = false;
 
     public static function getColumns(): array
     {
@@ -31,10 +40,58 @@ class BulkMailRecipientImporter extends Importer
         return new BulkMailRecipient;
     }
 
+    /** The campaign's matter keeps creditors (MatterCreditors): the list merged into them too, unless turned off. */
+    public const CREDITORS = 'creditors';
+
+    public static function getOptionsFormComponents(): array
+    {
+        return [
+            Toggle::make(self::CREDITORS)
+                ->label(__('Also merge them into the matter\'s creditors'))
+                ->helperText(__('For a matter whose type has creditors: a creditor not on its list is added, its new emails added to it, and its claim updated from the "claim_amount" column. Turn off for a list that is not of creditors.'))
+                ->default(true),
+        ];
+    }
+
     protected function beforeSave(): void
     {
         $this->record->campaign_id = $this->options['campaign_id'];
         $this->record->placeholders = $this->extraColumns() ?: null;
+    }
+
+    protected function afterSave(): void
+    {
+        $matter = ($this->options[self::CREDITORS] ?? false) ? $this->creditorsMatter() : null;
+
+        if (! $matter) {
+            return;
+        }
+
+        $placeholders = (array) $this->record->placeholders;
+
+        // An address OneDrive would not take must not lose the line: it is on the list all the same.
+        try {
+            app(MatterCreditors::class)->merge(
+                $matter,
+                (string) $this->record->name,
+                (array) $this->record->email,
+                $placeholders['claim_amount'] ?? $placeholders[BulkMailPlaceholders::normalize(__('Claim amount', [], 'ar'))] ?? null,
+                array_map('trim', explode(',', (string) ($placeholders['phone'] ?? ''))),
+            );
+        } catch (Throwable $e) {
+            Log::warning('Imported creditor not merged into the matter', ['campaign' => $this->options['campaign_id'], 'error' => $e->getMessage()]);
+        }
+    }
+
+    /** The campaign's matter, when it keeps creditors — read once an import's chunk. */
+    private function creditorsMatter(): ?Matter
+    {
+        if ($this->creditorsMatterRead === false) {
+            $matter = BulkMailCampaign::query()->find($this->options['campaign_id'] ?? null)?->matter;
+            $this->creditorsMatterRead = $matter && MatterCreditors::kept($matter) ? $matter : null;
+        }
+
+        return $this->creditorsMatterRead;
     }
 
     /**

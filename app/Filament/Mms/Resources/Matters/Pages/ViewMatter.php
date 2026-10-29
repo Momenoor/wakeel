@@ -170,6 +170,13 @@ class ViewMatter extends ViewRecord
                                 ->options(MatterLevel::class)
                                 ->default($record->level)
                                 ->required(),
+                            // Its type's phases: the one after the parent's, to start from.
+                            Select::make('phase')
+                                ->label(__('Phase'))
+                                ->options($record->type?->phaseOptions($record->phase) ?? [])
+                                ->default($record->type?->nextPhase($record->phase))
+                                ->visible((bool) $record->type?->has_phases)
+                                ->required(),
                         ]),
                     // The custom fields marked to be asked for here (on the matter type): filled for the
                     // new matter, starting from the parent's value; the others keep the parent's.
@@ -218,6 +225,7 @@ class ViewMatter extends ViewRecord
             $newMatter->number = $data['number'];
             $newMatter->year = $data['year'];
             $newMatter->level = $data['level'];
+            $newMatter->phase = $data['phase'] ?? $newMatter->phase;
 
             // What was filled in for the fields asked for here replaces the parent's value; no other field changes.
             $asked = $this->supplementaryFields($record)->pluck('label')->all();

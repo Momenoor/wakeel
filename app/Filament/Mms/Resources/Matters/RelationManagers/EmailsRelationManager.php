@@ -6,10 +6,13 @@ use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Concerns\RefreshesMatterPage;
 use App\Filament\Mms\Pages\UnfiledEmails;
 use App\Filament\Mms\Resources\Matters\MatterResource;
+use App\Filament\Support\CreditorFields;
 use App\Filament\Support\RegenerateEmailAction;
 use App\Jobs\EmailJob;
 use App\Models\Matter;
+use App\Models\MatterContact;
 use App\Models\MatterEmail;
+use App\Services\MMS\MatterCreditors;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterReplyCollector;
 use App\Support\Dates;
@@ -180,6 +183,32 @@ class EmailsRelationManager extends RelationManager
                             ->title(__('Moved to matter :matter.', ['matter' => $matter->year.'/'.$matter->number]))
                             ->body($oneDrive['moved'] ? null : __('Nothing of it was found in this matter\'s OneDrive to move.'))
                             ->actions([Action::make('open')->label(__('View'))->url(MatterResource::getUrl('view', ['record' => $matter]))])
+                            ->send();
+                    }),
+                // A matter with creditors (a bankruptcy's): its sender one of them, or their agent — the emails from
+                // them moved to the creditor's folder, as those from them go from now on.
+                Action::make('creditor')
+                    ->label(__('Sender is a creditor or their agent'))
+                    ->icon('heroicon-o-banknotes')
+                    ->color('gray')
+                    ->visible(fn (MatterEmail $record): bool => $record->direction === MatterEmail::RECEIVED
+                        && MatterCreditors::kept($this->getOwnerRecord())
+                        && (auth()->user()?->can('update', $this->getOwnerRecord()) ?? false))
+                    ->modalWidth('lg')
+                    ->modalDescription(fn (MatterEmail $record): string => __('Its emails that came in on this matter, and those that come from :address from now on, are saved in the creditor\'s folder.', ['address' => MatterEmail::addressOf((string) $record->from)]))
+                    ->schema(fn (MatterEmail $record): array => CreditorFields::schema($this->getOwnerRecord(), MatterContact::split((string) $record->from)[0] ?: MatterEmail::addressOf((string) $record->from)))
+                    ->action(function (MatterEmail $record, array $data): void {
+                        try {
+                            [$creditor, $moved] = CreditorFields::save($this->getOwnerRecord(), $data, [MatterEmail::addressOf((string) $record->from)]);
+                        } catch (\Throwable $e) {
+                            Notification::make()->danger()->title(__('The emails could not be moved'))->body($e->getMessage())->send();
+
+                            return;
+                        }
+
+                        Notification::make()->success()
+                            ->title(__('Saved as :creditor\'s', ['creditor' => $creditor->name]))
+                            ->body(__(':count emails moved to the creditor\'s folder.', ['count' => $moved]))
                             ->send();
                     }),
                 Action::make('view')
