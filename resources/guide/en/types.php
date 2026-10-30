@@ -26,7 +26,10 @@ return [
                 ['text' => 'Click "New Matter Type".', 'shot' => 'create-0'],
                 ['text' => 'Fill in the name and choose the incentive configuration and the trigger type. In the "Party capacities" section, write what each side is called in this type, such as "Plaintiff / Defendant" or "Landlord / Tenant", or pick from "Common names" to fill it in for you. These names appear on the matter page, in letters and in minutes.', 'shot' => 'create-1'],
             ],
-            'tips' => ['Turning off "Active" hides the type from the new matter form without deleting its old matters.'],
+            'tips' => [
+                'Turning off "Active" hides the type from the new matter form without deleting its old matters.',
+                'A type with phases can give each phase folders of its own: in "OneDrive folder structure", "Each phase\'s folders" → "Add a phase\'s folders", choose the phase and write its subfolders one per line. They are made inside a folder named after the phase, instead of the lines that start with {{matter.phase}}; the other lines are made for every phase. They are made when a matter is made, when a supplementary matter is made, and when a matter\'s phase is changed by editing it.',
+            ],
         ],
         [
             'id' => 'view',

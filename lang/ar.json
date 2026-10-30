@@ -5075,5 +5075,21 @@
     "{{matter.phase}} is the matter's phase, for a type with phases; a custom field is written {{matter.custom.<its name>}} — pick from the list below.": "{{matter.phase}} هي مرحلة القضية لنوع له مراحل، والحقل المخصص يُكتب {{matter.custom.<اسمه>}} — اختر من القائمة أدناه.",
     "The phase and the custom fields you can use": "المرحلة والحقول المخصصة المتاحة",
     "UpdateDifficulty:Matter": "تعديل صعوبة القضية",
-    "UpdateOfficeWork:Matter": "تعديل «تمت المباشرة من خلال المكتب» للقضية"
+    "UpdateOfficeWork:Matter": "تعديل «تمت المباشرة من خلال المكتب» للقضية",
+    "Too big to read.": "أكبر من أن يُقرأ.",
+    "Not an email that can be read.": "ليس رسالة بريد يمكن قراءتها.",
+    "To: :to": "إلى: :to",
+    "put in its OneDrive folder": "وُضعت في مجلدها على OneDrive",
+    "Each phase's folders": "مجلدات كل مرحلة",
+    "A phase's own subfolders, one per line, made inside a folder of the phase's name instead of the lines above that start with {{matter.phase}} (the other lines are every phase's). A phase left out has the subfolders above. Made when a matter is made and when its phase is changed.": "المجلدات الفرعية الخاصة بالمرحلة، واحد في كل سطر، تُنشأ داخل مجلد باسم المرحلة بدلاً من الأسطر أعلاه التي تبدأ بـ {{matter.phase}} (وباقي الأسطر لكل المراحل). المرحلة التي لا تُضاف هنا لها المجلدات أعلاه. تُنشأ عند إنشاء القضية وعند تغيير مرحلتها.",
+    "Add a phase's folders": "إضافة مجلدات مرحلة",
+    "Read emails added in OneDrive": "قراءة الرسائل المضافة في OneDrive",
+    "Adds the emails put in the matter's OneDrive folder by hand (.eml, .msg) to its emails, progress and contacts": "يضيف الرسائل الموضوعة يدوياً في مجلد القضية على OneDrive (‎.eml و‎.msg) إلى رسائلها وإجراءاتها وجهات اتصالها",
+    ":count emails added": "أُضيفت :count رسالة",
+    ":added emails added from :folders folders.": "أُضيفت :added رسالة من :folders مجلد.",
+    "A placeholder cut short: {{matter.plaintiffs,c:30}} its first 30 characters, {{matter.plaintiffs,w:3}} its first 3 words — in folders and letters alike.": "اختصار المتغير: {{matter.plaintiffs,c:30}} أول 30 حرفاً منه، و{{matter.plaintiffs,w:3}} أول 3 كلمات — في المجلدات والخطابات سواء.",
+    "Created in Outlook": "أُنشئ في Outlook",
+    "Checking OneDrive": "جارٍ فحص OneDrive",
+    "You are told in the bell when it is done.": "ستُبلَّغ في الجرس عند الانتهاء.",
+    "Matter :matter — :count emails.": "الدعوى :matter — :count رسالة."
 }

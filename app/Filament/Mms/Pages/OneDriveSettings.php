@@ -251,6 +251,7 @@ class OneDriveSettings extends Page implements HasTable
                             // The custom fields that exist, ready to use: the placeholder is the field's name as it is on the type.
                             Placeholder::make('custom_field_placeholders')
                                 ->label(__('The phase and the custom fields you can use'))
+                                ->helperText(__('A placeholder cut short: {{matter.plaintiffs,c:30}} its first 30 characters, {{matter.plaintiffs,w:3}} its first 3 words — in folders and letters alike.'))
                                 ->content(function (): HtmlString {
                                     // Its phase first; then the custom fields there are.
                                     $labels = MatterFieldDefinition::query()->orderBy('label')->pluck('label')->unique()->values();

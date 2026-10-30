@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Resources\Types\Schemas;
 use App\Enums\MatterDifficulty;
 use App\Filament\Mms\Resources\Incentive\MatterTypeIncentiveConfigs\MatterTypeIncentiveConfigResource;
 use App\Models\LetterTemplate;
+use App\Models\Matter;
 use App\Models\MatterTypeIncentiveConfig;
 use App\Models\Type;
 use App\Services\MMS\MatterOneDriveFolders;
@@ -88,6 +89,18 @@ class TypeInfolist
                                 ->hiddenLabel()
                                 ->state(fn (Type $record): HtmlString => self::tree(MatterOneDriveFolders::subfolders($record)))
                                 ->html(),
+                            // Each phase with folders of its own: as made for a matter in it.
+                            TextEntry::make('phase_structures')
+                                ->label(__('Each phase\'s folders'))
+                                ->state(fn (Type $record): HtmlString => new HtmlString(collect($record->phaseNames())
+                                    ->filter(fn (string $phase): bool => $record->phaseFolders($phase) !== [])
+                                    ->map(fn (string $phase): string => '<div class="font-semibold" dir="auto">'.e($phase).'</div>'.self::tree(array_map(
+                                        fn (string $line): string => str_replace(MatterOneDriveFolders::PHASE, $phase, $line),
+                                        MatterOneDriveFolders::subfolders((new Matter(['phase' => $phase]))->setRelation('type', $record)),
+                                    )))
+                                    ->implode('<div class="h-3"></div>')))
+                                ->html()
+                                ->visible(fn (Type $record): bool => collect($record->phaseNames())->contains(fn (string $phase): bool => $record->phaseFolders($phase) !== [])),
                             // Where the emails that come in, the emails sent and the signed minutes are saved: its own, or the default.
                             ...collect([
                                 ['onedrive_received_emails', __('Received emails folder structure'), fn () => MatterOneDriveFolders::receivedEmailsFolder() ?: __('Not saved in OneDrive')],

@@ -30,7 +30,10 @@ return [
                 ['text' => 'In "Placeholders Definition" you can link the campaign to a matter to fill the placeholders from it, and list the extra placeholders you use (name, amount, matter_number). In "Recipients & CC", set a fixed CC/BCC copy for all the campaign\'s messages.'],
                 ['text' => 'In "Schedule & Limits", set the "Daily Send Limit" (it protects the mailbox from being blocked), the "Scheduled At" time if you want it to start on its own (leave it empty to start it by hand), and the "Status" (usually Draft). Then click "Create".', 'shot' => 'create-3-done'],
             ],
-            'tips' => ['Turn on "Has Attachment" to attach one file to every message.'],
+            'tips' => [
+                'Turn on "Has Attachment" to attach one file to every message.',
+                'A placeholder can be cut short: {{matter.plaintiffs,c:30}} gives its first 30 characters and {{matter.plaintiffs,w:3}} its first 3 words.',
+            ],
         ],
 
         [

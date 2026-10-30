@@ -33,7 +33,7 @@ class MatterOneDriveFolder extends Model
 
     protected function casts(): array
     {
-        return ['moved_at' => 'datetime'];
+        return ['moved_at' => 'datetime', 'emails_read_at' => 'datetime'];
     }
 
     /**

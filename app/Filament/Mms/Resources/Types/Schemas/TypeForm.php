@@ -8,6 +8,7 @@ use App\Models\Type;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\PeriodicReports;
 use App\Services\MMS\ReceivedEmailFiling;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
@@ -72,6 +73,7 @@ class TypeForm
                         ->collapsed()
                         ->schema([
                             self::oneDriveStructureField(),
+                            self::phaseFoldersField(),
                             self::receivedEmailsField(),
                             // The emails from each side apart, each named as set.
                             ...array_map(fn (string $side): TextInput => self::receivedSideFolderField($side), ReceivedEmailFiling::APART),
@@ -257,6 +259,35 @@ class TypeForm
             ->placeholder(fn (): string => Setting::get(MatterOneDriveFolders::SUBFOLDERS, ''))
             ->rows(8)
             ->extraInputAttributes(['dir' => 'auto']);
+    }
+
+    /**
+     * Each phase's own folders (Type::phaseFolders()), made inside a folder of the phase's name — a phase left out
+     * has the subfolders above.
+     */
+    public static function phaseFoldersField(): Repeater
+    {
+        return Repeater::make('phase_folders')
+            ->label(__('Each phase\'s folders'))
+            ->helperText(__('A phase\'s own subfolders, one per line, made inside a folder of the phase\'s name instead of the lines above that start with {{matter.phase}} (the other lines are every phase\'s). A phase left out has the subfolders above. Made when a matter is made and when its phase is changed.'))
+            ->schema([
+                Select::make('phase')
+                    ->label(__('Phase'))
+                    ->options(fn (Get $get): array => collect((array) $get('../../phases'))->map(fn ($phase): string => trim((string) $phase))->filter()->mapWithKeys(fn (string $phase): array => [$phase => $phase])->all())
+                    ->required()
+                    ->distinct(),
+                Textarea::make('folders')
+                    ->label(__('Subfolders'))
+                    ->rows(5)
+                    ->required()
+                    ->extraInputAttributes(['dir' => 'auto']),
+            ])
+            ->itemLabel(fn (array $state): ?string => filled($state['phase'] ?? null) ? (string) $state['phase'] : null)
+            ->addActionLabel(__('Add a phase\'s folders'))
+            ->defaultItems(0)
+            ->reorderable(false)
+            ->collapsible()
+            ->visible(fn (Get $get): bool => (bool) $get('has_phases') && filled($get('phases')));
     }
 
     /**

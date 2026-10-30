@@ -41,7 +41,9 @@ final class MatterCreditors
         $moved = 0;
 
         $emails = $matter->emails()->where('direction', MatterEmail::RECEIVED)->get()
+            // Not one put in OneDrive by hand: it stays where it was put.
             ->filter(fn (MatterEmail $email): bool => in_array(MatterEmail::addressOf((string) $email->from), $addresses, true)
+                && $email->matched_by !== MatterEmail::BY_ONEDRIVE
                 && (((array) $email->onedrive)['report'] ?? null) === null);
 
         foreach ($emails as $email) {

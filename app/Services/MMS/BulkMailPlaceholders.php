@@ -12,6 +12,7 @@ use App\Models\Type;
 use App\Support\CompanyContact;
 use App\Support\Dates;
 use App\Support\Marks;
+use App\Support\RequestMemo;
 use BackedEnum;
 use Carbon\CarbonInterface;
 use Filament\Support\Contracts\HasLabel;
@@ -127,7 +128,9 @@ class BulkMailPlaceholders
             return '';
         }
 
-        $numbers = ExpertRegistration::query()->where('court_id', $courtId)->whereIn('party_id', $ids)->pluck('number', 'party_id');
+        // Asked once a request: a matter's placeholders are read for each of its emails, letters, folders.
+        $numbers = RequestMemo::remember('expert-registrations:'.$courtId.':'.$ids->implode(','), fn (): array => ExpertRegistration::query()
+            ->where('court_id', $courtId)->whereIn('party_id', $ids)->pluck('number', 'party_id')->all());
 
         return $ids->map(fn ($id) => $numbers[$id] ?? null)->filter()->implode(', ');
     }
@@ -280,14 +283,44 @@ class BulkMailPlaceholders
         // A switch that is on counts as filled for <<…>> parts, but prints
         // nothing.
         return str_replace(self::ON, '', preg_replace_callback('/\{\{\s*([^{}]+?)\s*\}\}/u', function (array $m) use ($lookup, $escape) {
-            $key = self::normalize(html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            [$key, $kind, $limit] = self::limited(html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            $key = self::normalize($key);
 
             if (! array_key_exists($key, $lookup)) {
                 return $m[0];
             }
 
-            return $escape ? e($lookup[$key]) : $lookup[$key];
+            $value = $kind !== null ? self::shorten($lookup[$key], $kind, $limit) : $lookup[$key];
+
+            return $escape ? e($value) : $value;
         }, $text) ?? $text);
+    }
+
+    /**
+     * A placeholder's key and the length it asks for, when it does: {{matter.reference,c:10}} its first 10
+     * characters, {{matter.plaintiffs,w:3}} its first 3 words — the comma Arabic or not, the digits too.
+     *
+     * @return array{0: string, 1: ?string, 2: int} the key as written, 'c' or 'w' or null, the length
+     */
+    public static function limited(string $tag): array
+    {
+        if (preg_match('/^(.*?)\s*[,،]\s*([cwCW])\s*:\s*([0-9٠-٩]+)\s*$/u', $tag, $m)) {
+            return [$m[1], mb_strtolower($m[2]), (int) strtr($m[3], ['٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4', '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9'])];
+        }
+
+        return [$tag, null, 0];
+    }
+
+    /** A value cut to its first $limit characters ('c') or words ('w'). */
+    public static function shorten(string $value, string $kind, int $limit): string
+    {
+        $value = trim((string) preg_replace('/\s+/u', ' ', $value));
+
+        if ($kind === 'w') {
+            return implode(' ', array_slice(explode(' ', $value), 0, max($limit, 0)));
+        }
+
+        return rtrim(mb_substr($value, 0, max($limit, 0)));
     }
 
     /**
@@ -528,7 +561,7 @@ class BulkMailPlaceholders
         $text = preg_replace_callback('/(?:&lt;&lt;|<<)(.*?)(?:&gt;&gt;|>>)|\[\[(.*?)\]\]/su', function (array $m) use ($lookup, $gone): string {
             $part = ($m[1] ?? '') !== '' ? $m[1] : ($m[2] ?? '');
             preg_match_all('/\{\{\s*([^{}]+?)\s*\}\}/u', $part, $found);
-            $keys = array_map(fn (string $key) => self::normalize(html_entity_decode($key, ENT_QUOTES | ENT_HTML5, 'UTF-8')), $found[1]);
+            $keys = array_map(fn (string $key) => self::normalize(self::limited(html_entity_decode($key, ENT_QUOTES | ENT_HTML5, 'UTF-8'))[0]), $found[1]);
 
             // Not all known yet: decided later.
             if (array_diff($keys, array_keys($lookup)) !== []) {

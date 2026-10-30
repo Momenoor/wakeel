@@ -28,8 +28,22 @@ class MatterContact extends Model
      */
     public static function learn(MatterEmail $email): int
     {
-        [$ownerName, $owner] = self::split((string) $email->from);
+        return self::learnFor($email, ...self::split((string) $email->from));
+    }
 
+    /**
+     * The same, of an email we sent (one put in the matter's OneDrive folder by hand): the others it went to kept
+     * as the first one's it went to who is not ours.
+     */
+    public static function learnSent(MatterEmail $email): int
+    {
+        $first = collect(Addresses::emails((array) $email->to))->first(fn (string $address): bool => ! self::isOurs($address));
+
+        return $first !== null ? self::learnFor($email, '', mb_strtolower($first)) : 0;
+    }
+
+    private static function learnFor(MatterEmail $email, string $ownerName, string $owner): int
+    {
         if (! $email->matter_id || $owner === '') {
             return 0;
         }

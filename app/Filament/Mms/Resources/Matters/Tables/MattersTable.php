@@ -12,6 +12,7 @@ use App\Models\Party;
 use App\Models\Type;
 use App\Support\Dates;
 use App\Support\MatterSearch;
+use App\Support\RequestMemo;
 use Carbon\Carbon;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -562,8 +563,8 @@ class MattersTable
 
         foreach ($texts as $word) {
             // Asked once a request for each word: the table builds its query several times (the rows, their count,
-            // the filters), and each asked the courts, types and parties again.
-            $in = once(fn (): array => self::fieldsFound($word));
+            // the filters), and each asked the courts, types and parties again (once() forgets in a static method).
+            $in = RequestMemo::remember('matter-search-fields:'.$word, fn (): array => self::fieldsFound($word));
 
             match (count($in)) {
                 0 => $query->whereRaw('1 = 0'),

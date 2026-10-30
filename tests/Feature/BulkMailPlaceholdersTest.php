@@ -16,6 +16,7 @@ use App\Services\MMS\BulkMailPlaceholders;
 use Filament\Actions\Imports\Models\Import;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
 use Tests\Support\MailSenders;
@@ -118,6 +119,34 @@ class BulkMailPlaceholdersTest extends TestCase
 
         $this->assertSame('Abu Dhabi Courts', $campaign->renderSubject($recipient));
         $this->assertStringContainsString('Claim 5,000 AED for 125/2025', $campaign->renderBody($recipient));
+    }
+
+    public function test_the_experts_registrations_are_read_once_a_request(): void
+    {
+        $experts = [['party_id' => 11], ['party_id' => 12]];
+        DB::enableQueryLog();
+
+        BulkMailPlaceholders::registrations($experts, 3);
+        BulkMailPlaceholders::registrations($experts, 3);
+        BulkMailPlaceholders::registrations($experts, 4);
+
+        $this->assertCount(2, DB::getQueryLog());
+    }
+
+    public function test_a_placeholder_is_cut_to_characters_or_words(): void
+    {
+        $values = ['matter.plaintiffs' => 'شركة  الخليج للتجارة العامة ذ.م.م', 'name' => 'Smith & Sons'];
+
+        $this->assertSame('شركة الخليج', BulkMailPlaceholders::apply('{{matter.plaintiffs,w:2}}', $values));
+        $this->assertSame('شركة الخ', BulkMailPlaceholders::apply('{{ Matter.Plaintiffs , C:8 }}', $values));
+        // The Arabic comma and digits too; a limit longer than the value changes nothing.
+        $this->assertSame('شركة الخليج للتجارة العامة ذ.م.م', BulkMailPlaceholders::apply('{{matter.plaintiffs،w:٩}}', $values));
+        // Escaped after being cut; one that matches nothing is left as written.
+        $this->assertSame('Smith &amp;', BulkMailPlaceholders::apply('{{name,c:7}}', $values, escape: true));
+        $this->assertSame('{{other,c:3}}', BulkMailPlaceholders::apply('{{other,c:3}}', $values));
+        // A <<…>> part is kept by the value, cut or not.
+        $this->assertSame('x Smith y', BulkMailPlaceholders::apply('x <<{{name,w:1}}>> y', $values));
+        $this->assertSame('x y', BulkMailPlaceholders::apply('x <<{{name,w:1}}>> y', ['name' => '']));
     }
 
     public function test_values_are_escaped_in_the_body_but_not_the_subject(): void

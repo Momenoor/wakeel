@@ -104,6 +104,16 @@ class MatterProgressRecorder
             $userId);
     }
 
+    /** An email we sent, put in the matter's OneDrive folder by hand (OneDriveAddedEmails). */
+    public static function emailSentByHand(MatterEmail $email, ?int $userId = null): void
+    {
+        self::keep($email->matter_id, ProgressType::EMAIL_SENT, $email,
+            $email->subject !== '' ? $email->subject : __('(no subject)'),
+            $email->at ?? now(),
+            self::join([__('To: :to', ['to' => implode(', ', (array) $email->to)]), __('Matter known by: :how', ['how' => MatterEmail::matchedByLabel($email->matched_by)])], ' — '),
+            $userId);
+    }
+
     /** An email to the matter's parties (Bulk Mail): one step, however many it reaches. */
     public static function emailSent(BulkMailCampaign $campaign, ?CarbonInterface $at = null): void
     {

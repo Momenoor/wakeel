@@ -92,6 +92,8 @@ class PayrollRunTest extends TestCase
         $payslips = $this->payroll->generate($this->payrollRun());
 
         $this->assertCount(1, $payslips);
+        // The run's one line in the activity log — not one per payslip, line and instalment.
+        $this->assertSame(0, Activity::query()->whereIn('subject_type', [(new Payslip)->getMorphClass(), (new PayslipLine)->getMorphClass()])->count());
 
         $payslip = $payslips->first();
 

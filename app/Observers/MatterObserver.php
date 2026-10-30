@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\Enums\MatterCollectionStatus;
+use App\Jobs\MakeMatterPhaseFolders;
 use App\Models\Matter;
 use App\Services\MMS\FeeChangeNotifier;
 use App\Services\MMS\MatterOneDriveFolders;
@@ -69,6 +70,11 @@ class MatterObserver
         // Finished: its OneDrive folder goes to the assistant's folder for finished matters.
         if ($matter->final_report_at !== null && $matter->wasChanged('final_report_at')) {
             MatterOneDriveFolders::queueMoveToFinished($matter);
+        }
+
+        // Its phase changed: the new phase's folders made in its OneDrive folders.
+        if (! $matter->wasRecentlyCreated && filled($matter->phase) && $matter->wasChanged('phase')) {
+            MakeMatterPhaseFolders::dispatch($matter->getKey())->afterCommit();
         }
 
     }

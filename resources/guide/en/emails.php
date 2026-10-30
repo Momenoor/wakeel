@@ -18,8 +18,23 @@ return [
             ],
             'tips' => [
                 'Links are read for emails that arrive after this update. For an older email, use "Make the PDF again" and its links are read too.',
-                'The "Scan OneDrive" button above the table picks up from OneDrive any PDFs, originals and attachments of received emails that are there.',
+                'The "Scan OneDrive" button above the table picks up from OneDrive any PDFs, originals and attachments of received emails that are there. It runs in the background: a notification in the bell tells you when it is done.',
                 'Every email on the matter has a step in the "Progress" tab and a line in the "History".',
+            ],
+        ],
+        [
+            'id' => 'added-in-onedrive',
+            'title' => 'Emails put in the matter\'s OneDrive folder by hand',
+            'description' => 'An email dragged from Outlook (.msg) or another mail program (.eml) into any folder of the matter\'s OneDrive folder is read every half hour and added to the matter: to its "Emails" ("Matter known by: put in its OneDrive folder"), a step in its "Progress" ("Email received", or "Email sent" when it is from one of our addresses) and its "Contacts" (whoever was copied in on it). The file stays where you put it, and its PDF and the files it came with are saved beside it under its name. The matter\'s people are told of one received. Put in the creditors\' claims folder (a type that has creditors), its sender becomes a creditor: named after the creditor\'s folder it is in, else after the sender. An address already a creditor\'s is added to that creditor.',
+            'roles' => [$admin, $withPermission],
+            'permissions' => ['View:MatterEmailsTab', 'Update:Matter (for the button)'],
+            'steps' => [
+                ['text' => 'Drag the email from Outlook into the folder you want in the matter\'s OneDrive folder, for example "07 مطالبات الدائنين/بنك دبي".'],
+                ['text' => 'To add it straight away, open the matter → "Emails" tab → "Read emails added in OneDrive". A notification says how many emails were added.'],
+            ],
+            'tips' => [
+                'Each file is read once. An email the matter already has (the same Message-ID) is not added again, and the system\'s own saved emails are never read as added.',
+                'Emails are read for matters still in progress. The button reads a finished matter\'s folder too.',
             ],
         ],
         [

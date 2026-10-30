@@ -8,6 +8,7 @@ use App\Filament\Mms\Pages\UnfiledEmails;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Support\CreditorFields;
 use App\Filament\Support\RegenerateEmailAction;
+use App\Jobs\CheckMatterEmailsInOneDrive;
 use App\Jobs\EmailJob;
 use App\Models\Matter;
 use App\Models\MatterContact;
@@ -15,6 +16,7 @@ use App\Models\MatterEmail;
 use App\Services\MMS\MatterCreditors;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterReplyCollector;
+use App\Services\MMS\OneDriveAddedEmails;
 use App\Support\Dates;
 use App\Support\Documents;
 use App\Support\ScreenPermissions;
@@ -236,7 +238,25 @@ class EmailsRelationManager extends RelationManager
                     ->tooltip(__('Reads from OneDrive which PDFs, originals and attachments of the emails that came in are there'))
                     ->icon('heroicon-o-cloud-arrow-down')
                     ->color('gray')
-                    ->action(fn () => $this->checkOneDrive($this->getOwnerRecord()->emails()->where('direction', MatterEmail::RECEIVED)->where(fn ($q) => $q->where('status', MatterEmail::FILED)->orWhereNull('status'))->get()->all())),
+                    // On the queue: a folder of OneDrive asked for each day's emails took up to half a minute here.
+                    ->action(function (): void {
+                        CheckMatterEmailsInOneDrive::dispatch((int) $this->getOwnerRecord()->getKey(), auth()->id())->afterCommit();
+                        Notification::make()->info()->title(__('Checking OneDrive'))->body(__('You are told in the bell when it is done.'))->send();
+                    }),
+                // The emails put in its OneDrive folder by hand, now — not waiting for the half-hourly reading.
+                Action::make('readAddedEmails')
+                    ->label(__('Read emails added in OneDrive'))
+                    ->tooltip(__('Adds the emails put in the matter\'s OneDrive folder by hand (.eml, .msg) to its emails, progress and contacts'))
+                    ->icon('heroicon-o-inbox-arrow-down')
+                    ->color('gray')
+                    ->visible(fn (): bool => auth()->user()?->can('update', $this->getOwnerRecord()) ?? false)
+                    ->action(function (): void {
+                        $result = app(OneDriveAddedEmails::class)->readMatter($this->getOwnerRecord(), auth()->id());
+
+                        $result['errors'] !== []
+                            ? Notification::make()->warning()->title(__(':count emails added', ['count' => $result['added']]))->body(implode("\n", $result['errors']))->send()
+                            : Notification::make()->success()->title(__(':count emails added', ['count' => $result['added']]))->send();
+                    }),
             ])
             ->emptyStateHeading(__('No emails yet'))
             ->emptyStateDescription(__('Emails sent from this matter, and those that come in from its parties, are listed here.'));

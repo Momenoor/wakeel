@@ -64,6 +64,9 @@ class MatterEmail extends Model
     /** Forwarded to the filing mailbox by someone in the office, naming its matter (ForwardedEmailFiler). */
     public const BY_FORWARD = 'forward';
 
+    /** Put in the matter's OneDrive folder by hand, as a file (.eml, .msg — OneDriveAddedEmails). */
+    public const BY_ONEDRIVE = 'onedrive';
+
     protected $fillable = ['matter_id', 'direction', 'status', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'cc', 'content_hash', 'files', 'links', 'onedrive', 'candidates', 'matched_by', 'at', 'user_id', 'was_unread'];
 
     protected function casts(): array
@@ -280,6 +283,7 @@ class MatterEmail extends Model
             self::BY_ADDRESS => __("the sender's only matter"),
             self::BY_HAND => __('chosen by hand'),
             self::BY_FORWARD => __('forwarded to the filing mailbox'),
+            self::BY_ONEDRIVE => __('put in its OneDrive folder'),
             default => '—',
         };
     }

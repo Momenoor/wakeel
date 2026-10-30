@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\MMS\MatterOneDriveFolders;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -55,6 +56,7 @@ class Type extends Model
         'has_creditors' => 'boolean',
         'has_phases' => 'boolean',
         'phases' => 'array',
+        'phase_folders' => 'array',
         'allow_current_status_import' => 'boolean',
         'exclude_from_incentive_count' => 'boolean',
         'incentive_config_id' => 'integer',
@@ -86,6 +88,7 @@ class Type extends Model
         'has_creditors',
         'has_phases',
         'phases',
+        'phase_folders',
         'incentive_trigger_type',
         'allow_current_status_import',
         'exclude_from_incentive_count',
@@ -135,6 +138,25 @@ class Type extends Model
         $at = array_search(trim((string) $phase), $names, true);
 
         return $at === false ? ($names[0] ?? null) : ($names[$at + 1] ?? $names[$at]);
+    }
+
+    /**
+     * A phase's own folders, one per line, made inside a folder of the phase's name — none when it has no list of
+     * its own (the type's structure is used) or is no longer one of the type's phases.
+     *
+     * @return list<string>
+     */
+    public function phaseFolders(?string $phase): array
+    {
+        $phase = trim((string) $phase);
+
+        if ($phase === '' || ! in_array($phase, $this->phaseNames(), true)) {
+            return [];
+        }
+
+        $row = collect((array) $this->phase_folders)->first(fn ($row): bool => trim((string) ($row['phase'] ?? '')) === $phase);
+
+        return MatterOneDriveFolders::lines((string) ($row['folders'] ?? ''));
     }
 
     /**

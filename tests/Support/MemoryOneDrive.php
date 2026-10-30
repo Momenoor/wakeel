@@ -13,6 +13,9 @@ class MemoryOneDrive extends OneDriveClient
     /** @var array<string, array{name: string, parent: ?string, folder: bool}> */
     public array $items = [];
 
+    /** @var array<string, string> a file's contents, by its id */
+    public array $contents = [];
+
     private int $next = 0;
 
     public function __construct(private readonly string $root = 'root')
@@ -26,13 +29,15 @@ class MemoryOneDrive extends OneDriveClient
     }
 
     /** A file put at a path under the root (its folders made) — its id. */
-    public function put(string $path): string
+    public function put(string $path, string $contents = ''): string
     {
         $segments = self::segments($path);
         $name = array_pop($segments);
         $parent = $segments === [] ? $this->root : $this->ensureFolder('', implode('/', $segments), $this->root)['id'];
+        $id = $this->add($name, $parent, false);
+        $this->contents[$id] = $contents;
 
-        return $this->add($name, $parent, false);
+        return $id;
     }
 
     /** An item's path under the root. */
@@ -84,11 +89,36 @@ class MemoryOneDrive extends OneDriveClient
 
         foreach ($this->items as $id => $item) {
             if ($item['parent'] === $folderId) {
-                $children[] = ['id' => (string) $id, 'name' => $item['name'], 'webUrl' => $this->url((string) $id), 'folder' => $item['folder'], 'children' => null, 'size' => null, 'modified' => null, 'mime' => null];
+                $children[] = ['id' => (string) $id, 'name' => $item['name'], 'webUrl' => $this->url((string) $id), 'folder' => $item['folder'], 'children' => $item['folder'] ? count(array_filter($this->items, fn (array $child): bool => $child['parent'] === (string) $id)) : null, 'size' => $item['folder'] ? null : strlen($this->contents[$id] ?? ''), 'modified' => null, 'mime' => null];
             }
         }
 
         return $children;
+    }
+
+    public function childrenOfMany(string $user, array $folderIds): array
+    {
+        return collect($folderIds)->mapWithKeys(fn (string $id): array => [$id => $this->children($user, $id)])->all();
+    }
+
+    public function itemInfo(string $user, string $itemId): array
+    {
+        $item = $this->items[$itemId];
+
+        return ['id' => $itemId, 'name' => $item['name'], 'webUrl' => $this->url($itemId), 'path' => '', 'folder' => $item['folder'], 'size' => null, 'mime' => null, 'downloadUrl' => $item['folder'] ? null : 'memory://'.$itemId];
+    }
+
+    public function download(string $downloadUrl): string
+    {
+        return $this->contents[substr($downloadUrl, strlen('memory://'))] ?? '';
+    }
+
+    public function upload(string $user, string $folderId, string $name, string $contents, string $mime = 'application/octet-stream', bool $replace = false): array
+    {
+        $id = $this->add($name, $folderId, false);
+        $this->contents[$id] = $contents;
+
+        return ['id' => $id, 'name' => $name, 'webUrl' => $this->url($id)];
     }
 
     public function move(string $user, string $itemId, string $parentId): array

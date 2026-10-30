@@ -8,6 +8,7 @@ use App\Models\MailboxFolderForward;
 use App\Models\MailSender;
 use App\Services\MMS\MailboxFolderForwarder;
 use App\Support\Dates;
+use App\Support\RequestMemo;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -22,6 +23,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Cache;
 use Livewire\Attributes\Url;
 use Throwable;
 
@@ -226,6 +228,8 @@ class MailboxFolderEmails extends Page implements HasTable
             return;
         }
 
+        // The forward as remembered for this request is no longer right.
+        RequestMemo::flush();
         Notification::make()->success()->title(__('Forwarding to :to', ['to' => $data['forward_to']]))->send();
     }
 
@@ -275,7 +279,9 @@ class MailboxFolderEmails extends Page implements HasTable
     private function folders(): array
     {
         try {
-            $folders = app(MailboxFolderForwarder::class)->folders($this->mailSender());
+            $mailbox = $this->mailSender();
+            // The mailbox's folders change seldom and take seconds to list: kept a few minutes.
+            $folders = $mailbox ? Cache::remember('mailbox-folders:'.$mailbox->getKey(), 300, fn (): array => app(MailboxFolderForwarder::class)->folders($mailbox)) : [];
         } catch (Throwable $e) {
             $this->readError = $e->getMessage();
             $folders = [];
@@ -299,6 +305,7 @@ class MailboxFolderEmails extends Page implements HasTable
     {
         $mailbox = $this->mailSender();
 
-        return $mailbox ? MailboxFolderForward::query()->where('mail_sender_id', $mailbox->getKey())->where('folder', $this->folder)->first() : null;
+        // Asked by the table's columns, actions and header alike: once a request.
+        return $mailbox ? RequestMemo::remember('mailbox-forward:'.$mailbox->getKey().':'.$this->folder, fn (): ?MailboxFolderForward => MailboxFolderForward::query()->where('mail_sender_id', $mailbox->getKey())->where('folder', $this->folder)->first()) : null;
     }
 }

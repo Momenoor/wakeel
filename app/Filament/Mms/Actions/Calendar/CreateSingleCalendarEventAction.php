@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Actions\Calendar;
 
 use App\Filament\Mms\Resources\CalendarEvents\Schemas\CalendarEventForm;
 use App\Filament\Support\OverlapConfirmation;
+use App\Jobs\PushCalendarEventToOutlook;
 use App\Models\CalendarEvent;
 use App\Models\Matter;
 use App\Services\MMS\OutlookCalendarService;
@@ -61,8 +62,9 @@ class CreateSingleCalendarEventAction extends Action
                     $event->matter->update(['next_session_date' => $data['start_datetime']]);
                 }
 
+                // On the queue: Outlook (and the invitations) took up to twenty seconds here; told in the bell.
                 if ($toOutlook) {
-                    $this->pushToOutlook($outlookService, $event, ! empty($data['invite_people']));
+                    PushCalendarEventToOutlook::dispatch((int) $event->getKey(), ! empty($data['invite_people']), Auth::id())->afterCommit();
                 }
 
                 Notification::make()

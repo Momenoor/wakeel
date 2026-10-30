@@ -85,7 +85,10 @@ class MatterOneDriveFolders
 
     /**
      * The standard subfolders, one per line; "a/b" makes b inside a — the
-     * matter type's own structure when it has one, else the default.
+     * matter type's own structure when it has one, else the default. A matter
+     * whose phase has folders of its own (Type::phaseFolders()): those, inside
+     * a folder of the phase's name, instead of the lines that start with the
+     * phase — the others are every phase's.
      *
      * @return list<string>
      */
@@ -93,9 +96,24 @@ class MatterOneDriveFolders
     {
         $type = $for instanceof Matter ? $for->loadMissing('type')->type : $for;
         $own = $type instanceof Type ? self::lines((string) $type->onedrive_subfolders) : [];
+        $lines = $own !== [] ? $own : self::lines((string) Setting::get(self::SUBFOLDERS, ''));
+        $phase = $for instanceof Matter && $type instanceof Type ? $type->phaseFolders($for->phase) : [];
 
-        return $own !== [] ? $own : self::lines((string) Setting::get(self::SUBFOLDERS, ''));
+        if ($phase === []) {
+            return $lines;
+        }
+
+        return [
+            ...array_filter($lines, fn (string $line): bool => ! preg_match(self::PHASE_FIRST, OneDriveClient::segments($line)[0] ?? '')),
+            ...array_map(fn (string $line): string => self::PHASE.'/'.$line, $phase),
+        ];
     }
+
+    /** The placeholder of the matter's phase — the folder a phase's own folders are made in. */
+    public const PHASE = '{{matter.phase}}';
+
+    /** A folder named by the matter's phase. */
+    private const PHASE_FIRST = '/\{\{\s*matter\.phase\s*\}\}/u';
 
     /**
      * @return list<string>
@@ -311,6 +329,30 @@ class MatterOneDriveFolders
      *
      * @param  list<string>  $subfolders
      */
+    /**
+     * A matter's phase changed: its standard folders, the new phase's among them, made in each of its folders not yet
+     * moved to the finished matters — those already there left as they are.
+     */
+    public function makePhaseFolders(Matter $matter): int
+    {
+        $made = 0;
+
+        MatterOneDriveFolder::query()
+            ->where('matter_id', $matter->getKey())
+            ->where('status', MatterOneDriveFolder::CREATED)
+            ->whereNotNull('drive_item_id')
+            ->whereNull('moved_at')
+            ->with('party')
+            ->get()
+            ->filter(fn (MatterOneDriveFolder $folder): bool => filled($folder->party?->onedrive_email))
+            ->each(function (MatterOneDriveFolder $folder) use ($matter, &$made): void {
+                $this->makeSubfolders($folder->party, (string) $folder->drive_item_id, self::subfoldersFor($matter));
+                $made++;
+            });
+
+        return $made;
+    }
+
     private function makeSubfolders(Party $party, string $folderId, array $subfolders): void
     {
         foreach ($subfolders as $subfolder) {
@@ -403,7 +445,7 @@ class MatterOneDriveFolders
 
                 // Where it is (a report's, …) kept with it.
                 $email->update(['onedrive' => [
-                    ...array_intersect_key((array) $email->onedrive, array_flip(['folder', 'report', 'before_report'])),
+                    ...array_intersect_key((array) $email->onedrive, array_flip(['folder', 'report', 'before_report', 'added'])),
                     'pdf' => $stem !== null && $names->has($stem.'.pdf'),
                     'eml' => $stem !== null && $names->has($stem.'.eml'),
                     'attachments' => $expected->filter(fn (string $name): bool => $inside->has($name))->count(),
@@ -572,7 +614,7 @@ class MatterOneDriveFolders
         $stem = mb_strtolower(self::clean($base));
 
         return collect($this->client->children($user, $folderId))
-            ->filter(fn (array $item): bool => in_array(mb_strtolower($item['name']), $item['folder'] ? [$stem] : [$stem.'.pdf', $stem.'.eml'], true))
+            ->filter(fn (array $item): bool => in_array(mb_strtolower($item['name']), $item['folder'] ? [$stem] : [$stem.'.pdf', $stem.'.eml', $stem.'.msg'], true))
             ->values();
     }
 

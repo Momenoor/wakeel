@@ -1,6 +1,7 @@
 <?php
 
 use App\Services\MMS\MailboxFolderForwarder;
+use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterReplyCollector;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -28,4 +29,10 @@ Schedule::command('mail:collect-replies --max-seconds=30')
 Schedule::command('mail:forward-folders')
     ->everyFiveMinutes()
     ->when(fn (): bool => MailboxFolderForwarder::enabled())
+    ->withoutOverlapping(15);
+
+// The emails put in the matters' OneDrive folders by hand (.eml, .msg): added to their matters.
+Schedule::command('onedrive:read-added-emails --max-seconds=50')
+    ->everyThirtyMinutes()
+    ->when(fn (): bool => MatterOneDriveFolders::enabled())
     ->withoutOverlapping(15);
