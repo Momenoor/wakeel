@@ -43,15 +43,24 @@ trait PrintableReport
      */
     public function bootPrintableReport(): void
     {
-        // This page's tables' remembered page sizes (Filament keeps them as "tables.<md5 of the class>…_per_page"):
-        // read without the table, which is not made yet.
-        $mine = md5(static::class);
+        // This page's tables' remembered page sizes (Filament keeps them under "filament.tables.<sha256 of the
+        // class>[.<sha256 of the table's identifier>].per_page" — InteractsWithTable::getTableSessionKey()): read
+        // without the table, which is not made yet.
+        $mine = 'filament.tables.'.hash('sha256', static::class);
 
-        foreach ((array) session('tables', []) as $key => $value) {
-            if ($value === 'all' && str_starts_with((string) $key, $mine) && str_ends_with((string) $key, '_per_page')) {
-                session()->forget('tables.'.$key);
+        $forgetAll = function (array $branch, string $path) use (&$forgetAll): void {
+            if (($branch['per_page'] ?? null) === 'all') {
+                session()->forget($path.'.per_page');
             }
-        }
+
+            foreach ($branch as $key => $value) {
+                if (is_array($value)) {
+                    $forgetAll($value, $path.'.'.$key);
+                }
+            }
+        };
+
+        $forgetAll((array) session($mine, []), $mine);
     }
 
     /** Built again when drawn — after the filters are applied, not before (see RendersFreshContent). */
