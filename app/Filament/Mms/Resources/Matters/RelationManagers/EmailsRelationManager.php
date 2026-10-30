@@ -9,6 +9,7 @@ use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Support\CreditorFields;
 use App\Filament\Support\RegenerateEmailAction;
 use App\Jobs\CheckMatterEmailsInOneDrive;
+use App\Jobs\CollectMatterEmails;
 use App\Jobs\EmailJob;
 use App\Models\Matter;
 use App\Models\MatterContact;
@@ -233,6 +234,16 @@ class EmailsRelationManager extends RelationManager
                 ]),
             ])
             ->headerActions([
+                // The mailboxes read now, not at the next round (every ten minutes): replies, and any other
+                // email from the matter's parties.
+                Action::make('collectReplies')
+                    ->label(__('Check for emails'))
+                    ->tooltip(fn (): string => __("Replies, and any other email from the matter's parties").' — '.__('Last automatic check: :when', ['when' => MatterReplyCollector::lastRunSummary()]))
+                    ->icon('heroicon-o-envelope-open')
+                    ->color('gray')
+                    ->visible(fn (): bool => MatterEmail::query()->where('direction', MatterEmail::SENT)->exists())
+                    // On the queue: reading the mailboxes can take a minute, and the page must not wait on it.
+                    ->action(fn () => CollectMatterEmails::start((int) $this->getOwnerRecord()->getKey())),
                 Action::make('checkAllOneDrive')
                     ->label(__('Check OneDrive'))
                     ->tooltip(__('Reads from OneDrive which PDFs, originals and attachments of the emails that came in are there'))

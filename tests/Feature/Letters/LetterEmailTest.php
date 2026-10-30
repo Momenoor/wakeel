@@ -192,6 +192,32 @@ class LetterEmailTest extends TestCase
         $this->assertSame(['mona@example.com', 'office@law.ae', 'saeed@example.com'], $to(0));
     }
 
+    public function test_each_address_in_to_is_named_after_whose_it_is(): void
+    {
+        $letter = app(LetterIssuer::class)->issue($this->letter->template, $this->letter->matter, [
+            ['name' => 'منى أحمد', 'role' => 'المدعي', 'emails' => ['mona@example.com'],
+                'representatives' => [['name' => 'مكتب المزروعي', 'emails' => ['office@law.ae', 'mona@example.com']]]],
+            ['name' => 'سعيد', 'role' => 'المدعى عليه', 'emails' => ['saeed@example.com']],
+        ], []);
+        $to = fn (int $i): array => array_map(fn ($a) => [$a->getName(), $a->getAddress()], $this->sent[$i]->getTo());
+
+        // By party: the party's name on the party's address, the lawyer's on the lawyer's — an address they share, both names.
+        app(LetterMailer::class)->send($letter, 'iflas', LetterMailer::ATTACHMENT, null, ['pdf'], separate: EmailGrouping::BY_PARTY);
+        $this->assertSame([['منى أحمد / مكتب المزروعي', 'mona@example.com'], ['مكتب المزروعي', 'office@law.ae']], $to(0));
+        $this->assertSame([['سعيد', 'saeed@example.com']], $to(1));
+
+        // All in one email: the same, everyone's together.
+        $this->sent = [];
+        app(LetterMailer::class)->send($letter, 'iflas', LetterMailer::ATTACHMENT, null, ['pdf'], separate: EmailGrouping::ALL);
+        $this->assertSame([['منى أحمد / مكتب المزروعي', 'mona@example.com'], ['مكتب المزروعي', 'office@law.ae'], ['سعيد', 'saeed@example.com']], $to(0));
+
+        // Each person: the party, then the lawyer on their own.
+        $this->sent = [];
+        app(LetterMailer::class)->send($letter, 'iflas', LetterMailer::ATTACHMENT, null, ['pdf'], separate: EmailGrouping::SEPARATE);
+        $this->assertSame([['منى أحمد', 'mona@example.com']], $to(0));
+        $this->assertSame([['مكتب المزروعي', 'office@law.ae']], $to(1));
+    }
+
     public function test_an_inbox_shared_by_recipients_gets_the_letter_once(): void
     {
         // The party and its lawyer's office share an address (spelt differently);

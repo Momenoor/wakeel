@@ -105,7 +105,7 @@ class MinutesSender
                 $title = __('Minutes no. :number', ['number' => $minutes->number]);
                 $sender = SenderMailer::sender($senderKey);
                 if ($minutes->matter) {
-                    defer(fn () => app(SentEmailArchive::class)->keepEmail($minutes->matter, $email, $sender, $names, $emails, $copied, $title, $userId, $record));
+                    defer(fn () => app(SentEmailArchive::class)->keepEmail($minutes->matter, $email, $sender, $names, self::addressed($group['rows']), $copied, $title, $userId, $record));
                 }
             }
         }
@@ -293,21 +293,10 @@ class MinutesSender
      */
     private static function addressed(array $rows): array
     {
-        $to = [];
-
-        foreach ($rows as $row) {
-            $who = trim(trim((string) ($row['name'] ?? '')).(filled($row['capacity'] ?? null) ? ' - '.trim((string) $row['capacity']) : ''));
-
-            foreach ((array) ($row['emails'] ?? []) as $email) {
-                $key = mb_strtolower($email);
-                $to[$key] ??= ['email' => $email, 'names' => []];
-                if ($who !== '' && ! in_array($who, $to[$key]['names'], true)) {
-                    $to[$key]['names'][] = $who;
-                }
-            }
-        }
-
-        return array_values(array_map(fn (array $a): array => ['email' => $a['email'], 'name' => implode(' / ', $a['names'])], $to));
+        return Addresses::named(array_map(fn (array $row): array => [
+            'name' => trim(trim((string) ($row['name'] ?? '')).(filled($row['capacity'] ?? null) ? ' - '.trim((string) $row['capacity']) : '')),
+            'emails' => (array) ($row['emails'] ?? []),
+        ], $rows));
     }
 
     /**

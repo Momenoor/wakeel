@@ -9,7 +9,6 @@ use App\Filament\Mms\Resources\BulkMailCampaigns\Pages\ViewBulkMailCampaign;
 use App\Filament\Mms\Resources\BulkMailCampaigns\RelationManagers\RecipientsRelationManager;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager;
-use App\Filament\Mms\Resources\Matters\RelationManagers\ProgressRelationManager;
 use App\Filament\Support\EmailSendFields;
 use App\Livewire\TabbedDatabaseNotifications;
 use App\Models\BulkMailCampaign;
@@ -612,7 +611,7 @@ class MatterRepliesTest extends TestCase
         ]];
 
         // From the matter's Progress tab: now, not at the next round.
-        Livewire::test(ProgressRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+        Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
             ->callTableAction('collectReplies')
             ->assertNotified(__('Checking for emails'));
         // Read on the queue: what came of it in the notifications of whoever asked.
@@ -718,7 +717,7 @@ class MatterRepliesTest extends TestCase
         $html = MatterReplyCollector::bullets(['One', new HtmlString('<b>Two</b>'), null, ''])->toHtml();
         $this->assertSame('<ul style="list-style: disc; padding-inline-start: 1.1rem; margin: 0;"><li>One</li><li><b>Two</b></li></ul>', $html);
 
-        Livewire::test(ProgressRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+        Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
             ->callTableAction('collectReplies')
             ->assertNotified(__('Checking for emails'));
         // Read on the queue: what came of it in the notifications of whoever asked.

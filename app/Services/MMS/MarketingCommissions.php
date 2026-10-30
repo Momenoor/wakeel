@@ -21,12 +21,13 @@ use Throwable;
 /**
  * What a matter's marketers earn.
  *
- * A matter's marketing share is a percentage of its fees' basic amount (Settings → Incentive: 25 by default,
- * changeable on the matter) or a fixed amount typed on it; its marketers split it — equally, or in the parts typed
- * for them. They earn it as the client pays: on what is collected of the fees' basic amount (never more than the
- * fees now come to — a credit note takes back), a fixed amount in the part collected. What each has earned in all
- * is worked out again whenever it may change (sync()) and the difference kept as a commission row — so what was
- * paid stays as it was paid, and what changes after is settled next.
+ * Each of a matter's marketers has a share of their own: a percentage of its fees' basic amount (Settings →
+ * Incentive: 25 by default, when none is typed for them) or a fixed amount. A third party's comes off first; a staff
+ * marketer's percentage is of what is left after the third parties' (shares()). They earn it as the client pays: on
+ * what is collected of the fees' basic amount (never more than the fees now come to — a credit note takes back), a
+ * fixed amount in the part collected. What each has earned in all is worked out again whenever it may change
+ * (sync()) and the difference kept as a commission row — so what was paid stays as it was paid, and what changes
+ * after is settled next.
  *
  * A staff marketer is paid in the incentive calculation of its period (apply(): a line of their own there); an
  * external one is owed until marked paid (markPaid()). On the assistants' side (IncentiveCalculatorService): an
@@ -65,34 +66,46 @@ class MarketingCommissions
         }
     }
 
+    public static function kindOf(MatterParty $marketer): string
+    {
+        return $marketer->type === MarketingCommission::EXTERNAL ? MarketingCommission::EXTERNAL : MarketingCommission::STAFF;
+    }
+
     /**
-     * Each marketer's kind and part of the share (a fraction), by party: the parts typed, as parts of their sum;
-     * none typed, equal.
+     * What each marketer's share comes to on so much of the matter's fees' basic amount, by party: their own
+     * percentage of it (none typed: the setting's), or of their fixed amount the part that is of all the fees'
+     * basic amount. The third parties' first; a staff marketer's percentage is of what is left after them.
      *
      * @param  Collection<int, MatterParty>  $marketers
-     * @return Collection<int, array{kind: string, part: float}>
+     * @return Collection<int, array{kind: string, amount: float}>
      */
-    public static function parts(Collection $marketers): Collection
+    public static function shares(Collection $marketers, float $basic, float $matterBasic): Collection
     {
-        $typed = (float) $marketers->sum(fn (MatterParty $marketer): float => (float) ($marketer->marketing_part ?? 0));
+        $basic = max(0.0, $basic);
+        $of = fn (MatterParty $marketer, float $base): float => $marketer->marketing_fixed !== null
+            ? ($matterBasic > 0 ? (float) $marketer->marketing_fixed * min(1.0, $basic / $matterBasic) : 0.0)
+            : $base * (float) ($marketer->marketing_rate ?? self::defaultShare()) / 100;
+
+        $external = $marketers->filter(fn (MatterParty $marketer): bool => self::kindOf($marketer) === MarketingCommission::EXTERNAL)
+            ->keyBy('party_id')
+            ->map(fn (MatterParty $marketer): float => $of($marketer, $basic));
+        $left = max(0.0, $basic - (float) $external->sum());
 
         return $marketers->keyBy('party_id')->map(fn (MatterParty $marketer): array => [
-            'kind' => $marketer->type === MarketingCommission::EXTERNAL ? MarketingCommission::EXTERNAL : MarketingCommission::STAFF,
-            'part' => $typed > 0 ? (float) ($marketer->marketing_part ?? 0) / $typed : 1 / max(1, $marketers->count()),
+            'kind' => self::kindOf($marketer),
+            'amount' => round($external->has($marketer->party_id) ? $external[$marketer->party_id] : $of($marketer, $left), 2),
         ]);
     }
 
     /**
-     * The marketing share on so much of the matter's fees' basic amount: its rate of it, or of its fixed amount the
-     * part that is of all its fees' basic amount.
+     * The third parties' commissions on so much of the fees' basic amount: what comes off it before the staff
+     * marketers' and the assistants' (IncentiveCalculatorService).
+     *
+     * @param  Collection<int, MatterParty>  $marketers
      */
-    public static function shareOf(Matter $matter, float $basic, float $matterBasic): float
+    public static function externalShareOf(Collection $marketers, float $basic, float $matterBasic): float
     {
-        if ($matter->marketing_fixed !== null) {
-            return $matterBasic > 0 ? (float) $matter->marketing_fixed * min(1.0, max(0.0, $basic) / $matterBasic) : 0.0;
-        }
-
-        return max(0.0, $basic) * (float) ($matter->marketing_rate ?? self::defaultShare()) / 100;
+        return round((float) self::shares($marketers, $basic, $matterBasic)->where('kind', MarketingCommission::EXTERNAL)->sum('amount'), 2);
     }
 
     /** The fees the share is on: the office's own — not a deduction, the VAT rows of before, nor the matter's expenses. */
@@ -145,15 +158,15 @@ class MarketingCommissions
 
             return $fee->total > 0 ? min($basic, $paid * $basic / $fee->total) : 0.0;
         }), 2);
-        $share = self::shareOf($matter, $collected, $matterBasic);
+        $shares = self::shares($marketers, $collected, $matterBasic);
+        $external = (float) $shares->where('kind', MarketingCommission::EXTERNAL)->sum('amount');
         // Not by a payment (a marketer added, a credit note …): dated as the latest payment it is earned on — so it
         // falls in the period the money came in, not after it; with nothing paid yet, today.
         $date ??= $fees->flatMap(fn (Fee $fee) => $fee->allocations)->max('date');
-        $parts = self::parts($marketers);
 
-        foreach ($parts->keys()->merge($recorded->keys())->unique() as $partyId) {
-            $part = $parts->get($partyId);
-            $target = round($share * ($part['part'] ?? 0.0), 2);
+        foreach ($shares->keys()->merge($recorded->keys())->unique() as $partyId) {
+            $share = $shares->get($partyId);
+            $target = $share['amount'] ?? 0.0;
             $earned = round((float) $recorded->get($partyId, collect())->sum('amount'), 2);
             $amount = round($target - $earned, 2);
 
@@ -166,29 +179,40 @@ class MarketingCommissions
                 'party_id' => $partyId,
                 // Earned by a payment: kept with it, dated with it (redate()).
                 'allocation_id' => $payment?->getKey(),
-                'kind' => $part['kind'] ?? $recorded->get($partyId)->first()->kind,
+                'kind' => $share['kind'] ?? $recorded->get($partyId)->first()->kind,
                 'date' => ($date ?? now())->toDateString(),
                 'base' => $collected,
                 'amount' => $amount,
-                'description' => $part === null
+                'description' => $share === null
                     ? __('No longer a marketer of the matter: what was earned taken back.')
-                    : $this->describe($matter, $collected, $matterBasic, $part['part'], $target),
+                    : $this->describe($marketers->firstWhere('party_id', $partyId), $collected, $matterBasic, $external, $target),
             ]);
         }
     }
 
-    /** What it came of, and what it makes in all. */
-    private function describe(Matter $matter, float $collected, float $matterBasic, float $part, float $target): string
+    /** A marketer's share in words: their percentage, or their fixed amount. */
+    public static function shareLabel(MatterParty $marketer): string
     {
-        return __(':share; collected :collected of the fees\' :basic; :part% of it: :target earned in all.', [
-            'share' => $matter->marketing_fixed !== null
-                ? __('Marketing share :amount fixed', ['amount' => Currency::text((float) $matter->marketing_fixed)])
-                : __('Marketing share :rate%', ['rate' => rtrim(rtrim(number_format((float) ($matter->marketing_rate ?? self::defaultShare()), 2), '0'), '.')]),
+        return $marketer->marketing_fixed !== null
+            ? __('Marketing share :amount fixed', ['amount' => Currency::text((float) $marketer->marketing_fixed)])
+            : __('Marketing share :rate%', ['rate' => rtrim(rtrim(number_format((float) ($marketer->marketing_rate ?? self::defaultShare()), 2), '0'), '.')]);
+    }
+
+    /** What it came of, and what it makes in all. */
+    private function describe(MatterParty $marketer, float $collected, float $matterBasic, float $external, float $target): string
+    {
+        $values = [
+            'share' => self::shareLabel($marketer),
             'collected' => Currency::text($collected),
             'basic' => Currency::text($matterBasic),
-            'part' => rtrim(rtrim(number_format($part * 100, 2), '0'), '.'),
+            'external' => Currency::text($external),
             'target' => Currency::text($target),
-        ]);
+        ];
+
+        // A staff marketer's percentage: of what is left after the third parties' commissions.
+        return self::kindOf($marketer) === MarketingCommission::STAFF && $marketer->marketing_fixed === null && $external > 0
+            ? __(':share; collected :collected of the fees\' :basic, less the third parties\' :external: :target earned in all.', $values)
+            : __(':share; collected :collected of the fees\' :basic: :target earned in all.', $values);
     }
 
     /**

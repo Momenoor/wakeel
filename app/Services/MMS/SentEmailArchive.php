@@ -88,7 +88,7 @@ class SentEmailArchive
      * A sent letter or minutes email, kept.
      *
      * @param  array<string, mixed>  $sender
-     * @param  list<string>  $to
+     * @param  list<string|array{email: string, name: string}>  $to  addresses, or each with the name of whose it is
      * @param  list<string>  $cc
      */
     public function keepEmail(Matter $matter, LetterEmail $email, array $sender, string $names, array $to, array $cc, string $title, ?int $userId, ?MatterEmail $record = null): void

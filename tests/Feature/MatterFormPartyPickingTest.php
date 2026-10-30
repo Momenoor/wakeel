@@ -67,7 +67,7 @@ class MatterFormPartyPickingTest extends TestCase
 
         // Added from the marketer's list by Salem's name: Salem, a marketer now, chosen in the row.
         Livewire::test(EditMatter::class, ['record' => $matter->getRouteKey()])
-            ->set('data.marketers', ['row' => ['party_id' => null, 'marketing_part' => null]])
+            ->set('data.marketers', ['row' => ['party_id' => null, 'marketing_rate' => null]])
             ->callAction(TestAction::make('createOption')->schemaComponent('marketers.row.party_id'), ['name' => 'Salem Office', 'phone' => ['0501112233'], 'email' => []])
             ->assertHasNoActionErrors()
             ->assertSet('data.marketers.row.party_id', $salem->id);
@@ -83,7 +83,7 @@ class MatterFormPartyPickingTest extends TestCase
         $salem = Party::factory()->create(['name' => 'Salem Office', 'role' => ['role' => ['party']]]);
 
         Livewire::test(EditMatter::class, ['record' => $matter->getRouteKey()])
-            ->set('data.marketers', ['row' => ['party_id' => $salem->id, 'marketing_part' => null]])
+            ->set('data.marketers', ['row' => ['party_id' => $salem->id, 'marketing_rate' => null]])
             ->assertSee('Salem Office');
     }
 

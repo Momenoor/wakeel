@@ -5,11 +5,8 @@ namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 use App\Enums\ProgressType;
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Concerns\RefreshesMatterPage;
-use App\Jobs\CollectMatterEmails;
-use App\Models\MatterEmail;
 use App\Models\MatterPeriodicReport;
 use App\Models\MatterProgress;
-use App\Services\MMS\MatterReplyCollector;
 use App\Services\MMS\PeriodicReports;
 use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
@@ -209,15 +206,6 @@ class ProgressRelationManager extends RelationManager
                 ]),
             ])
             ->headerActions([
-                // Now, not waiting for the next round (every ten minutes).
-                Action::make('collectReplies')
-                    ->label(__('Check for emails'))
-                    ->tooltip(fn (): string => __("Replies, and any other email from the matter's parties").' — '.__('Last automatic check: :when', ['when' => MatterReplyCollector::lastRunSummary()]))
-                    ->icon('heroicon-o-envelope-open')
-                    ->color('gray')
-                    ->visible(fn (): bool => MatterEmail::query()->where('direction', MatterEmail::SENT)->exists())
-                    // On the queue: reading the mailboxes can take a minute, and the page must not wait on it.
-                    ->action(fn () => CollectMatterEmails::start((int) $this->getOwnerRecord()->getKey())),
                 CreateAction::make()
                     ->label(__('Add progress'))
                     ->icon('heroicon-o-plus')

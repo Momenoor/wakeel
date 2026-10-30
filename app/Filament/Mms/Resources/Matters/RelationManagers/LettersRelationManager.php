@@ -207,7 +207,7 @@ class LettersRelationManager extends RelationManager
                     ->required(fn (Get $get): bool => blank($get('cc')))
                     ->validationMessages(['required' => __('Tick whom it goes to, or add copy addresses.')])
                     ->options($record->recipients->mapWithKeys(fn ($r) => [$r->id => trim($r->name.($r->role ? ' ('.$r->role.')' : ''))]))
-                    ->descriptions($record->recipients->mapWithKeys(fn ($r) => [$r->id => implode(' · ', $r->allEmails()) ?: __('No email')]))
+                    ->descriptions($record->recipients->mapWithKeys(fn ($r) => [$r->id => collect($r->addressed())->map(fn (array $a): string => trim($a['name'].' <'.$a['email'].'>', ' <>'))->implode(' · ') ?: __('No email')]))
                     ->bulkToggleable()
                     ->live(),
                 EmailSendFields::cc(),
@@ -354,10 +354,9 @@ class LettersRelationManager extends RelationManager
             $get('sender'),
         );
 
-        $addresses = fn (array $unit): string => trim(($unit['name'] ?? $unit['greet']?->name ?? '').' <'.implode(', ', $unit['emails']).'>', ' <>');
-        $to = $grouping === EmailGrouping::ALL
-            ? $ticked->map(fn ($recipient) => trim($recipient->name.' <'.implode(', ', $recipient->allEmails()).'>', ' <>'))->implode(' · ')
-            : ($first ? $addresses($first).(count($units) > 1 ? ' — '.__('and a separate email to each of the other :count', ['count' => count($units) - 1]) : '') : '');
+        // Each address named after whose it is — the party's, its lawyer's.
+        $addresses = fn (array $unit): string => collect($unit['to'])->map(fn (array $address): string => trim($address['name'].' <'.$address['email'].'>', ' <>'))->implode(' · ');
+        $to = $first ? $addresses($first).($grouping !== EmailGrouping::ALL && count($units) > 1 ? ' — '.__('and a separate email to each of the other :count', ['count' => count($units) - 1]) : '') : '';
 
         $name = LetterIssuer::fileName($record);
         $attachments = [

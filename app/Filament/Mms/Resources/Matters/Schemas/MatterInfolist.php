@@ -1021,9 +1021,7 @@ class MatterInfolist
             ->icon('heroicon-o-megaphone')
             ->visible(fn (Matter $record): bool => static::marketingRows($record) !== [])
             ->collapsible()
-            ->description(fn (Matter $record): string => $record->marketing_fixed !== null
-                ? __('Marketing share :amount fixed', ['amount' => Currency::text((float) $record->marketing_fixed)])
-                : __('Marketing share :rate%', ['rate' => rtrim(rtrim(number_format((float) ($record->marketing_rate ?? MarketingCommissions::defaultShare()), 2), '0'), '.')]))
+            ->description(__('Each marketer\'s own share of the fees\' basic amount; a third party\'s comes off before an employee\'s percentage.'))
             ->schema([
                 RepeatableEntry::make('marketing_rows')
                     ->hiddenLabel()
@@ -1032,7 +1030,7 @@ class MatterInfolist
                     ->schema([
                         TextEntry::make('name')->label(__('Marketer'))->weight(FontWeight::SemiBold),
                         TextEntry::make('kind')->label(__('Kind'))->badge(),
-                        TextEntry::make('part')->label(__('Part of the share')),
+                        TextEntry::make('share')->label(__('Share')),
                         TextEntry::make('earned')->label(__('Earned so far'))->aed(),
                         TextEntry::make('settled')->label(__('Paid so far'))->aed()->color('success'),
                     ]),
@@ -1046,20 +1044,20 @@ class MatterInfolist
      */
     private static function marketingRows(Matter $record): array
     {
-        $parts = MarketingCommissions::parts($record->marketers);
+        $marketers = $record->marketers->keyBy('party_id');
         $earned = $record->marketingCommissions->groupBy('party_id');
-        $kind = fn ($partyId): ?string => $parts->get($partyId)['kind'] ?? $earned->get($partyId)?->first()?->kind;
+        $kind = fn ($partyId): ?string => $marketers->has($partyId) ? MarketingCommissions::kindOf($marketers[$partyId]) : $earned->get($partyId)?->first()?->kind;
 
         // The viewer an assistant of this matter: its staff marketers hidden, but for themselves.
         $viewer = auth()->user()?->party?->getKey();
         $assistant = $viewer !== null && $record->assistantList()->contains('party_id', $viewer);
 
-        return $parts->keys()->merge($earned->keys())->unique()
+        return $marketers->keys()->merge($earned->keys())->unique()
             ->reject(fn ($partyId): bool => $assistant && $kind($partyId) === MarketingCommission::STAFF && (int) $partyId !== (int) $viewer)
             ->map(fn ($partyId): array => [
-                'name' => $record->marketers->firstWhere('party_id', $partyId)?->party?->name ?? $earned->get($partyId)?->first()?->party?->name ?? '—',
+                'name' => $marketers->get($partyId)?->party?->name ?? $earned->get($partyId)?->first()?->party?->name ?? '—',
                 'kind' => MarketingCommission::kindLabel($kind($partyId)),
-                'part' => isset($parts[$partyId]) ? round($parts[$partyId]['part'] * 100, 2).'%' : '—',
+                'share' => $marketers->has($partyId) ? MarketingCommissions::shareLabel($marketers[$partyId]) : '—',
                 'earned' => (float) $earned->get($partyId, collect())->sum('amount'),
                 // Staff: paid in a calculation; external: marked paid.
                 'settled' => (float) $earned->get($partyId, collect())->filter(fn (MarketingCommission $c): bool => $c->paid_at !== null || ($c->calculation?->isFinalized() ?? false))->sum('amount'),

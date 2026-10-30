@@ -31,10 +31,11 @@ use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
- * A matter's marketers: its marketing share (25% of the fees' basic amount by default), split between them and
- * earned as the client pays — a staff marketer paid in their incentive, a third party owed a commission. An
- * assistant is paid the matter's usual rate, whoever marketed it — of what is left after a third
- * party's share; the assistant who marketed it themself, the matter's rate.
+ * A matter's marketers: each with a share of their own (a percentage of the fees' basic amount — 25% by default —
+ * or a fixed amount), earned as the client pays — a staff marketer paid in their incentive, a third party owed a
+ * commission. A third party's comes off first; a staff marketer's percentage is of what is left. An assistant is
+ * paid the matter's usual rate, whoever marketed it — of what is left after a third party's share; the assistant
+ * who marketed it themself, the matter's rate.
  */
 class MarketersTest extends TestCase
 {
@@ -219,27 +220,27 @@ class MarketersTest extends TestCase
         $second = $this->employee('Second Marketer');
         [$matter, $fee] = $this->matter('904', [[$first, MarketingCommission::STAFF], [$second, MarketingCommission::STAFF]]);
 
-        // 4,000 of 10,000 paid: 25% of it, half each.
+        // 4,000 of 10,000 paid: no share typed for either, each has the setting's 25% of it.
         $this->collect($fee, 4000);
-        $this->assertSame(500.0, (float) MarketingCommission::where('party_id', $first->id)->sum('amount'));
-        $this->assertSame(500.0, (float) MarketingCommission::where('party_id', $second->id)->sum('amount'));
+        $this->assertSame(1000.0, (float) MarketingCommission::where('party_id', $first->id)->sum('amount'));
+        $this->assertSame(1000.0, (float) MarketingCommission::where('party_id', $second->id)->sum('amount'));
 
         // A credit note takes the fee down to 3,000: what was paid on more than it is earns nothing.
         app(FeeCreditNotes::class)->add($fee, ['amount' => 7000, 'date' => '2026-06-20']);
-        $this->assertSame(375.0, (float) MarketingCommission::where('party_id', $first->id)->sum('amount'));
+        $this->assertSame(750.0, (float) MarketingCommission::where('party_id', $first->id)->sum('amount'));
 
-        // Parts typed: 3 to 1 of the share.
-        MatterParty::where('matter_id', $matter->id)->where('party_id', $first->id)->update(['marketing_part' => 75]);
-        MatterParty::where('matter_id', $matter->id)->where('party_id', $second->id)->update(['marketing_part' => 25]);
+        // Their own percentages typed: 18.75% and 6.25%.
+        MatterParty::where('matter_id', $matter->id)->where('party_id', $first->id)->update(['marketing_rate' => 18.75]);
+        MatterParty::where('matter_id', $matter->id)->where('party_id', $second->id)->update(['marketing_rate' => 6.25]);
         app(MarketingCommissions::class)->sync($matter->fresh());
         $this->assertSame(562.5, (float) MarketingCommission::where('party_id', $first->id)->sum('amount'));
         $this->assertSame(187.5, (float) MarketingCommission::where('party_id', $second->id)->sum('amount'));
 
-        // The second taken off the matter: what they earned taken back.
+        // The second taken off the matter: what they earned taken back; the first's own share is as it was.
         MatterParty::where('matter_id', $matter->id)->where('party_id', $second->id)->delete();
         app(MarketingCommissions::class)->sync($matter->fresh());
         $this->assertSame(0.0, (float) MarketingCommission::where('party_id', $second->id)->sum('amount'));
-        $this->assertSame(750.0, (float) MarketingCommission::where('party_id', $first->id)->sum('amount'));
+        $this->assertSame(562.5, (float) MarketingCommission::where('party_id', $first->id)->sum('amount'));
     }
 
     public function test_marketers_are_added_on_the_matter_form_staff_or_third_party_by_who_they_are(): void
@@ -256,10 +257,9 @@ class MarketersTest extends TestCase
 
         Livewire::test(EditMatter::class, ['record' => $matter->getRouteKey()])
             ->set('data.marketers', [
-                'a' => ['party_id' => $staff->id, 'marketing_part' => null, 'role' => 'marketer'],
-                'b' => ['party_id' => $outsider->id, 'marketing_part' => null, 'role' => 'marketer'],
+                'a' => ['party_id' => $staff->id, 'marketing_rate' => 20, 'marketing_fixed' => null, 'role' => 'marketer'],
+                'b' => ['party_id' => $outsider->id, 'marketing_rate' => 10, 'marketing_fixed' => null, 'role' => 'marketer'],
             ])
-            ->set('data.marketing_rate', 20)
             ->call('save')
             ->assertHasNoFormErrors();
 
@@ -267,13 +267,13 @@ class MarketersTest extends TestCase
             $matter->marketers()->where('party_id', $staff->id)->value('type'),
             $matter->marketers()->where('party_id', $outsider->id)->value('type'),
         ]);
-        // Saved once: 20% of the 10,000 collected, half each.
-        $this->assertSame(1000.0, (float) MarketingCommission::where('party_id', $staff->id)->sum('amount'));
+        // Saved once: the third party's 10% of the 10,000 collected; the staff's 20% of the 9,000 left.
+        $this->assertSame(1800.0, (float) MarketingCommission::where('party_id', $staff->id)->sum('amount'));
         $this->assertSame(1000.0, (float) MarketingCommission::where('party_id', $outsider->id)->sum('amount'));
         $this->assertSame(2, MarketingCommission::count());
 
         Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])
-            ->assertSee(['Staff Marketer', 'Outside Marketer', __('Marketing share :rate%', ['rate' => '20'])]);
+            ->assertSee(['Staff Marketer', 'Outside Marketer', __('Marketing share :rate%', ['rate' => '20']), __('Marketing share :rate%', ['rate' => '10'])]);
     }
 
     public function test_an_assistant_sees_a_third_party_marketer_and_no_colleague_of_the_office(): void
@@ -333,11 +333,44 @@ class MarketersTest extends TestCase
     {
         $marketer = $this->employee('Fixed Marketer');
         [$matter, $fee] = $this->matter('905', [[$marketer, MarketingCommission::STAFF]]);
-        $matter->update(['marketing_fixed' => 1200]);
+        MatterParty::where('matter_id', $matter->id)->where('party_id', $marketer->id)->update(['marketing_fixed' => 1200]);
 
         $this->collect($fee, 2500);
         $this->assertSame(300.0, (float) MarketingCommission::sum('amount'));
         $this->assertSame(25.0, MarketingCommissions::defaultShare());
         $this->assertSame(5.0, MarketingCommissions::selfBonus());
+    }
+
+    public function test_a_staff_marketers_percentage_is_of_what_is_left_after_the_third_parties(): void
+    {
+        $staff = $this->employee('Staff Marketer');
+        $agent = Party::factory()->create(['name' => 'Agent', 'role' => ['role' => ['marketer']]]);
+        $broker = Party::factory()->create(['name' => 'Broker', 'role' => ['role' => ['marketer']]]);
+        [$matter, $fee] = $this->matter('907', [[$staff, MarketingCommission::STAFF], [$agent, MarketingCommission::EXTERNAL], [$broker, MarketingCommission::EXTERNAL]]);
+        MatterParty::where('matter_id', $matter->id)->where('party_id', $staff->id)->update(['marketing_rate' => 20]);
+        MatterParty::where('matter_id', $matter->id)->where('party_id', $agent->id)->update(['marketing_rate' => 10]);
+        MatterParty::where('matter_id', $matter->id)->where('party_id', $broker->id)->update(['marketing_fixed' => 500]);
+        $this->collect($fee, 10000);
+
+        // The third parties: 1,000 and 500 off the 10,000. The staff marketer: 20% of the 8,500 left.
+        $this->assertSame(1000.0, (float) MarketingCommission::where('party_id', $agent->id)->sum('amount'));
+        $this->assertSame(500.0, (float) MarketingCommission::where('party_id', $broker->id)->sum('amount'));
+        $this->assertSame(1700.0, (float) MarketingCommission::where('party_id', $staff->id)->sum('amount'));
+        $this->assertStringContainsString('1,500', (string) MarketingCommission::where('party_id', $staff->id)->sole()->description);
+
+        // The assistant too is paid on the 8,500: 15% of it.
+        $june = $this->june([$fee]);
+        $payable = $this->calculator->payableByParty($june);
+        $this->assertSame(1275.0, $payable[$this->assistant->id]);
+        $this->assertSame(1700.0, $payable[$staff->id]);
+
+        // Half collected: the fixed amount in the part collected, the percentages of what came in.
+        $other = Party::factory()->create(['name' => 'Other Staff', 'role' => ['role' => ['employee'], 'type' => ['assistant']]]);
+        [$second, $fee2] = $this->matter('908', [[$other, MarketingCommission::STAFF], [$broker, MarketingCommission::EXTERNAL]]);
+        MatterParty::where('matter_id', $second->id)->where('party_id', $broker->id)->update(['marketing_fixed' => 500]);
+        $this->collect($fee2, 5000);
+        $this->assertSame(250.0, (float) MarketingCommission::where('matter_id', $second->id)->where('party_id', $broker->id)->sum('amount'));
+        // 25% (the setting's) of 4,750.
+        $this->assertSame(1187.5, (float) MarketingCommission::where('matter_id', $second->id)->where('party_id', $other->id)->sum('amount'));
     }
 }

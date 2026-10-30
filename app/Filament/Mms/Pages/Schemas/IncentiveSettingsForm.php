@@ -58,7 +58,7 @@ class IncentiveSettingsForm
 
             // Who brought a matter in (MarketingCommissions).
             Section::make(__('Marketing'))
-                ->description(__('A matter\'s marketers share its marketing share, earned as the client pays: a staff marketer in their incentive, a third party as a commission owed. An assistant is paid the matter\'s usual rate, whoever marketed it.'))
+                ->description(__('Each of a matter\'s marketers has a share of their own, earned as the client pays: a staff marketer in their incentive, a third party as a commission owed. A third party\'s comes off first; a staff marketer\'s percentage is of what is left. An assistant is paid the matter\'s usual rate, whoever marketed it.'))
                 ->icon(Heroicon::Megaphone)
                 ->columns(2)
                 ->schema([
@@ -71,7 +71,7 @@ class IncentiveSettingsForm
                         ->step(0.01)
                         ->required()
                         ->default(MarketingCommissions::DEFAULT_SHARE)
-                        ->helperText(__('Of the fees\' basic amount, for a matter\'s marketers together; changeable on each matter.')),
+                        ->helperText(__('Of the fees\' basic amount, for a marketer with no share typed on the matter.')),
 
                     TextInput::make(MarketingCommissions::SELF_BONUS_SETTING)
                         ->label(__('Added to the assistant who marketed the matter themselves (%)'))

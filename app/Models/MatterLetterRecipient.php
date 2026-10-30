@@ -25,6 +25,34 @@ class MatterLetterRecipient extends Model
     }
 
     /**
+     * Whom the letter reaches by email for this recipient, each with their own addresses: the party, then
+     * each of its representatives.
+     *
+     * @return list<array{name: string, emails: list<mixed>}>
+     */
+    public function addressRows(): array
+    {
+        return [
+            ['name' => (string) $this->name, 'emails' => array_values((array) ($this->emails ?: [$this->email]))],
+            ...array_map(fn (array $representative): array => [
+                'name' => trim((string) ($representative['name'] ?? '')),
+                'emails' => array_values((array) ($representative['emails'] ?? [])),
+            ], array_values((array) ($this->representatives ?? []))),
+        ];
+    }
+
+    /**
+     * Their addresses for an email's To, each named after whose it is — the party's under the party's name,
+     * the lawyer's under the lawyer's (Addresses::named()).
+     *
+     * @return list<array{email: string, name: string}>
+     */
+    public function addressed(): array
+    {
+        return Addresses::named($this->addressRows());
+    }
+
+    /**
      * Everyone the letter reaches by email for this recipient: their own
      * addresses and their representatives'.
      *
@@ -32,12 +60,7 @@ class MatterLetterRecipient extends Model
      */
     public function allEmails(): array
     {
-        $emails = [
-            ...($this->emails ?: [$this->email]),
-            ...collect($this->representatives ?? [])->flatMap(fn (array $representative): array => (array) ($representative['emails'] ?? []))->all(),
-        ];
-
-        return Addresses::emails($emails);
+        return array_column($this->addressed(), 'email');
     }
 
     public function letter(): BelongsTo

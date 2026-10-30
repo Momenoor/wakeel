@@ -34,8 +34,10 @@ use function Illuminate\Support\defer;
  *
  * To everyone in one email, one to each recipient with their
  * representatives, or one to each person (EmailGrouping) — so
- * {{recipient.name}} greets each by name. Each recipient is marked sent
- * or failed, with the reason; the letter is marked Sent when any went out.
+ * {{recipient.name}} greets each by name. In the email's To, each address is
+ * named after whose it is: the party on its own, its lawyer on the lawyer's.
+ * Each recipient is marked sent or failed, with the reason; the letter is
+ * marked Sent when any went out.
  */
 class LetterMailer
 {
@@ -102,6 +104,8 @@ class LetterMailer
         foreach (self::emailGroups($withEmail, $grouping) as $unit) {
             $group = $unit['recipients'];
             $to = Addresses::without($unit['emails'], $reached);
+            // Each address under the name of whose it is.
+            $named = array_values(array_filter($unit['to'], fn (array $address): bool => in_array($address['email'], $to, true)));
 
             if ($to === [] && $reached !== []) {
                 // All of theirs had it already, in an earlier email.
@@ -118,7 +122,7 @@ class LetterMailer
 
             try {
                 try {
-                    $sent = SenderMailer::using($sender, fn () => Mail::to($to ?: $groupCc)->cc($to ? $groupCc : [])->send($email));
+                    $sent = SenderMailer::using($sender, fn () => Mail::to($to ? $named : $groupCc)->cc($to ? $groupCc : [])->send($email));
                 } catch (\Throwable $refusal) {
                     if (! self::refusedAddress($refusal)) {
                         throw $refusal;
@@ -126,7 +130,8 @@ class LetterMailer
 
                     // An address that does not exist stops the whole email at the mail server ("550 No Such User Here"):
                     // each is tried on its own, the others get it, and the ones refused are named.
-                    [$sent, $to, $groupCc, $refused] = $this->withoutRefused($sender, $email, $to, $groupCc, $refusal);
+                    [$sent, $to, $groupCc, $refused] = $this->withoutRefused($sender, $email, $to, $groupCc, $refusal, array_column($named, 'name', 'email'));
+                    $named = array_values(array_filter($named, fn (array $address): bool => in_array($address['email'], $to, true)));
                     $result['errors'][] = __('The mail server refused these addresses (they do not exist or cannot receive): :addresses', ['addresses' => implode(', ', $refused)]);
                 }
 
@@ -141,7 +146,7 @@ class LetterMailer
 
                 // Kept with the matter, as it went — once the page has
                 // answered: a PDF takes a moment, and an email each adds up.
-                $keepTo = $to ?: $groupCc;
+                $keepTo = $to ? $named : $groupCc;
                 $keepCc = $to ? $groupCc : [];
                 $userId = auth()->id();
                 defer(fn () => $this->keepOnMatter($letter, $email, $sender, $group, $keepTo, $keepCc, $userId, $record));
@@ -187,7 +192,7 @@ class LetterMailer
      *
      * @param  array<string, mixed>  $sender
      * @param  Collection<int, MatterLetterRecipient>  $group
-     * @param  list<string>  $to
+     * @param  list<string|array{email: string, name: string}>  $to
      * @param  list<string>  $cc
      */
     private function keepOnMatter(MatterLetter $letter, LetterEmail $email, array $sender, Collection $group, array $to, array $cc, ?int $userId, ?MatterEmail $record = null): void
@@ -251,39 +256,39 @@ class LetterMailer
     /**
      * The emails to send: one for all (no one greeted by name); one a
      * recipient with their representatives; or one each — the recipient,
-     * then each representative on their own.
+     * then each representative on their own. Each one's addresses ('to')
+     * named after whose they are, the plain addresses beside them.
      *
      * @param  Collection<int, MatterLetterRecipient>  $recipients
-     * @return list<array{recipients: Collection<int, MatterLetterRecipient>, emails: list<string>, greet: ?MatterLetterRecipient, name: ?string}>
+     * @return list<array{recipients: Collection<int, MatterLetterRecipient>, to: list<array{email: string, name: string}>, emails: list<string>, greet: ?MatterLetterRecipient, name: ?string}>
      */
     public static function emailGroups(Collection $recipients, string $grouping): array
     {
+        $unit = fn (Collection $group, array $to, ?MatterLetterRecipient $greet, ?string $name): array => [
+            'recipients' => $group,
+            'to' => $to,
+            'emails' => array_column($to, 'email'),
+            'greet' => $greet,
+            'name' => $name,
+        ];
+
         if ($grouping === EmailGrouping::ALL || $recipients->isEmpty()) {
-            return [[
-                'recipients' => $recipients->values(),
-                'emails' => Addresses::emails($recipients->flatMap(fn (MatterLetterRecipient $r) => $r->allEmails())->all()),
-                'greet' => null,
-                'name' => null,
-            ]];
+            return [$unit($recipients->values(), Addresses::named($recipients->flatMap(fn (MatterLetterRecipient $r) => $r->addressRows())), null, null)];
         }
 
         $units = [];
         foreach ($recipients as $recipient) {
             if ($grouping === EmailGrouping::BY_PARTY) {
-                $units[] = ['recipients' => collect([$recipient]), 'emails' => $recipient->allEmails(), 'greet' => $recipient, 'name' => null];
+                $units[] = $unit(collect([$recipient]), $recipient->addressed(), $recipient, null);
 
                 continue;
             }
 
-            $own = Addresses::emails($recipient->emails ?: [$recipient->email]);
-            if ($own !== []) {
-                $units[] = ['recipients' => collect([$recipient]), 'emails' => $own, 'greet' => $recipient, 'name' => null];
-            }
-
-            foreach ((array) ($recipient->representatives ?? []) as $representative) {
-                $emails = Addresses::emails((array) ($representative['emails'] ?? []));
-                if ($emails !== []) {
-                    $units[] = ['recipients' => collect([$recipient]), 'emails' => $emails, 'greet' => $recipient, 'name' => trim((string) ($representative['name'] ?? '')) ?: null];
+            // Each person on their own: the party first, then each representative.
+            foreach ($recipient->addressRows() as $i => $row) {
+                $to = Addresses::named([$row]);
+                if ($to !== []) {
+                    $units[] = $unit(collect([$recipient]), $to, $recipient, $i === 0 ? null : ($row['name'] ?: null));
                 }
             }
         }
@@ -452,7 +457,7 @@ class LetterMailer
      *
      * @throws \Throwable when no address took it, or for another reason
      */
-    private function withoutRefused(array $sender, LetterEmail $email, array $to, array $cc, \Throwable $refusal): array
+    private function withoutRefused(array $sender, LetterEmail $email, array $to, array $cc, \Throwable $refusal, array $names = []): array
     {
         $sent = null;
         $reached = [];
@@ -466,7 +471,7 @@ class LetterMailer
             $fresh->bcc = [];
 
             try {
-                $one = SenderMailer::using($sender, fn () => Mail::to($address)->send($fresh));
+                $one = SenderMailer::using($sender, fn () => Mail::to([['email' => $address, 'name' => $names[$address] ?? '']])->send($fresh));
                 $sent ??= $one;
                 $reached[] = $address;
             } catch (\Throwable $e) {

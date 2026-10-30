@@ -18,6 +18,7 @@ return [
             ],
             'tips' => [
                 'Links are read for emails that arrive after this update. For an older email, use "Make the PDF again" and its links are read too.',
+                'The "Check for emails" button above the table reads the mailboxes now, instead of waiting for the next round (every ten minutes): replies, and any other email from the matter\x27s parties. It runs in the background: a notification in the bell says how many were kept. It is shown once an email has been sent from the matter.',
                 'The "Scan OneDrive" button above the table picks up from OneDrive any PDFs, originals and attachments of received emails that are there. It runs in the background: a notification in the bell tells you when it is done.',
                 'Every email on the matter has a step in the "Progress" tab and a line in the "History".',
             ],

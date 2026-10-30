@@ -139,9 +139,14 @@
     </tr>
     <tr>
         <td class="label">To</td>
-        <td>{{ $recipient->name }}
-            &lt;{{ is_array($recipient->email)?implode('>; <',$recipient->email):$recipient->email }}&gt;
-        </td>
+        @if(is_array($recipient->email) && collect($recipient->email)->contains(fn ($address) => is_array($address)))
+            {{-- Each address named after whose it is: the party on its own, its lawyer on the lawyer's. --}}
+            <td>{{ collect($recipient->email)->map(fn ($address) => is_array($address) ? trim(($address['name'] ?? '').' <'.$address['email'].'>') : '<'.$address.'>')->implode('; ') }}</td>
+        @else
+            <td>{{ $recipient->name }}
+                &lt;{{ is_array($recipient->email)?implode('>; <',$recipient->email):$recipient->email }}&gt;
+            </td>
+        @endif
     </tr>
     @if(!empty($cc))
         <tr>

@@ -28,7 +28,7 @@ class EmailPdf
 {
     /**
      * @param  array{name: string, address: string}  $sender
-     * @param  list<string>  $to  addresses
+     * @param  list<string|array{email: string, name: string}>  $to  addresses — or each with the name of whose it is, shown so
      * @param  list<string>  $cc
      * @param  list<string>  $bcc
      * @param  list<string|array{name: string, size?: ?int}>  $attachments  names and sizes, or paths (their names shown, their sizes read)

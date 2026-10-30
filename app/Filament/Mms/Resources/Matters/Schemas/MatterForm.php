@@ -398,7 +398,7 @@ class MatterForm
                                 // Who brought it in, and their share of it (MarketingCommissions).
                                 Section::make(__('Marketing'))
                                     ->icon('heroicon-o-megaphone')
-                                    ->description(__('An employee is paid their part in their incentive; anyone else is owed it as a commission. Earned as the client pays.'))
+                                    ->description(__('Each marketer has a share of their own: a percentage of the fees\' basic amount, or a fixed amount. A third party\'s comes off first and is owed as a commission; an employee\'s percentage is of what is left, paid in their incentive. Earned as the client pays.'))
                                     ->collapsible()
                                     ->schema([
                                         Repeater::make('marketers')
@@ -406,7 +406,8 @@ class MatterForm
                                             ->hiddenLabel()
                                             ->table([
                                                 Repeater\TableColumn::make(__('Marketer')),
-                                                Repeater\TableColumn::make(__('Part of the share'))->width(160),
+                                                Repeater\TableColumn::make(__('Share (%)'))->width(130),
+                                                Repeater\TableColumn::make(__('Or a fixed amount'))->width(160),
                                             ])
                                             ->compact()
                                             ->defaultItems(0)
@@ -421,33 +422,23 @@ class MatterForm
                                                     ->searchable()
                                                     ->preload()
                                                     ->required()),
-                                                TextInput::make('marketing_part')
-                                                    ->label(__('Part of the share'))
-                                                    ->numeric()
-                                                    ->minValue(0)
-                                                    ->maxValue(100)
-                                                    ->suffix('%')
-                                                    ->placeholder(__('Equal')),
-                                                Hidden::make('role')->default('marketer'),
-                                            ])
-                                            ->addActionLabel(__('Add Marketer'))
-                                            ->addActionAlignment(Alignment::Start),
-                                        Grid::make(2)
-                                            ->schema([
+                                                // Of the fees' basic amount; empty: the setting's. A fixed amount typed instead wins.
                                                 TextInput::make('marketing_rate')
-                                                    ->label(__('Marketing share (%)'))
+                                                    ->label(__('Share (%)'))
                                                     ->numeric()
                                                     ->minValue(0)
                                                     ->maxValue(100)
                                                     ->suffix('%')
-                                                    ->placeholder(fn (): string => (string) MarketingCommissions::defaultShare())
-                                                    ->helperText(__('Of the fees\' basic amount; empty: the setting\'s.')),
+                                                    ->placeholder(fn (): string => (string) MarketingCommissions::defaultShare()),
                                                 TextInput::make('marketing_fixed')
                                                     ->label(__('Or a fixed amount'))
                                                     ->numeric()
                                                     ->minValue(0)
-                                                    ->helperText(__('Instead of the percentage, for all the matter\'s fees.')),
-                                            ]),
+                                                    ->placeholder('—'),
+                                                Hidden::make('role')->default('marketer'),
+                                            ])
+                                            ->addActionLabel(__('Add Marketer'))
+                                            ->addActionAlignment(Alignment::Start),
                                     ]),
 
                                 Section::make(__('Fees'))

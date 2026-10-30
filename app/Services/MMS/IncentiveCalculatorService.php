@@ -12,7 +12,6 @@ use App\Models\IncentiveExtraRule;
 use App\Models\IncentiveLine;
 use App\Models\IncentiveLineDeduction;
 use App\Models\IncentiveMetaAdjustment;
-use App\Models\MarketingCommission;
 use App\Models\MatterParty;
 use App\Models\MatterTypeIncentiveTier;
 use App\Models\PartyLeave;
@@ -180,13 +179,13 @@ class IncentiveCalculatorService
                 $lineShare = $matterGrossTotal > 0 ? ($grossFeeAmount / $matterGrossTotal) : 0.0;
                 $feeAmountExclVat = max(0.0, $grossFeeAmount - ($matterDeduction * $lineShare));
 
-                // A third party marketed it: their part of the marketing share comes off the fee first — the
-                // assistants' incentive is on what is left. A staff marketer's does not: theirs is on the fee.
+                // A third party marketed it: their commission comes off the fee first — the assistants' incentive
+                // is on what is left. A staff marketer's does not: theirs is on the fee.
                 if ($marketers = $marketersByMatter->get($matter->id)) {
-                    $externalPart = (float) MarketingCommissions::parts($marketers)->where('kind', MarketingCommission::EXTERNAL)->sum('part');
+                    $external = MarketingCommissions::externalShareOf($marketers, $grossFeeAmount, (float) ($matterRevenueBasic[$matter->id] ?? $grossFeeAmount));
 
-                    if ($externalPart > 0) {
-                        $feeAmountExclVat = round(max(0.0, $feeAmountExclVat - MarketingCommissions::shareOf($matter, $grossFeeAmount, (float) ($matterRevenueBasic[$matter->id] ?? $grossFeeAmount)) * $externalPart), 2);
+                    if ($external > 0) {
+                        $feeAmountExclVat = round(max(0.0, $feeAmountExclVat - $external), 2);
                     }
                 }
 

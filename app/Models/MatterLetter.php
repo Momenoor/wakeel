@@ -120,6 +120,7 @@ class MatterLetter extends Model
             ->with('party.user')
             ->where('role', 'expert')
             ->whereIn('type', $types)
+            ->orderBy('id')
             ->get()
             ->flatMap(fn (MatterParty $assistant): array => array_filter((array) ($assistant->party?->email ?: $assistant->party?->user?->email)))
             ->filter(fn ($email): bool => filter_var($email, FILTER_VALIDATE_EMAIL) !== false)

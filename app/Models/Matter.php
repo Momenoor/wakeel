@@ -66,8 +66,6 @@ class Matter extends Model implements AttachmentOwner
         'is_office_work',
         'received_at',
         'custom_fields',
-        'marketing_rate',
-        'marketing_fixed',
     ];
 
     protected array $dates = [
@@ -94,8 +92,6 @@ class Matter extends Model implements AttachmentOwner
         'review_count' => 'integer',
         'has_substantive_changes' => 'boolean',
         'has_court_penalty' => 'boolean',
-        'marketing_rate' => 'decimal:2',
-        'marketing_fixed' => 'decimal:2',
         'final_report_memo_date' => 'date',
         'is_office_work' => 'boolean',
         'created_at' => 'date:Y-m-d',
