@@ -65,7 +65,7 @@ return [
             'permissions' => [],
             'steps' => [
                 ['text' => 'Click your avatar in the top bar to open the menu: "Profile", the "Font Size" slider, the appearance switch and "Sign out".', 'shot' => 'usermenu-1'],
-                ['text' => 'In "Profile", upload your picture, edit your name, email and display name, turn WhatsApp and email notifications on or off, change your password, then click "Save changes".', 'shot' => 'profile-1'],
+                ['text' => 'In "Profile", upload your picture, edit your name, email and display name, choose your notifications under "My notifications", change your password, then click "Save changes".', 'shot' => 'profile-1'],
                 ['text' => 'The page has two columns: "Account" and the password, and below them the "My notifications" groups (what you are told of and how: the bell, email or WhatsApp; what your role requires stays on). In "Account", the "Theme" field picks the interface colours for you, unless the management makes everyone use the office theme.'],
             ],
             'tips' => ['The default font size is 16. On large screens, 13 or 14 is comfortable and shows more on the page.'],
@@ -75,7 +75,7 @@ return [
             'id' => 'demo-data',
             'title' => 'Fill the system with complete demo data',
             'description' => 'To try the system or train staff without using real data, the system has a demo data seeder that creates realistic Arabic data: users with avatars, a fake logo, courts and matter types, parties and experts, thirty matters at every stage with their fees, payments, requests, notes and attachments, letterheads, letter templates, sent letters and meeting minutes, and calendar appointments. You run it once on a separate, empty database.',
-            'roles' => [$admin . ' (whoever can run commands on the server)'],
+            'roles' => [$admin.' (whoever can run commands on the server)'],
             'permissions' => [],
             'steps' => [
                 ['text' => 'Create a new, empty database for the demo copy (for example in MySQL). Never use the office\'s real database.', 'code' => 'CREATE DATABASE wakeel_demo CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'],

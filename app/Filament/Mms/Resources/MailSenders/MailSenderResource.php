@@ -137,8 +137,8 @@ class MailSenderResource extends Resource
                         ->hiddenLabel()
                         ->visible(fn (Get $get) => $get('driver') === MailSender::MICROSOFT)
                         ->state(fn () => static::graphConfigured()
-                            ? __('Sent through Microsoft Graph with the app registration in .env. No password is needed here. The mailbox must exist in your Microsoft 365 tenant.')
-                            : __('Microsoft Graph is not set up yet: add MICROSOFT_GRAPH_TENANT_ID, MICROSOFT_GRAPH_CLIENT_ID and MICROSOFT_GRAPH_CLIENT_SECRET to .env (an Azure app registration with the Mail.Send application permission).'))
+                            ? __('Sent through Microsoft Graph with the office\'s app registration (Settings → Integrations → Microsoft 365). No password is needed here. The mailbox must exist in your Microsoft 365 tenant.')
+                            : __('Microsoft Graph is not set up yet: enter the Tenant ID, Client ID and Client secret of the office\'s Azure app registration (with the Mail.Send application permission) in Settings → Integrations → Microsoft 365.'))
                         ->helperText(__('With the User.Read.All permission as well, the app can tell for certain whether an address is a Microsoft 365 or a cPanel mailbox.'))
                         ->color(fn () => static::graphConfigured() ? 'gray' : 'danger')
                         ->columnSpanFull(),
@@ -153,7 +153,7 @@ class MailSenderResource extends Resource
                 ]),
 
             Section::make(__('Signature'))
-                ->description(__('Added under bulk mail sent from this mailbox.'))
+                ->description(__('Added at the end of every email sent from this mailbox: letters, minutes and bulk mail.'))
                 ->collapsible()
                 ->collapsed()
                 ->columnSpanFull()

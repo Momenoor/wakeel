@@ -4,7 +4,7 @@
 
 return [
     'title' => 'Users',
-    'intro' => 'The accounts that sign in to the system. Each user has a name, an email, a password and an avatar, a way to receive notifications, a link to their record in the parties, and most importantly the "Roles" that set what they can do. Find this section under "Administration → Users".',
+    'intro' => 'The accounts that sign in to the system. Each user has a name, an email, a password and an avatar, a link to their record in the parties, and most importantly the "Roles" that set what they can do. Find this section under "Administration → Users".',
     'actions' => [
         [
             'id' => 'list',
@@ -20,12 +20,12 @@ return [
         [
             'id' => 'create',
             'title' => 'Add a user',
-            'description' => 'The account is created with a name, an email and a first password. Then you set the roles, the notification details and the link to a record in the parties (so the assistant shows on their matters).',
+            'description' => 'The account is created with a name, an email and a first password. Then you set the roles and the link to a record in the parties (so the assistant shows on their matters).',
             'roles' => [$admin, $withPermission],
             'permissions' => ['Create:User'],
             'steps' => [
                 ['text' => 'Click "New User". Upload the "Avatar" by dragging the picture in or clicking "Browse".', 'shot' => 'create-1'],
-                ['text' => 'Enter the "Name", "Email", "Password", "Password Confirmation" and "Display name" (the name shown). "Party" links the user to the party record, "Notify by Whatsapp" and "Notify by Email" set the channels they are notified by, and "Roles" lets you choose one role or more.', 'shot' => 'create-2-filled'],
+                ['text' => 'Enter the "Name", "Email", "Password", "Password Confirmation" and "Display name" (the name shown). "Party" links the user to the party record, and "Roles" lets you choose one role or more. Which notifications they get, and how, each user chooses in their own profile.', 'shot' => 'create-2-filled'],
                 ['text' => 'Click "Create". The new user appears and can sign in straight away.', 'shot' => 'create-3-done'],
             ],
             'tips' => ['A user with no role sees nothing but the pages open to everyone (the dashboard, the profile and the user guide).'],
@@ -33,10 +33,10 @@ return [
         [
             'id' => 'edit',
             'title' => 'Edit a user',
-            'description' => 'To change the name, email, roles, notification channels or picture, and the work account (see the next action).',
+            'description' => 'To change the name, email, roles or picture, and the work account (see the next action).',
             'roles' => [$admin, $withPermission],
             'permissions' => ['Update:User'],
-            'steps' => [['text' => 'Click "Edit" on the user\'s row, change what you need, then click "Save changes".', 'shot' => 'edit-1']]
+            'steps' => [['text' => 'Click "Edit" on the user\'s row, change what you need, then click "Save changes".', 'shot' => 'edit-1']],
         ],
         [
             'id' => 'work-account',

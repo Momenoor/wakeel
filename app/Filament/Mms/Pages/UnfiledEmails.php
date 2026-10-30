@@ -366,7 +366,7 @@ class UnfiledEmails extends Page implements HasTable
                     ->color('gray')
                     ->requiresConfirmation()
                     ->modalHeading(fn (MatterEmail $record): string => __('Never check emails from :address?', ['address' => MatterEmail::addressOf((string) $record->from)]))
-                    ->modalDescription(__('Their emails waiting here are set aside, and new ones are not read (they stay unread in the mailbox). The address can be taken off the list in Settings → Integrations.'))
+                    ->modalDescription(__('Their emails waiting here are set aside, and new ones are not read (they stay unread in the mailbox). The address can be taken off the list in Settings → Collecting emails.'))
                     ->visible(fn (): bool => auth()->user()?->can('View:SystemSettings') ?? false)
                     ->action(function (MatterEmail $record): void {
                         $address = MatterEmail::addressOf((string) $record->from);
@@ -458,7 +458,7 @@ class UnfiledEmails extends Page implements HasTable
             ->color('gray')
             ->requiresConfirmation()
             ->modalHeading(fn (Collection $records): string => __('Never check emails from these :count senders?', ['count' => $records->map(fn (MatterEmail $email): string => MatterEmail::addressOf((string) $email->from))->unique()->count()]))
-            ->modalDescription(__('Their emails waiting here are set aside, and new ones are not read (they stay unread in the mailbox). The address can be taken off the list in Settings → Integrations.'))
+            ->modalDescription(__('Their emails waiting here are set aside, and new ones are not read (they stay unread in the mailbox). The address can be taken off the list in Settings → Collecting emails.'))
             ->visible(fn (): bool => auth()->user()?->can('View:SystemSettings') ?? false)
             ->deselectRecordsAfterCompletion()
             ->action(function (Collection $records): void {

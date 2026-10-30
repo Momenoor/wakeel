@@ -108,20 +108,22 @@ class LetterIssuer
 
     /**
      * Change an issued letter — its date, letterhead, attention line and
-     * recipients, and its wording if given (this letter's only: the
-     * template stays as it is) — keeping its reference; the letter's text
-     * is rendered again from them.
+     * recipients, its wording if given (this letter's only: the template
+     * stays as it is) and its filled-in fields if given — keeping its
+     * reference; the letter's text is rendered again from them.
      *
      * @param  list<array{name: string, role: ?string, emails: list<string>, party_id?: int|null}>  $recipients
+     * @param  array<string, mixed>|null  $inputs  the template's fields filled in again; null: as they were
      */
-    public function revise(MatterLetter $letter, array $recipients, CarbonInterface $date, ?Letterhead $letterhead, ?string $attention, ?string $body = null): MatterLetter
+    public function revise(MatterLetter $letter, array $recipients, CarbonInterface $date, ?Letterhead $letterhead, ?string $attention, ?string $body = null, ?array $inputs = null): MatterLetter
     {
-        return DB::transaction(function () use ($letter, $recipients, $date, $letterhead, $attention, $body) {
+        return DB::transaction(function () use ($letter, $recipients, $date, $letterhead, $attention, $body, $inputs) {
             $letter->update([
                 'letter_date' => $date,
                 'letterhead_id' => $letterhead?->getKey() ?? $letter->letterhead_id,
                 'attention' => filled($attention) ? trim($attention) : null,
                 ...(filled(strip_tags((string) $body)) || str_contains((string) $body, 'customBlock') ? ['body' => SignatureLayouts::freeze(LetterComposer::normalizeMergeTags((string) $body))] : []),
+                ...($inputs !== null && $letter->template ? ['inputs' => $this->freezeItems($letter->template, $inputs)] : []),
             ]);
 
             $letter->recipients()->delete();

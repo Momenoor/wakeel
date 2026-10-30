@@ -66,7 +66,7 @@ return [
             ],
             'tips' => [
                 '"About no matter" sets the email aside and deletes what was saved of it (the PDF and attachments). It stays in the mailbox.',
-                '"Ignore sender" sets aside their waiting emails, and their new emails are not read. To take the address off the ignore list, go to "Settings → Integrations".',
+                '"Ignore sender" sets aside their waiting emails, and their new emails are not read. To take the address off the ignore list, go to "Settings → Collecting emails" ("Never check emails from").',
                 'When an email is filed or moved by hand, the matter\'s people are told, and it shows as read in the bell of whoever filed it. The question "Which matter is this email from … about?" is marked read for everyone.',
             ],
         ],

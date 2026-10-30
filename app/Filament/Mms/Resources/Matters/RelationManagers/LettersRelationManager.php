@@ -475,6 +475,8 @@ class LettersRelationManager extends RelationManager
                 // Ticked as when issued: the matter's parties it went to,
                 // and anyone typed in under "Other recipients".
                 ...self::recipientsState($record),
+                // The template's fields as filled in when it was issued.
+                ...self::inputsState($record),
             ])
             ->schema(fn (MatterLetter $record): array => [
                 Section::make()
@@ -487,6 +489,11 @@ class LettersRelationManager extends RelationManager
                             ->placeholder(__('The template\'s letterhead')),
                     ]),
                 self::recipientsSection($record->matter, separately: false),
+                // As when issuing: the template's own fields, to fill in again. The meeting was made then, if at all.
+                Section::make(__('Letter details'))
+                    ->visible($record->template !== null)
+                    ->schema($this->inputFields($record->matter, $record->template, withMeeting: false))
+                    ->columns(2),
                 Section::make(__('The letter'))
                     ->description(__('Changes here are for this letter only — the template stays as it is.'))
                     ->collapsible()
@@ -506,6 +513,8 @@ class LettersRelationManager extends RelationManager
                     filled($data['letterhead_id'] ?? null) ? Letterhead::find($data['letterhead_id']) : null,
                     $data['attention'] ?? null,
                     $data['body'] ?? null,
+                    // The fields filled in again, over those the form has no place for (a meeting's link and time).
+                    $record->template ? [...($record->inputs ?? []), ...self::inputsFrom($data)] : null,
                 );
 
                 Notification::make()->success()->title(__('Letter :reference updated', ['reference' => $record->reference]))->send();
@@ -929,7 +938,7 @@ class LettersRelationManager extends RelationManager
      *
      * @return list<mixed>
      */
-    private function inputFields(Matter $matter, ?LetterTemplate $template): array
+    private function inputFields(Matter $matter, ?LetterTemplate $template, bool $withMeeting = true): array
     {
         $fields = [];
         // Filled by the meeting made on issue, when it is.
@@ -974,7 +983,60 @@ class LettersRelationManager extends RelationManager
                 ->hidden(fn (Get $get): bool => in_array($key, $meetingLinks, true) && (bool) $get('create_meeting'));
         }
 
-        return [...$fields, ...$this->meetingFields($template)];
+        return $withMeeting ? [...$fields, ...$this->meetingFields($template)] : $fields;
+    }
+
+    /**
+     * The template's fields as the form sends them: inputs.*, and a list's
+     * extra lines (one per line) after the items ticked.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private static function inputsFrom(array $data): array
+    {
+        $inputs = $data['inputs'] ?? [];
+        foreach ($data['extra'] ?? [] as $key => $lines) {
+            $more = array_values(array_filter(array_map('trim', preg_split('/\R/', (string) $lines))));
+            $inputs[$key] = [...array_values((array) ($inputs[$key] ?? [])), ...$more];
+        }
+
+        return $inputs;
+    }
+
+    /**
+     * A letter's filled-in fields as the form shows them, to change: each
+     * as issued; a list of items holds their texts, so those still in the
+     * library are ticked again and the rest are its extra lines.
+     *
+     * @return array{inputs: array<string, mixed>, extra: array<string, string>}
+     */
+    private static function inputsState(MatterLetter $letter): array
+    {
+        $inputs = [];
+        $extra = [];
+
+        foreach ($letter->template?->inputs ?? [] as $input) {
+            $key = $input['key'] ?? '';
+            if ($key === '') {
+                continue;
+            }
+
+            $value = $letter->inputs[$key] ?? null;
+
+            if (($input['type'] ?? 'text') !== 'items') {
+                $inputs[$key] = $value;
+
+                continue;
+            }
+
+            $ids = LetterItem::query()->forGroup($input['group'] ?? null, $letter->matter->type_id)->pluck('id', 'text');
+            $texts = array_values((array) $value);
+            $inputs[$key] = array_values(array_filter(array_map(fn ($text) => $ids[$text] ?? null, $texts)));
+            $extra[$key] = implode("\n", array_filter($texts, fn ($text) => ! isset($ids[$text])));
+        }
+
+        return ['inputs' => $inputs, 'extra' => $extra];
     }
 
     /**
@@ -1175,11 +1237,7 @@ class LettersRelationManager extends RelationManager
             ]);
         $recipients = self::chosenRecipients($matter, $data, $template->locale !== 'en');
 
-        $inputs = $data['inputs'] ?? [];
-        foreach ($data['extra'] ?? [] as $key => $lines) {
-            $more = array_values(array_filter(array_map('trim', preg_split('/\R/', (string) $lines))));
-            $inputs[$key] = [...array_values((array) ($inputs[$key] ?? [])), ...$more];
-        }
+        $inputs = self::inputsFrom($data);
 
         // A meeting already on the calendar: its link and time go in the letter, none is made.
         $existing = filled($data['existing_event_id'] ?? null)

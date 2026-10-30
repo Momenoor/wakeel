@@ -13,8 +13,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * A mailbox letters and bulk mail can be sent from: a cPanel mailbox over
  * SMTP (host, port, username, password), or a Microsoft 365 mailbox sent
- * through Microsoft Graph with the app registration in .env
- * (MICROSOFT_GRAPH_TENANT_ID / CLIENT_ID / CLIENT_SECRET) — no password.
+ * through Microsoft Graph with the office's app registration (Settings → Integrations,
+ * put over the configuration by Integrations::apply()) — no password.
  */
 #[Fillable('user_id', 'key', 'name', 'address', 'driver', 'host', 'port', 'encryption', 'username', 'password', 'signature', 'is_active', 'collects', 'sends', 'keep_all_inbox', 'files_forwards', 'inbox_folder', 'folders_only')]
 class MailSender extends Model

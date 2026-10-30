@@ -356,6 +356,41 @@ class LetterBuilderTest extends TestCase
         $this->assertStringContainsString('{{input.documents}}', $this->template->fresh()->body);
     }
 
+    public function test_editing_offers_the_templates_fields_filled_in_as_issued(): void
+    {
+        $candidates = array_values(LetterComposer::candidates($this->matter));
+        $letter = app(LetterIssuer::class)->issue($this->template, $this->matter, [$candidates[0]], [
+            'meeting_date' => '2026-09-30', 'meeting_time' => '11:00', 'meeting_link' => 'https://teams.example/abc',
+            'documents' => [$this->items[0], 'سطر إضافي.'],
+        ]);
+
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('editLetter', $letter)
+            // The same fields as when issuing: the list's library items ticked again, its own line as an extra line.
+            ->assertTableActionDataSet([
+                'inputs.meeting_date' => '2026-09-30',
+                'inputs.meeting_link' => 'https://teams.example/abc',
+                'inputs.documents' => [$this->items[0]],
+                'extra.documents' => 'سطر إضافي.',
+            ])
+            ->assertMountedActionModalSee(['Letter details', 'المستندات'])
+            ->setTableActionData([
+                'inputs.meeting_time' => '14:30',
+                'inputs.documents' => [$this->items[1], $this->items[2]],
+                'extra.documents' => "بند جديد.\n",
+            ])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+
+        $letter->refresh();
+        $this->assertSame('14:30', $letter->inputs['meeting_time']);
+        $this->assertSame('2026-09-30', $letter->inputs['meeting_date']);
+        $this->assertSame(['كشف الحسابات البنكية.', 'مذكرة شارحة.', 'بند جديد.'], $letter->inputs['documents']);
+        $this->assertStringContainsString('بند جديد.', $letter->rendered_html);
+        $this->assertStringNotContainsString('بيان موطن المدين.', $letter->rendered_html);
+        $this->assertSame('JPA/2026/986/1', $letter->reference);
+    }
+
     public function test_a_letter_can_be_written_without_a_template(): void
     {
         $candidateIds = array_keys(LetterComposer::candidates($this->matter));

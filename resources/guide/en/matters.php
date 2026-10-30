@@ -261,6 +261,7 @@ return [
                 ['text' => 'The new letter appears with its reference number at the top of the table, with a notification holding the PDF and Word links.', 'shot' => 'letters-7-issued'],
                 ['text' => 'To write a free letter without a template, click "Write a letter", type the subject, choose the language (Arabic or English) and the recipient, then type the text in the editor.', 'shot' => 'letters-2-write'],
                 ['text' => 'The "Preview" button opens the letter as a PDF, as it will print, with the "Open to print", "Word", "Edit" and "Send by email" buttons.', 'shot' => 'letters-3-preview'],
+                ['text' => '"Edit" (in the row\x27s "…" menu, or from the preview) opens the same form as when issuing: the date, the letterhead, the recipients, the template\x27s own fields under "Letter details" filled in as they were, and the wording under "The letter". Change what you need and click "Save": the letter is made again from them, its reference as it was, and the template is not touched.'],
                 ['text' => 'To send it, click "Send by email": choose the "Send from" mailbox, how to send it (as an attachment with a covering email, or as the body of the email itself), the attachment format (PDF or Word), the recipients and the CC, then click "Send". "A separate email to each recipient" sends each party their own email.', 'shot' => 'letters-4-email'],
             ],
             'tips' => [

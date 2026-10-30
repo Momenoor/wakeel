@@ -4,7 +4,7 @@
 
 return [
     'title' => 'Mail senders',
-    'intro' => 'The mailboxes the system sends letters, campaigns and minutes from, and reads incoming email from: a Microsoft 365 account or another mail server (SMTP or cPanel). Each mailbox has a name, an address and an email signature, and two options: "Keep every email of this inbox" and "Filing mailbox". Some may also be defined in the configuration files. Find them under "Settings → Communication → Mail senders".',
+    'intro' => 'The mailboxes the system sends letters, campaigns and minutes from, and reads incoming email from: a Microsoft 365 account or another mail server (SMTP or cPanel). Each mailbox has a name, an address and an email signature, and two options: "Keep every email of this inbox" and "Filing mailbox". Find them under "Settings → Communication → Mail senders".',
     'actions' => [
         [
             'id' => 'list',
