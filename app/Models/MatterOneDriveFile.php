@@ -14,6 +14,9 @@ class MatterOneDriveFile extends Model
 {
     public const ADDED = 'added';
 
+    /** Being read — still so at the next run: the run died on it (PHP's time limit) and it is not tried again. */
+    public const READING = 'reading';
+
     public const KNOWN = 'known';
 
     public const UNREADABLE = 'unreadable';

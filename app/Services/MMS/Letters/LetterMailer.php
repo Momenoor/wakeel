@@ -19,7 +19,6 @@ use App\Support\EmailGrouping;
 use App\Support\Honorific;
 use App\Support\RichHtml;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
@@ -142,7 +141,9 @@ class LetterMailer
                 $withoutRecipients['sent'] += $group->isEmpty() ? 1 : 0;
                 $names = [...$names, ...($unit['name'] !== null ? [$unit['name']] : $group->pluck('name')->all())];
 
-                $this->copyToSentFolder($senderKey, $sent?->toString());
+                if ($notCopied = SentFolder::copyQuietly($senderKey, $sent?->toString())) {
+                    $result['errors'][] = $notCopied;
+                }
 
                 // Kept with the matter, as it went — once the page has
                 // answered: a PDF takes a moment, and an email each adds up.
@@ -488,21 +489,5 @@ class LetterMailer
         }
 
         return [$sent, array_values(array_intersect($to, $reached)), array_values(array_intersect($cc, $reached)), $refused];
-    }
-
-    /**
-     * Sent already; a Sent-folder copy that fails is only logged.
-     */
-    private function copyToSentFolder(string $senderKey, ?string $raw): void
-    {
-        if ($raw === null) {
-            return;
-        }
-
-        try {
-            app(SentFolder::class)->saveFor($senderKey, $raw);
-        } catch (\Throwable $e) {
-            Log::warning("Letter email sent but not copied to the {$senderKey} Sent folder: ".$e->getMessage());
-        }
     }
 }

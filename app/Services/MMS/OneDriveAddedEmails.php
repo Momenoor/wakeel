@@ -133,6 +133,15 @@ class OneDriveAddedEmails
             foreach ($files as $file) {
                 $row = $seen->get($file['id']);
 
+                // Still "reading" from an earlier run: that run died on it (a .msg whose RTF takes longer than PHP
+                // allows) — not tried again, or every run would die on it and never reach the files after it.
+                if ($row?->outcome === MatterOneDriveFile::READING) {
+                    $row->update(['outcome' => MatterOneDriveFile::FAILED, 'attempts' => MatterOneDriveFile::TRIES, 'error' => __('Reading it did not finish; the file is skipped.')]);
+                    $errors[] = $file['path'].': '.__('Reading it did not finish; the file is skipped.');
+
+                    continue;
+                }
+
                 if ($row !== null && ($row->outcome !== MatterOneDriveFile::FAILED || $row->attempts >= MatterOneDriveFile::TRIES)) {
                     continue;
                 }
@@ -272,6 +281,9 @@ class OneDriveAddedEmails
 
             return false;
         }
+
+        // Marked before it is read: a run that dies on it leaves this, and the next run skips it.
+        $note(MatterOneDriveFile::READING);
 
         try {
             $info = $this->client->itemInfo($user, $file['id']);

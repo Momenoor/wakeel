@@ -23,6 +23,7 @@ use App\Models\User;
 use App\Models\WhatsAppTemplate;
 use App\Services\MMS\Letters\MinutesSender;
 use App\Services\MMS\Letters\MinutesService;
+use App\Services\MMS\SentFolder;
 use App\Services\Notifications\NotificationPreferences as Prefs;
 use App\Services\WhatsAppCloud;
 use App\Support\CompanyContact;
@@ -37,6 +38,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
+use Mockery;
 use Spatie\Permission\Models\Role;
 use Symfony\Component\Mime\Email;
 use Tests\Support\MailSenders;
@@ -67,6 +69,7 @@ class MinutesSignatureTest extends TestCase
 
         Storage::fake('public');
         $this->withoutDefer();
+        $this->app->instance(SentFolder::class, Mockery::spy(SentFolder::class));
 
         MailSenders::add('iflas', [
             'username' => 'iflas@jpaemirates.com', 'address' => 'iflas@jpaemirates.com', 'name' => 'JPA Iflas',

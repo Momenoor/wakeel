@@ -36,6 +36,7 @@ return [
             'tips' => [
                 'Each file is read once. An email the matter already has (the same Message-ID) is not added again, and the system\'s own saved emails are never read as added.',
                 'Emails are read for matters still in progress. The button reads a finished matter\'s folder too.',
+                'A file the reading cannot finish (an Outlook message whose formatted text holds pictures) is skipped from then on and named in the result, so the files after it are still read.',
             ],
         ],
         [

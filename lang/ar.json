@@ -5094,5 +5094,7 @@
     "Syncing with Outlook": "جارٍ المزامنة مع Outlook",
     "Sending to Outlook": "جارٍ الإرسال إلى Outlook",
     "Reading the emails added in OneDrive": "جارٍ قراءة الرسائل المضافة في OneDrive",
-    "Export to Excel": "تصدير إلى Excel"
+    "Export to Excel": "تصدير إلى Excel",
+    "Reading it did not finish; the file is skipped.": "لم تكتمل قراءته؛ تم تخطي الملف.",
+    "Sent, but not copied to the :sender Sent folder: :error": "أُرسلت، لكن لم تُنسخ إلى مجلد المرسلة في :sender: :error"
 }

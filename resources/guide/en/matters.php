@@ -288,6 +288,7 @@ return [
             'tips' => [
                 '"Finalize" freezes the text of the minutes and saves a PDF in the matter\'s files, so check the answers and attendees before it.',
                 '"Send to attendees" sends the minutes by email or WhatsApp to each attendee to sign, and the signed copies come back to the matter.',
+                'A minutes email is copied into the sending mailbox\'s Sent folder, as a letter\'s is (a Microsoft 365 mailbox keeps its own copy). If the copy fails, the send result says so; the email itself went.',
                 'In the email template: {{recipient.salutation}} writes all the email\'s recipients with their names and capacities, one per line, and {{recipient.role}} is the recipient\'s capacity.',
                 'In "Record the meeting", a "Save" button next to "Next" saves what was recorded without moving on, and a "Join the meeting" button is for online meetings. "Live view" follows where the text is being typed.',
             ],

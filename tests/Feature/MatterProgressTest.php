@@ -144,6 +144,25 @@ class MatterProgressTest extends TestCase
 
         $sent = $this->matter->progress()->where('type', ProgressType::MINUTES_SENT)->sole();
         $this->assertSame(__('By email').' — الأستاذ/ محمد عبد المقصود', $sent->details);
+        // A copy in the sender's Sent folder, as a letter's.
+        app(SentFolder::class)->shouldHaveReceived('saveFor')->once()->with('iflas', Mockery::type('string'));
+    }
+
+    public function test_a_sent_folder_copy_that_fails_is_said_in_the_send_result(): void
+    {
+        app(SentFolder::class)->shouldReceive('saveFor')->andThrow(new \RuntimeException('IMAP login failed'));
+        $minutes = MatterMinutes::create([
+            'matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => 3, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT, 'attendees' => [['present' => true, 'name' => 'محمد عبد المقصود']],
+        ]);
+        app(MinutesService::class)->finalise($minutes, $this->user->id);
+
+        $result = app(MinutesSender::class)->send($minutes->fresh(), [['name' => 'الأستاذ/ محمد عبد المقصود', 'emails' => ['m@law.ae'], 'by_email' => true]], 'iflas', userId: $this->user->id);
+
+        // Sent all the same; the copy's failure named.
+        $this->assertSame([1, 0], [$result['sent'], $result['failed']]);
+        $this->assertSame([__('Sent, but not copied to the :sender Sent folder: :error', ['sender' => 'iflas', 'error' => 'IMAP login failed'])], $result['errors']);
+        $this->assertSame(ProgressType::MINUTES_SENT, $this->matter->progress()->where('type', ProgressType::MINUTES_SENT)->sole()->type);
     }
 
     public function test_an_email_to_the_parties_is_one_step_however_many_it_reaches(): void

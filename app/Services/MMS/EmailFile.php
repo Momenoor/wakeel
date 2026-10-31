@@ -105,10 +105,18 @@ class EmailFile
         return preg_match('/^'.preg_quote($name, '/').':\s*(.*(?:\r?\n[ \t].*)*)/im', $headers, $m) ? trim((string) preg_replace('/\r?\n[ \t]+/', ' ', $m[1])) : '';
     }
 
-    /** Its text as HTML — the plain text's, when it has no HTML; nothing when it has neither (RTF only). */
+    /** Compressed RTF above this is not searched for the HTML in it: the library's scanner takes minutes on one that holds pictures. */
+    private const RTF_MAX_BYTES = 1024 * 1024;
+
+    /**
+     * Its text as HTML — from the RTF when it has no HTML of its own, unless the RTF is big (pictures in it: the
+     * library's scanner takes longer than PHP allows); the plain text's otherwise; nothing when it has neither.
+     */
     private static function html(Message $message): string
     {
-        $html = rescue(fn () => (string) $message->getBodyHTML(), '', report: false);
+        $properties = $message->properties;
+        $rtfTooBig = blank($properties['body_html'] ?? null) && strlen((string) ($properties['rtf_compressed'] ?? '')) > self::RTF_MAX_BYTES;
+        $html = $rtfTooBig ? '' : rescue(fn () => (string) $message->getBodyHTML(), '', report: false);
 
         if (trim($html) !== '') {
             return $html;

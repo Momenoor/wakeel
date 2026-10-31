@@ -157,6 +157,30 @@ class OneDriveAddedEmailsTest extends TestCase
         $this->assertSame(['Second'], $second->emails()->pluck('subject')->all());
     }
 
+    public function test_a_file_whose_reading_never_finished_is_skipped_and_said(): void
+    {
+        $id = $this->oneDrive->put('04 المراسلات/Huge.msg', 'whatever');
+        // Left "reading" by a run that died on it (PHP's time limit, on a .msg whose RTF holds pictures).
+        MatterOneDriveFile::create(['matter_id' => $this->matter->id, 'item_id' => $id, 'path' => '04 المراسلات/Huge.msg', 'outcome' => MatterOneDriveFile::READING, 'attempts' => 1]);
+
+        $result = app(OneDriveAddedEmails::class)->readMatter($this->matter);
+
+        $this->assertSame(0, $result['added']);
+        $this->assertCount(1, $result['errors']);
+        $this->assertStringEndsWith('Huge.msg: '.__('Reading it did not finish; the file is skipped.'), $result['errors'][0]);
+        $row = MatterOneDriveFile::query()->sole();
+        $this->assertSame([MatterOneDriveFile::FAILED, MatterOneDriveFile::TRIES], [$row->outcome, $row->attempts]);
+        $this->assertSame(0, MatterEmail::count());
+
+        // Not tried again.
+        $this->assertSame(['added' => 0, 'errors' => []], app(OneDriveAddedEmails::class)->readMatter($this->matter));
+
+        // A file is marked as it is read: "reading" first, then what came of it.
+        $this->oneDrive->put('04 المراسلات/Claim.eml', self::eml('clerk@dubai.gov.ae', 'Session notice', 'abc-9@dubai.gov.ae'));
+        app(OneDriveAddedEmails::class)->readMatter($this->matter);
+        $this->assertSame([MatterOneDriveFile::FAILED, MatterOneDriveFile::ADDED], MatterOneDriveFile::query()->orderBy('id')->pluck('outcome')->all());
+    }
+
     public function test_an_outlook_message_is_read(): void
     {
         $message = EmailFile::read('sample.msg', (string) file_get_contents(base_path('vendor/hfig/mapi/tests/_files/sample.msg')));

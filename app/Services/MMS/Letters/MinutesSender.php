@@ -13,6 +13,7 @@ use App\Services\MMS\BulkMailPlaceholders;
 use App\Services\MMS\MatterProgressRecorder;
 use App\Services\MMS\SenderMailer;
 use App\Services\MMS\SentEmailArchive;
+use App\Services\MMS\SentFolder;
 use App\Services\WhatsAppCloud;
 use App\Services\WhatsAppService;
 use App\Support\Addresses;
@@ -88,8 +89,10 @@ class MinutesSender
             $copied = Addresses::without(Addresses::emails([...$cc, ...$theirs]), $emails);
 
             $record = null;
-            $sent = $this->attempt($minutes, array_values($group['rows']), MinutesDelivery::EMAIL, Str::limit(implode(', ', $emails), 250, ''), $userId, $result, function () use ($senderKey, $email, $emails, $group, $copied, $minutes, $userId, &$record) {
+            $raw = null;
+            $sent = $this->attempt($minutes, array_values($group['rows']), MinutesDelivery::EMAIL, Str::limit(implode(', ', $emails), 250, ''), $userId, $result, function () use ($senderKey, $email, $emails, $group, $copied, $minutes, $userId, &$record, &$raw) {
                 $message = SenderMailer::using(SenderMailer::sender($senderKey), fn () => Mail::to(self::addressed($group['rows']))->cc($copied)->send($email));
+                $raw = $message?->toString();
                 // Remembered, for its replies.
                 $record = MatterEmail::recordSent($minutes->matter_id, $minutes, $senderKey, $message?->getMessageId(), $email->emailSubject, [...$emails, ...$copied], $userId);
 
@@ -97,6 +100,11 @@ class MinutesSender
             });
 
             if ($sent) {
+                // A copy in the sender's Sent folder, as a letter's.
+                if ($notCopied = SentFolder::copyQuietly($senderKey, $raw)) {
+                    $result['errors'][] = $notCopied;
+                }
+
                 $reachedRows += array_fill_keys(array_keys($group['rows']), true);
                 $methods[MatterProgressRecorder::EMAIL] = true;
 

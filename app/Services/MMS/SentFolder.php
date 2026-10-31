@@ -4,7 +4,9 @@ namespace App\Services\MMS;
 
 use App\Models\BulkMailCampaign;
 use App\Support\Tolerant;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
+use Throwable;
 use Webklex\PHPIMAP\Address;
 use Webklex\PHPIMAP\Client;
 use Webklex\PHPIMAP\ClientManager;
@@ -41,6 +43,29 @@ class SentFolder
             ['\Seen'],
             now()->format('d-M-Y H:i:s O')
         );
+    }
+
+    /**
+     * A copy of an email just sent, kept in the sender's Sent folder — the email went already, so a copy that
+     * fails is logged and said in the send's result, not thrown.
+     *
+     * @return string|null what to tell; null when copied (or the sender keeps its own copies)
+     */
+    public static function copyQuietly(string $senderKey, ?string $raw): ?string
+    {
+        if ($raw === null) {
+            return null;
+        }
+
+        try {
+            app(self::class)->saveFor($senderKey, $raw);
+
+            return null;
+        } catch (Throwable $e) {
+            Log::warning("Email sent but not copied to the {$senderKey} Sent folder: ".$e->getMessage());
+
+            return __('Sent, but not copied to the :sender Sent folder: :error', ['sender' => $senderKey, 'error' => $e->getMessage()]);
+        }
     }
 
     /**
