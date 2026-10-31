@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Actions\Calendar;
 
+use App\Jobs\PushCalendarEventToOutlook;
 use App\Models\CalendarEvent;
 use App\Models\Matter;
 use App\Services\MMS\OutlookCalendarService;
@@ -10,8 +11,6 @@ use Filament\Notifications\Notification;
 
 class SyncToOutlookAction extends Action
 {
-    use SyncsEventToOutlook;
-
     public static function getDefaultName(): ?string
     {
         return 'syncToOutlook';
@@ -22,12 +21,13 @@ class SyncToOutlookAction extends Action
         parent::setUp();
 
         // An event: put on Outlook, or — already there — sent again as it is here (its title, time, place and
-        // text), when a change did not reach it. A matter: its latest event not on Outlook yet.
+        // text), when a change did not reach it. A matter: its latest event not on Outlook yet. On the queue:
+        // Microsoft took up to fourteen seconds here; whoever asked is told in the bell.
         $this->label(__('Sync to Outlook'))
             ->icon('heroicon-o-arrow-path')
             ->visible(fn ($record) => app(OutlookCalendarService::class)->isConfigured()
                 && ($record instanceof CalendarEvent || ($record instanceof Matter && $record->calendarEvents()->where('synced_to_outlook', false)->exists())))
-            ->action(function ($record, OutlookCalendarService $outlookService) {
+            ->action(function ($record) {
                 if ($record instanceof Matter) {
                     $record = $record->calendarEvents()->where('synced_to_outlook', false)->latest()->first();
                 }
@@ -36,23 +36,8 @@ class SyncToOutlookAction extends Action
                     return;
                 }
 
-                if (filled($record->outlook_event_id)) {
-                    try {
-                        $outlookService->pushChanges($record, CalendarEvent::OUTLOOK_FIELDS);
-                        Notification::make()->title(__('Updated in Outlook'))->success()->send();
-                    } catch (\Throwable $e) {
-                        Notification::make()->title(__('Outlook Sync Failed'))->body($e->getMessage())->danger()->send();
-                    }
-
-                    return;
-                }
-
-                if ($this->pushToOutlook($outlookService, $record)) {
-                    Notification::make()
-                        ->title(__('Synced to Outlook Successfully'))
-                        ->success()
-                        ->send();
-                }
+                PushCalendarEventToOutlook::dispatch((int) $record->getKey(), null, auth()->id(), filled($record->outlook_event_id))->afterCommit();
+                Notification::make()->info()->title(__('Sending to Outlook'))->body(__('You are told in the bell when it is done.'))->send();
             });
     }
 }

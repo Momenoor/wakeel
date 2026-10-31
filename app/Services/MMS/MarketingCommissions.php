@@ -117,7 +117,9 @@ class MarketingCommissions
     /** A payment, a fee or a credit note changed on a matter: what its marketers earned, again. */
     public function afterChange(?Matter $matter, ?CarbonInterface $date = null, ?Allocation $payment = null): void
     {
-        if ($matter && ($matter->matterParties()->where('role', 'marketer')->exists() || MarketingCommission::query()->where('matter_id', $matter->getKey())->exists())) {
+        // sync() reads the marketers and the commissions itself and stops when there are none: asked here first,
+        // that was two queries more on every fee and payment saved.
+        if ($matter) {
             $this->sync($matter, $date, $payment);
         }
     }

@@ -62,7 +62,7 @@ return [
         [
             'id' => 'edit-delete',
             'title' => 'Edit or delete an event',
-            'description' => 'You can edit any event (the title, the linked matters, the date, the location, the description) or delete it. Deleting also deletes it from Outlook if it is synced. When you edit a synced event here, an "Updated in Outlook" message appears (or the reason it was not updated). "Sync to Outlook" on any event sends it again as it is in the system.',
+            'description' => 'You can edit any event (the title, the linked matters, the date, the location, the description) or delete it. Deleting also deletes it from Outlook if it is synced. When you edit a synced event here, the change is sent to Outlook in the background and the bell tells you "Updated in Outlook" (or the reason it was not updated). "Sync to Outlook" on any event sends it again as it is in the system, the same way.',
             'roles' => [$admin, $withPermission],
             'permissions' => ['Update:CalendarEvent', 'Delete:CalendarEvent', 'SyncToOutlook:CalendarEvent (to sync it)'],
             'steps' => [

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\MMS\MatterOneDriveFolders;
+use App\Support\RequestMemo;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -16,6 +17,12 @@ use Spatie\Activitylog\Support\LogOptions;
 
 class Type extends Model
 {
+    /** Whether any type has phases — the matters list's phase filter asks on every row: once a request. */
+    public static function anyWithPhases(): bool
+    {
+        return RequestMemo::remember('types_with_phases', fn (): bool => static::query()->where('has_phases', true)->exists());
+    }
+
     use HasFactory;
     use LogsActivity;
 

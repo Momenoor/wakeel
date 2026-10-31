@@ -2,12 +2,13 @@
 
 namespace App\Filament\Mms\Actions\Calendar;
 
+use App\Jobs\SyncOutlookCalendarRange;
 use App\Models\CalendarEvent;
 use App\Services\MMS\Calendar\EventMatterLinker;
 use App\Services\MMS\Calendar\MatterReferenceMatcher;
-use App\Services\MMS\Calendar\OutlookCalendarSync;
 use App\Services\MMS\OutlookCalendarService;
 use App\Support\MatterSearch;
+use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Forms\Components\CheckboxList;
@@ -16,9 +17,7 @@ use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
-use Throwable;
 
 /**
  * Linking calendar events to matters — by hand or from their titles — and
@@ -180,27 +179,15 @@ class CalendarMatterActions
             ->color('gray')
             ->visible(fn (): bool => app(OutlookCalendarService::class)->isConfigured())
             ->modalHeading(__('Sync with Outlook'))
-            ->modalDescription(__('Adds and updates the Outlook events between these dates and links them to their matters. The coming months also sync every 5 minutes on their own.'))
+            ->modalDescription(__('Adds and updates the Outlook events between these dates and links them to their matters, in the background: you are told in the bell when it is done. The coming months also sync every 5 minutes on their own.'))
             ->schema([
                 DatePicker::make('from')->label(__('From'))->default(now()->subMonths(3))->required(),
                 DatePicker::make('to')->label(__('To'))->default(now()->addMonths(6))->required()->afterOrEqual('from'),
             ])
+            // On the queue: months of Outlook events took five to fourteen seconds here.
             ->action(function (array $data): void {
-                @set_time_limit(300);
-
-                try {
-                    $counts = app(OutlookCalendarSync::class)->sync(Carbon::parse($data['from'])->startOfDay(), Carbon::parse($data['to'])->endOfDay());
-                } catch (Throwable $exception) {
-                    Notification::make()->title(__('Outlook sync failed'))->body($exception->getMessage())->danger()->send();
-
-                    return;
-                }
-
-                Notification::make()
-                    ->title(__('Outlook sync done'))
-                    ->body(__(':added added, :updated updated, :removed removed, :linked matter link(s).', $counts))
-                    ->success()
-                    ->send();
+                SyncOutlookCalendarRange::dispatch(CarbonImmutable::parse($data['from']), CarbonImmutable::parse($data['to']), auth()->id())->afterCommit();
+                Notification::make()->info()->title(__('Syncing with Outlook'))->body(__('You are told in the bell when it is done.'))->send();
             });
     }
 

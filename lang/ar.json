@@ -3090,7 +3090,7 @@
     "Link all events to matters": "ربط جميع الأحداث بالقضايا",
     "Goes through every event — past, current and upcoming — and adds the matters each title names. Links already made are kept.": "يمر على جميع الأحداث — السابقة والحالية والقادمة — ويضيف القضايا المذكورة في كل عنوان. تبقى الروابط الموجودة كما هي.",
     "Sync with Outlook": "المزامنة مع Outlook",
-    "Adds and updates the Outlook events between these dates and links them to their matters. The coming months also sync every 5 minutes on their own.": "يضيف ويحدّث أحداث Outlook بين هذين التاريخين ويربطها بقضاياها. تتم مزامنة الأشهر القادمة تلقائياً كل 5 دقائق أيضاً.",
+    "Adds and updates the Outlook events between these dates and links them to their matters, in the background: you are told in the bell when it is done. The coming months also sync every 5 minutes on their own.": "يضيف ويحدّث أحداث Outlook بين هذين التاريخين ويربطها بقضاياها، في الخلفية: ستُبلَّغ في الجرس عند الانتهاء. تتم مزامنة الأشهر القادمة تلقائياً كل 5 دقائق أيضاً.",
     "Outlook sync failed": "فشلت المزامنة مع Outlook",
     "Outlook sync done": "تمت المزامنة مع Outlook",
     ":added added, :updated updated, :removed removed, :linked matter link(s).": "أُضيف :added، وحُدّث :updated، وحُذف :removed، و:linked ربط بالقضايا.",
@@ -5090,5 +5090,8 @@
     ":share; collected :collected of the fees' :basic, less the third parties' :external: :target earned in all.": ":share؛ حُصّل :collected من أتعاب قدرها :basic، بعد خصم :external للأطراف الخارجية: المستحق إجمالاً :target.",
     ":share; collected :collected of the fees' :basic: :target earned in all.": ":share؛ حُصّل :collected من أتعاب قدرها :basic: المستحق إجمالاً :target.",
     "Each of a matter's marketers has a share of their own, earned as the client pays: a staff marketer in their incentive, a third party as a commission owed. A third party's comes off first; a staff marketer's percentage is of what is left. An assistant is paid the matter's usual rate, whoever marketed it.": "لكل مسوّق في القضية حصته الخاصة، تُكتسب مع سداد العميل: الموظف في حافزه، والطرف الخارجي عمولة مستحقة له. حصة الطرف الخارجي تُخصم أولاً، ونسبة الموظف من المتبقي بعدها. ويُصرف للمساعد المعدل المعتاد للقضية أياً كان من سوّقها.",
-    "Of the fees' basic amount, for a marketer with no share typed on the matter.": "من المبلغ الأساسي للأتعاب، للمسوّق الذي لم تُكتب له حصة في القضية."
+    "Of the fees' basic amount, for a marketer with no share typed on the matter.": "من المبلغ الأساسي للأتعاب، للمسوّق الذي لم تُكتب له حصة في القضية.",
+    "Syncing with Outlook": "جارٍ المزامنة مع Outlook",
+    "Sending to Outlook": "جارٍ الإرسال إلى Outlook",
+    "Reading the emails added in OneDrive": "جارٍ قراءة الرسائل المضافة في OneDrive"
 }

@@ -2,11 +2,11 @@
 
 namespace App\Observers;
 
+use App\Jobs\PushCalendarEventToOutlook;
 use App\Models\CalendarEvent;
 use App\Services\MMS\Calendar\CalendarAlarms;
 use App\Services\MMS\Calendar\EventMatterLinker;
 use App\Services\MMS\OutlookCalendarService;
-use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Log;
 
 class CalendarEventObserver
@@ -30,9 +30,9 @@ class CalendarEventObserver
 
     /**
      * Changed in Wakeel (its title, time, place or text): the change put on Outlook — the shared calendar, the
-     * calendars of those invited and their phones — or the next sync would bring Outlook's back over it. Its
-     * reminder items follow within the minute (CalendarAlarms). Kept here whatever Outlook answers; a refusal
-     * is said.
+     * calendars of those invited and their phones — or the next sync would bring Outlook's back over it; on the
+     * queue (PushCalendarEventToOutlook: Microsoft took seconds here), whoever saved it told in the bell. Its
+     * reminder items follow within the minute (CalendarAlarms). Kept here whatever Outlook answers.
      */
     public function updated(CalendarEvent $event): void
     {
@@ -42,24 +42,11 @@ class CalendarEventObserver
             return;
         }
 
-        $outlook = app(OutlookCalendarService::class);
-
-        if (! $outlook->isConfigured()) {
+        if (! app(OutlookCalendarService::class)->isConfigured()) {
             return;
         }
 
-        try {
-            $outlook->pushChanges($event, $changed);
-            // Said, so whoever saved it knows it reached Outlook (and its invitees' calendars).
-            Notification::make()->title(__('Updated in Outlook'))->success()->send();
-        } catch (\Throwable $e) {
-            Log::warning('Calendar event '.$event->id.' changed here, not in Outlook: '.$e->getMessage());
-            Notification::make()
-                ->warning()
-                ->title(__('Saved, but Outlook was not updated'))
-                ->body($e->getMessage())
-                ->send();
-        }
+        PushCalendarEventToOutlook::dispatch((int) $event->getKey(), null, auth()->id(), true, $changed)->afterCommit();
     }
 
     /**

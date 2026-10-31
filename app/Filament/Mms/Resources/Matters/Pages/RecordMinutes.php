@@ -33,6 +33,9 @@ class RecordMinutes extends Page
 
     public int $minutesId;
 
+    /** Read once a request — the title, the header actions, the form and the save each ask for it. */
+    private ?MatterMinutes $loadedMinutes = null;
+
     /** @var array<string, mixed>|null */
     public ?array $data = [];
 
@@ -58,7 +61,7 @@ class RecordMinutes extends Page
 
     public function minutes(): MatterMinutes
     {
-        return MatterMinutes::with('template')->findOrFail($this->minutesId);
+        return $this->loadedMinutes ??= MatterMinutes::with('template')->findOrFail($this->minutesId);
     }
 
     public function getTitle(): string

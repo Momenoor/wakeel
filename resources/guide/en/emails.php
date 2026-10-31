@@ -31,7 +31,7 @@ return [
             'permissions' => ['View:MatterEmailsTab', 'Update:Matter (for the button)'],
             'steps' => [
                 ['text' => 'Drag the email from Outlook into the folder you want in the matter\'s OneDrive folder, for example "07 مطالبات الدائنين/بنك دبي".'],
-                ['text' => 'To add it straight away, open the matter → "Emails" tab → "Read emails added in OneDrive". A notification says how many emails were added.'],
+                ['text' => 'To add it straight away, open the matter → "Emails" tab → "Read emails added in OneDrive". It runs in the background; the bell tells you how many emails were added.'],
             ],
             'tips' => [
                 'Each file is read once. An email the matter already has (the same Message-ID) is not added again, and the system\'s own saved emails are never read as added.',

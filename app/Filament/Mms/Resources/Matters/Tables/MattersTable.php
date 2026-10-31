@@ -246,7 +246,7 @@ class MattersTable
                     ->label(__('Phase'))
                     ->options(fn (): array => Matter::query()->whereNotNull('phase')->distinct()->orderBy('phase')->pluck('phase', 'phase')->all())
                     ->multiple()
-                    ->visible(fn (): bool => Type::query()->where('has_phases', true)->exists()),
+                    ->visible(fn (): bool => Type::anyWithPhases()),
 
                 SelectFilter::make('collection_status')
                     ->label(__('Collection Status'))

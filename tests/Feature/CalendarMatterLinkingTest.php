@@ -309,7 +309,9 @@ class CalendarMatterLinkingTest extends TestCase
         Livewire::test(ListCalendarEvents::class)
             ->assertTableActionVisible('syncToOutlook', $event)
             ->callTableAction('syncToOutlook', $event)
-            ->assertNotified(__('Updated in Outlook'));
+            ->assertNotified(__('Sending to Outlook'));
+        // On the queue (run at once here): told in the bell.
+        $this->assertSame(__('Updated in Outlook'), auth()->user()->notifications()->sole()->data['title']);
 
         // Its title, time, place and text, as they are here.
         Http::assertSent(fn ($request): bool => $request->method() === 'PATCH'

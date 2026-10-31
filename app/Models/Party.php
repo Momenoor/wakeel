@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Services\Translation\EnglishNames;
 use App\Services\WhatsAppService;
+use App\Support\RequestMemo;
 use App\Support\Sql;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -18,6 +19,12 @@ use Spatie\Activitylog\Support\LogOptions;
 
 class Party extends Model
 {
+    /** A party's name by its id, read once a request — a form's every row asks for its own on each redraw. */
+    public static function rememberedName(mixed $id): ?string
+    {
+        return blank($id) ? null : RequestMemo::remember('party_name_'.$id, fn (): ?string => static::query()->whereKey($id)->value('name'));
+    }
+
     use HasFactory;
     use LogsActivity;
 

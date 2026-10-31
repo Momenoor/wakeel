@@ -65,13 +65,13 @@
             if (! pusher) {
                 return;
             }
-            const started = performance.now();
             pusher.connection.bind('state_change', (states) => {
                 if (['unavailable', 'failed'].includes(states.current)) {
-                    report(0, 'echo: connection ' + states.current, started);
+                    // Not a request: no duration (the time since the page opened said nothing, and topped the report).
+                    report(0, 'echo: connection ' + states.current, performance.now());
                 }
             });
-            pusher.bind('pusher:subscription_error', (error) => report(error?.status ?? 0, 'echo: channel refused', started));
+            pusher.bind('pusher:subscription_error', (error) => report(error?.status ?? 0, 'echo: channel refused', performance.now()));
         };
         if (window.Echo) { watchEcho(); } else { window.addEventListener('EchoLoaded', watchEcho, { once: true }); }
 

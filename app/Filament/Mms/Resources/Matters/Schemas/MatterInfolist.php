@@ -49,6 +49,7 @@ use App\Services\MMS\OneDriveFolderLinker;
 use App\Services\MMS\Requests\RequestHistory;
 use App\Support\Currency;
 use App\Support\Dates;
+use App\Support\RequestMemo;
 use App\Support\ScreenPermissions;
 use Closure;
 use Filament\Actions\Action;
@@ -1269,13 +1270,14 @@ class MatterInfolist
             return collect();
         }
 
-        return IncentiveAssistantLine::query()
+        // Asked for by three sections on each render: once a request.
+        return RequestMemo::remember('matter_incentive_lines_'.$record->getKey().'_'.($user?->getKey() ?? 0), fn (): Collection => IncentiveAssistantLine::query()
             ->whereHas('incentiveLine', fn ($q) => $q->where('matter_id', $record->getKey())
                 ->whereHas('calculation', fn ($q) => $q->where('status', 'finalized')))
             ->when(! $seesAll, fn ($q) => $q->where('party_id', $ownPartyId))
             ->with(['party', 'incentiveLine.calculation'])
             ->orderBy('id')
-            ->get();
+            ->get());
     }
 
     /**

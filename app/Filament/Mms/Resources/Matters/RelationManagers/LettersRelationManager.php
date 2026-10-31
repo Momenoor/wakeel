@@ -26,6 +26,7 @@ use App\Services\MMS\Letters\LetterMeeting;
 use App\Support\Addresses;
 use App\Support\Dates;
 use App\Support\EmailGrouping;
+use App\Support\RequestMemo;
 use App\Support\ScreenPermissions;
 use Carbon\Carbon;
 use Closure;
@@ -286,7 +287,8 @@ class LettersRelationManager extends RelationManager
     {
         $own = $record->template?->emailTemplate;
 
-        return $own?->is_active ? $own : EmailTemplate::default();
+        // Asked for three times as the send screen opens: the default read once a request.
+        return $own?->is_active ? $own : RequestMemo::remember('letter_cover_email_default', fn (): ?EmailTemplate => EmailTemplate::default());
     }
 
     /**
