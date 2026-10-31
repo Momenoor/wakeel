@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\ProgressType;
+use App\Filament\Mms\Exports\MatterProgressExporter;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\ProgressRelationManager;
 use App\Models\BulkMailCampaign;
@@ -22,6 +23,8 @@ use App\Services\MMS\SentFolder;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
+use Filament\Actions\Exports\ExportColumn;
+use Filament\Actions\Exports\Models\Export;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Filament\Schemas\Components\Tabs\Tab;
@@ -30,6 +33,7 @@ use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Mockery;
 use Spatie\Permission\Models\Role;
+use Tests\Support\MailSenders;
 use Tests\TestCase;
 
 /**
@@ -51,13 +55,13 @@ class MatterProgressTest extends TestCase
 
         Storage::fake('public');
         $this->withoutDefer();
-        \Tests\Support\MailSenders::add('iflas', [
-                'username' => 'iflas@jpaemirates.com', 'address' => 'iflas@jpaemirates.com', 'name' => 'JPA Iflas',
-                'password' => 'secret', 'host' => 'mail.example.com', 'port' => 587, 'encryption' => 'tls',
-            ]);
+        MailSenders::add('iflas', [
+            'username' => 'iflas@jpaemirates.com', 'address' => 'iflas@jpaemirates.com', 'name' => 'JPA Iflas',
+            'password' => 'secret', 'host' => 'mail.example.com', 'port' => 587, 'encryption' => 'tls',
+        ]);
         config([
             'mail.mailers.smtp.transport' => 'array',
-            ]);
+        ]);
         $this->app->instance(SentFolder::class, Mockery::spy(SentFolder::class));
 
         $this->user = User::factory()->create()->assignRole(
@@ -234,5 +238,33 @@ class MatterProgressTest extends TestCase
         $sent = $this->matter->progress()->where('type', ProgressType::LETTER_SENT)->sole();
         $this->assertSame($letter->fresh()->sent_at->toDateTimeString(), $sent->happened_at->toDateTimeString());
         $this->assertStringContainsString('منى أحمد، شركة خارجية', $sent->details);
+    }
+
+    public function test_the_progress_is_exported_to_excel_as_the_tab_shows_it(): void
+    {
+        $byHand = MatterProgress::create(['matter_id' => $this->matter->id, 'type' => ProgressType::SESSION, 'title' => 'جلسة النطق بالحكم', 'details' => 'تأجلت', 'happened_at' => '2026-10-04 10:30:00', 'user_id' => $this->user->id]);
+        MatterProgress::create(['matter_id' => $this->matter->id, 'type' => ProgressType::LETTER_SENT, 'title' => 'Letter sent', 'happened_at' => '2026-10-05 00:00:00', 'source_type' => MatterLetter::class, 'source_id' => 1]);
+
+        // The row written for a step: the matter, the date with its time only when there is one, the type's name, who added it.
+        $map = collect(MatterProgressExporter::getColumns())->mapWithKeys(fn (ExportColumn $column): array => [$column->getName() => $column->getLabel()])->all();
+        $row = array_combine(array_keys($map), (new MatterProgressExporter(new Export, $map, []))(MatterProgressExporter::modifyQuery(MatterProgress::query())->findOrFail($byHand->id)));
+
+        $this->assertSame('2026/986', (string) $row['matter']);
+        $this->assertSame('04/10/2026 10:30 AM', (string) $row['happened_at']);
+        $this->assertSame(__('Session'), (string) $row['type']);
+        $this->assertSame('جلسة النطق بالحكم', (string) $row['title']);
+        $this->assertSame('تأجلت', (string) $row['details']);
+        $this->assertSame($this->user->name, (string) $row['user.name']);
+        $this->assertSame(__('No'), (string) $row['automatic']);
+        $this->assertSame('', (string) $row['periodicReport.number']);
+
+        // The button on the tab: a file named after the matter, every step shown in it.
+        Livewire::test(ProgressRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->callAction(TestAction::make('exportProgress')->table())
+            ->assertHasNoActionErrors();
+
+        $export = Export::sole();
+        $this->assertStringStartsWith('Progress 2026-986 ', $export->file_name);
+        $this->assertSame(2, $export->successful_rows);
     }
 }

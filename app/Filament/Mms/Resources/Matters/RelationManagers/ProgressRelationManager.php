@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 use App\Enums\ProgressType;
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Concerns\RefreshesMatterPage;
+use App\Filament\Mms\Exports\MatterProgressExporter;
 use App\Models\MatterPeriodicReport;
 use App\Models\MatterProgress;
 use App\Services\MMS\PeriodicReports;
@@ -15,6 +16,8 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
+use Filament\Actions\ExportAction;
+use Filament\Actions\Exports\Enums\ExportFormat;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -206,6 +209,16 @@ class ProgressRelationManager extends RelationManager
                 ]),
             ])
             ->headerActions([
+                // The steps shown — the tab's filters, search and order — as an Excel sheet named after the matter.
+                ExportAction::make('exportProgress')
+                    ->exporter(MatterProgressExporter::class)
+                    ->label(__('Export to Excel'))
+                    ->icon('heroicon-o-arrow-down-tray')
+                    ->color('gray')
+                    ->formats([ExportFormat::Xlsx])
+                    ->fileDisk('public')
+                    ->fileName(fn (): string => 'Progress '.$this->getOwnerRecord()->year.'-'.$this->getOwnerRecord()->number.' '.date('Y-m-d_H-i-s'))
+                    ->columnMappingColumns(2),
                 CreateAction::make()
                     ->label(__('Add progress'))
                     ->icon('heroicon-o-plus')

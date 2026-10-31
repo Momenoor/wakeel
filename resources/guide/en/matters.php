@@ -349,6 +349,7 @@ return [
             'steps' => [
                 ['text' => 'In the matters list, click "Export All" (orange). Choose the columns you want (untick the ones you do not need), then click "Export".', 'shot' => 'export-1'],
                 ['text' => '"Export by Assistant" gives a file grouped by each assistant and their matters, the same way.', 'shot' => 'export-2'],
+                ['text' => 'One matter\'s steps export too: on its "Progress" tab, "Export to Excel" gives the steps the tab shows (its filter and search apply) with their date, type, name, details, who added them or that they were recorded by themselves, and the periodic report each is in. The file is named after the matter.'],
             ],
             'tips' => ['When the export is done, a notification in the bell gives you a link to download the file.'],
         ],
