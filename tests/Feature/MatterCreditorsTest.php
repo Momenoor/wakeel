@@ -350,4 +350,41 @@ class MatterCreditorsTest extends TestCase
         $this->matter->type->update(['onedrive_sent_creditors' => 'مطالبات/{{creditor}}']);
         $this->assertSame('مطالبات/بنك المشرق', MatterOneDriveFolders::sentEmailsFolderFor($this->matter->fresh(), now(), ['claims@mashreq.ae']));
     }
+
+    public function test_a_party_is_made_a_creditor_too_from_its_row_or_with_others_at_once(): void
+    {
+        $plaintiff = 'p:'.MatterParty::query()->where('matter_id', $this->matter->id)->where('type', 'plaintiff')->value('party_id');
+        MatterParty::create(['matter_id' => $this->matter->id, 'party_id' => Party::factory()->create(['name' => 'شركة النور', 'email' => ['noor@noor.ae'], 'phone' => ['0501111111']])->id, 'role' => 'party', 'type' => 'defendant']);
+        $defendant = 'p:'.MatterParty::query()->where('matter_id', $this->matter->id)->where('type', 'defendant')->value('party_id');
+        $this->received('court@dubai.gov.ae', 'وارد 1');
+
+        // From its row: the plaintiff is a creditor too — both capacities on the one row, its emails filed as a creditor's.
+        Livewire::test(MatterContacts::class, ['matter' => $this->matter])
+            ->callTableAction('makeCreditor', $plaintiff, ['name' => 'شركة المهاد', 'agent' => false])
+            ->assertHasNoTableActionErrors();
+        $mahad = $this->matter->creditors()->where('name', 'شركة المهاد')->sole();
+        $this->assertSame(['info@mahad.ae'], $mahad->addresses()->pluck('email')->all());
+        $rows = collect((new MatterContactsExport($this->matter))->rows())->keyBy('key');
+        $this->assertSame($mahad->id, $rows[$plaintiff]['creditor_id']);
+        $this->assertStringContainsString('الدائن', $rows[$plaintiff]['capacity']);
+        $this->assertStringContainsString(Type::sideLabel($this->matter->type, 'plaintiff'), $rows[$plaintiff]['capacity']);
+        $this->assertSame(ReceivedEmailFiling::CREDITOR, ReceivedEmailFiling::side($this->matter, 'info@mahad.ae'));
+        $this->assertCount(1, $rows->filter(fn (array $row): bool => $row['creditor_id'] === $mahad->id));
+
+        // Many at once: the defendant and someone who wrote in — the plaintiff, a creditor already, left as it is.
+        Livewire::test(MatterContacts::class, ['matter' => $this->matter])
+            ->callTableBulkAction('makeCreditors', [$plaintiff, $defendant, 'e:court@dubai.gov.ae'])
+            ->assertHasNoTableBulkActionErrors()
+            ->assertNotified(trans_choice('No creditor made.|:count creditor made.|:count creditors made.', 2, ['count' => 2]));
+        $this->assertSame(3, $this->matter->creditors()->count());
+        $noor = $this->matter->creditors()->where('name', 'شركة النور')->sole();
+        $this->assertSame([['0501111111'], ['noor@noor.ae']], [$noor->phones, $noor->addresses()->pluck('email')->all()]);
+        $this->assertSame([1, 2, 3], $this->matter->creditors()->orderBy('number')->pluck('number')->map(fn ($n): int => (int) $n)->all());
+
+        // Edited from the party's row: every column of a creditor, its number among them.
+        Livewire::test(MatterContacts::class, ['matter' => $this->matter])
+            ->callTableAction('editCreditor', $plaintiff, ['name' => 'شركة المهاد', 'number' => 9, 'id_number' => 'CN-9', 'claim_amount' => '1000', 'emails' => ['info@mahad.ae'], 'phone' => []])
+            ->assertHasNoTableActionErrors();
+        $this->assertSame([9, 'CN-9', '1000.00'], [(int) $mahad->fresh()->number, $mahad->fresh()->id_number, $mahad->fresh()->claim_amount]);
+    }
 }

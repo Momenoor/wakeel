@@ -77,6 +77,11 @@ final class ReceivedEmailFiling
             return self::GENERAL;
         }
 
+        // A creditor's address first — the list is kept by hand, and a party that is a creditor too has its claim.
+        if (MatterCreditorAddress::query()->where('matter_id', $matter->getKey())->where('email', $address)->exists()) {
+            return self::CREDITOR;
+        }
+
         $sides = self::sides($matter);
         $parties = array_map('intval', MatterContact::partiesWith($address)->all());
 
@@ -84,10 +89,6 @@ final class ReceivedEmailFiling
             if (isset($sides[$party])) {
                 return $sides[$party];
             }
-        }
-
-        if (MatterCreditorAddress::query()->where('matter_id', $matter->getKey())->where('email', $address)->exists()) {
-            return self::CREDITOR;
         }
 
         // An address someone copied in on the matter: their side — only when everyone who copied it in is on one

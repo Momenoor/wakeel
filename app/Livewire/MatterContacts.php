@@ -14,11 +14,16 @@ use App\Models\Party;
 use App\Services\MMS\MatterContactsExport;
 use App\Services\MMS\MatterCreditors;
 use App\Support\Addresses;
+use App\Support\Dates;
+use Carbon\CarbonInterface;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
+use Filament\Actions\BulkAction;
+use Filament\Actions\BulkActionGroup;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
@@ -192,6 +197,32 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                     ->toggle()
                     ->visible(fn (): bool => $this->hasCreditors()),
             ])
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    // The rows ticked, each a creditor by its own name and addresses — a party both; one a creditor
+                    // already, or with no address, left as it is.
+                    BulkAction::make('makeCreditors')
+                        ->label(__('Make creditors'))
+                        ->icon('heroicon-o-banknotes')
+                        ->visible(fn (): bool => $this->hasCreditors() && $this->canChange())
+                        ->requiresConfirmation()
+                        ->modalDescription(__('Each row ticked becomes a creditor of the matter by its name and addresses — a party stays a party too. Their emails that came in move to their folders, and those that come from now on go there.'))
+                        ->action(function (\Illuminate\Support\Collection $records): void {
+                            try {
+                                $made = app(MatterCreditors::class)->makeCreditors($this->matter(), $records);
+                            } catch (\Throwable $e) {
+                                $this->rowsRead = null;
+                                Notification::make()->danger()->title(__('The emails could not be moved'))->body($e->getMessage())->send();
+
+                                return;
+                            }
+                            $this->rowsRead = null;
+
+                            Notification::make()->success()->title(trans_choice('No creditor made.|:count creditor made.|:count creditors made.', $made, ['count' => $made]))->send();
+                        })
+                        ->deselectRecordsAfterCompletion(),
+                ]),
+            ])
             ->headerActions([
                 Action::make('export')
                     ->label(__('Export contacts'))
@@ -262,13 +293,14 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                     ->modalWidth('lg')
                     ->fillForm(fn (array $record): array => ($creditor = $this->creditor($record)) ? [
                         'name' => $creditor->name,
+                        'number' => $creditor->number,
                         'id_number' => $creditor->id_number,
                         'emails' => $creditor->addresses()->where('agent', false)->pluck('email')->all(),
                         'phone' => (array) $creditor->phones,
                         'claim_amount' => $creditor->claim_amount,
                         'custom' => (array) $creditor->custom,
                     ] : [])
-                    ->schema(fn (array $record): array => $this->creditorSchema($record['creditor_id']))
+                    ->schema(fn (array $record): array => $this->creditorSchema($record['creditor_id'], $record['first_email'] ?? null))
                     ->action(function (array $record, array $data): void {
                         $this->saveCreditor($this->creditor($record) ?? abort(404), $data);
                         Notification::make()->success()->title(__('Saved'))->send();
@@ -375,11 +407,12 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                             $this->saveAgent($this->creditor($record) ?? abort(404), [], $data);
                             Notification::make()->success()->title(__('Saved'))->send();
                         }),
-                    // Anyone who is no party: a creditor, or a creditor's agent — their emails to its folder.
+                    // Anyone with an address — a party too, which is then both: a creditor, or a creditor's agent — their
+                    // emails to its folder.
                     Action::make('makeCreditor')
-                        ->label(__('A creditor or their agent'))
+                        ->label(fn (array $record): string => $record['party_id'] ? __('A creditor too') : __('A creditor or their agent'))
                         ->icon('heroicon-o-banknotes')
-                        ->visible(fn (array $record): bool => $this->hasCreditors() && $this->canChange() && ! $record['party_id'] && $record['creditor_id'] === null && $record['own'] !== [])
+                        ->visible(fn (array $record): bool => $this->hasCreditors() && $this->canChange() && $record['creditor_id'] === null && $record['own'] !== [])
                         ->modalHeading(fn (array $record): string => __('A creditor or their agent').': '.$record['name'])
                         ->modalDescription(__('Their emails that came in on this matter, and those that come from now on, are saved in the creditor\'s folder.'))
                         ->modalWidth('lg')
@@ -435,15 +468,28 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
      * columns (Type::creditorColumns()).
      *
      * @param  ?int  $ignore  the creditor being edited: its own licence or ID is not a second one
+     * @param  ?CarbonInterface  $firstEmail  when its first email came in, shown when editing
      * @return list<\Filament\Schemas\Components\Component>
      */
-    private function creditorSchema(?int $ignore = null): array
+    private function creditorSchema(?int $ignore = null, ?CarbonInterface $firstEmail = null): array
     {
         return [
             TextInput::make('name')
                 ->label(__("Creditor's name"))
                 ->required()
                 ->maxLength(255),
+            // Its number: given as it is added, changed here when the list is numbered another way.
+            TextInput::make('number')
+                ->label(__('No.'))
+                ->numeric()
+                ->integer()
+                ->minValue(1)
+                ->rule(fn (): Unique => Rule::unique('matter_creditors', 'number')->where('matter_id', $this->matterId)->ignore($ignore))
+                ->validationMessages(['unique' => __('A creditor of this matter has this number already.')]),
+            Placeholder::make('first_email')
+                ->label(__('First email'))
+                ->content(fn (): string => $firstEmail?->format(Dates::dateFormat()) ?? '—')
+                ->visible($ignore !== null),
             TextInput::make('id_number')
                 ->label(__('Trade licence or ID number'))
                 ->helperText(__('The same number twice in a matter is one creditor twice: a claim with it already is said.'))
@@ -492,6 +538,7 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
         DB::transaction(function () use ($creditor, $data, $emails): void {
             $creditor->fill([
                 'name' => trim((string) $data['name']),
+                'number' => filled($data['number'] ?? null) ? (int) $data['number'] : $creditor->number,
                 'id_number' => trim((string) ($data['id_number'] ?? '')) ?: null,
                 'phones' => array_values((array) ($data['phone'] ?? [])),
                 'claim_amount' => filled($data['claim_amount'] ?? null) ? $data['claim_amount'] : null,

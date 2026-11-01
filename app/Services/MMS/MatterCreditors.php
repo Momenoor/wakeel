@@ -116,6 +116,28 @@ final class MatterCreditors
         return $creditor;
     }
 
+    /**
+     * The Contacts tab's rows given, each made a creditor (merge()) by its name, its own addresses and phones — a
+     * party stays a party too, and is then both. One a creditor or an agent already, or with no address, is left as
+     * it is. How many were made.
+     *
+     * @param  iterable<array<string, mixed>>  $rows  as MatterContactsExport::rows() gives them
+     */
+    public function makeCreditors(Matter $matter, iterable $rows): int
+    {
+        $made = 0;
+
+        foreach ($rows as $row) {
+            if (! is_array($row) || ($row['creditor_id'] ?? null) !== null || ($row['own'] ?? []) === []) {
+                continue;
+            }
+
+            $made += $this->merge($matter, (string) ($row['name'] ?? ''), (array) $row['own'], null, array_map('trim', explode(',', (string) ($row['phones'] ?? '')))) !== null ? 1 : 0;
+        }
+
+        return $made;
+    }
+
     /** One name written two ways: letter case, spaces and أ/ا, ة/ه, ى/ي … aside. */
     private static function sameName(string $a, string $b): bool
     {

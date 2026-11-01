@@ -5188,5 +5188,10 @@
     "Emails sent to creditors — folder": "الرسائل المرسلة إلى الدائنين — المجلد",
     "Where an email sent to a creditor or its agent is saved as a PDF, inside the matter's folder — with the claim, e.g. المطالبات/{{creditor.number}} {{creditor}}/صادر. {{creditor}} is the creditor's name, {{creditor.number}} its number (001), {{day}} the day it is sent; and the matter's placeholders. Leave empty to save them with the other sent emails.": "أين تُحفظ الرسالة المرسلة إلى دائن أو وكيله كملف PDF داخل مجلد القضية — مع المطالبة، مثل المطالبات/{{creditor.number}} {{creditor}}/صادر. و{{creditor}} اسم الدائن، و{{creditor.number}} رقمه (001)، و{{day}} يوم الإرسال؛ ومتغيّرات القضية. اتركه فارغاً لحفظها مع الرسائل الصادرة الأخرى.",
     "a reply to an email that came in on it": "رد على رسالة وردت فيها",
-    "Formatted text (editor)": "نص منسّق (محرر)"
+    "Formatted text (editor)": "نص منسّق (محرر)",
+    "A creditor too": "دائن أيضاً",
+    "Make creditors": "جعلهم دائنين",
+    "Each row ticked becomes a creditor of the matter by its name and addresses — a party stays a party too. Their emails that came in move to their folders, and those that come from now on go there.": "كل سطر محدد يصبح دائناً في القضية باسمه وعناوينه — والطرف يبقى طرفاً أيضاً. وتنتقل رسائلهم الواردة إلى مجلداتهم، وما يصل منهم من الآن يذهب إليها.",
+    "No creditor made.|:count creditor made.|:count creditors made.": "{0} لم يُجعل أحد دائناً.|{1} جُعل دائن واحد.|[2,*] جُعل :count دائنين.",
+    "A creditor of this matter has this number already.": "لدائن في هذه القضية هذا الرقم أصلاً."
 }
