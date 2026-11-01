@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Resources\Matters\Schemas;
 
+use App\Filament\Forms\Components\RichText;
 use App\Filament\Support\TeamsAttendanceSection;
 use App\Models\MatterMinutes;
 use App\Models\Party;
@@ -406,6 +407,7 @@ class MinutesRecordForm
                 'date' => DatePicker::make('inputs.'.$input['key']),
                 'time' => TimePicker::make('inputs.'.$input['key'])->seconds(false),
                 'textarea' => Textarea::make('inputs.'.$input['key'])->rows(3)->columnSpanFull(),
+                'richtext' => RichText::make('inputs.'.$input['key'])->email()->columnSpanFull(),
                 'number' => TextInput::make('inputs.'.$input['key'])->numeric(),
                 'url' => TextInput::make('inputs.'.$input['key'])->url()->columnSpanFull(),
                 'select' => Select::make('inputs.'.$input['key'])->options(array_combine($input['options'] ?? [], $input['options'] ?? []) ?: []),

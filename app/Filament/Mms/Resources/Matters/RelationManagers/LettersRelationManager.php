@@ -973,6 +973,8 @@ class LettersRelationManager extends RelationManager
 
             $fields[] = (match ($input['type'] ?? 'text') {
                 'textarea' => Textarea::make($name)->rows(3)->columnSpanFull(),
+                // Formatted: bold, lists … kept in the letter as typed.
+                'richtext' => RichText::make($name)->email()->columnSpanFull(),
                 'date' => DatePicker::make($name),
                 'time' => TimePicker::make($name)->seconds(false),
                 'url' => TextInput::make($name)->url()->columnSpanFull(),

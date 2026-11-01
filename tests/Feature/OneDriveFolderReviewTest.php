@@ -360,12 +360,23 @@ class OneDriveFolderReviewTest extends TestCase
 
         // From the OneDrive Folders page: back to the default.
         Livewire::test(OneDriveSettings::class)
-            ->callAction(TestAction::make('assignToTypes')->schemaComponent('type_structures'), ['types' => [$a->id, $c->id], 'use_default' => true])
+            ->callAction(TestAction::make('assignToTypes')->schemaComponent('type_structures'), ['types' => [$a->id, $c->id], 'source' => 'default'])
             ->assertHasNoFormErrors();
 
         $this->assertNull($a->fresh()->onedrive_subfolders);
         $this->assertNull($c->fresh()->onedrive_subfolders);
         $this->assertSame("01 تقارير\n02 مراسلات", $b->fresh()->onedrive_subfolders);
+
+        // Every folder setting of one type set up, given to others at once.
+        $b->update(['onedrive_received_emails' => 'المراسلات/{{day}}', 'onedrive_attachments_plaintiff' => 'المستندات/{{side}}', 'onedrive_sent_emails' => 'الصادر', 'received_name' => '{{date}} {{party}}']);
+        Livewire::test(OneDriveSettings::class)
+            ->callAction(TestAction::make('assignToTypes')->schemaComponent('type_structures'), ['types' => [$a->id, $c->id], 'source' => 'type', 'from_type' => $b->id])
+            ->assertHasNoFormErrors();
+
+        foreach ([$a, $c] as $type) {
+            $this->assertSame($b->fresh()->only(Type::FOLDER_FIELDS), $type->fresh()->only(Type::FOLDER_FIELDS));
+        }
+        $this->assertSame('المستندات/{{side}}', $a->fresh()->onedrive_attachments_plaintiff);
     }
 
     public function test_a_standard_name_taken_already_is_not_overwritten(): void

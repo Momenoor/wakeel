@@ -1181,4 +1181,24 @@ class LetterBuilderTest extends TestCase
         $this->assertSame(now()->toDateString(), $inputs['meeting_date']);
         $this->assertSame($this->items, $inputs['documents']);
     }
+
+    public function test_a_formatted_text_field_keeps_its_formatting_in_the_letter(): void
+    {
+        $this->template->update([
+            'inputs' => [['key' => 'terms', 'label' => 'الشروط', 'type' => 'richtext']],
+            'body' => '<p>{{recipients}}</p><p>نحيطكم علماً: {{input.terms}}</p><p>{{input.terms}}</p>',
+        ]);
+
+        // One paragraph: inline where its placeholder sits, its formatting kept and never escaped.
+        $html = $this->composer(['terms' => '<p>يُرجى <strong>الالتزام</strong> بالموعد</p>'])->bodyHtml();
+        $this->assertStringContainsString('نحيطكم علماً: يُرجى <strong>الالتزام</strong> بالموعد', $html);
+        $this->assertStringNotContainsString('&lt;strong', $html);
+        $this->assertStringNotContainsString('<p><p>', $html);
+
+        // Several paragraphs and a list: they take the paragraph's place as they are.
+        $html = $this->composer(['terms' => '<p>أولاً</p><ul><li>بند <em>أول</em></li></ul>'])->bodyHtml();
+        $this->assertStringContainsString('<li>بند <em>أول</em></li>', $html);
+        $this->assertStringNotContainsString('&lt;li', $html);
+        $this->assertStringNotContainsString('<p><p>', $html);
+    }
 }

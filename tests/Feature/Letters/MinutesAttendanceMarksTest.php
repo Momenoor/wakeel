@@ -10,6 +10,7 @@ use App\Models\Matter;
 use App\Models\MatterMinutes;
 use App\Models\MatterParty;
 use App\Models\Party;
+use App\Models\Type;
 use App\Models\User;
 use App\Services\MMS\BulkMailPlaceholders;
 use App\Services\MMS\Letters\LetterComposer;
@@ -247,12 +248,12 @@ class MinutesAttendanceMarksTest extends TestCase
         $this->party($matter, 'defendant', 'شركة ج');
         $matter = $matter->fresh();
 
-        $values = \App\Services\MMS\BulkMailPlaceholders::forMatter($matter);
+        $values = BulkMailPlaceholders::forMatter($matter);
         $this->assertSame('المتنازع', $values['matter.plaintiff_capacity']);
-        $this->assertSame(\App\Models\Type::sideLabel($matter->type, 'defendant'), $values['matter.defendant_capacity']);
+        $this->assertSame(Type::sideLabel($matter->type, 'defendant'), $values['matter.defendant_capacity']);
 
         $text = '<p>{{each matter.plaintiffs}}</p><p>{{item.number}} {{item.name}} ({{item.capacity}})</p><p>{{/each}}</p>';
-        $out = \App\Services\MMS\BulkMailPlaceholders::each($text, $values);
+        $out = BulkMailPlaceholders::each($text, $values);
         $this->assertStringContainsString('1 شركة أ (المتنازع)', $out);
         $this->assertStringContainsString('2 شركة ب (المتنازع)', $out);
     }
@@ -260,5 +261,56 @@ class MinutesAttendanceMarksTest extends TestCase
     private function party(Matter $matter, string $type, string $name): MatterParty
     {
         return MatterParty::create(['matter_id' => $matter->id, 'role' => 'party', 'type' => $type, 'party_id' => Party::factory()->create(['name' => $name])->id]);
+    }
+
+    public function test_the_main_parties_absent_are_named_with_their_capacities_without_their_representatives(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $matter = Matter::factory()->create();
+        $claimant = $this->party($matter, 'plaintiff', 'شركة المدعي');
+        $defendant = $this->party($matter, 'defendant', 'شركة النور');
+        $second = $this->party($matter, 'defendant', 'مؤسسة الأمل');
+        $lawyer = MatterParty::create(['matter_id' => $matter->id, 'role' => 'representative', 'type' => 'lawyer', 'parent_id' => $defendant->id, 'party_id' => Party::factory()->create(['name' => 'مكتب الهاشمي'])->id]);
+        $values = fn (array $attendees): array => (new LetterComposer(new LetterTemplate(['locale' => 'ar', 'subject' => 'S', 'body' => '<p>x</p>']), $matter, [LetterComposer::MINUTES => ['attendees' => $attendees]]))->values();
+
+        // The claimant came itself; neither defendant did, and their lawyer stayed away too: both absent, by their own
+        // names with their capacities — the lawyer, a representative, not among them.
+        $v = $values([
+            ['present' => true, 'title' => 'السيد/', 'name' => 'مندوب المدعي', 'party_id' => $claimant->party_id, 'capacity' => 'المدعي'],
+            ['present' => false, 'title' => 'السادة/', 'name' => 'مندوب النور', 'party_id' => $defendant->party_id, 'capacity' => 'المدعى عليه الأول'],
+            ['present' => false, 'title' => '', 'name' => 'مندوب الأمل', 'party_id' => $second->party_id],
+            ['present' => false, 'title' => 'الأستاذ/', 'name' => 'محامي النور', 'party_id' => $lawyer->party_id, 'represents' => $defendant->party_id],
+        ]);
+        $this->assertSame('السادة/ شركة النور (المدعى عليه الأول)، مؤسسة الأمل ('.Type::sideLabel($matter->type, 'defendant').')', $v['minutes.absentees.parties']);
+        $this->assertSame('2', $v['minutes.absentees.parties.count']);
+        // Every absent person by side still counts the lawyer.
+        $this->assertSame('3', $v['minutes.absentees.defendant.count']);
+
+        // The lawyer came for the first defendant: it is not absent; the second still is.
+        $v = $values([
+            ['present' => true, 'title' => 'السيد/', 'name' => 'مندوب المدعي', 'party_id' => $claimant->party_id],
+            ['present' => false, 'title' => 'السادة/', 'name' => 'مندوب النور', 'party_id' => $defendant->party_id],
+            ['present' => false, 'title' => '', 'name' => 'مندوب الأمل', 'party_id' => $second->party_id, 'capacity' => 'المدعى عليه الثاني'],
+            ['present' => true, 'title' => 'الأستاذ/', 'name' => 'محامي النور', 'party_id' => $lawyer->party_id, 'represents' => $defendant->party_id],
+        ]);
+        $this->assertSame('مؤسسة الأمل (المدعى عليه الثاني)', $v['minutes.absentees.parties']);
+        $this->assertSame('1', $v['minutes.absentees.parties.count']);
+
+        // The lawyer there without the line saying for whom: a representative of the first defendant on the matter, so it is not absent either.
+        $v = $values([
+            ['present' => false, 'title' => 'السادة/', 'name' => 'مندوب النور', 'party_id' => $defendant->party_id],
+            ['present' => true, 'title' => 'الأستاذ/', 'name' => 'محامي النور', 'party_id' => $lawyer->party_id],
+        ]);
+        $this->assertSame(['', '0'], [$v['minutes.absentees.parties'], $v['minutes.absentees.parties.count']]);
+
+        // Everyone there: none.
+        $v = $values([
+            ['present' => true, 'name' => 'مندوب المدعي', 'party_id' => $claimant->party_id],
+            ['present' => true, 'name' => 'مندوب النور', 'party_id' => $defendant->party_id],
+            ['present' => true, 'name' => 'مندوب الأمل', 'party_id' => $second->party_id],
+        ]);
+        $this->assertSame(['', '0'], [$v['minutes.absentees.parties'], $v['minutes.absentees.parties.count']]);
+        // In the placeholders list for templates.
+        $this->assertArrayHasKey('minutes.absentees.parties', LetterComposer::catalog());
     }
 }

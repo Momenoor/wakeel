@@ -14,6 +14,7 @@ use App\Services\MMS\EmployeePlaceholders;
 use App\Services\MMS\Letters\Blocks\SignatureBlock;
 use App\Support\CompanyContact;
 use App\Support\Dates;
+use App\Support\EditorHtml;
 use App\Support\Honorific;
 use App\Support\RichHtml;
 use Carbon\Carbon;
@@ -267,10 +268,28 @@ class LetterComposer
             'time' => ['' => $this->time((string) $value)],
             // Line breaks kept (as HTML); a single line stays plain text.
             'textarea' => ['' => str_contains((string) $value, "\n") ? nl2br(e(trim((string) $value))) : (string) $value],
+            // Formatted in the editor: its HTML as typed — one paragraph unwrapped, to sit in the sentence it is in.
+            'richtext' => ['' => self::richValue((string) $value)],
             'items' => ['' => $this->itemsHtml($input, (array) ($value ?? []))],
             'url' => $this->link(trim((string) $value)),
             default => ['' => (string) $value],
         };
+    }
+
+    /**
+     * What was typed in a formatted field, as the letter takes it: the editor's HTML cleaned; a single paragraph
+     * without its <p>, so it reads on in the sentence its placeholder is in — several stay as they are and take
+     * their paragraph's place.
+     */
+    private static function richValue(string $value): string
+    {
+        $html = trim((string) EditorHtml::clean($value));
+
+        if (preg_match('/^<p(?:\s[^>]*)?>(.*)<\/p>$/su', $html, $m) && ! preg_match('/<(p|ul|ol|table|h[1-6]|div)\b/i', $m[1])) {
+            return trim($m[1]);
+        }
+
+        return $html;
     }
 
     /**
@@ -596,6 +615,41 @@ class LetterComposer
                 $values["minutes.{$name}.{$group}.count"] = (string) $members->count();
             }
         }
+
+        // The main parties absent — neither there themselves nor any of their representatives (one standing for them
+        // on the line, or one of theirs on the matter) — each by its own name with its capacity:
+        // {{minutes.absentees.parties}}, and how many. Representatives are never among them.
+        $this->matter->loadMissing(['matterParties.party', 'type']);
+        $mains = $this->matter->matterParties
+            ->filter(fn (MatterParty $mp): bool => empty($mp->parent_id) && $mp->role === 'party' && $mp->party !== null)
+            ->keyBy(fn (MatterParty $mp): int => (int) $mp->party_id);
+        // Whom each of the matter's representatives stands for: one of them there is the party there.
+        $byRow = $this->matter->matterParties->keyBy('id');
+        $standsFor = $this->matter->matterParties
+            ->filter(fn (MatterParty $mp): bool => ! empty($mp->parent_id) && $byRow->has((int) $mp->parent_id))
+            ->mapWithKeys(fn (MatterParty $mp): array => [(int) $mp->party_id => (int) $byRow->get((int) $mp->parent_id)->party_id])
+            ->all();
+        $there = $people
+            ->filter(fn (array $a): bool => ! empty($a['present']))
+            ->flatMap(fn (array $a): array => array_filter([
+                filled($a['represents'] ?? null) ? (int) $a['represents'] : null,
+                filled($a['party_id'] ?? null) ? (int) $a['party_id'] : null,
+                filled($a['party_id'] ?? null) ? ($standsFor[(int) $a['party_id']] ?? null) : null,
+            ]))
+            ->unique()
+            ->all();
+        $absent = $people
+            ->filter(fn (array $a): bool => empty($a['present']) && blank($a['represents'] ?? null) && filled($a['party_id'] ?? null)
+                && $mains->has((int) $a['party_id']) && ! in_array((int) $a['party_id'], $there, true))
+            ->unique(fn (array $a): int => (int) $a['party_id']);
+
+        $values['minutes.absentees.parties'] = $absent->map(function (array $a) use ($mains): string {
+            $main = $mains->get((int) $a['party_id']);
+            $capacity = trim((string) ($a['capacity'] ?? '')) ?: Type::sideLabel($this->matter->type, $main->type);
+
+            return trim(trim((string) ($a['title'] ?? '')).' '.trim((string) $main->party->name)).($capacity !== '' ? ' ('.$capacity.')' : '');
+        })->implode($separator);
+        $values['minutes.absentees.parties.count'] = (string) $absent->count();
 
         return $values;
     }
@@ -983,7 +1037,10 @@ class LetterComposer
         // Parts written <<…>>: in only when their placeholders are filled.
         $html = BulkMailPlaceholders::conditionals($html, $values);
 
+        // A formatted field's HTML goes in as it is, never escaped.
+        $rich = collect($this->template->inputs ?? [])->filter(fn ($input): bool => is_array($input) && ($input['type'] ?? null) === 'richtext' && filled($input['key'] ?? null))->map(fn (array $input): string => 'input.'.$input['key'])->flip()->all();
         $blocks = array_filter($values, fn ($value, $key) => in_array($key, self::BLOCKS, true)
+            || isset($rich[$key])
             || (str_starts_with($key, 'input.') && str_contains($value, '<ol>'))
             || (str_starts_with($key, 'input.') && str_contains($value, '<br'))
             || str_starts_with($value, '<a href='), ARRAY_FILTER_USE_BOTH);
@@ -1153,6 +1210,8 @@ class LetterComposer
         }
 
         $catalog['minutes.absentees.count'] = __('Minutes').' — '.__('how many were absent');
+        $catalog['minutes.absentees.parties'] = __('Minutes').' — '.__('the main parties absent, by name with their capacities — never their representatives; a party that came itself or through any of its representatives is not absent');
+        $catalog['minutes.absentees.parties.count'] = __('Minutes').' — '.__('how many main parties were absent');
 
         return $catalog;
     }

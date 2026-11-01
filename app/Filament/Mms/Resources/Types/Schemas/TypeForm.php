@@ -84,8 +84,11 @@ class TypeForm
                             self::receivedEmailsField(),
                             // The emails from each side apart, each named as set.
                             ...array_map(fn (string $side): TextInput => self::receivedSideFolderField($side), ReceivedEmailFiling::APART),
+                            // Where the files the emails come with go, apart from the emails: in general, and a side's.
+                            ...array_map(fn (string $side): TextInput => self::attachmentsFolderField($side), [ReceivedEmailFiling::GENERAL, ...ReceivedEmailFiling::APART]),
                             ...array_map(fn (string $side): TextInput => self::receivedNameField($side), [ReceivedEmailFiling::GENERAL, ...ReceivedEmailFiling::APART]),
                             self::sentEmailsField(),
+                            self::sentToCreditorsField(),
                             self::signedMinutesField(),
                             self::periodicReportsField(),
                             // Its group — the types with the same folders: changed with it, or left as they are (EditType).
@@ -184,6 +187,32 @@ class TypeForm
     }
 
     /**
+     * Where the files the emails of a side (or any, the general one) come with are saved, apart from the email's PDF
+     * and original (ReceivedEmailFiling::attachmentsTemplate()) — for this type, or (not $forType) the setting.
+     * Empty: the setting's; empty too, beside the email's PDF in a folder of its name.
+     */
+    public static function attachmentsFolderField(string $side, bool $forType = true): TextInput
+    {
+        $general = $side === ReceivedEmailFiling::GENERAL;
+        $creditor = $side === ReceivedEmailFiling::CREDITOR;
+
+        return TextInput::make($forType ? ReceivedEmailFiling::ATTACHMENTS_COLUMNS[$side] : ReceivedEmailFiling::ATTACHMENTS_SETTINGS[$side])
+            ->label(match ($side) {
+                ReceivedEmailFiling::PLAINTIFF => __('Files from the plaintiff side — folder'),
+                ReceivedEmailFiling::DEFENDANT => __('Files from the defendant side — folder'),
+                ReceivedEmailFiling::CREDITOR => __('Files from creditors — folder'),
+                default => __('Files received emails came with — folder'),
+            })
+            ->helperText(__('Where the files an email came with are saved, apart from the email\'s PDF and original (which stay in the email\'s folder), inside the matter\'s folder — e.g. 02 المستندات/{{side}}. {{side}} is the side\'s name on the type, {{party}} who sent it, {{day}} the day it came, {{creditor}} the creditor; and the matter\'s placeholders. Leave empty to save them beside the email\'s PDF, in a folder of its name.')
+                .($general ? '' : ' '.__('Leave empty to save this side\'s as the general ones.'))
+                .($forType ? ' '.__('Leave empty for the setting (Settings → OneDrive Folders).') : ''))
+            ->placeholder(fn (): string => $forType ? ReceivedEmailFiling::attachmentsTemplate(null, $side) : ($general ? '' : trim((string) Setting::get(ReceivedEmailFiling::ATTACHMENTS_SETTINGS[ReceivedEmailFiling::GENERAL], ''))))
+            ->visible(fn (Get $get): bool => ! $forType || ! $creditor || (bool) $get('has_creditors'))
+            ->maxLength(500)
+            ->extraInputAttributes(['dir' => 'auto']);
+    }
+
+    /**
      * Where a periodic report's files are moved inside the matter's folder (PeriodicReports) — for this type, or (not
      * $forType) the setting. Empty: the setting's, else the default one.
      */
@@ -238,6 +267,21 @@ class TypeForm
             ->placeholder(fn (): string => MatterOneDriveFolders::sentEmailsFolder())
             ->maxLength(500)
             ->extraInputAttributes(['dir' => 'ltr']);
+    }
+
+    /**
+     * Where the emails sent to a creditor (or its agent) are saved inside the matter's folder — for this type, or
+     * (not $forType) the setting. Empty: the setting's; empty too, the sent emails folder.
+     */
+    public static function sentToCreditorsField(bool $forType = true): TextInput
+    {
+        return TextInput::make($forType ? 'onedrive_sent_creditors' : MatterOneDriveFolders::SENT_TO_CREDITORS)
+            ->label(__('Emails sent to creditors — folder'))
+            ->helperText(__('Where an email sent to a creditor or its agent is saved as a PDF, inside the matter\'s folder — with the claim, e.g. المطالبات/{{creditor.number}} {{creditor}}/صادر. {{creditor}} is the creditor\'s name, {{creditor.number}} its number (001), {{day}} the day it is sent; and the matter\'s placeholders. Leave empty to save them with the other sent emails.').($forType ? ' '.__('Leave empty for the setting (Settings → OneDrive Folders).') : ''))
+            ->placeholder(fn (): string => $forType ? MatterOneDriveFolders::sentToCreditorsTemplate() : '')
+            ->visible(fn (Get $get): bool => ! $forType || (bool) $get('has_creditors'))
+            ->maxLength(500)
+            ->extraInputAttributes(['dir' => 'auto']);
     }
 
     /**

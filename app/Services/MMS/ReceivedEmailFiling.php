@@ -49,6 +49,14 @@ final class ReceivedEmailFiling
 
     public const NAME_COLUMNS = [self::PLAINTIFF => 'received_name_plaintiff', self::DEFENDANT => 'received_name_defendant', self::CREDITOR => 'received_name_creditor', self::GENERAL => 'received_name'];
 
+    /**
+     * Where the files an email came with go, apart from its PDF and original: a side's, and the general one — the
+     * setting, and the matter type's column. Empty: beside the PDF, in a folder of its name.
+     */
+    public const ATTACHMENTS_SETTINGS = [self::PLAINTIFF => 'onedrive_attachments_plaintiff_folder', self::DEFENDANT => 'onedrive_attachments_defendant_folder', self::CREDITOR => 'onedrive_attachments_creditors_folder', self::GENERAL => 'onedrive_attachments_folder'];
+
+    public const ATTACHMENTS_COLUMNS = [self::PLAINTIFF => 'onedrive_attachments_plaintiff', self::DEFENDANT => 'onedrive_attachments_defendant', self::CREDITOR => 'onedrive_attachments_creditors', self::GENERAL => 'onedrive_attachments'];
+
     /** The name as it always was, written as a pattern. */
     public const DEFAULT_NAME = '{{date}} {{time}} {{kind}} — {{party}} — {{subject}}';
 
@@ -253,6 +261,17 @@ final class ReceivedEmailFiling
     }
 
     /** The matter type's own (its column), else the setting. */
+    /**
+     * The folder for the files a side's emails come with, on this matter: the side's own (its type's, else the
+     * setting), else the general one's; empty, they go beside the email's PDF.
+     */
+    public static function attachmentsTemplate(?Matter $matter, string $side): string
+    {
+        $own = $side !== self::GENERAL && isset(self::ATTACHMENTS_COLUMNS[$side]) ? self::own($matter, self::ATTACHMENTS_COLUMNS[$side], self::ATTACHMENTS_SETTINGS[$side]) : '';
+
+        return $own !== '' ? $own : self::own($matter, self::ATTACHMENTS_COLUMNS[self::GENERAL], self::ATTACHMENTS_SETTINGS[self::GENERAL]);
+    }
+
     private static function own(?Matter $matter, string $column, string $setting): string
     {
         $own = $matter ? trim((string) $matter->loadMissing('type')->type?->getAttribute($column)) : '';

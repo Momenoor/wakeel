@@ -292,6 +292,7 @@ return [
                 '"Send to attendees" sends the minutes by email or WhatsApp to each attendee to sign, and the signed copies come back to the matter.',
                 'A minutes email is copied into the sending mailbox\'s Sent folder, as a letter\'s is (a Microsoft 365 mailbox keeps its own copy). If the copy fails, the send result says so; the email itself went.',
                 'In the email template: {{recipient.salutation}} writes all the email\'s recipients with their names and capacities, one per line, and {{recipient.role}} is the recipient\'s capacity.',
+                'In the minutes template: {{minutes.absentees.parties}} writes the main parties that were absent — each by its own name with its capacity, e.g. شركة النور (المدعى عليه) — and {{minutes.absentees.parties.count}} how many. Representatives never count, and a party is not absent when it came itself or any of its representatives did — one marked as attending for it, or one of its representatives on the matter. {{minutes.absentees.claimant}}, .defendant, .interpreter and .others list every absent person by side, representatives included.',
                 'In "Record the meeting", a "Save" button next to "Next" saves what was recorded without moving on, and a "Join the meeting" button is for online meetings. "Live view" follows where the text is being typed.',
             ],
         ],

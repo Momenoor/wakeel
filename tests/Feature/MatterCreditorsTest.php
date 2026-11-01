@@ -327,4 +327,27 @@ class MatterCreditorsTest extends TestCase
         $this->assertSame(['بنك المشرق', 'claims@mashreq.ae, lawyer@hashmi.ae', 'مكتب الهاشمي', '043334444', '250000.00', '1', 'CN-1001', '55/2026'], MatterCreditors::bulkMailRows($this->matter->fresh())[0]);
         unlink($path);
     }
+
+    public function test_an_email_sent_to_a_creditor_is_saved_with_its_claim_when_a_folder_is_set_for_it(): void
+    {
+        $mashreq = MatterCreditor::assign($this->matter, null, 'بنك المشرق', 'claims@mashreq.ae');
+        MatterCreditor::assign($this->matter, $mashreq->id, null, 'lawyer@hashmi.ae', true, 'مكتب الهاشمي');
+        Setting::set(MatterOneDriveFolders::SENT_EMAILS, 'المراسلات/صادر', 'onedrive');
+        Setting::clearCache();
+
+        // Nothing set for creditors: with the other sent emails.
+        $this->assertSame('المراسلات/صادر', MatterOneDriveFolders::sentEmailsFolderFor($this->matter, now(), ['claims@mashreq.ae']));
+
+        Setting::set(MatterOneDriveFolders::SENT_TO_CREDITORS, 'المطالبات/{{creditor.number}} {{creditor}}/صادر', 'onedrive');
+        Setting::clearCache();
+
+        // To the creditor, or its agent: with the claim. To anyone else: as before.
+        $this->assertSame('المطالبات/001 بنك المشرق/صادر', MatterOneDriveFolders::sentEmailsFolderFor($this->matter, now(), ['claims@mashreq.ae']));
+        $this->assertSame('المطالبات/001 بنك المشرق/صادر', MatterOneDriveFolders::sentEmailsFolderFor($this->matter, now(), ['info@mahad.ae', 'Lawyer@Hashmi.ae']));
+        $this->assertSame('المراسلات/صادر', MatterOneDriveFolders::sentEmailsFolderFor($this->matter, now(), ['court@dubai.gov.ae']));
+
+        // The type's own wins over the setting.
+        $this->matter->type->update(['onedrive_sent_creditors' => 'مطالبات/{{creditor}}']);
+        $this->assertSame('مطالبات/بنك المشرق', MatterOneDriveFolders::sentEmailsFolderFor($this->matter->fresh(), now(), ['claims@mashreq.ae']));
+    }
 }

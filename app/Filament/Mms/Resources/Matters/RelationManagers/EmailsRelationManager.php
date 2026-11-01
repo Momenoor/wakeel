@@ -424,6 +424,7 @@ class EmailsRelationManager extends RelationManager
     {
         $sent = $email->direction === MatterEmail::SENT;
         $folder = ((array) $email->onedrive)['folder'] ?? null;
+        $attachmentsFolder = ((array) $email->onedrive)['attachments_folder'] ?? null;
         $files = $email->fileLinks();
         $links = $email->downloadLinks();
 
@@ -436,6 +437,8 @@ class EmailsRelationManager extends RelationManager
             // What was kept of an email that came in.
             // Inside the matter's OneDrive folder — as it was when the email was saved.
             'onedrive_folder' => [__('OneDrive folder'), filled($folder) ? $folder : null],
+            // Its files kept apart from it, when the side has an attachments folder.
+            'onedrive_attachments_folder' => [__('Attachments folder'), filled($attachmentsFolder) ? $attachmentsFolder : null],
             'onedrive_pdf' => [__('PDF in OneDrive'), $email->oneDriveLabel('pdf')],
             'onedrive_eml' => [__('EML in OneDrive'), $email->oneDriveLabel('eml')],
             'onedrive_attachments' => [__('Attachments in OneDrive'), $email->oneDriveLabel('attachments')],

@@ -22,6 +22,7 @@ use App\Support\MatterSearch;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -98,6 +99,7 @@ class OneDriveSettings extends Page implements HasTable
             'finished_folder' => Setting::get(MatterOneDriveFolders::FINISHED_FOLDER, ''),
             'signed_minutes' => MatterOneDriveFolders::signedMinutesFolder(),
             'sent_emails' => MatterOneDriveFolders::sentEmailsFolder(),
+            MatterOneDriveFolders::SENT_TO_CREDITORS => Setting::get(MatterOneDriveFolders::SENT_TO_CREDITORS, ''),
             'received_emails' => MatterOneDriveFolders::receivedEmailsFolder(),
             // Each side's folder and name, and the general name (ReceivedEmailFiling), and a periodic report's
             // folder: the settings by their keys.
@@ -113,7 +115,7 @@ class OneDriveSettings extends Page implements HasTable
      */
     private static function keyedSettings(): array
     {
-        return [...array_values(ReceivedEmailFiling::FOLDER_SETTINGS), ...array_values(ReceivedEmailFiling::NAME_SETTINGS), PeriodicReports::SETTING];
+        return [...array_values(ReceivedEmailFiling::FOLDER_SETTINGS), ...array_values(ReceivedEmailFiling::ATTACHMENTS_SETTINGS), ...array_values(ReceivedEmailFiling::NAME_SETTINGS), PeriodicReports::SETTING];
     }
 
     /** The groups of types alike in their own folders: who is in each, and what their folders are. */
@@ -134,8 +136,13 @@ class OneDriveSettings extends Page implements HasTable
             'received_name_plaintiff' => __('Emails from the plaintiff side — file name'),
             'received_name_defendant' => __('Emails from the defendant side — file name'),
             'onedrive_received_creditors' => __('Emails from creditors — folder'),
+            'onedrive_attachments' => __('Files received emails came with — folder'),
+            'onedrive_attachments_plaintiff' => __('Files from the plaintiff side — folder'),
+            'onedrive_attachments_defendant' => __('Files from the defendant side — folder'),
+            'onedrive_attachments_creditors' => __('Files from creditors — folder'),
             'received_name_creditor' => __('Emails from creditors — file name'),
             'onedrive_sent_emails' => __('Sent emails subfolder'),
+            'onedrive_sent_creditors' => __('Emails sent to creditors — folder'),
             'onedrive_signed_minutes' => __('Signed minutes subfolder'),
             'onedrive_periodic_reports' => __('Periodic report folder'),
         ];
@@ -210,10 +217,13 @@ class OneDriveSettings extends Page implements HasTable
                                 ->label(__('Matter types with folders of their own'))
                                 ->content(fn (): HtmlString => self::typeGroups())
                                 ->hintAction(
+                                    // Every folder setting of a type (Type::FOLDER_FIELDS) given to many types at once: copied from a type
+                                    // set up already, the standard subfolders alone, or cleared so the defaults on this page apply.
                                     Action::make('assignToTypes')
                                         ->label(__('Assign a structure to matter types'))
                                         ->icon(Heroicon::OutlinedFolder)
-                                        ->fillForm(fn (Get $get): array => ['structure' => $get('subfolders')])
+                                        ->modalWidth('2xl')
+                                        ->fillForm(fn (Get $get): array => ['structure' => $get('subfolders'), 'source' => 'type'])
                                         ->schema([
                                             Select::make('types')
                                                 ->label(__('Matter types'))
@@ -221,16 +231,33 @@ class OneDriveSettings extends Page implements HasTable
                                                 ->multiple()
                                                 ->searchable()
                                                 ->required(),
-                                            Toggle::make('use_default')
-                                                ->label(__('Use the default structure'))
+                                            Radio::make('source')
+                                                ->label(__('Give them'))
+                                                ->options([
+                                                    'type' => __('Every folder setting of a matter type set up already (its subfolders, emails, files, names, sent emails, signed minutes, periodic reports)'),
+                                                    'structure' => __('The standard subfolders below only'),
+                                                    'default' => __('No folders of their own: the defaults on this page apply to them'),
+                                                ])
+                                                ->default('type')
                                                 ->live(),
+                                            Select::make('from_type')
+                                                ->label(__('Copy from'))
+                                                ->options(fn () => Type::query()->orderBy('name')->pluck('name', 'id'))
+                                                ->searchable()
+                                                ->visible(fn (Get $get): bool => $get('source') === 'type')
+                                                ->required(fn (Get $get): bool => $get('source') === 'type'),
                                             TypeForm::oneDriveStructureField('structure')
-                                                ->hidden(fn (Get $get): bool => (bool) $get('use_default'))
-                                                ->required(fn (Get $get): bool => ! $get('use_default')),
+                                                ->visible(fn (Get $get): bool => $get('source') === 'structure')
+                                                ->required(fn (Get $get): bool => $get('source') === 'structure'),
                                         ])
                                         ->action(function (array $data): void {
-                                            $structure = ! empty($data['use_default']) ? null : (trim((string) ($data['structure'] ?? '')) ?: null);
-                                            Type::query()->whereIn('id', $data['types'] ?? [])->update(['onedrive_subfolders' => $structure]);
+                                            $types = Type::query()->whereIn('id', $data['types'] ?? []);
+
+                                            $types->update(match ($data['source'] ?? 'structure') {
+                                                'type' => Type::query()->findOrFail($data['from_type'])->only(Type::FOLDER_FIELDS),
+                                                'default' => array_fill_keys(Type::FOLDER_FIELDS, null),
+                                                default => ['onedrive_subfolders' => trim((string) ($data['structure'] ?? '')) ?: null],
+                                            });
 
                                             Notification::make()->success()->title(__('Folder structure set for :count types', ['count' => count($data['types'] ?? [])]))->send();
                                         }),
@@ -248,6 +275,7 @@ class OneDriveSettings extends Page implements HasTable
                                 ->label(__('Sent emails subfolder'))
                                 ->helperText(__('Every email sent from a matter — letters, minutes, bulk mail — is saved here as a PDF, inside the matter\'s folder (made when missing). Leave empty not to save them in OneDrive.').' '.__('A folder may use the matter\'s placeholders, like the letters do; {{day}} is the day it is sent.'))
                                 ->extraInputAttributes(['dir' => 'auto']),
+                            TypeForm::sentToCreditorsField(forType: false),
                             TypeForm::periodicReportsField(PeriodicReports::SETTING, forType: false),
                         ]),
                     Section::make(__('Received emails — folders'))
@@ -266,6 +294,8 @@ class OneDriveSettings extends Page implements HasTable
                                 ->extraInputAttributes(['dir' => 'ltr']),
                             // The emails from each side apart, each named as set; a matter type may have its own.
                             ...array_map(fn (string $side): TextInput => TypeForm::receivedSideFolderField($side, forType: false), ReceivedEmailFiling::APART),
+                            // The files the emails come with, apart from the emails: in general, and a side's.
+                            ...array_map(fn (string $side): TextInput => TypeForm::attachmentsFolderField($side, forType: false), [ReceivedEmailFiling::GENERAL, ...ReceivedEmailFiling::APART]),
                         ]),
                     Section::make(__('Received emails — file names'))
                         ->icon(Heroicon::OutlinedDocumentText)
@@ -408,6 +438,7 @@ class OneDriveSettings extends Page implements HasTable
         Setting::set(MatterOneDriveFolders::FINISHED_FOLDER, trim((string) ($state['finished_folder'] ?? '')), 'onedrive');
         Setting::set(MatterOneDriveFolders::SIGNED_MINUTES, trim((string) ($state['signed_minutes'] ?? '')), 'onedrive');
         Setting::set(MatterOneDriveFolders::SENT_EMAILS, trim((string) ($state['sent_emails'] ?? '')), 'onedrive');
+        Setting::set(MatterOneDriveFolders::SENT_TO_CREDITORS, trim((string) ($state[MatterOneDriveFolders::SENT_TO_CREDITORS] ?? '')), 'onedrive');
         Setting::set(MatterOneDriveFolders::RECEIVED_EMAILS, trim((string) ($state['received_emails'] ?? '')), 'onedrive');
 
         foreach (self::keyedSettings() as $key) {

@@ -181,6 +181,7 @@ class LetterTemplateForm
                                     ->options([
                                         'text' => __('Text'),
                                         'textarea' => __('Long text'),
+                                        'richtext' => __('Formatted text (editor)'),
                                         'date' => __('Date'),
                                         'time' => __('Time'),
                                         'url' => __('Link'),
@@ -310,7 +311,7 @@ class LetterTemplateForm
                         TextEntry::make('marks_help')
                             ->hiddenLabel()
                             ->visible(fn (Get $get) => self::isMinutes($get('category')))
-                            ->state(new HtmlString(e(__('Minutes as a form: {{box minutes.attendees.claimant.count > 0}} draws a check box, ticked when someone on the claimant\'s side attended (.defendant, .interpreter, .others the same; {{minutes.absentees.…}} for who was absent), and {{minutes.attendees.claimant}} their names with commas. {{radio input.meeting_type = "عن بعد"}} draws a radio button, selected when the Choice field "meeting_type" has that value. {{matter.expertise}} is the experts\' areas of expertise, with commas.')))),
+                            ->state(new HtmlString(e(__('Minutes as a form: {{box minutes.attendees.claimant.count > 0}} draws a check box, ticked when someone on the claimant\'s side attended (.defendant, .interpreter, .others the same; {{minutes.absentees.…}} for who was absent), and {{minutes.attendees.claimant}} their names with commas. {{minutes.absentees.parties}} names the main parties absent with their capacities (never their representatives; one that came itself or through any of its representatives is not absent) and {{minutes.absentees.parties.count}} how many. {{radio input.meeting_type = "عن بعد"}} draws a radio button, selected when the Choice field "meeting_type" has that value. {{matter.expertise}} is the experts\' areas of expertise, with commas.')))),
                     ]),
             ]);
     }

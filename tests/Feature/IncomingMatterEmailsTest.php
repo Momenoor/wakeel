@@ -27,6 +27,7 @@ use App\Services\MMS\EmailDownloadLinks;
 use App\Services\MMS\IncomingEmailMatcher;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterReplyCollector;
+use App\Services\MMS\ReceivedEmailFiling;
 use App\Services\MMS\SentFolder;
 use App\Services\Notifications\NotificationPreferences as Prefs;
 use App\Support\Tolerant;
@@ -1366,5 +1367,73 @@ class IncomingMatterEmailsTest extends TestCase
         );
         // To compare with where an email already is, the number is left out.
         $this->assertSame('واردة/2026-10-16', MatterOneDriveFolders::receivedEmailsFolderFor($this->second, Carbon::parse('2026-10-16 10:00', config('app.timezone')), nextSerial: false));
+    }
+
+    public function test_the_files_an_email_came_with_go_to_the_sides_attachments_folder_while_its_pdf_stays_with_the_emails(): void
+    {
+        Setting::set(MatterOneDriveFolders::RECEIVED_EMAILS, 'المراسلات', 'onedrive');
+        Setting::set(ReceivedEmailFiling::ATTACHMENTS_SETTINGS[ReceivedEmailFiling::PLAINTIFF], '02 المستندات/{{side}}', 'onedrive');
+        Setting::clearCache();
+        $made = fn (): array => Http::recorded()
+            ->filter(fn ($pair) => $pair[0]->method() === 'POST' && str_contains($pair[0]->url(), '/children'))
+            ->map(fn ($pair) => $pair[0]->data()['name'] ?? null)
+            ->values()
+            ->all();
+
+        // The lawyer stands for the plaintiff: its file goes to the plaintiff's documents; the email stays in the correspondence.
+        $this->collect($this->email(['subject' => 'مستندات القضية 987/2026']));
+        $email = MatterEmail::where('status', MatterEmail::FILED)->sole();
+        $capacity = Type::sideLabel($this->second->type, 'plaintiff');
+        $this->assertSame('المراسلات', $email->onedrive['folder']);
+        $this->assertSame('02 المستندات/'.$capacity, $email->onedrive['attachments_folder']);
+        $this->assertSame(['pdf' => true, 'eml' => false, 'attachments' => 1], collect($email->onedrive)->only(['pdf', 'eml', 'attachments'])->all());
+        $this->assertContains('02 المستندات', $made());
+        $this->assertContains($capacity, $made());
+        // No folder of the PDF's name beside it.
+        $this->assertNotContains(pathinfo($email->files[0]['name'], PATHINFO_FILENAME), $made());
+        Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->second, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('view', $email)
+            ->assertMountedActionModalSee([__('Attachments folder'), '02 المستندات/'.$capacity]);
+
+        // From no side: the general attachments folder — named for who sent it.
+        Setting::set(ReceivedEmailFiling::ATTACHMENTS_SETTINGS[ReceivedEmailFiling::GENERAL], 'المستندات/{{party}}', 'onedrive');
+        Setting::clearCache();
+        $this->collect($this->email(['from' => 'clerk@court.ae', 'from_name' => 'المحكمة', 'subject' => 'إخطار 987/2026', 'message_id' => '<court@court.ae>']));
+        $court = MatterEmail::where('from', 'like', '%clerk@court.ae%')->sole();
+        $this->assertSame('المستندات/المحكمة', $court->onedrive['attachments_folder']);
+
+        // Nothing set: beside the PDF, in a folder of its name, as always.
+        Setting::set(ReceivedEmailFiling::ATTACHMENTS_SETTINGS[ReceivedEmailFiling::GENERAL], '', 'onedrive');
+        Setting::clearCache();
+        $this->collect($this->email(['from' => 'other@court.ae', 'from_name' => 'أخرى', 'subject' => 'إخطار ثانٍ 987/2026', 'message_id' => '<other@court.ae>']));
+        $other = MatterEmail::where('from', 'like', '%other@court.ae%')->sole();
+        $this->assertArrayNotHasKey('attachments_folder', $other->onedrive);
+        $this->assertContains(pathinfo($other->files[0]['name'], PATHINFO_FILENAME), $made());
+    }
+
+    public function test_a_reply_written_from_outlook_to_an_email_that_came_in_is_kept_beside_it(): void
+    {
+        Setting::set(MatterOneDriveFolders::RECEIVED_EMAILS, 'واردة/{{day}}', 'onedrive');
+        Setting::set(MatterOneDriveFolders::SENT_EMAILS, 'صادرة', 'onedrive');
+        Setting::clearCache();
+        User::factory()->create(['email' => 'amr@jpa.ae']);
+
+        $this->collect($this->email(['message_id' => '<claim-1@albanna.ae>', 'subject' => 'مطالبة في القضية 987/2026', 'at' => '2026-10-16 09:00:00']));
+        $received = MatterEmail::where('direction', MatterEmail::RECEIVED)->sole();
+        $this->assertSame('واردة/2026-10-16', $received->onedrive['folder']);
+
+        // Written from Outlook in reply to it, with no matter number in it: the matter is that email's, and it
+        // sits beside it, not in the sent folder.
+        $this->assertSame(1, $this->collect($this->email([
+            'message_id' => '<reply-1@jpa.ae>', 'references' => ['<claim-1@albanna.ae>'], 'from' => 'amr@jpa.ae', 'from_name' => 'عمرو',
+            'subject' => 'RE: مطالبة', 'to' => ['office@albanna.ae'], 'cc' => ['iflas@jpa.ae'], 'at' => '2026-10-18 11:00:00', 'attachments' => [],
+        ])));
+        $sent = MatterEmail::where('direction', MatterEmail::SENT)->sole();
+        $this->assertSame([$received->matter_id, MatterEmail::BY_REPLY, 'واردة/2026-10-16'], [$sent->matter_id, $sent->matched_by, $sent->onedrive['folder']]);
+        $this->assertSame(__('a reply to an email that came in on it'), MatterEmail::matchedByLabel($sent->matched_by));
+
+        // Not a reply: where the sent emails go.
+        $this->assertSame(1, $this->collect($this->email(['message_id' => '<new-1@jpa.ae>', 'from' => 'amr@jpa.ae', 'subject' => 'طلب — القضية 987/2026', 'to' => ['office@albanna.ae'], 'cc' => ['iflas@jpa.ae'], 'attachments' => []])));
+        $this->assertSame('صادرة', MatterEmail::where('message_id', 'new-1@jpa.ae')->sole()->onedrive['folder']);
     }
 }
