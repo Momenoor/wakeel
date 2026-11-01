@@ -1200,13 +1200,13 @@ class MatterOneDriveFolders
         [$before, $after] = explode(self::SERIAL_MARK, $segments[$depth], 2);
         $pattern = '/^'.preg_quote($before, '/').'(\d+)'.preg_quote($after, '/').'$/u';
 
+        // Where the matter's emails were filed — and the copies of those with more than one capacity (onedrive.copies).
         $used = MatterEmail::query()
             ->where('matter_id', $matter->getKey())
-            ->whereNotNull('onedrive->folder')
-            ->when($prefix !== '', fn ($query) => $query->where('onedrive->folder', 'like', addcslashes($prefix, '%_\\').'/%'))
+            ->whereNotNull('onedrive')
             ->pluck('onedrive')
-            ->map(fn ($onedrive): string => (string) (((array) $onedrive)['folder'] ?? ''))
-            ->filter(fn (string $folder): bool => $prefix === '' || str_starts_with(mb_strtolower($folder), mb_strtolower($prefix).'/'))
+            ->flatMap(fn ($onedrive): array => [(string) (((array) $onedrive)['folder'] ?? ''), ...array_map(fn ($copy): string => (string) (((array) $copy)['folder'] ?? ''), (array) (((array) $onedrive)['copies'] ?? []))])
+            ->filter(fn (string $folder): bool => $folder !== '' && ($prefix === '' || str_starts_with(mb_strtolower($folder), mb_strtolower($prefix).'/')))
             ->map(fn (string $folder): int => preg_match($pattern, OneDriveClient::segments($folder)[$depth] ?? '', $m) ? (int) $m[1] : 0)
             ->max() ?? 0;
 
@@ -1467,6 +1467,25 @@ class MatterOneDriveFolders
 
             if ($under($apart)) {
                 $email->update(['onedrive' => [...(array) $email->onedrive, 'attachments_folder' => $moved($apart)]]);
+                $done['emails']++;
+            }
+        }
+
+        foreach (MatterEmail::query()->where('matter_id', $matter->getKey())->whereNotNull('onedrive->copies')->get() as $email) {
+            $copies = (array) (((array) $email->onedrive)['copies'] ?? []);
+            $changed = false;
+
+            foreach ($copies as $i => $copy) {
+                foreach (['folder', 'attachments_folder'] as $what) {
+                    if (filled($copy[$what] ?? null) && $under((string) $copy[$what])) {
+                        $copies[$i][$what] = $moved((string) $copy[$what]);
+                        $changed = true;
+                    }
+                }
+            }
+
+            if ($changed) {
+                $email->update(['onedrive' => [...(array) $email->onedrive, 'copies' => array_values($copies)]]);
                 $done['emails']++;
             }
         }

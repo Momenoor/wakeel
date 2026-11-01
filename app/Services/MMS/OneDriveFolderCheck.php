@@ -94,7 +94,11 @@ final class OneDriveFolderCheck
 
         $expected = collect([
             ...MatterOneDriveFolders::subfoldersFor($matter),
-            ...MatterEmail::query()->where('matter_id', $matter->getKey())->whereNotNull('onedrive->folder')->pluck('onedrive')->flatMap(fn ($onedrive): array => [(string) (((array) $onedrive)['folder'] ?? ''), (string) (((array) $onedrive)['attachments_folder'] ?? '')])->all(),
+            ...MatterEmail::query()->where('matter_id', $matter->getKey())->whereNotNull('onedrive->folder')->pluck('onedrive')->flatMap(fn ($onedrive): array => [
+                (string) (((array) $onedrive)['folder'] ?? ''),
+                (string) (((array) $onedrive)['attachments_folder'] ?? ''),
+                ...array_map(fn ($copy): string => (string) (((array) $copy)['folder'] ?? ''), (array) (((array) $onedrive)['copies'] ?? [])),
+            ])->all(),
             ...$matter->periodicReports()->pluck('folder')->map(fn ($folder): string => (string) $folder)->all(),
         ])->map(fn (string $path): string => MatterOneDriveFolders::cleanPath($path))->filter()->unique()->values();
 

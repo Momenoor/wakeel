@@ -1217,6 +1217,11 @@ class MatterReplyCollector
         $attachmentsFolder = MatterOneDriveFolders::attachmentsFolderFor($matter, $email->at, $side, $from, $party);
         $oneDrive = ['pdf' => false, 'eml' => false, 'attachments' => 0, 'folder' => $folder, ...($attachmentsFolder !== '' ? ['attachments_folder' => $attachmentsFolder] : [])];
 
+        // What it is made of, for a copy in each other capacity's folders (keepCopies()).
+        $pdf = '';
+        $source = null;
+        $files = [];
+
         foreach ($stored as $i => $file) {
             $path = (string) ($file['path'] ?? '');
             if (! $disk = Documents::storage($path)) {
@@ -1225,7 +1230,8 @@ class MatterReplyCollector
 
             // The original email (.eml) goes to OneDrive only, beside the PDF; it is not kept in the system.
             if (($file['kind'] ?? null) === MatterEmail::SOURCE) {
-                $oneDrive['eml'] = $this->archive->keepInOneDrive($matter, $name.'.eml', (string) $disk->get($path), 'message/rfc822', $folder);
+                $source = (string) $disk->get($path);
+                $oneDrive['eml'] = $this->archive->keepInOneDrive($matter, $name.'.eml', $source, 'message/rfc822', $folder);
                 $disk->delete($path);
 
                 continue;
@@ -1236,16 +1242,22 @@ class MatterReplyCollector
 
             if ($i === 0) {
                 // The PDF: with the matter's attachments, and in OneDrive.
+                $pdf = $contents;
                 $kept[] = ['name' => $name.'.pdf', 'path' => $this->archive->keepFile($matter, $name.'.pdf', $contents, $mime, $folder, $userId, inOneDrive: $saved)];
                 $oneDrive['pdf'] = (bool) $saved;
             } else {
                 // A file it came with: in OneDrive only — in the side's attachments folder, else in a folder of the PDF's name.
+                $files[] = ['name' => (string) $file['name'], 'contents' => $contents, 'mime' => $mime];
                 $attachment = $this->keepAttachment($matter, (string) $file['name'], $contents, $mime, $attachmentsFolder !== '' ? $attachmentsFolder : ($folder !== '' ? $folder.'/'.$name : ''), $userId);
                 $kept[] = ['name' => $attachment['name'], 'path' => $attachment['path']];
                 $oneDrive['attachments'] += $attachment['saved'] ? 1 : 0;
             }
 
             $disk->delete($path);
+        }
+
+        if ($pdf !== '') {
+            $this->keepCopies($matter, $pdf, $files, $name, $source, $email->at, $from, $side, $party, $oneDrive);
         }
 
         $email->update([
@@ -1418,7 +1430,46 @@ class MatterReplyCollector
         // Its files apart, when the side has an attachments folder (a party's documents folder).
         $attachmentsFolder = $files !== [] ? MatterOneDriveFolders::attachmentsFolderFor($matter, $at, $side, $from, $party !== '' ? $party : $from) : '';
 
-        return $this->keepIn($matter, MatterOneDriveFolders::receivedEmailsFolderFor($matter, $at, $side, $from), $pdf, $files, $name, $userId, $source, $oneDrive, $attachmentsFolder);
+        $kept = $this->keepIn($matter, MatterOneDriveFolders::receivedEmailsFolderFor($matter, $at, $side, $from), $pdf, $files, $name, $userId, $source, $oneDrive, $attachmentsFolder);
+        $this->keepCopies($matter, $pdf, $files, $name, $source, $at, $from, $side, $party, $oneDrive);
+
+        return $kept;
+    }
+
+    /**
+     * An email from someone with more than one capacity on the matter (a party that is a creditor too): a copy of
+     * it — its PDF, its original and the files it came with — in each other capacity's folders as well, in OneDrive
+     * only, and where each went noted with it (onedrive.copies). The matter's attachments, its progress and the
+     * email's own folder stay the one.
+     *
+     * @param  list<array{name: string, contents: string, mime?: string}>  $files
+     * @param  array<string, mixed>  $oneDrive
+     */
+    private function keepCopies(Matter $matter, string $pdf, array $files, string $name, ?string $source, ?CarbonInterface $at, string $from, string $side, string $party, array &$oneDrive): void
+    {
+        foreach (array_diff(ReceivedEmailFiling::sidesOf($matter, $from), [$side]) as $other) {
+            $folder = MatterOneDriveFolders::receivedEmailsFolderFor($matter, $at, $other, $from);
+
+            if ($folder === '') {
+                continue;
+            }
+
+            $attachmentsFolder = $files !== [] ? MatterOneDriveFolders::attachmentsFolderFor($matter, $at, $other, $from, $party !== '' ? $party : $from) : '';
+            $copy = [
+                'side' => $other,
+                'folder' => $folder,
+                'attachments_folder' => $attachmentsFolder !== '' ? $attachmentsFolder : null,
+                'pdf' => $this->archive->keepInOneDrive($matter, $name.'.pdf', $pdf, 'application/pdf', $folder),
+                'eml' => $source !== null && $this->archive->keepInOneDrive($matter, $name.'.eml', $source, 'message/rfc822', $folder),
+                'attachments' => 0,
+            ];
+
+            foreach ($files as $file) {
+                $copy['attachments'] += $this->archive->keepInOneDrive($matter, SentEmailArchive::shortFileName((string) $file['name']), (string) $file['contents'], (string) ($file['mime'] ?? 'application/octet-stream'), $attachmentsFolder !== '' ? $attachmentsFolder : $folder.'/'.$name) ? 1 : 0;
+            }
+
+            $oneDrive['copies'][] = array_filter($copy, fn ($value): bool => $value !== null);
+        }
     }
 
     /**

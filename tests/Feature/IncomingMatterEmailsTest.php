@@ -13,6 +13,7 @@ use App\Jobs\RegenerateEmail;
 use App\Livewire\TabbedDatabaseNotifications;
 use App\Models\MailSender;
 use App\Models\Matter;
+use App\Models\MatterCreditor;
 use App\Models\MatterEmail;
 use App\Models\MatterOneDriveFolder;
 use App\Models\MatterParty;
@@ -1435,5 +1436,44 @@ class IncomingMatterEmailsTest extends TestCase
         // Not a reply: where the sent emails go.
         $this->assertSame(1, $this->collect($this->email(['message_id' => '<new-1@jpa.ae>', 'from' => 'amr@jpa.ae', 'subject' => 'طلب — القضية 987/2026', 'to' => ['office@albanna.ae'], 'cc' => ['iflas@jpa.ae'], 'attachments' => []])));
         $this->assertSame('صادرة', MatterEmail::where('message_id', 'new-1@jpa.ae')->sole()->onedrive['folder']);
+    }
+
+    public function test_an_email_from_someone_with_two_capacities_is_saved_in_each_capacitys_folders(): void
+    {
+        // The lawyer stands for the plaintiff — and is a creditor on the matter too.
+        MatterCreditor::assign($this->second, null, 'مكتب البنا', 'office@albanna.ae');
+        Setting::set(MatterOneDriveFolders::RECEIVED_EMAILS, 'المراسلات', 'onedrive');
+        Setting::set(ReceivedEmailFiling::FOLDER_SETTINGS[ReceivedEmailFiling::PLAINTIFF], 'وارد المدعي/{{serial}}', 'onedrive');
+        Setting::set(ReceivedEmailFiling::ATTACHMENTS_SETTINGS[ReceivedEmailFiling::PLAINTIFF], '02 المدعي', 'onedrive');
+        Setting::set(ReceivedEmailFiling::FOLDER_SETTINGS[ReceivedEmailFiling::CREDITOR], 'المطالبات/{{creditor}}/{{serial}}', 'onedrive');
+        Setting::clearCache();
+        $made = fn (): array => Http::recorded()
+            ->filter(fn ($pair) => $pair[0]->method() === 'POST' && str_contains($pair[0]->url(), '/children'))
+            ->map(fn ($pair) => $pair[0]->data()['name'] ?? null)
+            ->values()
+            ->all();
+
+        $this->assertSame([ReceivedEmailFiling::CREDITOR, ReceivedEmailFiling::PLAINTIFF], ReceivedEmailFiling::sidesOf($this->second, 'Office@AlBanna.ae'));
+
+        $this->collect($this->email(['subject' => 'مطالبة في القضية 987/2026']));
+        $email = MatterEmail::where('status', MatterEmail::FILED)->sole();
+
+        // Filed as a creditor's, with its claim — and a copy, files and all, in the plaintiff's folders.
+        $this->assertSame('المطالبات/مكتب البنا/1', $email->onedrive['folder']);
+        $this->assertSame([['side' => 'plaintiff', 'folder' => 'وارد المدعي/1', 'attachments_folder' => '02 المدعي', 'pdf' => true, 'eml' => false, 'attachments' => 1]], $email->onedrive['copies']);
+        $this->assertContains('وارد المدعي', $made());
+        $this->assertContains('02 المدعي', $made());
+        // The copy's number counts: the next email's copy is 2.
+        $this->collect($this->email(['subject' => 'مطالبة ثانية 987/2026', 'message_id' => '<two@albanna.ae>']));
+        $this->assertSame('وارد المدعي/2', MatterEmail::where('message_id', 'two@albanna.ae')->sole()->onedrive['copies'][0]['folder']);
+
+        // Said in its details.
+        Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->second, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('view', $email)
+            ->assertMountedActionModalSee([__('Also saved as'), 'وارد المدعي/1']);
+
+        // The folder renamed: the copy's record follows.
+        $this->assertSame(['folders' => 0, 'emails' => 2, 'files' => 0, 'reports' => 0, 'links' => 0], app(MatterOneDriveFolders::class)->renameWithin($this->second, 'وارد المدعي', 'بريد المدعي'));
+        $this->assertSame('بريد المدعي/1', $email->fresh()->onedrive['copies'][0]['folder']);
     }
 }

@@ -71,17 +71,33 @@ final class ReceivedEmailFiling
      */
     public static function side(Matter $matter, string $address): string
     {
+        return self::sidesOf($matter, $address)[0] ?? self::GENERAL;
+    }
+
+    /**
+     * Every capacity an address has on the matter, the creditor's first (the list is kept by hand): a party that is
+     * a creditor too has both, and its emails are saved in each capacity's folders (MatterReplyCollector). None for
+     * anyone else's.
+     *
+     * @return list<string>
+     */
+    public static function sidesOf(Matter $matter, string $address): array
+    {
         $address = mb_strtolower(trim($address));
 
         if ($address === '') {
-            return self::GENERAL;
+            return [];
         }
 
-        // A creditor's address first — the list is kept by hand, and a party that is a creditor too has its claim.
-        if (MatterCreditorAddress::query()->where('matter_id', $matter->getKey())->where('email', $address)->exists()) {
-            return self::CREDITOR;
-        }
+        $sides = MatterCreditorAddress::query()->where('matter_id', $matter->getKey())->where('email', $address)->exists() ? [self::CREDITOR] : [];
+        $party = self::partySide($matter, $address);
 
+        return $party !== null ? [...$sides, $party] : $sides;
+    }
+
+    /** The side of the matter an address is on (side()), or null for anyone on no side. */
+    private static function partySide(Matter $matter, string $address): ?string
+    {
         $sides = self::sides($matter);
         $parties = array_map('intval', MatterContact::partiesWith($address)->all());
 
@@ -124,7 +140,7 @@ final class ReceivedEmailFiling
             }
         }
 
-        return self::GENERAL;
+        return null;
     }
 
     /** The folder structure for a side's emails on this matter: its type's own, else the setting; empty, the general one. */

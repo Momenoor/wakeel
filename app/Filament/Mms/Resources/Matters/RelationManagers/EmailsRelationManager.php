@@ -15,10 +15,12 @@ use App\Jobs\ReadMatterEmailsAddedInOneDrive;
 use App\Models\Matter;
 use App\Models\MatterContact;
 use App\Models\MatterEmail;
+use App\Models\Type;
 use App\Models\User;
 use App\Services\MMS\MatterCreditors;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterReplyCollector;
+use App\Services\MMS\ReceivedEmailFiling;
 use App\Support\Dates;
 use App\Support\Documents;
 use App\Support\ScreenPermissions;
@@ -425,6 +427,12 @@ class EmailsRelationManager extends RelationManager
         $sent = $email->direction === MatterEmail::SENT;
         $folder = ((array) $email->onedrive)['folder'] ?? null;
         $attachmentsFolder = ((array) $email->onedrive)['attachments_folder'] ?? null;
+        // Someone with more than one capacity on the matter: a copy in each other capacity's folders.
+        $copies = collect((array) (((array) $email->onedrive)['copies'] ?? []))
+            ->map(fn ($copy): string => (((array) $copy)['side'] ?? '') === ReceivedEmailFiling::CREDITOR ? __('Creditor') : Type::sideLabel($email->matter?->type, (string) (((array) $copy)['side'] ?? '')))
+            ->zip(collect((array) (((array) $email->onedrive)['copies'] ?? []))->map(fn ($copy): string => (string) (((array) $copy)['folder'] ?? '')))
+            ->map(fn ($pair): string => $pair[0].' — '.$pair[1])
+            ->implode('؛ ');
         $files = $email->fileLinks();
         $links = $email->downloadLinks();
 
@@ -439,6 +447,7 @@ class EmailsRelationManager extends RelationManager
             'onedrive_folder' => [__('OneDrive folder'), filled($folder) ? $folder : null],
             // Its files kept apart from it, when the side has an attachments folder.
             'onedrive_attachments_folder' => [__('Attachments folder'), filled($attachmentsFolder) ? $attachmentsFolder : null],
+            'onedrive_copies' => [__('Also saved as'), $copies !== '' ? $copies : null],
             'onedrive_pdf' => [__('PDF in OneDrive'), $email->oneDriveLabel('pdf')],
             'onedrive_eml' => [__('EML in OneDrive'), $email->oneDriveLabel('eml')],
             'onedrive_attachments' => [__('Attachments in OneDrive'), $email->oneDriveLabel('attachments')],
