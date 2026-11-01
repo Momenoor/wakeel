@@ -1643,10 +1643,12 @@ class MatterOneDriveFolders
 
         $matter->loadMissing('type');
 
-        return self::resolvePath($template, $matter, $at ?? now(), '', [
+        // {{serial}}: the same number the email itself takes under the same folder (resolved before the email is kept).
+        return self::withSerial($matter, self::resolvePath($template, $matter, $at ?? now(), '', [
             'side' => $side === ReceivedEmailFiling::GENERAL ? '' : Type::sideLabel($matter->type, $side),
             'party' => Str::limit(trim((string) preg_replace('/\s+/u', ' ', $party)), SentEmailArchive::PARTY_LIMIT, '…'),
             ...ReceivedEmailFiling::creditorValues($matter, $side, $from),
-        ]);
+            self::SERIAL => self::SERIAL_MARK,
+        ]));
     }
 }

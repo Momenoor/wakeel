@@ -57,6 +57,9 @@ final class ReceivedEmailFiling
 
     public const ATTACHMENTS_COLUMNS = [self::PLAINTIFF => 'onedrive_attachments_plaintiff', self::DEFENDANT => 'onedrive_attachments_defendant', self::CREDITOR => 'onedrive_attachments_creditors', self::GENERAL => 'onedrive_attachments'];
 
+    /** A creditor's name in a folder or file name ({{creditor}}): no longer than this. */
+    public const CREDITOR_NAME_LIMIT = 25;
+
     /** The name as it always was, written as a pattern. */
     public const DEFAULT_NAME = '{{date}} {{time}} {{kind}} — {{party}} — {{subject}}';
 
@@ -184,7 +187,7 @@ final class ReceivedEmailFiling
         $address = $side === self::CREDITOR && $matter ? MatterCreditorAddress::of($matter, $from) : null;
 
         return $address?->creditor ? [
-            'creditor' => Str::limit(trim((string) preg_replace('/\s+/u', ' ', $address->creditor->name)), SentEmailArchive::PARTY_LIMIT, '…'),
+            'creditor' => Str::limit(trim((string) preg_replace('/\s+/u', ' ', $address->creditor->name)), self::CREDITOR_NAME_LIMIT, '…'),
             // Its number in the matter's list, three digits: {{creditor.number}} before its name keeps the folders in order.
             'creditor.number' => $address->creditor->paddedNumber(),
             'side' => $address->agent ? __("Creditor's agent") : __('Creditor'),
