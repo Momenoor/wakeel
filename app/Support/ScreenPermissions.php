@@ -144,8 +144,8 @@ final class ScreenPermissions
      */
     public static function grantedFrom(): array
     {
-        $matterViewers = ['View:Matter', 'ViewOwn:Matter'];
-        $matterListers = ['ViewAny:Matter', 'ViewOwn:Matter'];
+        $matterViewers = ['View:Matter', 'ViewOwn:Matter', 'ViewAdministered:Matter'];
+        $matterListers = ['ViewAny:Matter', 'ViewOwn:Matter', 'ViewAdministered:Matter'];
 
         return [
             self::BULK_MAIL_RECIPIENTS => ['View:BulkMailCampaign'],

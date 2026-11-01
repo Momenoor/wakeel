@@ -54,8 +54,8 @@ class MatterOneDriveFolders
     public function __construct(private readonly OneDriveClient $client) {}
 
     /**
-     * The matter's OneDrive folders a user may see: every one for a super
-     * admin, else their own (as the assistant).
+     * The matter's OneDrive folders a user may see: every one for a super admin, else their own (as the
+     * assistant) and those of the assistants they administer (User::ownMatterPartyIds()).
      *
      * @return Collection<int, MatterOneDriveFolder>
      */
@@ -63,7 +63,7 @@ class MatterOneDriveFolders
     {
         return $matter->oneDriveFolders()
             ->with('party')
-            ->when(! ($user?->hasRole('super-admin') ?? false), fn ($q) => $q->where('party_id', $user?->party?->id ?? 0))
+            ->when(! ($user?->isSuperAdmin() ?? false), fn ($q) => $q->whereIn('party_id', $user?->ownMatterPartyIds() ?? []))
             ->get();
     }
 

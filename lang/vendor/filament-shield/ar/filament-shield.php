@@ -117,6 +117,7 @@ return [
 
         // Matter — scope.
         'view_own' => 'عرض ملفاته فقط',
+        'view_administered' => 'عرض قضايا المساعدين الذين يتابعهم فقط',
         'view_trashed' => 'عرض المحذوفات',
         'export' => 'تصدير',
         'import' => 'استيراد',

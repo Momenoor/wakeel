@@ -52,7 +52,7 @@ final class AssistantSettingsFields
                 ->multiple()
                 ->preload()
                 ->searchable()
-                ->helperText(__('These users open and work on this assistant\'s matters (as their own role allows), and are told of what happens on them: emails sent and received, requests, minutes, new matters and appointment reminders.'))
+                ->helperText(__('These users open and work on this assistant\'s matters (as their own role allows), see this assistant\'s OneDrive folders and incentive on them and have them in their "My Matters", and are told of what happens on them: emails sent and received, requests, minutes, new matters and appointment reminders. A role given "View administered assistants\' matters only" instead of "View own matters" sees these assistants\' matters and no others.'))
                 ->columnSpanFull(),
         ]));
     }

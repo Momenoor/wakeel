@@ -41,14 +41,17 @@ return [
         [
             'id' => 'work-account',
             'title' => 'The work account and shared mailboxes',
-            'description' => 'The user\'s page (edit or view) has two columns, with a "Work account" section: one Microsoft 365 account for OneDrive, the calendar and the user\'s own mailbox, reached through the office\'s app registered with Microsoft, with no password. "Read and file its emails" (with "Which emails": "Only those about a matter" or "Every email"; an email whose matter is not known waits in this user\'s own "Unfiled emails"), "Send from it" (in their own "Send from" list only, not anyone else\'s), and the "Signature" at the end of their emails (empty: the office\'s signature). Then "May send from the office\'s shared mailboxes" and "Shared mailboxes they may use": they send only from these, and in "Unfiled emails", its tabs and its files they see only what reached them. If all of them are ticked, any shared mailbox added later is open to them too. Last, "In Unfiled emails, from the shared mailboxes": "All of them" or "Those that may be about their matters". An assistant also has an "Assistant" section: their matters\' OneDrive folders, "Report reviewers (WhatsApp)" and "Administrators of their matters".',
+            'description' => 'The user\'s page (edit or view) has two columns, with a "Work account" section: one Microsoft 365 account for OneDrive, the calendar and the user\'s own mailbox, reached through the office\'s app registered with Microsoft, with no password. "Read and file its emails" (with "Which emails": "Only those about a matter" or "Every email"; an email whose matter is not known waits in this user\'s own "Unfiled emails"), "Send from it" (in their own "Send from" list only, not anyone else\'s), and the "Signature" at the end of their emails (empty: the office\'s signature). Then "May send from the office\'s shared mailboxes" and "Shared mailboxes they may use": they send only from these, and in "Unfiled emails", its tabs and its files they see only what reached them. If all of them are ticked, any shared mailbox added later is open to them too. Last, "In Unfiled emails, from the shared mailboxes": "All of them" or "Those that may be about their matters". An assistant also has an "Assistant" section: their matters\' OneDrive folders, "Report reviewers (WhatsApp)" and "Administrators of their matters": users who open and work on this assistant\'s matters as their own, see the assistant\'s OneDrive folders and incentive on the matter\'s page, have those matters in their "My Matters" report, and are told of what happens on them as the assistant is.',
             'roles' => [$admin, $withPermission],
             'permissions' => ['Update:User'],
             'steps' => [
                 ['text' => 'Click "Edit" on the user\'s row and scroll down to "Work account": enter the "Microsoft 365 account" (empty: the sign-in email itself) and turn on what is needed.', 'shot' => 'work-account-1'],
                 ['text' => 'Tick the "Shared mailboxes they may use" ("Deselect all" clears the ticks), choose which of them they see in Unfiled emails, then click "Save changes".', 'shot' => 'work-account-2'],
             ],
-            'tips' => ['A user whose mailboxes are all still ticked sees every shared mailbox, including any added later.'],
+            'tips' => [
+                'A user whose mailboxes are all still ticked sees every shared mailbox, including any added later.',
+                'An administrator with the "View own matters" permission sees the matters they are on and their assistants\'; one given "View administered assistants\' matters only" instead (Roles → Matters) sees those assistants\' matters and no others.',
+            ],
         ],
         [
             'id' => 'password',

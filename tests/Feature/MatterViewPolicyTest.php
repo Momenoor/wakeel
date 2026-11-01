@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Models\Matter;
 use App\Models\MatterParty;
@@ -79,5 +80,36 @@ class MatterViewPolicyTest extends TestCase
         $this->actingAs($user->fresh());
 
         Livewire::test(ViewMatter::class, ['record' => $matter->getKey()])->assertSuccessful();
+    }
+
+    public function test_view_administered_opens_only_the_administered_assistants_matters(): void
+    {
+        $user = $this->userWith('ViewAdministered:Matter');
+        $own = Party::factory()->create(['user_id' => $user->id]);
+        $assistant = Party::factory()->assistant()->create();
+        $assistant->administrators()->attach($user);
+
+        $mine = Matter::factory()->create(['number' => '781', 'year' => 2026]);
+        $theirs = Matter::factory()->create(['number' => '782', 'year' => 2026]);
+        $nobodys = Matter::factory()->create(['number' => '783', 'year' => 2026]);
+        MatterParty::create(['matter_id' => $mine->id, 'role' => 'expert', 'type' => 'expert', 'party_id' => $own->id]);
+        MatterParty::create(['matter_id' => $theirs->id, 'role' => 'expert', 'type' => 'assistant', 'party_id' => $assistant->id]);
+
+        // The assistant's matter, and not the ones the user is on themselves.
+        $user = $user->fresh();
+        $this->assertTrue($user->can('view', $theirs));
+        $this->assertFalse($user->can('view', $mine));
+        $this->assertFalse($user->can('view', $nobodys));
+
+        $this->actingAs($user);
+        $this->assertTrue(MatterResource::canViewAny());
+        $this->assertSame([$theirs->id], Matter::query()->visibleTo($user)->pluck('id')->all());
+        $this->assertSame([$theirs->id], array_keys(MatterSearch::options('78')));
+
+        // With "View own matters" as well: their own too.
+        $user->givePermissionTo(Permission::firstOrCreate(['name' => 'ViewOwn:Matter', 'guard_name' => 'web']));
+        $user = $user->fresh();
+        $this->assertTrue($user->can('view', $mine));
+        $this->assertEqualsCanonicalizing([$mine->id, $theirs->id], Matter::query()->visibleTo($user)->pluck('id')->all());
     }
 }

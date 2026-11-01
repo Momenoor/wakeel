@@ -31,7 +31,7 @@ class MatterResource extends Resource
     {
         $user = auth()->user();
 
-        return $user->can('ViewAny:Matter') || $user->can('ViewOwn:Matter');
+        return $user->can('ViewAny:Matter') || $user->can('ViewOwn:Matter') || $user->can('ViewAdministered:Matter');
     }
 
     public static function canView(Model $record): bool

@@ -239,6 +239,16 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     }
 
     /**
+     * The assistants they administer, as parties on matters. Read once a request.
+     *
+     * @return list<int>
+     */
+    public function administeredPartyIds(): array
+    {
+        return once(fn (): array => array_map('intval', $this->administeredAssistants()->pluck('parties.id')->all()));
+    }
+
+    /**
      * Whose matters are theirs, as parties on them: their own party, and the assistants they administer.
      * Read once a request.
      *
@@ -246,10 +256,10 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
      */
     public function ownMatterPartyIds(): array
     {
-        return once(fn (): array => array_values(array_unique(array_map('intval', array_filter([
-            $this->party?->getKey(),
-            ...$this->administeredAssistants()->pluck('parties.id')->all(),
-        ])))));
+        return once(fn (): array => array_values(array_unique(array_filter([
+            (int) $this->party?->getKey(),
+            ...$this->administeredPartyIds(),
+        ]))));
     }
 
     /** The theme they chose (App\Support\ThemeManager decides whether it is used). */

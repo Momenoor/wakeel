@@ -27,9 +27,10 @@ use Illuminate\Database\Eloquent\Builder;
  * Every other report answers a manager's question. This one answers the
  * assistant's: what is on my desk, what is overdue, what is in court next.
  *
- * Scoped by the signed-in user's linked Party and fails CLOSED — a user with no
- * Party link sees nothing rather than everything. That is the same trap that
- * made MatterResource leak every matter in the office when the link was missing.
+ * Scoped by the signed-in user's linked Party and the assistants they administer
+ * (User::ownMatterPartyIds()) and fails CLOSED — a user with neither sees nothing
+ * rather than everything. That is the same trap that made MatterResource leak
+ * every matter in the office when the link was missing.
  */
 class MyMattersReport extends Page implements HasTable
 {
@@ -52,14 +53,17 @@ class MyMattersReport extends Page implements HasTable
     }
 
     /**
-     * Anyone with a Party link may see their own work. No extra permission is
-     * required precisely because the page can only ever show the viewer's own
-     * matters.
+     * Anyone with a Party link, or assistants they administer, may see their
+     * own work. No extra permission is required precisely because the page can
+     * only ever show the viewer's own matters.
      */
     public static function canAccess(): bool
     {
-        return auth()->user()?->party !== null
-            && auth()->user()->can('View:MyMattersReport');
+        $user = auth()->user();
+
+        return $user !== null
+            && $user->ownMatterPartyIds() !== []
+            && $user->can('View:MyMattersReport');
     }
 
     public static function shouldRegisterNavigation(): bool
@@ -69,18 +73,11 @@ class MyMattersReport extends Page implements HasTable
 
     protected function getTableQuery(): Builder
     {
-        $partyId = auth()->user()?->party?->id;
-
-        $query = Matter::query()
+        return Matter::query()
             ->with(['court', 'type'])
             ->select('matters.*')
-            ->selectRaw(Sql::daysSince('matters.distributed_at').' as days_open');
-
-        if (! $partyId) {
-            return $query->whereRaw('1 = 0');
-        }
-
-        return $query->whereHas('matterParties', fn ($q) => $q->where('party_id', $partyId));
+            ->selectRaw(Sql::daysSince('matters.distributed_at').' as days_open')
+            ->ofParties(auth()->user()?->ownMatterPartyIds() ?? []);
     }
 
     public function table(Table $table): Table
@@ -96,6 +93,10 @@ class MyMattersReport extends Page implements HasTable
                 ReportMatterColumns::reference(),
 
                 ReportMatterColumns::courtAndType(),
+
+                // Whose it is, for one who administers assistants.
+                ReportMatterColumns::assistants()
+                    ->visible(fn (): bool => (auth()->user()?->administeredPartyIds() ?? []) !== []),
 
                 TextColumn::make('status')
                     ->label(__('Status'))

@@ -24,10 +24,15 @@ class MatterPolicy
             return true;
         }
 
-        // A user restricted to their own matters (ViewOwn) can open the ones
-        // they are on, or their administered assistants are — the same scope
-        // the resource's list applies (Matter::scopeOwnedBy()).
-        return $authUser->can('ViewOwn:Matter') && $authUser instanceof User && $matter->isOwnedBy($authUser);
+        // A user restricted to their own matters (ViewOwn) can open the ones they are on, or their administered
+        // assistants are; one restricted to their administered assistants' (ViewAdministered) only the latter — the
+        // same scopes the resource's list applies (Matter::scopeVisibleTo()).
+        if (! $authUser instanceof User) {
+            return false;
+        }
+
+        return ($authUser->can('ViewOwn:Matter') && $matter->isOwnedBy($authUser))
+            || ($authUser->can('ViewAdministered:Matter') && $matter->isAdministeredBy($authUser));
     }
 
     public function create(AuthUser $authUser): bool
@@ -83,6 +88,11 @@ class MatterPolicy
     public function viewOwn(AuthUser $authUser, Matter $matter): bool
     {
         return $authUser->can('ViewOwn:Matter');
+    }
+
+    public function viewAdministered(AuthUser $authUser, Matter $matter): bool
+    {
+        return $authUser->can('ViewAdministered:Matter');
     }
 
     public function viewTrashed(AuthUser $authUser, Matter $matter): bool

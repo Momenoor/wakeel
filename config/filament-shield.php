@@ -248,6 +248,7 @@ return [
             MatterResource::class => [
                 'deleteAny',
                 'viewOwn',
+                'viewAdministered',
                 'viewTrashed',
                 'updateInitialReportDate',
                 'updateFinalReportDate',

@@ -1255,18 +1255,18 @@ class MatterInfolist
     }
 
     /**
-     * The finalized assistant lines on this matter the viewer may see: every
-     * assistant's for a super admin, otherwise only the viewer's own.
+     * The finalized assistant lines on this matter the viewer may see: every assistant's for a super admin,
+     * otherwise the viewer's own and their administered assistants' (User::ownMatterPartyIds()).
      *
      * @return Collection<int, IncentiveAssistantLine>
      */
     private static function visibleIncentiveLines($record): Collection
     {
         $user = auth()->user();
-        $seesAll = $user?->hasRole('super-admin') ?? false;
-        $ownPartyId = $user?->party?->id;
+        $seesAll = $user?->isSuperAdmin() ?? false;
+        $parties = $user?->ownMatterPartyIds() ?? [];
 
-        if (! $seesAll && ! $ownPartyId) {
+        if (! $seesAll && $parties === []) {
             return collect();
         }
 
@@ -1274,15 +1274,15 @@ class MatterInfolist
         return RequestMemo::remember('matter_incentive_lines_'.$record->getKey().'_'.($user?->getKey() ?? 0), fn (): Collection => IncentiveAssistantLine::query()
             ->whereHas('incentiveLine', fn ($q) => $q->where('matter_id', $record->getKey())
                 ->whereHas('calculation', fn ($q) => $q->where('status', 'finalized')))
-            ->when(! $seesAll, fn ($q) => $q->where('party_id', $ownPartyId))
+            ->when(! $seesAll, fn ($q) => $q->whereIn('party_id', $parties))
             ->with(['party', 'incentiveLine.calculation'])
             ->orderBy('id')
             ->get());
     }
 
     /**
-     * The matter's folders in its assistants' OneDrive: a super admin sees
-     * every assistant's, anyone else only their own. "Create folders" makes
+     * The matter's folders in its assistants' OneDrive: a super admin sees every assistant's, anyone else
+     * their own and their administered assistants'. "Create folders" makes
      * any missing or failed one again — folders already made stay as they
      * are.
      */

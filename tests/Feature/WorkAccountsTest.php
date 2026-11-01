@@ -5,16 +5,19 @@ namespace Tests\Feature;
 use App\Enums\NotificationType;
 use App\Enums\RequestStatus;
 use App\Enums\RequestType;
+use App\Filament\Mms\Pages\Reports\MyMattersReport;
 use App\Filament\Mms\Pages\UnfiledEmails;
 use App\Filament\Support\EmailSendFields;
 use App\Models\MailSender;
 use App\Models\Matter;
 use App\Models\MatterEmail;
+use App\Models\MatterOneDriveFolder;
 use App\Models\MatterParty;
 use App\Models\MatterRequest;
 use App\Models\Party;
 use App\Models\User;
 use App\Services\MMS\MatterEmailSentNotifier;
+use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterPeople;
 use App\Services\MMS\Requests\RequestServiceFactory;
 use App\Services\MMS\SenderMailer;
@@ -201,5 +204,23 @@ class WorkAccountsTest extends TestCase
         MatterEmailSentNotifier::flush();
         $this->assertSame(2, $manager->notifications()->count());
         $this->assertSame(0, $amr->notifications()->where('data->viewData->'.NotificationType::DATA_KEY, NotificationType::MATTER_EMAIL_SENT->value)->count());
+
+        // The assistant's OneDrive folder on the matter is theirs to see — not another assistant's on it.
+        $sara = $this->assistant('sara@jpa.ae');
+        MatterParty::create(['matter_id' => $matter->id, 'party_id' => $sara->party->id, 'role' => 'expert', 'type' => 'assistant']);
+        $amrs = MatterOneDriveFolder::create(['matter_id' => $matter->id, 'party_id' => $amr->party->id, 'folder_name' => '2026-1', 'status' => MatterOneDriveFolder::CREATED, 'drive_item_id' => 'f-amr', 'web_url' => 'https://onedrive.test/amr']);
+        MatterOneDriveFolder::create(['matter_id' => $matter->id, 'party_id' => $sara->party->id, 'folder_name' => '2026-1', 'status' => MatterOneDriveFolder::CREATED, 'drive_item_id' => 'f-sara', 'web_url' => 'https://onedrive.test/sara']);
+        $this->assertSame([$amrs->id], MatterOneDriveFolders::visibleTo($matter, $manager)->modelKeys());
+        $this->assertCount(2, MatterOneDriveFolders::visibleTo($matter, $this->admin));
+
+        // Their matters in My Matters, each with its assistants — a page an administrator with no party of their own opens too.
+        $manager->givePermissionTo(Permission::findOrCreate('View:MyMattersReport'));
+        $this->actingAs($manager->fresh());
+        $this->assertTrue(MyMattersReport::canAccess());
+        Livewire::test(MyMattersReport::class)
+            ->assertCanSeeTableRecords([$matter])
+            ->assertCanNotSeeTableRecords([$other])
+            ->assertTableColumnVisible('assistants')
+            ->assertSee($amr->party->name);
     }
 }

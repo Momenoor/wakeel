@@ -119,30 +119,61 @@ class Matter extends Model implements AttachmentOwner
      */
     public function scopeOwnedBy(Builder $query, User $user): void
     {
-        $parties = $user->ownMatterPartyIds();
+        $query->ofParties($user->ownMatterPartyIds());
+    }
 
+    /** The matters of the assistants someone administers (User::administeredPartyIds()) — not their own. */
+    public function scopeAdministeredBy(Builder $query, User $user): void
+    {
+        $query->ofParties($user->administeredPartyIds());
+    }
+
+    /**
+     * The matters these parties are on. None for no parties — never all.
+     *
+     * @param  list<int>  $parties
+     */
+    public function scopeOfParties(Builder $query, array $parties): void
+    {
         $parties === []
             ? $query->whereRaw('1 = 0')
             : $query->whereHas('matterParties', fn (Builder $q) => $q->whereIn('party_id', $parties));
     }
 
     /**
-     * The matters someone may see: all of them, or — given only ViewOwn:Matter — their own. Fails closed: a
-     * user kept to their own matters without a party linked sees none (scopeOwnedBy()). The matters list and
-     * every matter picker (MatterSearch) read through it.
+     * The matters someone may see: all of them (ViewAny:Matter), their own (ViewOwn:Matter), or only their
+     * administered assistants' (ViewAdministered:Matter). Fails closed: a user kept to their own matters without
+     * a party linked, or to their administered assistants' without any, sees none. The matters list and every
+     * matter picker (MatterSearch) read through it.
      */
     public function scopeVisibleTo(Builder $query, ?User $user): void
     {
-        if ($user && ! $user->can('ViewAny:Matter') && $user->can('ViewOwn:Matter')) {
+        if (! $user || $user->can('ViewAny:Matter')) {
+            return;
+        }
+
+        if ($user->can('ViewOwn:Matter')) {
             $query->ownedBy($user);
+        } elseif ($user->can('ViewAdministered:Matter')) {
+            $query->administeredBy($user);
         }
     }
 
     /** Whether it is one of someone's own matters (scopeOwnedBy()). */
     public function isOwnedBy(User $user): bool
     {
-        $parties = $user->ownMatterPartyIds();
+        return $this->isOfParties($user->ownMatterPartyIds());
+    }
 
+    /** Whether it is a matter of an assistant someone administers (scopeAdministeredBy()). */
+    public function isAdministeredBy(User $user): bool
+    {
+        return $this->isOfParties($user->administeredPartyIds());
+    }
+
+    /** @param  list<int>  $parties */
+    private function isOfParties(array $parties): bool
+    {
         return $parties !== [] && $this->matterParties()->whereIn('party_id', $parties)->exists();
     }
 

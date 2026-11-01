@@ -148,8 +148,8 @@ class MatterRequestResource extends Resource
 
         $user = auth()->user();
 
-        if (! $user->can('ViewAny:Matter') && $user->can('ViewOwn:Matter')) {
-            $query->whereHas('matter', fn (Builder $q) => $q->ownedBy($user));
+        if (! $user->can('ViewAny:Matter')) {
+            $query->whereHas('matter', fn (Builder $q) => $q->visibleTo($user));
         }
 
         return $query;

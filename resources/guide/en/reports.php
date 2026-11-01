@@ -157,7 +157,7 @@ return [
         [
             'id' => 'my-matters',
             'title' => 'My Matters',
-            'description' => 'A personal report for the assistant: the matters on their desk, which are late, and when their next session is. It relies on the user being linked to their record in the parties, so they see only their own matters.',
+            'description' => 'A personal report for the assistant: the matters on their desk, which are late, and when their next session is. It relies on the user being linked to their record in the parties, so they see only their own matters. An administrator of assistants (Users → the assistant\'s page → "Administrators of their matters") sees those assistants\' matters here too, with an "Assistants" column saying whose each is.',
             'roles' => ['Assistant (the demo "assistant" role) and anyone with the permission', $admin],
             'permissions' => ['View:MyMattersReport'],
             'steps' => [
