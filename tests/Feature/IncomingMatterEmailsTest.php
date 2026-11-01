@@ -34,6 +34,7 @@ use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
@@ -789,6 +790,85 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertSame(MatterEmail::FILED, MatterEmail::sole()->status);
     }
 
+    public function test_a_copy_of_what_the_office_sent_from_wakeel_is_read_in_the_other_mailbox_and_not_kept(): void
+    {
+        MailSenders::add('assistant', ['username' => 'amr@jpa.ae', 'address' => 'amr@jpa.ae', 'name' => 'Amr', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
+        $read = 0;
+        $copy = function (array $attributes) use (&$read): array {
+            return $this->email(['from' => 'iflas@jpa.ae', 'from_name' => 'JPA', 'to' => ['office@albanna.ae'], 'cc' => ['amr@jpa.ae'], 'was_read' => false, 'mark_read' => function () use (&$read): void {
+                $read++;
+            }, ...$attributes]);
+        };
+
+        // A letter sent from Wakeel, copied to the assistant: known by its Message-ID.
+        MatterEmail::create(['matter_id' => $this->second->id, 'direction' => MatterEmail::SENT, 'sender_key' => 'iflas', 'message_id' => 'letter-1@jpa.ae', 'subject' => 'خطاب — JPA/2026/987/1', 'to' => ['office@albanna.ae', 'amr@jpa.ae'], 'at' => now()]);
+        $this->assertSame(0, app(MatterReplyCollector::class)->handle([$copy(['message_id' => '<letter-1@jpa.ae>', 'subject' => 'خطاب — JPA/2026/987/1'])], collect(), 'assistant'));
+
+        // One sent through Microsoft 365, which gives it an id of its own: known by the mailbox it went from, its
+        // subject and whom outside it went to, within minutes.
+        MatterEmail::create(['matter_id' => $this->second->id, 'direction' => MatterEmail::SENT, 'sender_key' => 'iflas', 'message_id' => 'AAMkGraphOwnId', 'subject' => 'محضر — JPA/2026/987/2', 'to' => ['office@albanna.ae'], 'at' => now()]);
+        $this->assertSame(0, app(MatterReplyCollector::class)->handle([$copy(['message_id' => '<smtp-made@jpa.ae>', 'subject' => 'محضر — JPA/2026/987/2', 'at' => now()->addMinute()->toDateTimeString()])], collect(), 'assistant'));
+
+        // Nothing recorded: each is on its matter already. Read in the assistant's mailbox, as it is in the one it went from.
+        $this->assertSame(0, MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->count());
+        $this->assertSame(2, MatterEmail::query()->where('direction', MatterEmail::SENT)->count());
+        $this->assertSame(2, $read);
+    }
+
+    public function test_an_email_the_office_wrote_from_outlook_to_a_party_is_kept_on_its_matter_as_sent_and_its_reply_with_it(): void
+    {
+        $amr = User::factory()->create(['email' => 'amr@jpa.ae']);
+        $read = 0;
+        $email = $this->email([
+            'message_id' => '<outlook-1@jpa.ae>', 'from' => 'amr@jpa.ae', 'from_name' => 'عمرو', 'subject' => 'طلب مستندات — القضية 987/2026',
+            'to' => ['office@albanna.ae'], 'cc' => ['iflas@jpa.ae'], 'was_read' => false, 'mark_read' => function () use (&$read): void {
+                $read++;
+            },
+            'attachments' => [['name' => 'طلب.pdf', 'contents' => '%PDF-request', 'mime' => 'application/pdf']],
+        ]);
+
+        // Read from the shared mailbox it was copied to: kept as sent on the matter its subject names.
+        $this->assertSame(1, $this->collect($email));
+
+        $sent = MatterEmail::query()->where('direction', MatterEmail::SENT)->sole();
+        $this->assertSame($this->second->id, $sent->matter_id);
+        $this->assertSame(MatterEmail::BY_SUBJECT, $sent->matched_by);
+        $this->assertSame($amr->id, $sent->user_id);
+        // Amr has no mailbox of his own read: its replies looked for where it was read.
+        $this->assertSame('iflas', $sent->sender_key);
+        $this->assertSame(['office@albanna.ae'], $sent->to);
+        $this->assertSame(1, $read);
+        // Its PDF in the sent-emails folder, named as an outgoing email, with the file it went with.
+        $this->assertTrue(collect($this->uploads)->contains(fn (string $url) => str_contains($url, __('Outgoing')) && str_contains($url, '.pdf:/content')));
+        $this->assertTrue(collect($this->uploads)->contains(fn (string $url) => str_contains($url, 'طلب.pdf')));
+        $this->assertSame(1, $this->second->progress()->where('type', ProgressType::EMAIL_SENT)->count());
+
+        // The party's reply to it is kept as its reply.
+        $reply = $this->email(['message_id' => '<reply-1@albanna.ae>', 'references' => ['<outlook-1@jpa.ae>'], 'subject' => 'RE: طلب مستندات — القضية 987/2026']);
+        $this->assertSame(1, app(MatterReplyCollector::class)->handle([$reply], MatterEmail::query()->where('direction', MatterEmail::SENT)->get(), 'iflas'));
+        $this->assertSame($sent->id, MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->sole()->parent_id);
+
+        // The same email read again (another of our mailboxes it was copied to): a copy of what is kept, not kept twice.
+        $this->assertSame(0, $this->collect($email));
+        $this->assertSame(1, MatterEmail::query()->where('direction', MatterEmail::SENT)->count());
+    }
+
+    public function test_an_email_between_office_people_or_about_no_certain_matter_is_left_alone(): void
+    {
+        $read = 0;
+        $unread = ['was_read' => false, 'mark_read' => function () use (&$read): void {
+            $read++;
+        }];
+
+        // Between two of the office's addresses, though it names a matter.
+        $this->assertSame(0, $this->collect($this->email(['from' => 'amr@jpa.ae', 'subject' => 'بخصوص 987/2026', 'to' => ['iflas@jpa.ae'], ...$unread])));
+        // To someone outside, about no certain matter (the lawyer is on two).
+        $this->assertSame(0, $this->collect($this->email(['from' => 'amr@jpa.ae', 'subject' => 'بخصوص القضيتين', 'to' => ['office@albanna.ae'], ...$unread])));
+
+        $this->assertSame(0, MatterEmail::count());
+        $this->assertSame(0, $read);
+    }
+
     public function test_onedrive_can_be_read_for_what_of_an_email_is_there(): void
     {
         $this->collect($this->email(['subject' => 'مستندات القضية 987/2026']));
@@ -1231,5 +1311,60 @@ class IncomingMatterEmailsTest extends TestCase
             IncomingEmailMatcher::normal('مؤسسة  إبراهيم للتجارة'),
             IncomingEmailMatcher::normal('مؤسسه ابراهيم لِلتجارة'),
         );
+    }
+
+    public function test_each_user_sees_which_emails_they_have_not_read_and_who_read_each(): void
+    {
+        $this->collect($this->email(['subject' => 'مستندات القضية 987/2026']));
+        $received = MatterEmail::where('direction', MatterEmail::RECEIVED)->sole();
+        $sent = MatterEmail::recordSent($this->second->id, null, 'iflas', 'sent-1', 'خطاب إلى المحكمة', ['court@dubai.ae'], $this->user->id);
+        $colleague = $this->assistantOn($this->second);
+
+        // Unread by me: the one that came in; the one I sent, I have read. The tab says how many.
+        $this->assertSame('1', EmailsRelationManager::getBadge($this->second, ViewMatter::class));
+        $page = Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->second, 'pageClass' => ViewMatter::class]);
+        $page->filterTable('unread_by_me', true)
+            ->assertCanSeeTableRecords([$received])
+            ->assertCanNotSeeTableRecords([$sent])
+            ->removeTableFilters();
+
+        // Its details opened: read by me, and I am listed as its reader.
+        $page->mountTableAction('view', $received);
+        $this->assertTrue($received->fresh()->isReadBy($this->user));
+        $this->assertNull(EmailsRelationManager::getBadge($this->second, ViewMatter::class));
+        Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->second, 'pageClass' => ViewMatter::class])
+            ->assertTableColumnStateSet('read_by', [$this->user->name], $received)
+            ->assertTableColumnStateSet('read_by', [$this->user->name.' ('.__('sent it').')'], $sent)
+            // Unread again, for me alone.
+            ->callTableAction('markUnread', $received);
+        $this->assertFalse($received->fresh()->isReadBy($this->user));
+
+        // The colleague has their own: both unread, till they mark one read or open the other from the list.
+        $this->actingAs($colleague);
+        $this->assertSame('2', EmailsRelationManager::getBadge($this->second, ViewMatter::class));
+        Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->second, 'pageClass' => ViewMatter::class])
+            ->callTableAction('markRead', $sent)
+            ->call('markEmailRead', $received->id);
+        $this->assertNull(EmailsRelationManager::getBadge($this->second, ViewMatter::class));
+        $this->assertEqualsCanonicalizing([$colleague->id], $received->fresh()->reads->pluck('user_id')->all());
+    }
+
+    public function test_the_emails_of_a_day_are_numbered_under_their_folder_when_the_structure_says_so(): void
+    {
+        Setting::set(MatterOneDriveFolders::RECEIVED_EMAILS, 'واردة/{{day}}/{{serial}}', 'onedrive');
+        Setting::clearCache();
+
+        $this->collect(
+            $this->email(['subject' => 'القضية 987/2026 أولى', 'at' => '2026-10-16 09:00:00']),
+            $this->email(['subject' => 'القضية 987/2026 ثانية', 'at' => '2026-10-16 15:00:00', 'message_id' => '<two@albanna.ae>']),
+            $this->email(['subject' => 'القضية 987/2026 ثالثة', 'at' => '2026-10-17 09:00:00', 'message_id' => '<three@albanna.ae>']),
+        );
+
+        $this->assertSame(
+            ['واردة/2026-10-16/1', 'واردة/2026-10-16/2', 'واردة/2026-10-17/1'],
+            MatterEmail::where('status', MatterEmail::FILED)->orderBy('at')->get()->map(fn (MatterEmail $email): string => (string) $email->onedrive['folder'])->all(),
+        );
+        // To compare with where an email already is, the number is left out.
+        $this->assertSame('واردة/2026-10-16', MatterOneDriveFolders::receivedEmailsFolderFor($this->second, Carbon::parse('2026-10-16 10:00', config('app.timezone')), nextSerial: false));
     }
 }

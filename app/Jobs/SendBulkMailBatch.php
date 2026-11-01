@@ -193,6 +193,7 @@ class SendBulkMailBatch implements ShouldQueue
                     $campaign->renderSubject($recipient),
                     $campaign->created_by,
                     asAttachment: false,
+                    to: (array) $recipient->email,
                 );
                 // What was kept, and how many files it went with, for the matter's Emails tab.
                 $record?->noteKept($kept, count($campaign->attachmentsFor($recipient)));

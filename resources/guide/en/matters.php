@@ -267,6 +267,7 @@ return [
             'tips' => [
                 'Templates and letterheads are managed under "Settings → Templates".',
                 'A sent letter changes from "Draft" to "Sent", with the date it was sent.',
+                'A date field of the template is the meeting\'s only when its key or label names the meeting (meeting, اجتماع, جلسة). A letter\'s own date (its issue date, a deadline) is left as typed when you choose a meeting from the calendar; the meeting\'s date and time are then asked for on their own.',
             ],
         ],
 
@@ -286,6 +287,7 @@ return [
                 ['text' => 'The "Preview" section shows the email as the first recipient will get it: "To" (each attendee with their name and capacity), "CC", "Subject", "Attachments" and the text with the placeholders filled in, and a preview of the WhatsApp message too. Then click "Send".', 'shot' => 'minutes-7-preview'],
             ],
             'tips' => [
+                'If the mail server refuses one of the addresses (it does not exist or cannot receive), the minutes are sent to each of the others on their own, as a letter is: the refused address is named in the send result and its line is marked failed.',
                 '"Finalize" freezes the text of the minutes and saves a PDF in the matter\'s files, so check the answers and attendees before it.',
                 '"Send to attendees" sends the minutes by email or WhatsApp to each attendee to sign, and the signed copies come back to the matter.',
                 'A minutes email is copied into the sending mailbox\'s Sent folder, as a letter\'s is (a Microsoft 365 mailbox keeps its own copy). If the copy fails, the send result says so; the email itself went.',
@@ -307,6 +309,7 @@ return [
             ],
             'tips' => [
                 '"Other emails" on the row adds other email addresses for the person on this matter, copied in whenever we email them on it, without changing their details in the parties table.',
+                'On a matter with creditors, each creditor has a number ("No.", its claim\'s serial, given as it is added), a "Trade licence or ID number" (the same number twice in a matter is refused), its "Claim amount", the date of the "First email" from it or its agents, and the columns its matter type gives creditors ("Creditors\' own columns" on the type). "Import creditors" reads an Excel or CSV sheet with the headings name, email, agent, phone, claim_amount, id_number (in English or Arabic) and the type\'s own columns, merging each line into the list by its address, licence or name; "Export creditors for bulk mail" writes the same columns, each a placeholder in a bulk mail. Making someone a creditor offers "The same creditor on another matter", to copy its details and agents from there. Whoever a creditor copies in on its emails (outside the office, no party) becomes its address too, so their emails go to its folder.',
                 '"Export contacts" (in the tab and at the top of the page) exports them, edits included.',
                 'Anyone not allowed to edit parties does not see "Edit" on a party\'s row.',
             ],

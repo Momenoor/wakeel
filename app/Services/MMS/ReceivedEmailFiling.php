@@ -177,6 +177,8 @@ final class ReceivedEmailFiling
 
         return $address?->creditor ? [
             'creditor' => Str::limit(trim((string) preg_replace('/\s+/u', ' ', $address->creditor->name)), SentEmailArchive::PARTY_LIMIT, '…'),
+            // Its number in the matter's list, three digits: {{creditor.number}} before its name keeps the folders in order.
+            'creditor.number' => $address->creditor->paddedNumber(),
             'side' => $address->agent ? __("Creditor's agent") : __('Creditor'),
         ] : [];
     }

@@ -381,6 +381,12 @@ class Party extends Model
      *
      * @return BelongsToMany<User, $this>
      */
+    /** The matters' folders made in this assistant's OneDrive. */
+    public function matterOneDriveFolders(): HasMany
+    {
+        return $this->hasMany(MatterOneDriveFolder::class, 'party_id');
+    }
+
     public function reportReviewers(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'party_report_reviewers', 'party_id', 'user_id')->withTimestamps();

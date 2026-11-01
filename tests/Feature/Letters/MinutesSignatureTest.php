@@ -13,6 +13,7 @@ use App\Models\EmailTemplate;
 use App\Models\LetterTemplate;
 use App\Models\MailSender;
 use App\Models\Matter;
+use App\Models\MatterEmail;
 use App\Models\MatterMinutes;
 use App\Models\MatterOneDriveFolder;
 use App\Models\MatterParty;
@@ -33,6 +34,7 @@ use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
@@ -521,5 +523,33 @@ class MinutesSignatureTest extends TestCase
             ->callMountedAction();
 
         $this->assertSame('new-secret', WhatsAppCloud::appSecret());
+    }
+
+    public function test_an_address_the_mail_server_refuses_is_left_out_and_the_others_still_get_the_minutes(): void
+    {
+        // The server turns the whole email away for an address that does not exist.
+        Event::listen(MessageSending::class, function (MessageSending $event): void {
+            foreach ($event->message->getTo() as $address) {
+                if ($address->getAddress() === 'gone@x.ae') {
+                    throw new \RuntimeException('550 5.1.1 <gone@x.ae>: Recipient address rejected: User unknown');
+                }
+            }
+        });
+        $company = Party::where('name', 'محمد عبد المقصود')->sole();
+        $lines = [
+            ['name' => 'الأستاذ/ محمد عبد المقصود', 'party_id' => $company->id, 'group' => $company->id, 'emails' => ['m@law.ae'], 'by_email' => true],
+            ['name' => 'السيد/ راحل', 'emails' => ['gone@x.ae'], 'by_email' => true],
+        ];
+
+        $result = app(MinutesSender::class)->send($this->minutes, $lines, 'iflas', grouping: EmailGrouping::ALL);
+
+        // Sent to each on their own, as a letter is: the one that exists got it, the refused one is named.
+        $this->assertSame([['m@law.ae']], array_map(fn (Email $email): array => array_map(fn ($a) => $a->getAddress(), $email->getTo()), $this->sent));
+        $this->assertSame(1, $result['sent']);
+        $this->assertSame(1, $result['failed']);
+        $this->assertStringContainsString('gone@x.ae', $result['errors'][0]);
+        $this->assertSame([MinutesDelivery::SENT, MinutesDelivery::FAILED], $this->minutes->deliveries()->orderBy('id')->pluck('status')->all());
+        // Remembered for its replies with whom it reached.
+        $this->assertSame(['m@law.ae'], MatterEmail::query()->where('direction', MatterEmail::SENT)->sole()->to);
     }
 }

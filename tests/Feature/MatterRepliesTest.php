@@ -10,6 +10,7 @@ use App\Filament\Mms\Resources\BulkMailCampaigns\RelationManagers\RecipientsRela
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager;
 use App\Filament\Support\EmailSendFields;
+use App\Jobs\CollectMatterEmails;
 use App\Livewire\TabbedDatabaseNotifications;
 use App\Models\BulkMailCampaign;
 use App\Models\Letterhead;
@@ -31,6 +32,7 @@ use App\Services\MMS\SenderMailer;
 use App\Services\MMS\SentEmailArchive;
 use App\Services\MMS\SentFolder;
 use App\Services\Notifications\NotificationPreferences as Prefs;
+use App\Support\Dates;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -71,6 +73,9 @@ class MatterRepliesTest extends TestCase
 
     private bool $mailReadAllowed = true;
 
+    /** Whether the mailbox lets emails be marked as read (Mail.ReadWrite). */
+    private bool $markReadAllowed = true;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -83,7 +88,16 @@ class MatterRepliesTest extends TestCase
             'mail.mailers.microsoft-graph' => ['transport' => 'microsoft-graph', 'tenant_id' => 'tenant', 'client_id' => 'client', 'client_secret' => 'secret'],
             'services.outlook' => ['tenant_id' => 'tenant', 'client_id' => 'client', 'client_secret' => 'secret'],
         ]);
-        $this->app->instance(SentFolder::class, Mockery::spy(SentFolder::class));
+        // The cPanel mailbox (iflas) read too, as every mailbox set to be read is: nothing in it unless a test says.
+        $empty = Mockery::mock(WhereQuery::class);
+        $empty->shouldReceive('whereSince', 'leaveUnread', 'setFetchBody', 'setFetchFlags', 'setFetchOrderAsc', 'limit')->andReturnSelf();
+        $empty->shouldReceive('get')->andReturn(new MessageCollection);
+        $empty->shouldReceive('errors')->andReturn([]);
+        $inbox = Mockery::mock(Folder::class);
+        $inbox->shouldReceive('query')->andReturn($empty);
+        $mailboxes = Mockery::spy(SentFolder::class);
+        $mailboxes->shouldReceive('inbox')->andReturn($inbox)->byDefault();
+        $this->app->instance(SentFolder::class, $mailboxes);
         Gate::before(fn () => true);
         Filament::setCurrentPanel(Filament::getPanel('mms'));
 
@@ -109,10 +123,20 @@ class MatterRepliesTest extends TestCase
                 return Http::response(['value' => array_values(array_filter($this->inbox, fn (array $item): bool => ($item['internetMessageId'] ?? null) === $wanted[1]))]);
             }
 
-            if (str_contains($url, '/mailFolders/Inbox/messages')) {
+            // The folders never read, each with an id of its own.
+            if (preg_match('~/mailFolders/(sentitems|outbox|drafts|junkemail|deleteditems)\?~', $url, $folder)) {
+                return Http::response(['id' => $folder[1].'-folder-id']);
+            }
+
+            // The mailbox's messages since a time — every folder's.
+            if (preg_match('~/messages\?.*receivedDateTime ge~', $url)) {
                 return $this->mailReadAllowed
                     ? Http::response(['value' => $this->inbox])
                     : Http::response(['error' => ['code' => 'ErrorAccessDenied', 'message' => 'Access is denied.']], 403);
+            }
+
+            if ($request->method() === 'PATCH' && ! $this->markReadAllowed) {
+                return Http::response(['error' => ['code' => 'ErrorAccessDenied', 'message' => 'Access is denied.']], 403);
             }
 
             if (str_contains($url, '/attachments')) {
@@ -453,7 +477,7 @@ class MatterRepliesTest extends TestCase
         $this->assertSame(MatterReplyCollector::MAX_LOOK_BACK, MatterReplyCollector::lookBackDays());
     }
 
-    public function test_set_to_keep_every_email_a_mailbox_never_sent_from_is_read_too(): void
+    public function test_a_mailbox_set_to_be_read_is_read_though_nothing_was_ever_sent_from_it(): void
     {
         MailSender::create(['driver' => MailSender::MICROSOFT, 'address' => 'info@jpa.ae', 'name' => 'Info', 'key' => 'info', 'is_active' => true]);
         $this->inbox = [[
@@ -463,11 +487,14 @@ class MatterRepliesTest extends TestCase
             'body' => ['contentType' => 'html', 'content' => '<p>؟</p>'], 'internetMessageHeaders' => [], 'isRead' => false,
         ]];
 
-        // Only replies and parties': a mailbox nothing was sent from is not read.
+        // Read, though nothing was ever sent from it — a stranger's email naming no matter is not kept from it.
         app(MatterReplyCollector::class)->collect(null, 60);
-        Http::assertNotSent(fn (Request $request) => str_contains(rawurldecode($request->url()), 'users/info@jpa.ae/mailFolders'));
+        Http::assertSent(fn (Request $request) => str_contains(rawurldecode($request->url()), 'users/info@jpa.ae/messages'));
+        $this->assertSame(0, MatterEmail::count());
+        $this->assertNotNull(MatterReplyCollector::lastReadAt('info'));
+        $this->assertSame(MatterReplyCollector::lastReadAt('info')->format(Dates::dateTimeFormat()), MatterReplyCollector::lastReadLabel(MailSender::query()->where('key', 'info')->first()));
 
-        // That mailbox set to keep every email: it is.
+        // Set to keep every email: the stranger's waits in Unfiled emails.
         MailSender::query()->where('key', 'info')->first()->update(['keep_all_inbox' => true]);
         app(MatterReplyCollector::class)->collect(null, 60);
         $this->assertSame('info', MatterEmail::pending()->sole()->sender_key);
@@ -475,12 +502,66 @@ class MatterRepliesTest extends TestCase
         $this->assertTrue(MatterEmail::pending()->sole()->was_unread);
         // Read for the last day only, never further back.
         $since = now()->subDay()->utc()->format('Y-m-d\TH');
-        Http::assertSent(fn (Request $request) => str_contains(rawurldecode($request->url()), 'users/info@jpa.ae/mailFolders')
+        Http::assertSent(fn (Request $request) => str_contains(rawurldecode($request->url()), 'users/info@jpa.ae/messages')
             && str_contains(rawurldecode($request->url()), 'receivedDateTime ge '.$since));
+
+        // One not set to be read is said so; one set to be read that no round reached yet, "Never read".
+        $this->assertSame(__('Not read'), MatterReplyCollector::lastReadLabel(MailSender::query()->where('key', 'info')->first()->fill(['is_active' => false])));
+        $this->assertSame(__('Never read'), MatterReplyCollector::lastReadLabel(MailSender::create(['driver' => MailSender::MICROSOFT, 'address' => 'new@jpa.ae', 'name' => 'New', 'key' => 'new', 'is_active' => true])));
+    }
+
+    public function test_a_microsoft_365_mailbox_is_read_in_every_folder_but_what_it_sent_its_drafts_junk_and_bin(): void
+    {
+        MailSender::create(['driver' => MailSender::MICROSOFT, 'address' => 'no_reply@jpa.ae', 'name' => 'JPA', 'key' => 'noreply', 'is_active' => true]);
+        $this->sentEmail(['sender_key' => 'noreply']);
+        $reply = fn (string $id, string $folder): array => [
+            'id' => $id, 'subject' => 'RE: طلب بيانات — JPA/2026/986/1', 'internetMessageId' => '<'.$id.'@police>', 'hasAttachments' => false, 'parentFolderId' => $folder,
+            'from' => ['emailAddress' => ['address' => 'info@dubaipolice.gov.ae', 'name' => 'شرطة دبي']],
+            'toRecipients' => [['emailAddress' => ['address' => 'no_reply@jpa.ae']]], 'receivedDateTime' => now()->toIso8601String(),
+            'body' => ['contentType' => 'html', 'content' => '<p>تم.</p>'], 'internetMessageHeaders' => [],
+        ];
+        // One a rule moved to a folder of its own, and the mailbox's own copies in Sent Items and the bin.
+        $this->inbox = [$reply('moved', 'archive-folder-id'), $reply('ours', 'sentitems-folder-id'), $reply('binned', 'deleteditems-folder-id')];
+
+        $result = app(MatterReplyCollector::class)->collect($this->matter->id);
+
+        $this->assertSame(1, $result['replies']);
+        $this->assertSame('moved@police', MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->sole()->message_id);
+        // The whole mailbox asked for, not its Inbox alone; the folders not read asked for once, then remembered.
+        Http::assertSent(fn (Request $request) => str_contains(rawurldecode($request->url()), 'users/no_reply@jpa.ae/messages?'));
+        Http::assertNotSent(fn (Request $request) => str_contains(rawurldecode($request->url()), '/mailFolders/Inbox/'));
+        app(MatterReplyCollector::class)->collect($this->matter->id);
+        $this->assertCount(1, Http::recorded(fn (Request $request) => str_contains(rawurldecode($request->url()), '/mailFolders/sentitems')));
+    }
+
+    public function test_a_mailbox_that_will_not_mark_emails_read_is_said_once_in_the_result(): void
+    {
+        MailSender::create(['driver' => MailSender::MICROSOFT, 'address' => 'no_reply@jpa.ae', 'name' => 'JPA', 'key' => 'noreply', 'is_active' => true]);
+        $this->sentEmail(['sender_key' => 'noreply']);
+        $reply = fn (string $id): array => [
+            'id' => $id, 'subject' => 'RE: طلب بيانات — JPA/2026/986/1', 'internetMessageId' => '<'.$id.'@police>', 'hasAttachments' => false,
+            'from' => ['emailAddress' => ['address' => 'info@dubaipolice.gov.ae', 'name' => 'شرطة دبي']],
+            'toRecipients' => [['emailAddress' => ['address' => 'no_reply@jpa.ae']]], 'receivedDateTime' => now()->toIso8601String(),
+            'body' => ['contentType' => 'html', 'content' => '<p>تم.</p>'], 'internetMessageHeaders' => [], 'isRead' => false,
+        ];
+        $this->inbox = [$reply('r1'), $reply('r2')];
+        $this->markReadAllowed = false;
+
+        $result = app(MatterReplyCollector::class)->collect(null, 60);
+
+        // Both kept; the mailbox named once, with what to grant — in the result, and so in the bell and the last run's line.
+        $this->assertSame(2, $result['replies']);
+        $this->assertCount(1, $result['errors']);
+        $this->assertStringContainsString('JPA', $result['errors'][0]);
+        $this->assertStringContainsString('Mail.ReadWrite', $result['errors'][0]);
+        $this->assertStringContainsString('Mail.ReadWrite', MatterReplyCollector::lastRunSummary());
+        $this->assertSame('warning', CollectMatterEmails::notification($result)->getStatus());
     }
 
     public function test_an_automatic_run_records_itself_and_goes_on_where_a_short_one_stopped(): void
     {
+        // The one mailbox read here: a run with no time reads one mailbox, and it must be this one.
+        MailSender::query()->where('key', 'iflas')->first()->update(['collects' => false]);
         MailSender::create(['driver' => MailSender::MICROSOFT, 'address' => 'no_reply@jpa.ae', 'name' => 'JPA', 'key' => 'noreply', 'is_active' => true]);
         $this->sentEmail(['sender_key' => 'noreply']);
         $message = fn (string $id, string $at) => [

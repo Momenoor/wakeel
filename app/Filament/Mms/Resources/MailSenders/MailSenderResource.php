@@ -8,6 +8,7 @@ use App\Filament\Mms\Resources\MailSenders\Pages\ManageMailSenders;
 use App\Filament\Shared\Clusters\Settings;
 use App\Models\MailSender;
 use App\Services\MMS\MailboxDetector;
+use App\Services\MMS\MatterReplyCollector;
 use App\Services\MMS\SenderMailer;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -125,7 +126,7 @@ class MailSenderResource extends Resource
                         ->label(__('Keep every email of this inbox'))
                         ->default(false)
                         ->inline(false)
-                        ->helperText(__("Off: only replies and emails from a matter's parties are kept from this mailbox. On: every other email too (except the office's own) goes to Unfiled emails, to file on a matter or set aside.")),
+                        ->helperText(__("Off: only replies and emails from a matter's parties are kept from this mailbox. On: every other email too goes to Unfiled emails, to file on a matter or set aside. The office's own emails never do: a copy of one sent from Wakeel is left as it is, and one written from Outlook to someone outside is filed on its matter as sent.")),
                     // Only for this: everything in it is an instruction to file, never correspondence.
                     Toggle::make('files_forwards')
                         ->label(__('Filing mailbox'))
@@ -246,6 +247,11 @@ class MailSenderResource extends Resource
                 IconColumn::make('is_active')->label(__('Active'))->boolean(),
                 IconColumn::make('keep_all_inbox')->label(__('Keeps every email'))->boolean(),
                 IconColumn::make('files_forwards')->label(__('Filing mailbox'))->boolean(),
+                // Whether the automatic rounds reach it: a mailbox never read is a mailbox whose emails are never filed.
+                TextColumn::make('last_read')
+                    ->label(__('Last read'))
+                    ->state(fn (MailSender $record): string => MatterReplyCollector::lastReadLabel($record))
+                    ->color(fn (MailSender $record): ?string => MatterReplyCollector::lastReadLabel($record) === __('Never read') ? 'warning' : null),
             ])
             ->recordActions([
                 Action::make('test')

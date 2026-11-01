@@ -198,6 +198,20 @@ class FakeOneDrive
             return Http::response(['value' => array_map(fn (string $child): array => $this->resource($child), $this->childrenOf($id))]);
         }
 
+        // Renamed in place.
+        if ($method === 'PATCH' && isset($request->data()['name']) && ! isset($request->data()['parentReference'])) {
+            $name = (string) $request->data()['name'];
+            $twin = $this->child($this->items[$id]['parent'], $name);
+
+            if ($twin !== null && $twin !== $id) {
+                return Http::response(['error' => ['code' => 'nameAlreadyExists']], 409);
+            }
+
+            $this->items[$id]['name'] = $name;
+
+            return Http::response($this->resource($id));
+        }
+
         if ($method === 'PATCH' && isset($request->data()['parentReference']['id'])) {
             $to = $request->data()['parentReference']['id'];
             $name = $this->items[$id]['name'];

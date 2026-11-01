@@ -41,13 +41,18 @@ class MatterContactsExport
 
     public static function download(Matter $matter): BinaryFileResponse
     {
-        // Their claims, on a matter that has creditors.
+        // Their claims, on a matter that has creditors: each creditor's number, licence or ID, claim, first email
+        // and own columns.
         $claims = $matter->creditors()->exists();
+        $columns = $claims ? MatterCreditors::ownColumns($matter) : [];
 
         return self::sheet(
             __('Contacts').' '.$matter->number.'-'.$matter->year.'.xlsx',
-            [...self::headings(), ...($claims ? [__('Claim amount')] : [])],
-            array_map(fn (array $row): array => [$row['name'], $row['capacity'], $row['for'], $row['source'], $row['phones'], $row['emails'], $row['theirs'], ...($claims ? [$row['claim']] : [])], (new self($matter))->rows()),
+            [...self::headings(), ...($claims ? [__('No.'), __('Licence / ID'), __('Claim amount'), __('First email'), ...$columns] : [])],
+            array_map(fn (array $row): array => [
+                $row['name'], $row['capacity'], $row['for'], $row['source'], $row['phones'], $row['emails'], $row['theirs'],
+                ...($claims ? [$row['number'], $row['id_number'], $row['claim'], $row['first_email']?->format('Y-m-d'), ...array_map(fn (string $column): ?string => $row['custom'][$column] ?? null, $columns)] : []),
+            ], (new self($matter))->rows()),
         );
     }
 
@@ -124,17 +129,27 @@ class MatterContactsExport
             'creditor_id' => $row['creditor'] ?? null,
             'agent' => (bool) ($row['agent'] ?? false),
             'claim' => $row['claim'] ?? null,
+            'number' => $row['number'] ?? null,
+            'id_number' => $row['id_number'] ?? null,
+            'custom' => $row['custom'] ?? [],
+            'first_email' => $row['first_email'] ?? null,
         ], array_keys($this->rows), $this->rows));
     }
 
     /** Its creditors — each with its own addresses — and their agents, each agent once with the addresses it writes from. */
     private function creditors(): void
     {
-        foreach ($this->matter->creditors()->with('addresses')->orderBy('name')->get() as $creditor) {
+        $firsts = MatterCreditors::firstEmailsAt($this->matter);
+
+        foreach ($this->matter->creditors()->with('addresses')->orderBy('number')->orderBy('name')->get() as $creditor) {
             /** @var MatterCreditor $creditor */
             $key = $this->add('c:'.$creditor->getKey(), $creditor->name, $creditor->addresses->where('agent', false)->pluck('email')->all(), (array) $creditor->phones, __('Creditors'), __('Creditor'));
             $this->rows[$key]['creditor'] = (int) $creditor->getKey();
             $this->rows[$key]['claim'] = $creditor->claim_amount;
+            $this->rows[$key]['number'] = $creditor->number;
+            $this->rows[$key]['id_number'] = $creditor->id_number;
+            $this->rows[$key]['custom'] = (array) $creditor->custom;
+            $this->rows[$key]['first_email'] = $firsts[(int) $creditor->getKey()] ?? null;
 
             $agents = $creditor->addresses->where('agent', true)->groupBy(fn (MatterCreditorAddress $address): string => mb_strtolower(trim((string) $address->agent_name)) ?: $address->email);
 

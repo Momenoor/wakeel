@@ -37,7 +37,12 @@ return [
                 ['text' => 'Open "Settings → Integrations → OneDrive Folders", turn on creating folders, and enter the standard subfolders and the path of the "Signed minutes subfolder".', 'shot' => 'onedrive/page-1'],
                 ['text' => 'Before you rely on it, test the connection: "Create test folder" and "Remove test folder", or "Test with an assistant\'s Microsoft 365 email", then click "Save Settings".'],
             ],
-            'tips' => ['This needs an Azure app (with Microsoft Graph permissions) set up in the environment file.'],
+            'tips' => [
+                'This needs an Azure app (with Microsoft Graph permissions) set up in the environment file.',
+                '"Standard folder for matters in progress" and "Standard folder for finished matters" are the two folders at the top of every assistant\'s OneDrive. "Apply to the assistants" moves what each assistant has now under those names, sets them on their profiles and refreshes the matters\' links, one assistant at a time in the background.',
+                'When a matter\'s phase is changed, the folder named after the old phase is renamed to the new one in its OneDrive folders, what is in it stays in it, and the records of the emails and documents filed under it follow.',
+                'Once an hour the system looks for the folders it made in the matters in progress (the standard subfolders and the folders emails were filed in). One renamed, moved or deleted by hand is told to the matter\'s people and the super administrators in the bell, once a day, to put it back under its name.',
+            ],
         ],
     ],
 ];

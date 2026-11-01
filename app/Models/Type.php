@@ -64,6 +64,7 @@ class Type extends Model
         'has_phases' => 'boolean',
         'phases' => 'array',
         'phase_folders' => 'array',
+        'creditor_columns' => 'array',
         'allow_current_status_import' => 'boolean',
         'exclude_from_incentive_count' => 'boolean',
         'incentive_config_id' => 'integer',
@@ -96,6 +97,8 @@ class Type extends Model
         'has_phases',
         'phases',
         'phase_folders',
+        'phase_keep_folders',
+        'creditor_columns',
         'incentive_trigger_type',
         'allow_current_status_import',
         'exclude_from_incentive_count',
@@ -164,6 +167,28 @@ class Type extends Model
         $row = collect((array) $this->phase_folders)->first(fn ($row): bool => trim((string) ($row['phase'] ?? '')) === $phase);
 
         return MatterOneDriveFolders::lines((string) ($row['folders'] ?? ''));
+    }
+
+    /**
+     * The folders of a finished phase that stay with the matters in progress — the next phase goes on working in
+     * them — one a line, as the phase's folders write them (their first folder).
+     *
+     * @return list<string>
+     */
+    public function phaseKeepFolders(): array
+    {
+        return MatterOneDriveFolders::lines((string) $this->phase_keep_folders);
+    }
+
+    /**
+     * The columns its matters' creditors have of their own, besides the usual (name, number, licence, claim,
+     * phones, addresses): their names, as typed.
+     *
+     * @return list<string>
+     */
+    public function creditorColumns(): array
+    {
+        return array_values(array_unique(array_filter(array_map(fn ($column): string => trim((string) $column), (array) $this->creditor_columns))));
     }
 
     /**
@@ -241,7 +266,7 @@ class Type extends Model
     }
 
     /** Its own OneDrive folders (Settings → OneDrive Folders): empty — the default one. */
-    public const FOLDER_FIELDS = ['onedrive_subfolders', 'onedrive_received_emails', 'onedrive_received_plaintiff', 'onedrive_received_defendant', 'onedrive_received_creditors', 'received_name', 'received_name_plaintiff', 'received_name_defendant', 'received_name_creditor', 'onedrive_sent_emails', 'onedrive_signed_minutes', 'onedrive_periodic_reports'];
+    public const FOLDER_FIELDS = ['onedrive_subfolders', 'phase_keep_folders', 'onedrive_received_emails', 'onedrive_received_plaintiff', 'onedrive_received_defendant', 'onedrive_received_creditors', 'received_name', 'received_name_plaintiff', 'received_name_defendant', 'received_name_creditor', 'onedrive_sent_emails', 'onedrive_signed_minutes', 'onedrive_periodic_reports'];
 
     /**
      * Its OneDrive folders as one value, to compare: types alike in all of them are a group.

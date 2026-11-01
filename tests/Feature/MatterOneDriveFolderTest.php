@@ -7,10 +7,12 @@ use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Types\Pages\EditType;
 use App\Filament\Mms\Resources\Types\Pages\ViewType;
 use App\Jobs\CreateMatterOneDriveFolder;
+use App\Jobs\StandardiseAssistantFolders;
 use App\Livewire\MatterOneDriveFiles;
 use App\Models\Court;
 use App\Models\Matter;
 use App\Models\MatterEmail;
+use App\Models\MatterOneDriveFile;
 use App\Models\MatterOneDriveFolder;
 use App\Models\MatterParty;
 use App\Models\Party;
@@ -19,6 +21,7 @@ use App\Models\Type;
 use App\Models\User;
 use App\Services\MMS\MatterOneDriveExplorer;
 use App\Services\MMS\MatterOneDriveFolders;
+use App\Services\MMS\OneDriveFolderCheck;
 use App\Services\MMS\SentEmailArchive;
 use App\Services\MMS\SentMailImporter;
 use Filament\Facades\Filament;
@@ -919,5 +922,148 @@ class MatterOneDriveFolderTest extends TestCase
         $this->assertSame('رد طلب', MatterOneDriveFolders::clean("رد\x01\x1F طلب\x7F"));
         $this->assertNotSame('', MatterOneDriveFolders::clean("caf\xE9 report"));
         $this->assertSame('a b.pdf', MatterOneDriveExplorer::cleanName("a\x00b.pdf"));
+    }
+
+    public function test_a_matters_phase_changed_renames_its_phase_folder_and_the_paths_kept_under_it(): void
+    {
+        $this->switchOn("{{matter.phase}}/01 system\n{{matter.phase}}/02 documents");
+        $od = (new FakeOneDrive)->install();
+        $type = Type::firstOrCreate(['name' => 'إفلاس']);
+        $type->update(['has_phases' => true, 'phases' => ['المرحلة الأولى', 'المرحلة الثانية']]);
+        $matter = Matter::factory()->create(['year' => 2026, 'number' => 1020, 'type_id' => $type->id, 'court_id' => Court::firstOrCreate(['name' => 'محاكم دبي'])->id, 'phase' => 'المرحلة الأولى']);
+        $this->assign($matter, $this->assistant());
+        $main = '2026-1020 - إفلاس - محاكم دبي';
+        $this->assertSame(['المرحلة الأولى'], $od->names("Work/Matters/{$main}"));
+
+        // Filed under the phase: an email, a file read from OneDrive — and something put in the folder by hand.
+        $od->make((string) $od->find("Work/Matters/{$main}/المرحلة الأولى/01 system"), 'بخط اليد');
+        $email = MatterEmail::create(['matter_id' => $matter->id, 'direction' => MatterEmail::RECEIVED, 'status' => MatterEmail::FILED, 'sender_key' => 'iflas', 'subject' => 'x', 'at' => now(), 'onedrive' => ['pdf' => true, 'folder' => 'المرحلة الأولى/01 system']]);
+        $other = MatterEmail::create(['matter_id' => $matter->id, 'direction' => MatterEmail::RECEIVED, 'status' => MatterEmail::FILED, 'sender_key' => 'iflas', 'subject' => 'y', 'at' => now(), 'onedrive' => ['pdf' => true, 'folder' => 'المرحلة الأولى بيانات/01 system']]);
+        $file = MatterOneDriveFile::create(['matter_id' => $matter->id, 'item_id' => 'i1', 'path' => 'المرحلة الأولى/02 documents/a.msg', 'outcome' => 'added']);
+
+        // Its phase changed: the folder renamed, what is in it with it, the new phase's folders in place.
+        // Edited (a fresh model, as the edit page has it — the observer leaves a matter just created alone).
+        Matter::find($matter->id)->update(['phase' => 'المرحلة الثانية']);
+
+        $this->assertSame(['المرحلة الثانية'], $od->names("Work/Matters/{$main}"));
+        $this->assertSame(['01 system', '02 documents'], $od->names("Work/Matters/{$main}/المرحلة الثانية"));
+        $this->assertSame(['بخط اليد'], $od->names("Work/Matters/{$main}/المرحلة الثانية/01 system"));
+        $this->assertSame('المرحلة الثانية/01 system', $email->fresh()->onedrive['folder']);
+        // A folder whose name only starts the same: not touched.
+        $this->assertSame('المرحلة الأولى بيانات/01 system', $other->fresh()->onedrive['folder']);
+        $this->assertSame('المرحلة الثانية/02 documents/a.msg', $file->fresh()->path);
+        // A link holds the path as OneDrive writes it in a web address.
+        $this->assertSame('https://x.sharepoint.com/personal/a/Documents/Work/Matters/2026-1020/'.rawurlencode('المرحلة الثانية').'/01%20system/a.pdf', MatterOneDriveFolders::relinkUrl('https://x.sharepoint.com/personal/a/Documents/Work/Matters/2026-1020/'.rawurlencode('المرحلة الأولى').'/01%20system/a.pdf', 'المرحلة الأولى', 'المرحلة الثانية'));
+    }
+
+    public function test_a_folder_renamed_in_the_types_structure_is_renamed_in_its_matters_with_the_records_of_what_is_in_it(): void
+    {
+        $this->switchOn();
+        $od = (new FakeOneDrive)->install();
+        $type = Type::firstOrCreate(['name' => 'خبرة']);
+        $type->update(['onedrive_subfolders' => "01 المراسلات\n02 المستندات"]);
+        $matter = $this->matter();
+        $this->assign($matter, $this->assistant());
+        $main = '2026-123 - خبرة - محاكم دبي';
+        $od->make((string) $od->find("Work/Matters/{$main}/02 المستندات"), 'عقد');
+        $email = MatterEmail::create(['matter_id' => $matter->id, 'direction' => MatterEmail::RECEIVED, 'status' => MatterEmail::FILED, 'sender_key' => 'iflas', 'subject' => 'x', 'at' => now(), 'onedrive' => ['pdf' => true, 'folder' => '02 المستندات/2026-10-01']]);
+
+        Gate::before(fn () => true);
+        Filament::setCurrentPanel('mms');
+        $this->actingAs(User::factory()->create());
+
+        // The structure changed: the folder gone from it is offered to map to its new name.
+        $page = Livewire::test(EditType::class, ['record' => $type->getRouteKey()])
+            ->fillForm(['onedrive_subfolders' => "01 المراسلات\n02 الوثائق"])
+            ->call('save')
+            ->assertHasNoFormErrors()
+            ->assertSet('folderRenames', ['02 المستندات']);
+
+        $page->callAction('renameFolders', ['renames' => [['from' => '02 المستندات', 'to' => '02 الوثائق']], 'finished' => false, 'group' => false])
+            ->assertHasNoActionErrors()
+            ->assertSet('folderRenames', []);
+
+        // Renamed in the matter's OneDrive, what was in it still in it; the email's record follows.
+        $this->assertSame(['01 المراسلات', '02 الوثائق'], $od->names("Work/Matters/{$main}"));
+        $this->assertSame(['عقد'], $od->names("Work/Matters/{$main}/02 الوثائق"));
+        $this->assertSame('02 الوثائق/2026-10-01', $email->fresh()->onedrive['folder']);
+        $this->assertSame(trans_choice('Folders renamed in no matter.|Folders renamed in :count matter.|Folders renamed in :count matters.', 1, ['count' => 1]), auth()->user()->notifications()->first()->data['title']);
+    }
+
+    public function test_a_finished_phase_leaves_the_folders_the_next_phase_goes_on_working_in(): void
+    {
+        $this->switchOn("{{matter.custom.Phase}}/01 system\n{{matter.custom.Phase}}/02 documents");
+        $od = (new FakeOneDrive)->install();
+        $assistant = $this->assistant(['onedrive_finished_path' => 'Work/Finished']);
+        Type::firstOrCreate(['name' => 'خبرة'])->update(['phase_keep_folders' => '02 documents']);
+        $main = '2026-1010 - خبرة - محاكم دبي';
+
+        $one = $this->phaseOf('phase1');
+        $this->assign($one, $assistant);
+        $two = $this->phaseOf('phase2');
+        $this->assign($two, $assistant);
+
+        $one->finalReportSubmission();
+
+        // The phase folder stays, with the folder kept; the rest went to the finished matters.
+        $this->assertSame(['phase1', 'phase2'], $od->names("Work/Matters/{$main}"));
+        $this->assertSame(['02 documents'], $od->names("Work/Matters/{$main}/phase1"));
+        $this->assertSame(['01 system'], $od->names("Work/Finished/{$main}/phase1"));
+        $this->assertSame($od->find("Work/Finished/{$main}"), MatterOneDriveFolder::where('matter_id', $one->id)->sole()->drive_item_id);
+    }
+
+    public function test_the_assistants_folders_are_given_the_standard_names_with_what_is_in_them(): void
+    {
+        $this->switchOn();
+        $od = (new FakeOneDrive)->install();
+        $assistant = $this->assistant(['onedrive_finished_path' => 'Work/Finished']);
+        $matter = $this->matter();
+        $this->assign($matter, $assistant);
+        $main = '2026-123 - خبرة - محاكم دبي';
+        $od->ensure('Work/Finished/2025-9 - خبرة - محاكم دبي');
+        Setting::set(MatterOneDriveFolders::MATTERS_FOLDER, 'القضايا الجارية', 'onedrive');
+        Setting::set(MatterOneDriveFolders::FINISHED_FOLDER, 'القضايا المنتهية', 'onedrive');
+        Setting::clearCache();
+        $user = User::factory()->create();
+
+        (new StandardiseAssistantFolders($assistant->id, $user->id))->handle(app(MatterOneDriveFolders::class));
+
+        $this->assertSame([$main], $od->names('القضايا الجارية'));
+        $this->assertSame(['2025-9 - خبرة - محاكم دبي'], $od->names('القضايا المنتهية'));
+        // The emptied folders are gone; the profile says the standard names.
+        $this->assertNull($od->find('Work/Matters'));
+        $this->assertSame(['القضايا الجارية', 'القضايا المنتهية'], [$assistant->fresh()->onedrive_path, $assistant->fresh()->onedrive_finished_path]);
+        $this->assertStringContainsString('Amr', $user->notifications()->first()->data['title']);
+
+        // Done already: nothing to do.
+        (new StandardiseAssistantFolders($assistant->id, $user->id))->handle(app(MatterOneDriveFolders::class));
+        $this->assertContains(__('They had them already.'), $user->notifications()->get()->pluck('data.body')->all());
+    }
+
+    public function test_a_folder_renamed_by_hand_is_told_to_the_matters_people_once_a_day(): void
+    {
+        $this->switchOn("01 المراسلات\n02 المستندات");
+        $od = (new FakeOneDrive)->install();
+        $admin = User::factory()->create()->assignRole(Role::firstOrCreate(['name' => config('filament-shield.super_admin.name', 'super_admin'), 'guard_name' => 'web']));
+        $matter = $this->matter();
+        $this->assign($matter, $this->assistant());
+        $main = '2026-123 - خبرة - محاكم دبي';
+        // An email filed in a folder of its day — there, as its files were put in it.
+        $od->ensure("Work/Matters/{$main}/02 المستندات/2026-10-01");
+        MatterEmail::create(['matter_id' => $matter->id, 'direction' => MatterEmail::RECEIVED, 'status' => MatterEmail::FILED, 'sender_key' => 'iflas', 'subject' => 'x', 'at' => now(), 'onedrive' => ['pdf' => true, 'folder' => '02 المستندات/2026-10-01']]);
+
+        // All in place: nothing said.
+        $this->assertSame(['checked' => 1, 'missing' => 0, 'stopped' => false, 'errors' => []], app(OneDriveFolderCheck::class)->run());
+        $this->assertCount(0, $admin->notifications()->get());
+
+        // Renamed by hand: told, with the folder's name — once a day, not every hour.
+        $od->items[(string) $od->find("Work/Matters/{$main}/01 المراسلات")]['name'] = '01 مراسلات قديمة';
+        $this->assertSame(1, app(OneDriveFolderCheck::class)->run()['missing']);
+        app(OneDriveFolderCheck::class)->run();
+        $notifications = $admin->notifications()->get();
+        $this->assertCount(1, $notifications);
+        $this->assertStringContainsString('2026/123', $notifications[0]->data['title']);
+        $this->assertStringContainsString('01 المراسلات', $notifications[0]->data['body']);
+        $this->assertNotNull(MatterOneDriveFolder::where('matter_id', $matter->id)->sole()->checked_at);
     }
 }

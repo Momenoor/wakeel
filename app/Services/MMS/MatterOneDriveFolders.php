@@ -6,10 +6,14 @@ use App\Enums\NotificationType;
 use App\Filament\Mms\Pages\OneDriveSettings;
 use App\Jobs\CreateMatterOneDriveFolder;
 use App\Jobs\MoveMatterOneDriveFolder;
+use App\Models\Attachment;
 use App\Models\Matter;
 use App\Models\MatterEmail;
+use App\Models\MatterMinutes;
+use App\Models\MatterOneDriveFile;
 use App\Models\MatterOneDriveFolder;
 use App\Models\MatterParty;
+use App\Models\MinutesDelivery;
 use App\Models\OneDriveFolderReview;
 use App\Models\Party;
 use App\Models\Setting;
@@ -23,6 +27,7 @@ use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * A folder for each matter in its assistant's OneDrive:
@@ -50,6 +55,18 @@ class MatterOneDriveFolders
 
     /** Where the replies to them are kept, with what they came with; empty: not kept there. */
     public const RECEIVED_EMAILS = 'onedrive_received_emails_folder';
+
+    /** Setting: the standard name of the folder at the top of each assistant's OneDrive that holds their matters in progress. */
+    public const MATTERS_FOLDER = 'onedrive_matters_folder_name';
+
+    /** Setting: the standard name of the folder at the top of each assistant's OneDrive for their finished matters. */
+    public const FINISHED_FOLDER = 'onedrive_finished_folder_name';
+
+    /** In an emails' folder structure: {{serial}}, the email's number among those filed under the same folder — the emails of a day 1, 2, 3. */
+    public const SERIAL = 'serial';
+
+    /** What {{serial}} is resolved to until the number is known (a character no name has). */
+    private const SERIAL_MARK = "\u{E000}serial\u{E000}";
 
     public function __construct(private readonly OneDriveClient $client) {}
 
@@ -298,7 +315,7 @@ class MatterOneDriveFolders
                         Action::make('review')->label('Review')->translateLabel(false)->url($url)->markAsRead(),
                     ]),
             );
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             Log::info('OneDrive folder notice not sent', ['folder' => $folder->getKey(), 'error' => $e->getMessage()]);
         }
     }
@@ -356,7 +373,7 @@ class MatterOneDriveFolders
     private function makeSubfolders(Party $party, string $folderId, array $subfolders): void
     {
         foreach ($subfolders as $subfolder) {
-            $path = implode('/', array_map([self::class, 'clean'], OneDriveClient::segments($subfolder)));
+            $path = self::cleanPath($subfolder);
 
             if ($path !== '') {
                 $this->client->ensureFolder($party->onedrive_email, $path, $folderId);
@@ -621,16 +638,22 @@ class MatterOneDriveFolders
     /** A subfolder of the matter's folder ("a/b"), made when missing — its id; the matter's folder itself for none. */
     private function ensurePath(string $user, MatterOneDriveFolder $folder, string $subfolder): string
     {
-        $path = implode('/', array_map([self::class, 'clean'], OneDriveClient::segments($subfolder)));
+        $path = self::cleanPath($subfolder);
 
         return $path !== '' ? (string) $this->client->ensureFolder($user, $path, $folder->drive_item_id)['id'] : (string) $folder->drive_item_id;
     }
 
-    /** A folder's id, down a path from a folder — null when a folder on the way is not there. */
-    private function walk(string $user, string $id, string $path): ?string
+    /**
+     * A folder's id, down a path from a folder — null when a folder on the way is not there. With $listings, the
+     * folders listed are remembered in it: many paths walked down one tree ask OneDrive for each folder once.
+     *
+     * @param  array<string, list<array{id: string, name: string, webUrl: string}>>  $listings
+     */
+    public function walk(string $user, string $id, string $path, array &$listings = []): ?string
     {
         foreach (OneDriveClient::segments($path) as $segment) {
-            $next = collect($this->client->childFolders($user, $id))->first(fn (array $f): bool => mb_strtolower($f['name']) === mb_strtolower(self::clean($segment)));
+            $listings[$id] ??= $this->client->childFolders($user, $id);
+            $next = collect($listings[$id])->first(fn (array $f): bool => mb_strtolower($f['name']) === mb_strtolower(self::clean($segment)));
             $id = (string) ($next['id'] ?? '');
 
             if ($id === '') {
@@ -759,10 +782,27 @@ class MatterOneDriveFolders
 
         $main = $this->client->ensureFolder($user, self::clean($folder->folder_name), $finishedParentId);
         $inside = collect($this->client->childFolders($user, (string) $folder->drive_item_id))->keyBy(fn (array $f): string => mb_strtolower($f['name']));
+        // The folders of the phase the next phase goes on working in (the type's): left with the matters in progress.
+        $kept = array_map(fn (string $line): string => mb_strtolower(self::clean(OneDriveClient::segments($line)[0] ?? '')), $matter?->loadMissing('type')->type?->phaseKeepFolders() ?? []);
 
         foreach ($phases as $phase) {
-            if ($found = $inside->get(mb_strtolower($phase))) {
+            if (! $found = $inside->get(mb_strtolower($phase))) {
+                continue;
+            }
+
+            if ($kept === []) {
                 $this->client->move($user, $found['id'], $main['id']);
+
+                continue;
+            }
+
+            // What is not kept goes, into a folder of the phase's name under the finished main folder; the phase's
+            // folder stays here with the folders kept.
+            $target = $this->client->ensureFolder($user, (string) $found['name'], $main['id']);
+            foreach ($this->client->children($user, (string) $found['id']) as $child) {
+                if (! in_array(mb_strtolower((string) $child['name']), $kept, true)) {
+                    $this->client->move($user, (string) $child['id'], (string) $target['id']);
+                }
             }
         }
 
@@ -800,17 +840,61 @@ class MatterOneDriveFolders
     public static function phaseFolders(Matter $matter): array
     {
         $values = BulkMailPlaceholders::forMatter($matter);
+
+        return array_values(array_unique(array_filter(array_map(
+            fn (string $first): string => self::resolveParts($first, $matter, $values)[0] ?? '',
+            self::namedFirsts($matter),
+        ))));
+    }
+
+    /**
+     * The first folders of the structure named after the matter (phaseFolders()), each as the structure writes
+     * it — with its placeholder: to say what a folder was called before the matter changed.
+     *
+     * @return list<string>
+     */
+    private static function namedFirsts(Matter $matter): array
+    {
         $firsts = [];
 
         foreach ([...self::subfolders($matter), self::receivedEmailsTemplate($matter)] as $line) {
             $first = OneDriveClient::segments($line)[0] ?? '';
 
             if (str_contains($first, '{{') && ! preg_match('/\{\{\s*(day|month|year)\s*\}\}/iu', $first)) {
-                $firsts[] = self::resolveParts($first, $matter, $values)[0] ?? '';
+                $firsts[] = $first;
             }
         }
 
-        return array_values(array_unique(array_filter($firsts)));
+        return array_values(array_unique($firsts));
+    }
+
+    /**
+     * A matter's phase changed: the folders named after its phase, in each of its OneDrive folders, renamed from
+     * the old phase's name to the new — what is in them with them — and every path the system keeps under them
+     * changed (renameWithin()). What was renamed, old => new.
+     *
+     * @return array<string, string>
+     */
+    public function renamePhaseFolders(Matter $matter, string $fromPhase): array
+    {
+        $values = BulkMailPlaceholders::forMatter($matter);
+        $before = [...$values, 'matter.phase' => $fromPhase];
+        $renames = [];
+
+        foreach (self::namedFirsts($matter) as $first) {
+            $old = self::resolveParts($first, $matter, $before)[0] ?? '';
+            $new = self::resolveParts($first, $matter, $values)[0] ?? '';
+
+            if ($old !== '' && $new !== '' && $old !== $new) {
+                $renames[$old] = $new;
+            }
+        }
+
+        foreach ($renames as $old => $new) {
+            $this->renameWithin($matter, $old, $new);
+        }
+
+        return $renames;
     }
 
     public static function signedMinutesFolder(): string
@@ -835,12 +919,19 @@ class MatterOneDriveFolders
      * its placeholders filled in from the matter (see resolvePath()) — the one of the side
      * the email came from, when it has one of its own (ReceivedEmailFiling).
      */
-    public static function receivedEmailsFolderFor(Matter $matter, ?CarbonInterface $at = null, string $side = ReceivedEmailFiling::GENERAL, string $from = ''): string
+    public static function receivedEmailsFolderFor(Matter $matter, ?CarbonInterface $at = null, string $side = ReceivedEmailFiling::GENERAL, string $from = '', bool $nextSerial = true): string
     {
         $template = ReceivedEmailFiling::folderTemplate($matter, $side);
 
-        // A creditor's: {{creditor}}, its name, by the address it came from.
-        return $template === '' ? '' : self::resolvePath($template, $matter, $at ?? now(), extra: ReceivedEmailFiling::creditorValues($matter, $side, $from));
+        if ($template === '') {
+            return '';
+        }
+
+        // A creditor's: {{creditor}}, its name, by the address it came from. {{serial}}: the next number under the
+        // folder — or, to compare with where an email is, no folder for it at all.
+        $path = self::resolvePath($template, $matter, $at ?? now(), extra: [...ReceivedEmailFiling::creditorValues($matter, $side, $from), self::SERIAL => $nextSerial ? self::SERIAL_MARK : '']);
+
+        return self::withSerial($matter, $path);
     }
 
     /**
@@ -1008,11 +1099,72 @@ class MatterOneDriveFolders
      * placeholders filled in, and {{day}} (…) as the day it is sent — see resolvePath().
      * Empty when they are not saved in OneDrive.
      */
-    public static function sentEmailsFolderFor(Matter $matter, ?CarbonInterface $at = null): string
+    /**
+     * @param  list<string>  $to  whom it went to: for {{creditor}} in the folder, the creditor one of them is (a claim's
+     *                            correspondence in its own folder); no creditor among them, the folder is left out
+     */
+    public static function sentEmailsFolderFor(Matter $matter, ?CarbonInterface $at = null, array $to = [], bool $nextSerial = true): string
     {
         $template = self::sentEmailsTemplate($matter);
 
-        return $template === '' ? '' : self::resolvePath($template, $matter, $at ?? now(), self::DEFAULT_SENT_EMAILS);
+        if ($template === '') {
+            return '';
+        }
+
+        $path = self::resolvePath($template, $matter, $at ?? now(), self::DEFAULT_SENT_EMAILS, [...self::sentCreditorValues($matter, $to), self::SERIAL => $nextSerial ? self::SERIAL_MARK : '']);
+
+        return self::withSerial($matter, $path);
+    }
+
+    /**
+     * For an email sent to a creditor (or its agent): {{creditor}} and {{creditor.number}} — the first of those it
+     * went to that is a creditor's address on the matter.
+     *
+     * @param  list<string>  $to
+     * @return array<string, string>
+     */
+    private static function sentCreditorValues(Matter $matter, array $to): array
+    {
+        foreach ($to as $address) {
+            $values = ReceivedEmailFiling::creditorValues($matter, ReceivedEmailFiling::CREDITOR, (string) $address);
+
+            if ($values !== []) {
+                return $values;
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * A path with {{serial}} in it: the number of the next email filed under the same folder — the emails of a day
+     * numbered 1, 2, 3 — by the folders the matter's emails were filed in so far. Without it, the path as it is.
+     */
+    private static function withSerial(Matter $matter, string $path): string
+    {
+        if (! str_contains($path, self::SERIAL_MARK)) {
+            return $path;
+        }
+
+        $segments = OneDriveClient::segments($path);
+        $depth = (int) array_key_first(array_filter($segments, fn (string $segment): bool => str_contains($segment, self::SERIAL_MARK)));
+        $prefix = implode('/', array_slice($segments, 0, $depth));
+        [$before, $after] = explode(self::SERIAL_MARK, $segments[$depth], 2);
+        $pattern = '/^'.preg_quote($before, '/').'(\d+)'.preg_quote($after, '/').'$/u';
+
+        $used = MatterEmail::query()
+            ->where('matter_id', $matter->getKey())
+            ->whereNotNull('onedrive->folder')
+            ->when($prefix !== '', fn ($query) => $query->where('onedrive->folder', 'like', addcslashes($prefix, '%_\\').'/%'))
+            ->pluck('onedrive')
+            ->map(fn ($onedrive): string => (string) (((array) $onedrive)['folder'] ?? ''))
+            ->filter(fn (string $folder): bool => $prefix === '' || str_starts_with(mb_strtolower($folder), mb_strtolower($prefix).'/'))
+            ->map(fn (string $folder): int => preg_match($pattern, OneDriveClient::segments($folder)[$depth] ?? '', $m) ? (int) $m[1] : 0)
+            ->max() ?? 0;
+
+        $segments[$depth] = $before.($used + 1).$after;
+
+        return implode('/', $segments);
     }
 
     /** The folder signed minutes are saved in, for this matter — the setting with the matter's placeholders filled in. */
@@ -1135,5 +1287,286 @@ class MatterOneDriveFolders
         $this->client->delete($party->onedrive_email, $folder['id']);
 
         return true;
+    }
+
+    // ── Folders renamed
+
+    /** A path within a matter's folder as OneDrive has it: each folder's name cleaned, joined with "/". */
+    public static function cleanPath(string $path): string
+    {
+        return implode('/', array_filter(array_map([self::class, 'clean'], OneDriveClient::segments($path)), fn (string $segment): bool => $segment !== ''));
+    }
+
+    /**
+     * Every line of a type's folder structure, as written: its standard subfolders (its own, else the default) and
+     * each phase's own folders under the phase's folder — to say which folders were renamed (RenameTypeFolders).
+     *
+     * @return list<string>
+     */
+    public static function structureLines(Type $type): array
+    {
+        $lines = self::subfolders($type);
+
+        foreach ($type->phaseNames() as $phase) {
+            foreach ($type->phaseFolders($phase) as $line) {
+                $lines[] = self::PHASE.'/'.$line;
+            }
+        }
+
+        return array_values(array_unique($lines));
+    }
+
+    /**
+     * A folder of the matter's folder renamed — or moved, when its new path is under another folder — in each of
+     * the matter's OneDrive folders (one an assistant's), what is in it with it, and every path the system keeps
+     * under it changed to the new (repathKept()). One of the new name there already: what was in the old goes into
+     * it, and the emptied old folder is removed. Paths within the matter's folder.
+     *
+     * @return array{folders: int, emails: int, files: int, reports: int, links: int}
+     */
+    public function renameWithin(Matter $matter, string $from, string $to): array
+    {
+        $from = self::cleanPath($from);
+        $to = self::cleanPath($to);
+        $done = ['folders' => 0, 'emails' => 0, 'files' => 0, 'reports' => 0, 'links' => 0];
+
+        if ($from === '' || $to === '' || mb_strtolower($from) === mb_strtolower($to)) {
+            return $done;
+        }
+
+        $folders = MatterOneDriveFolder::query()
+            ->where('matter_id', $matter->getKey())
+            ->where('status', MatterOneDriveFolder::CREATED)
+            ->whereNotNull('drive_item_id')
+            ->with('party')
+            ->get()
+            ->filter(fn (MatterOneDriveFolder $folder): bool => filled($folder->party?->onedrive_email));
+
+        foreach ($folders as $folder) {
+            $done['folders'] += $this->renameIn((string) $folder->party->onedrive_email, (string) $folder->drive_item_id, $from, $to) ? 1 : 0;
+        }
+
+        return [...$done, ...$this->repathKept($matter, $from, $to)];
+    }
+
+    /**
+     * In one OneDrive: the folder at a path under the matter's folder renamed, or moved, to another path. Whether
+     * it was there to rename.
+     */
+    private function renameIn(string $user, string $rootId, string $from, string $to): bool
+    {
+        $fromId = $this->walk($user, $rootId, $from);
+
+        if ($fromId === null) {
+            return false;
+        }
+
+        $segments = OneDriveClient::segments($to);
+        $leaf = (string) array_pop($segments);
+        $parentPath = implode('/', $segments);
+        $parentId = $parentPath === '' ? $rootId : (string) $this->client->ensureFolder($user, $parentPath, $rootId)['id'];
+
+        // One of the new name there already (made by the structure since): what was in the old goes into it.
+        $existing = collect($this->client->childFolders($user, $parentId))->first(fn (array $f): bool => mb_strtolower($f['name']) === mb_strtolower($leaf));
+        if ($existing !== null && (string) $existing['id'] !== $fromId) {
+            $this->mergeInto($user, $fromId, (string) $existing['id']);
+
+            return true;
+        }
+
+        $fromSegments = OneDriveClient::segments($from);
+        $fromLeaf = (string) array_pop($fromSegments);
+        $fromParentPath = implode('/', $fromSegments);
+        $fromParentId = $fromParentPath === '' ? $rootId : $this->walk($user, $rootId, $fromParentPath);
+
+        if ($fromParentId !== $parentId) {
+            $this->client->move($user, $fromId, $parentId);
+        }
+
+        if ($fromLeaf !== $leaf) {
+            $this->client->rename($user, $fromId, $leaf);
+        }
+
+        return true;
+    }
+
+    /**
+     * Every path the system keeps under a folder of the matter's, changed to the folder's new path: the emails'
+     * folders, the files read from OneDrive, the periodic reports' folders, and the links of signed minutes and
+     * attachments that hold the path. How many of each.
+     *
+     * @return array{emails: int, files: int, reports: int, links: int}
+     */
+    private function repathKept(Matter $matter, string $from, string $to): array
+    {
+        $lower = mb_strtolower($from);
+        $under = fn (string $path): bool => mb_strtolower($path) === $lower || str_starts_with(mb_strtolower($path), $lower.'/');
+        $moved = fn (string $path): string => $to.mb_substr($path, mb_strlen($from));
+        $like = addcslashes($from, '%_\\').'%';
+        $done = ['emails' => 0, 'files' => 0, 'reports' => 0, 'links' => 0];
+
+        foreach (MatterEmail::query()->where('matter_id', $matter->getKey())->where('onedrive->folder', 'like', $like)->get() as $email) {
+            $folder = (string) (((array) $email->onedrive)['folder'] ?? '');
+
+            if ($under($folder)) {
+                $email->update(['onedrive' => [...(array) $email->onedrive, 'folder' => $moved($folder)]]);
+                $done['emails']++;
+            }
+        }
+
+        foreach (MatterOneDriveFile::query()->where('matter_id', $matter->getKey())->where('path', 'like', $like)->get() as $file) {
+            if ($under((string) $file->path)) {
+                $file->update(['path' => $moved((string) $file->path)]);
+                $done['files']++;
+            }
+        }
+
+        foreach ($matter->periodicReports()->where('folder', 'like', $like)->get() as $report) {
+            if ($under((string) $report->folder)) {
+                $report->update(['folder' => $moved((string) $report->folder)]);
+                $done['reports']++;
+            }
+        }
+
+        foreach ($matter->attachments()->whereNotNull('onedrive_url')->get(['id', 'onedrive_url']) as $attachment) {
+            if (($url = self::relinkUrl((string) $attachment->onedrive_url, $from, $to)) !== $attachment->onedrive_url) {
+                $attachment->update(['onedrive_url' => $url]);
+                $done['links']++;
+            }
+        }
+
+        foreach (MinutesDelivery::query()->whereIn('matter_minutes_id', $matter->minutes()->select('id'))->whereNotNull('onedrive_url')->get(['id', 'onedrive_url']) as $delivery) {
+            if (($url = self::relinkUrl((string) $delivery->onedrive_url, $from, $to)) !== $delivery->onedrive_url) {
+                $delivery->update(['onedrive_url' => $url]);
+                $done['links']++;
+            }
+        }
+
+        return $done;
+    }
+
+    /**
+     * A link to a file in OneDrive, with a folder of its path renamed: the folder as OneDrive writes it in a web
+     * address (each name encoded), and as written plainly, replaced by the new — the link as it was when the
+     * folder is not in it.
+     */
+    public static function relinkUrl(string $url, string $from, string $to): string
+    {
+        $encode = fn (string $path): string => implode('/', array_map('rawurlencode', OneDriveClient::segments($path)));
+
+        foreach ([[$encode($from), $encode($to)], [$from, $to]] as [$old, $new]) {
+            $url = str_replace('/'.$old.'/', '/'.$new.'/', $url);
+
+            if (str_ends_with($url, '/'.$old)) {
+                $url = substr($url, 0, -strlen('/'.$old)).'/'.$new;
+            }
+        }
+
+        return $url;
+    }
+
+    // ── The two folders at the top of each assistant's OneDrive
+
+    /**
+     * The standard names of the folders at the top of each assistant's OneDrive: the matters in progress and the
+     * finished (Settings → OneDrive Folders) — the usual Arabic names until set.
+     *
+     * @return array{matters: string, finished: string}
+     */
+    public static function standardFolders(): array
+    {
+        return [
+            'matters' => trim((string) Setting::get(self::MATTERS_FOLDER, '')) ?: 'القضايا الجارية',
+            'finished' => trim((string) Setting::get(self::FINISHED_FOLDER, '')) ?: 'القضايا المنتهية',
+        ];
+    }
+
+    /**
+     * An assistant's two folders given the standard names: what each holds moved under the standard name at the
+     * top of their OneDrive (into a folder of that name there already, when there is one), the paths on their
+     * profile set to the names, their matters' links refreshed and the files' links that held the old path changed.
+     * What was done: each folder's old and new name, when it was changed, and how many links.
+     *
+     * @return array{matters: ?string, finished: ?string, links: int}
+     */
+    public function standardiseRoots(Party $party): array
+    {
+        $user = (string) $party->onedrive_email;
+        $standard = self::standardFolders();
+        $done = ['matters' => null, 'finished' => null, 'links' => 0];
+        $changed = false;
+
+        foreach (['matters' => 'onedrive_path', 'finished' => 'onedrive_finished_path'] as $which => $column) {
+            $new = $standard[$which];
+            $old = trim((string) $party->{$column});
+
+            if (mb_strtolower(self::cleanPath($old)) === mb_strtolower(self::cleanPath($new))) {
+                continue;
+            }
+
+            $target = $this->client->ensureFolder($user, $new);
+
+            if ($old !== '') {
+                // The whole folder's contents go under the standard name.
+                $current = $this->client->findFolder($user, $old);
+                if ($current !== null && $current['id'] !== $target['id']) {
+                    $this->mergeInto($user, $current['id'], $target['id']);
+                }
+                $done['links'] += $this->relinkAll($party, $old, $new);
+            } else {
+                // At the top of their OneDrive: only the matters' folders go, not everything there.
+                $rows = $party->matterOneDriveFolders()->where('status', MatterOneDriveFolder::CREATED)->whereNotNull('drive_item_id')->when($which === 'matters', fn ($q) => $q->whereNull('moved_at'), fn ($q) => $q->whereNotNull('moved_at'))->get();
+                foreach ($rows->unique('drive_item_id') as $row) {
+                    $this->client->move($user, (string) $row->drive_item_id, $target['id']);
+                }
+            }
+
+            $party->forceFill([$column => $new])->save();
+            $done[$which] = ($old !== '' ? $old : __('(the top of their OneDrive)')).' → '.$new;
+            $changed = true;
+        }
+
+        // Their matters' links: where each folder is now.
+        if ($changed) {
+            foreach ($party->matterOneDriveFolders()->where('status', MatterOneDriveFolder::CREATED)->whereNotNull('drive_item_id')->get() as $row) {
+                try {
+                    $row->update(['web_url' => $this->client->itemInfo($user, (string) $row->drive_item_id)['webUrl'] ?: $row->web_url]);
+                } catch (Throwable $e) {
+                    Log::info('OneDrive link not refreshed: '.$e->getMessage(), ['folder' => $row->getKey()]);
+                }
+            }
+        }
+
+        return $done;
+    }
+
+    /**
+     * The links of the files of this assistant's matters that hold a path renamed (the folder their matters are
+     * in): changed to the new. How many.
+     */
+    private function relinkAll(Party $party, string $from, string $to): int
+    {
+        $matters = $party->matterOneDriveFolders()->pluck('matter_id')->unique()->values()->all();
+        $links = 0;
+
+        if ($matters === []) {
+            return 0;
+        }
+
+        foreach (Attachment::query()->whereIn('matter_id', $matters)->whereNotNull('onedrive_url')->get(['id', 'onedrive_url']) as $attachment) {
+            if (($url = self::relinkUrl((string) $attachment->onedrive_url, $from, $to)) !== $attachment->onedrive_url) {
+                $attachment->update(['onedrive_url' => $url]);
+                $links++;
+            }
+        }
+
+        foreach (MinutesDelivery::query()->whereIn('matter_minutes_id', MatterMinutes::query()->whereIn('matter_id', $matters)->select('id'))->whereNotNull('onedrive_url')->get(['id', 'onedrive_url']) as $delivery) {
+            if (($url = self::relinkUrl((string) $delivery->onedrive_url, $from, $to)) !== $delivery->onedrive_url) {
+                $delivery->update(['onedrive_url' => $url]);
+                $links++;
+            }
+        }
+
+        return $links;
     }
 }

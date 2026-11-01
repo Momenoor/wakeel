@@ -7,6 +7,7 @@ use App\Jobs\ImportSentEmails;
 use App\Livewire\SentMailImportProgressPanel;
 use App\Services\MMS\SenderMailer;
 use App\Services\MMS\SentMailImportProgress;
+use App\Support\MatterSearch;
 use Filament\Actions;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -38,7 +39,7 @@ class ListBulkMailCampaigns extends ListRecords
             ->icon('heroicon-o-inbox-arrow-down')
             ->color('gray')
             ->visible(fn (): bool => auth()->user()?->can('Create:BulkMailCampaign') ?? false)
-            ->modalDescription(__('Reads the sender mailbox\'s Sent folder and creates a completed campaign: one recipient per email whose subject matches, marked as sent on the date it was sent. Nothing is sent. Emails brought in before are skipped.'))
+            ->modalDescription(__('Reads the sender mailbox\'s Sent folder and creates a completed campaign: one recipient per email whose subject matches, marked as sent on the date it was sent. Nothing is sent. Emails brought in before are skipped. Each email is remembered as sent — on the matter chosen, if any — so its replies are kept as a letter\'s are.'))
             ->schema([
                 TextInput::make('name')
                     ->label(__('Campaign name'))
@@ -51,6 +52,13 @@ class ListBulkMailCampaigns extends ListRecords
                 TextInput::make('subject')
                     ->label(__('Subject contains'))
                     ->required(),
+                Select::make('matter_id')
+                    ->label(__('Matter'))
+                    ->helperText(__('The matter these emails were about, if one: their replies are then filed on it. Leave empty for a general mail not related to a matter.'))
+                    ->searchable()
+                    ->getSearchResultsUsing(fn (string $search): array => MatterSearch::options($search))
+                    ->getOptionLabelUsing(fn ($value): ?string => filled($value) ? (MatterSearch::labels([(int) $value])[(int) $value] ?? null) : null)
+                    ->nullable(),
                 DatePicker::make('from')
                     ->label(__('Sent from date'))
                     ->required(),
@@ -65,7 +73,7 @@ class ListBulkMailCampaigns extends ListRecords
             ->action(function (array $data): void {
                 $run = SentMailImportProgress::start();
 
-                ImportSentEmails::dispatchAfterResponse($run, $data['name'], $data['sender'], $data['subject'], (string) $data['from'], (string) $data['to'], (int) auth()->id());
+                ImportSentEmails::dispatchAfterResponse($run, $data['name'], $data['sender'], $data['subject'], (string) $data['from'], (string) $data['to'], (int) auth()->id(), filled($data['matter_id'] ?? null) ? (int) $data['matter_id'] : null);
 
                 $this->replaceMountedAction('importProgress', ['run' => $run]);
             });

@@ -72,9 +72,10 @@ class MatterObserver
             MatterOneDriveFolders::queueMoveToFinished($matter);
         }
 
-        // Its phase changed: the new phase's folders made in its OneDrive folders.
+        // Its phase changed: the old phase's folders renamed to the new, and the new phase's folders made, in its
+        // OneDrive folders.
         if (! $matter->wasRecentlyCreated && filled($matter->phase) && $matter->wasChanged('phase')) {
-            MakeMatterPhaseFolders::dispatch($matter->getKey())->afterCommit();
+            MakeMatterPhaseFolders::dispatch($matter->getKey(), filled($matter->getOriginal('phase')) ? (string) $matter->getOriginal('phase') : null)->afterCommit();
         }
 
     }

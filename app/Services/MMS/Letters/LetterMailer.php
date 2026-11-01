@@ -129,7 +129,7 @@ class LetterMailer
 
                     // An address that does not exist stops the whole email at the mail server ("550 No Such User Here"):
                     // each is tried on its own, the others get it, and the ones refused are named.
-                    [$sent, $to, $groupCc, $refused] = $this->withoutRefused($sender, $email, $to, $groupCc, $refusal, array_column($named, 'name', 'email'));
+                    [$sent, $to, $groupCc, $refused] = self::withoutRefused($sender, $email, $to, $groupCc, $refusal, array_column($named, 'name', 'email'));
                     $named = array_values(array_filter($named, fn (array $address): bool => in_array($address['email'], $to, true)));
                     $result['errors'][] = __('The mail server refused these addresses (they do not exist or cannot receive): :addresses', ['addresses' => implode(', ', $refused)]);
                 }
@@ -450,7 +450,8 @@ class LetterMailer
 
     /**
      * The email sent to each address on its own, after the whole of it was refused for one: those that took it, and
-     * those that were refused. Nothing went before — the server turns the email away before it is sent.
+     * those that were refused. Nothing went before — the server turns the email away before it is sent. Letters'
+     * and minutes' alike (MinutesSender).
      *
      * @param  list<string>  $to
      * @param  list<string>  $cc
@@ -458,7 +459,7 @@ class LetterMailer
      *
      * @throws \Throwable when no address took it, or for another reason
      */
-    private function withoutRefused(array $sender, LetterEmail $email, array $to, array $cc, \Throwable $refusal, array $names = []): array
+    public static function withoutRefused(array $sender, LetterEmail $email, array $to, array $cc, \Throwable $refusal, array $names = []): array
     {
         $sent = null;
         $reached = [];

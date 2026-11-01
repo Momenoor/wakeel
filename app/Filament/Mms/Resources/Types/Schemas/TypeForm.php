@@ -60,6 +60,12 @@ class TypeForm
                                 ->label(__('Has creditors'))
                                 ->helperText(__('Its matters keep a list of creditors and their agents, who are no parties (a bankruptcy\'s): on their Contacts tab, their emails saved in a folder of their own, exported for bulk mail.'))
                                 ->live(),
+                            TagsInput::make('creditor_columns')
+                                ->label(__('Creditors\' own columns'))
+                                ->placeholder(__('Add a column name'))
+                                ->helperText(__('Besides a creditor\'s name, number, licence or ID, claim amount, phones and addresses: any other column its matters\' creditors keep (execution file no., …). Each is a field on the creditor, a column in the creditors\' sheet, and a placeholder in a bulk mail to them.'))
+                                ->visible(fn (Get $get): bool => (bool) $get('has_creditors'))
+                                ->columnSpanFull(),
                         ]),
                     // What the sides are called.
                     Section::make(__('Party capacities'))
@@ -74,6 +80,7 @@ class TypeForm
                         ->schema([
                             self::oneDriveStructureField(),
                             self::phaseFoldersField(),
+                            self::phaseKeepFoldersField(),
                             self::receivedEmailsField(),
                             // The emails from each side apart, each named as set.
                             ...array_map(fn (string $side): TextInput => self::receivedSideFolderField($side), ReceivedEmailFiling::APART),
@@ -146,7 +153,7 @@ class TypeForm
     {
         return TextInput::make($name)
             ->label(__('Received emails folder structure'))
-            ->helperText(__('Where the emails that come in are saved inside the matter\'s folder, for this type\'s matters. Folders are separated by "/", and each may use the matter\'s placeholders, like the letters do, e.g. {{matter.custom.Phase}}/01 system. {{day}} is the day the email reached us, so the emails of one day go in the same folder. Leave empty for the default one (Settings → OneDrive Folders).'))
+            ->helperText(__('Where the emails that come in are saved inside the matter\'s folder, for this type\'s matters. Folders are separated by "/", and each may use the matter\'s placeholders, like the letters do, e.g. {{matter.custom.Phase}}/01 system. {{day}} is the day the email reached us, so the emails of one day go in the same folder; {{serial}} is the email\'s number under its folder (the emails of a day 1, 2, 3 — short names). Leave empty for the default one (Settings → OneDrive Folders).'))
             ->placeholder(fn (): string => MatterOneDriveFolders::receivedEmailsFolder())
             ->maxLength(500)
             ->extraInputAttributes(['dir' => 'ltr']);
@@ -258,6 +265,18 @@ class TypeForm
             ->helperText(__('One per line, in order. Use "/" for a folder inside another, e.g. "02 المستندات/من المدعي". Changes apply to folders made from now on.').' '.__('A folder may use the matter\'s placeholders, like the letters do, e.g. {{matter.custom.phase}}/01 المراسلات; one the matter has no value for is left out.'))
             ->placeholder(fn (): string => Setting::get(MatterOneDriveFolders::SUBFOLDERS, ''))
             ->rows(8)
+            ->extraInputAttributes(['dir' => 'auto']);
+    }
+
+    /**
+     * The folders of a finished phase that stay with the matters in progress (Type::phaseKeepFolders()).
+     */
+    public static function phaseKeepFoldersField(): Textarea
+    {
+        return Textarea::make('phase_keep_folders')
+            ->label(__('Folders kept for the next phase'))
+            ->helperText(__('When a phase of a case is finished, its folder goes to the finished matters — except these folders of it, which stay with the matters in progress for the next phase to go on working in. One per line, by the folder\'s name as a phase\'s folders write it (e.g. 07 مطالبات الدائنين). Leave empty to move the whole phase folder.'))
+            ->rows(3)
             ->extraInputAttributes(['dir' => 'auto']);
     }
 

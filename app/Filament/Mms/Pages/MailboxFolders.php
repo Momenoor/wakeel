@@ -8,6 +8,7 @@ use App\Filament\Shared\Clusters\Settings;
 use App\Models\MailboxFolderForward;
 use App\Models\MailSender;
 use App\Services\MMS\MailboxFolderForwarder;
+use App\Services\MMS\MatterReplyCollector;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -99,6 +100,10 @@ class MailboxFolders extends Page implements HasTable
                     ->description(fn (MailSender $record): string => (string) $record->address),
                 TextColumn::make('inbox_folder')->label(__('Read for the matters\' emails'))
                     ->state(fn (MailSender $record): string => ! $record->collects ? __('No') : ($record->inbox_folder ?: __('Inbox'))),
+                TextColumn::make('last_read')
+                    ->label(__('Last read'))
+                    ->state(fn (MailSender $record): string => MatterReplyCollector::lastReadLabel($record))
+                    ->color(fn (MailSender $record): ?string => MatterReplyCollector::lastReadLabel($record) === __('Never read') ? 'warning' : null),
                 TextColumn::make('forwards')
                     ->label(__('Folders forwarded'))
                     ->state(fn (MailSender $record): array => $record->folderForwards

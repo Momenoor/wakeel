@@ -15,6 +15,7 @@ use App\Jobs\ReadMatterEmailsAddedInOneDrive;
 use App\Models\Matter;
 use App\Models\MatterContact;
 use App\Models\MatterEmail;
+use App\Models\User;
 use App\Services\MMS\MatterCreditors;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterReplyCollector;
@@ -29,7 +30,9 @@ use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Text;
+use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -79,12 +82,16 @@ class EmailsRelationManager extends RelationManager
             ->recordTitleAttribute('subject')
             // Sent, and received ones that are on the matter — filed, or a reply (kept with no status) —
             // not those waiting for a matter, or set aside.
-            ->modifyQueryUsing(fn (Builder $query) => $query->where(fn (Builder $q) => $q
-                ->where('direction', MatterEmail::SENT)
-                ->orWhere('status', MatterEmail::FILED)
-                ->orWhereNull('status')))
+            ->modifyQueryUsing(fn (Builder $query) => self::listed($query)->with(['reads.user', 'user']))
             ->defaultSort('at', 'desc')
             ->columns([
+                // Each user's own: unread until they open it (or mark it read).
+                IconColumn::make('unread')
+                    ->label('')
+                    ->state(fn (MatterEmail $record): bool => ! $record->isReadBy(auth()->user()))
+                    ->icon(fn (bool $state): string => $state ? 'heroicon-s-envelope' : 'heroicon-o-envelope-open')
+                    ->color(fn (bool $state): string => $state ? 'warning' : 'gray')
+                    ->tooltip(fn (bool $state): string => $state ? __('Unread by you') : __('Read by you')),
                 TextColumn::make('at')
                     ->label(__('Date'))
                     ->dateTime()
@@ -108,6 +115,14 @@ class EmailsRelationManager extends RelationManager
 
                     ->searchable()
                     ->wrap(),
+                TextColumn::make('read_by')
+                    ->label(__('Read by'))
+                    ->state(fn (MatterEmail $record): array => self::readers($record))
+                    ->listWithLineBreaks()
+                    ->limitList(3)
+                    ->expandableLimitedList()
+                    ->placeholder(__('No one yet'))
+                    ->toggleable(),
                 // What of an email that came in is in the matter's OneDrive.
                 TextColumn::make('pdf_saved')
                     ->label(__('PDF in OneDrive'))
@@ -143,6 +158,16 @@ class EmailsRelationManager extends RelationManager
                 SelectFilter::make('direction')
                     ->label(__('Direction'))
                     ->options([MatterEmail::SENT => __('Sent'), MatterEmail::RECEIVED => __('Received')]),
+                Filter::make('unread_by_me')
+                    ->label(__('Unread by me'))
+                    ->toggle()
+                    ->query(fn (Builder $query): Builder => $query->unreadBy(auth()->user())),
+                // A matter with creditors: the emails that came in from no creditor yet — to assign (Sender is a creditor).
+                Filter::make('no_creditor')
+                    ->label(__('Not assigned to a creditor'))
+                    ->toggle()
+                    ->visible(fn (): bool => MatterCreditors::kept($this->getOwnerRecord()))
+                    ->query(fn (Builder $query): Builder => MatterCreditors::withoutCreditor($query)),
             ])
             ->recordActions([
                 // The email's PDF, as kept.
@@ -151,6 +176,8 @@ class EmailsRelationManager extends RelationManager
                     ->icon('heroicon-o-document-text')
                     ->color('gray')
                     ->visible(fn (MatterEmail $record): bool => self::pdfUrl($record) !== null)
+                    // Opened: read by whoever opened it.
+                    ->extraAttributes(fn (MatterEmail $record): array => ['wire:click' => 'markEmailRead('.$record->getKey().')'])
                     ->url(fn (MatterEmail $record): ?string => self::pdfUrl($record), shouldOpenInNewTab: true),
                 // Filed on the wrong matter: to another, with its files and its step in the progress.
                 Action::make('move')
@@ -199,7 +226,7 @@ class EmailsRelationManager extends RelationManager
                         && (auth()->user()?->can('update', $this->getOwnerRecord()) ?? false))
                     ->modalWidth('lg')
                     ->modalDescription(fn (MatterEmail $record): string => __('Its emails that came in on this matter, and those that come from :address from now on, are saved in the creditor\'s folder.', ['address' => MatterEmail::addressOf((string) $record->from)]))
-                    ->schema(fn (MatterEmail $record): array => CreditorFields::schema($this->getOwnerRecord(), MatterContact::split((string) $record->from)[0] ?: MatterEmail::addressOf((string) $record->from)))
+                    ->schema(fn (MatterEmail $record): array => CreditorFields::schema($this->getOwnerRecord(), MatterContact::split((string) $record->from)[0] ?: MatterEmail::addressOf((string) $record->from), MatterEmail::addressOf((string) $record->from)))
                     ->action(function (MatterEmail $record, array $data): void {
                         try {
                             [$creditor, $moved] = CreditorFields::save($this->getOwnerRecord(), $data, [MatterEmail::addressOf((string) $record->from)]);
@@ -214,9 +241,17 @@ class EmailsRelationManager extends RelationManager
                             ->body(__(':count emails moved to the creditor\'s folder.', ['count' => $moved]))
                             ->send();
                     }),
+                Action::make('markRead')
+                    ->label(__('Mark as read'))
+                    ->icon('heroicon-o-envelope-open')
+                    ->color('gray')
+                    ->visible(fn (MatterEmail $record): bool => ! $record->isReadBy(auth()->user()))
+                    ->action(fn (MatterEmail $record) => $record->markReadBy(auth()->user())),
                 Action::make('view')
                     ->label(__('Details'))
                     ->icon('heroicon-o-eye')
+                    // Its details opened: read by whoever opened them.
+                    ->mountUsing(fn (MatterEmail $record) => $record->markReadBy(auth()->user()))
                     ->modalHeading(fn (MatterEmail $record): string => (string) ($record->subject ?: __('(no subject)')))
                     ->schema(fn (MatterEmail $record): array => self::details($record))
                     ->modalSubmitAction(false)
@@ -229,6 +264,11 @@ class EmailsRelationManager extends RelationManager
                         ->icon('heroicon-o-cloud-arrow-down')
                         ->visible(fn (MatterEmail $record): bool => $record->direction === MatterEmail::RECEIVED)
                         ->action(fn (MatterEmail $record) => $this->checkOneDrive([$record])),
+                    Action::make('markUnread')
+                        ->label(__('Mark as unread'))
+                        ->icon('heroicon-o-envelope')
+                        ->visible(fn (MatterEmail $record): bool => $record->isReadBy(auth()->user()) && ! ($record->direction === MatterEmail::SENT && (int) $record->user_id === (int) auth()->id()))
+                        ->action(fn (MatterEmail $record) => $record->markUnreadBy(auth()->user())),
                     // Its PDF made wrongly (garbled letters): made again from the mailbox, its files in their places.
                     RegenerateEmailAction::make(fn (): bool => auth()->user()?->can('update', $this->getOwnerRecord()) ?? false),
                 ]),
@@ -269,6 +309,64 @@ class EmailsRelationManager extends RelationManager
             ])
             ->emptyStateHeading(__('No emails yet'))
             ->emptyStateDescription(__('Emails sent from this matter, and those that come in from its parties, are listed here.'));
+    }
+
+    /**
+     * The emails on the matter: sent, and received ones that are on it — filed, or a reply (kept with no status) —
+     * not those waiting for a matter, or set aside.
+     */
+    private static function listed(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $q) => $q
+            ->where('direction', MatterEmail::SENT)
+            ->orWhere('status', MatterEmail::FILED)
+            ->orWhereNull('status'));
+    }
+
+    /** On the tab: how many of the matter's emails the user has not read yet. */
+    public static function getBadge(Model $ownerRecord, string $pageClass): ?string
+    {
+        $user = auth()->user();
+
+        if (! $user instanceof User || ! method_exists($ownerRecord, 'emails')) {
+            return null;
+        }
+
+        $unread = self::listed($ownerRecord->emails()->getQuery())->unreadBy($user)->count();
+
+        return $unread > 0 ? (string) $unread : null;
+    }
+
+    public static function getBadgeColor(Model $ownerRecord, string $pageClass): ?string
+    {
+        return 'warning';
+    }
+
+    /**
+     * Who read an email, in order — and, for one sent from here, who sent it.
+     *
+     * @return list<string>
+     */
+    private static function readers(MatterEmail $email): array
+    {
+        $names = $email->reads->sortBy('read_at')->map(fn ($read): ?string => $read->user?->name)->filter()->values()->all();
+
+        if ($email->direction === MatterEmail::SENT && $email->user) {
+            array_unshift($names, $email->user->name.' ('.__('sent it').')');
+        }
+
+        return array_values(array_unique($names));
+    }
+
+    /** An email opened from the list (its PDF): read by the user. */
+    public function markEmailRead(int $emailId): void
+    {
+        $email = $this->getOwnerRecord()->emails()->whereKey($emailId)->first();
+        $user = auth()->user();
+
+        if ($email && $user instanceof User) {
+            $email->markReadBy($user);
+        }
     }
 
     /**

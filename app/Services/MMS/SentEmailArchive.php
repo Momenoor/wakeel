@@ -112,7 +112,7 @@ class SentEmailArchive
                 now(),
             );
 
-            $kept = $this->keep($matter, $pdf, $names, $title, $userId);
+            $kept = $this->keep($matter, $pdf, $names, $title, $userId, to: array_map(fn ($address) => is_array($address) ? (string) ($address['email'] ?? '') : (string) $address, $to));
             // What was kept, and what it went with, on the email's record — for the matter's Emails tab.
             $record?->noteKept($kept, count($email->files));
         } catch (Throwable $e) {
@@ -125,10 +125,13 @@ class SentEmailArchive
      * matter's attachments (unless it's kept elsewhere already — a bulk
      * mail's), and in the OneDrive sent-emails folder.
      */
-    public function keep(Matter $matter, string $pdf, string $party, string $about, ?int $userId, bool $asAttachment = true): array
+    /**
+     * @param  list<string>  $to  whom it went to — for a creditor's own folder (MatterOneDriveFolders::sentEmailsFolderFor())
+     */
+    public function keep(Matter $matter, string $pdf, string $party, string $about, ?int $userId, bool $asAttachment = true, array $to = []): array
     {
         $name = self::emailName(true, $party, $about).'.pdf';
-        $folder = MatterOneDriveFolders::sentEmailsFolderFor($matter);
+        $folder = MatterOneDriveFolders::sentEmailsFolderFor($matter, null, $to);
         $path = $this->keepFile($matter, $name, $pdf, 'application/pdf', $folder, $userId, $asAttachment, $inOneDrive);
 
         return ['name' => $name, 'path' => $path, 'inOneDrive' => (bool) $inOneDrive, 'folder' => $folder];

@@ -72,9 +72,12 @@ return [
             'permissions' => ['Create:BulkMailCampaign'],
             'steps' => [
                 ['text' => 'Click "Import sent emails".', 'shot' => 'list-2-import'],
-                ['text' => 'Enter the "Campaign name", choose "Sent from" (the mailbox), fill in "Subject contains", set "Sent from date" and "Sent to date", then click "Submit".', 'shot' => 'import-1'],
+                ['text' => 'Enter the "Campaign name", choose "Sent from" (the mailbox), fill in "Subject contains", choose the "Matter" the emails were about (optional), set "Sent from date" and "Sent to date", then click "Submit".', 'shot' => 'import-1'],
             ],
-            'tips' => ['This works when the mailbox is set up for reading (IMAP) in the mail senders settings.'],
+            'tips' => [
+                'This works when the mailbox is set up for reading (IMAP) in the mail senders settings.',
+                'Each imported email is remembered as sent, on the "Matter" chosen if any: a reply to it is filed on that matter, or kept with its recipient in the campaign, as a reply to a letter is. An email already sent from Wakeel is not remembered twice.',
+            ],
         ],
     ],
 ];

@@ -18,6 +18,7 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
@@ -32,6 +33,9 @@ use Filament\Tables\Table;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Unique;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
 
@@ -150,11 +154,32 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                     ->label(__('Phones'))
                     ->placeholder('—')
                     ->wrap(),
+                TextColumn::make('number')
+                    ->label(__('No.'))
+                    ->placeholder('—')
+                    ->visible(fn (): bool => $this->hasCreditors()),
+                TextColumn::make('id_number')
+                    ->label(__('Licence / ID'))
+                    ->placeholder('—')
+                    ->copyable()
+                    ->visible(fn (): bool => $this->hasCreditors()),
                 TextColumn::make('claim')
                     ->label(__('Claim amount'))
                     ->numeric(2)
                     ->placeholder('—')
                     ->visible(fn (): bool => $this->hasCreditors()),
+                TextColumn::make('first_email')
+                    ->label(__('First email'))
+                    ->tooltip(__('When the first email came in from the creditor or its agents'))
+                    ->date()
+                    ->placeholder('—')
+                    ->visible(fn (): bool => $this->hasCreditors()),
+                ...array_map(fn (string $column): TextColumn => TextColumn::make('custom_'.md5($column))
+                    ->label($column)
+                    ->state(fn (array $record): ?string => $record['custom'][$column] ?? null)
+                    ->placeholder('—')
+                    ->wrap()
+                    ->toggleable(), $this->hasCreditors() ? MatterCreditors::ownColumns($this->matter()) : []),
                 TextColumn::make('source')
                     ->label(__('Source'))
                     ->color('gray')
@@ -181,12 +206,46 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                     ->color('gray')
                     ->visible(fn (): bool => $this->hasCreditors())
                     ->action(fn () => MatterCreditors::bulkMailDownload($this->matter())),
+                // A list of creditors (El Baz's sheet): name, email, agent, phone, claim_amount, id_number and the
+                // type's own columns, by their headings — each merged into the matter's list.
+                Action::make('importCreditors')
+                    ->label(__('Import creditors'))
+                    ->tooltip(__('An Excel or CSV sheet with the headings name, email, agent, phone, claim_amount, id_number (in English or Arabic) and the type\'s own columns: each line a creditor, merged into the list by its address, licence or name.'))
+                    ->icon('heroicon-o-arrow-up-tray')
+                    ->color('gray')
+                    ->visible(fn (): bool => $this->hasCreditors() && $this->canChange())
+                    ->modalWidth('lg')
+                    ->schema([
+                        FileUpload::make('file')
+                            ->label(__('Sheet'))
+                            ->disk('local')
+                            ->directory('creditor-imports')
+                            ->acceptedFileTypes(['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'text/csv', 'text/plain', 'application/vnd.ms-excel'])
+                            ->maxSize(10240)
+                            ->required(),
+                    ])
+                    ->action(function (array $data): void {
+                        $path = Storage::disk('local')->path((string) $data['file']);
+
+                        try {
+                            $taken = app(MatterCreditors::class)->importSheet($this->matter(), $path);
+                        } catch (\Throwable $e) {
+                            Notification::make()->danger()->title(__('The sheet could not be read'))->body($e->getMessage())->send();
+
+                            return;
+                        } finally {
+                            Storage::disk('local')->delete((string) $data['file']);
+                        }
+
+                        $this->rowsRead = null;
+                        Notification::make()->success()->title(trans_choice(':count creditor taken from the sheet.|:count creditors taken from the sheet.', $taken, ['count' => $taken]))->send();
+                    }),
                 Action::make('addCreditor')
                     ->label(__('Add a creditor'))
                     ->icon('heroicon-o-plus')
                     ->visible(fn (): bool => $this->hasCreditors() && $this->canChange())
                     ->modalWidth('lg')
-                    ->schema(self::creditorSchema())
+                    ->schema(fn (): array => $this->creditorSchema())
                     ->action(function (array $data): void {
                         $this->saveCreditor($this->matter()->creditors()->make(), $data);
                         Notification::make()->success()->title(__('Saved'))->send();
@@ -203,11 +262,13 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                     ->modalWidth('lg')
                     ->fillForm(fn (array $record): array => ($creditor = $this->creditor($record)) ? [
                         'name' => $creditor->name,
+                        'id_number' => $creditor->id_number,
                         'emails' => $creditor->addresses()->where('agent', false)->pluck('email')->all(),
                         'phone' => (array) $creditor->phones,
                         'claim_amount' => $creditor->claim_amount,
+                        'custom' => (array) $creditor->custom,
                     ] : [])
-                    ->schema(self::creditorSchema())
+                    ->schema(fn (array $record): array => $this->creditorSchema($record['creditor_id']))
                     ->action(function (array $record, array $data): void {
                         $this->saveCreditor($this->creditor($record) ?? abort(404), $data);
                         Notification::make()->success()->title(__('Saved'))->send();
@@ -322,7 +383,7 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                         ->modalHeading(fn (array $record): string => __('A creditor or their agent').': '.$record['name'])
                         ->modalDescription(__('Their emails that came in on this matter, and those that come from now on, are saved in the creditor\'s folder.'))
                         ->modalWidth('lg')
-                        ->schema(fn (array $record): array => CreditorFields::schema($this->matter(), $record['name']))
+                        ->schema(fn (array $record): array => CreditorFields::schema($this->matter(), $record['name'], $record['own'][0] ?? ''))
                         ->action(function (array $record, array $data): void {
                             try {
                                 [$creditor, $moved] = CreditorFields::save($this->matter(), $data, $record['own']);
@@ -370,19 +431,30 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
     }
 
     /**
+     * A creditor's form: its name, licence or ID (one a matter), claim, addresses, phones — and the type's own
+     * columns (Type::creditorColumns()).
+     *
+     * @param  ?int  $ignore  the creditor being edited: its own licence or ID is not a second one
      * @return list<\Filament\Schemas\Components\Component>
      */
-    private static function creditorSchema(): array
+    private function creditorSchema(?int $ignore = null): array
     {
         return [
             TextInput::make('name')
                 ->label(__("Creditor's name"))
                 ->required()
                 ->maxLength(255),
+            TextInput::make('id_number')
+                ->label(__('Trade licence or ID number'))
+                ->helperText(__('The same number twice in a matter is one creditor twice: a claim with it already is said.'))
+                ->maxLength(100)
+                ->rule(fn (): Unique => Rule::unique('matter_creditors', 'id_number')->where('matter_id', $this->matterId)->ignore($ignore))
+                ->validationMessages(['unique' => __('A creditor of this matter has this licence or ID number already.')]),
             TextInput::make('claim_amount')
                 ->label(__('Claim amount'))
                 ->numeric()
                 ->minValue(0),
+            ...array_map(fn (string $column): TextInput => TextInput::make('custom.'.$column)->label($column)->maxLength(500), MatterCreditors::ownColumns($this->matter())),
             TagsInput::make('emails')
                 ->label(__("The creditor's own emails"))
                 ->helperText(__('Its lawyer\'s or agent\'s are added as its agent (Add an agent).'))
@@ -420,8 +492,10 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
         DB::transaction(function () use ($creditor, $data, $emails): void {
             $creditor->fill([
                 'name' => trim((string) $data['name']),
+                'id_number' => trim((string) ($data['id_number'] ?? '')) ?: null,
                 'phones' => array_values((array) ($data['phone'] ?? [])),
                 'claim_amount' => filled($data['claim_amount'] ?? null) ? $data['claim_amount'] : null,
+                'custom' => array_filter(array_map(fn ($value): string => trim((string) $value), (array) ($data['custom'] ?? [])), fn (string $value): bool => $value !== '') ?: null,
             ])->save();
             $creditor->addresses()->where('agent', false)->whereNotIn('email', $emails)->delete();
 

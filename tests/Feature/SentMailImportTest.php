@@ -10,6 +10,8 @@ use App\Livewire\SentMailImportProgressPanel;
 use App\Models\BulkMailCampaign;
 use App\Models\BulkMailRecipient;
 use App\Models\MailSender;
+use App\Models\Matter;
+use App\Models\MatterEmail;
 use App\Models\User;
 use App\Services\MMS\SentFolder;
 use App\Services\MMS\SentMailImporter;
@@ -168,6 +170,30 @@ class SentMailImportTest extends TestCase
         $this->assertSame($campaign->id, $progress['campaign_id']);
         $this->assertSame(3, $progress['scanned']);
         $this->assertSame(2, $progress['imported']);
+
+        // Each remembered as sent when it went — of no matter here, as its campaign — so its replies are watched for.
+        $remembered = MatterEmail::query()->where('direction', MatterEmail::SENT)->orderBy('at')->get();
+        $this->assertSame(['a@x', 'b@x'], $remembered->pluck('message_id')->all());
+        $this->assertSame([['a@client.ae'], ['b@client.ae']], $remembered->pluck('to')->all());
+        $this->assertSame('2026-09-01 09:00:00', $remembered[0]->at->utc()->toDateTimeString());
+        $this->assertSame('office', $remembered[0]->sender_key);
+        $this->assertNull($remembered[0]->matter_id);
+        $this->assertTrue($remembered[0]->source->is($recipients[0]));
+    }
+
+    public function test_emails_imported_for_a_matter_are_remembered_as_sent_on_it_and_one_sent_from_wakeel_not_twice(): void
+    {
+        $this->fakeGraph();
+        $matter = Matter::factory()->create();
+        // The first went from Wakeel as a letter: on the matter already.
+        MatterEmail::create(['matter_id' => $matter->id, 'direction' => MatterEmail::SENT, 'sender_key' => 'office', 'message_id' => 'a@x', 'subject' => 'Invoice reminder', 'to' => ['a@client.ae'], 'at' => now()]);
+
+        app(SentMailImporter::class)->run(SentMailImportProgress::start(), 'Invoice reminders', 'office', 'invoice', Carbon::parse('2026-09-01'), Carbon::parse('2026-09-30'), $this->user->id, $matter->id);
+
+        $this->assertSame($matter->id, BulkMailCampaign::sole()->matter_id);
+        $this->assertSame(2, BulkMailRecipient::count());
+        $this->assertSame(1, MatterEmail::query()->where('message_id', 'a@x')->count());
+        $this->assertSame($matter->id, MatterEmail::query()->where('message_id', 'b@x')->sole()->matter_id);
     }
 
     public function test_running_it_again_brings_nothing_twice(): void

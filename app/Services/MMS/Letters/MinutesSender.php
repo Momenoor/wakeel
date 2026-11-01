@@ -90,14 +90,50 @@ class MinutesSender
 
             $record = null;
             $raw = null;
-            $sent = $this->attempt($minutes, array_values($group['rows']), MinutesDelivery::EMAIL, Str::limit(implode(', ', $emails), 250, ''), $userId, $result, function () use ($senderKey, $email, $emails, $group, $copied, $minutes, $userId, &$record, &$raw) {
-                $message = SenderMailer::using(SenderMailer::sender($senderKey), fn () => Mail::to(self::addressed($group['rows']))->cc($copied)->send($email));
+            $refused = [];
+            $deliveries = [];
+            $sent = $this->attempt($minutes, array_values($group['rows']), MinutesDelivery::EMAIL, Str::limit(implode(', ', $emails), 250, ''), $userId, $result, function () use ($senderKey, $email, $group, $copied, $minutes, $userId, &$record, &$raw, &$refused) {
+                $sender = SenderMailer::sender($senderKey);
+                $to = self::addressed($group['rows']);
+                $cc = $copied;
+
+                try {
+                    $message = SenderMailer::using($sender, fn () => Mail::to($to)->cc($cc)->send($email));
+                } catch (\Throwable $refusal) {
+                    if (! LetterMailer::refusedAddress($refusal)) {
+                        throw $refusal;
+                    }
+
+                    // An address that does not exist stops the whole email at the mail server ("550 No Such User Here"):
+                    // each is tried on its own, as a letter's — the others get it, and the ones refused are named.
+                    [$message, $reached, $cc, $refused] = LetterMailer::withoutRefused($sender, $email, array_column($to, 'email'), $cc, $refusal, array_column($to, 'name', 'email'));
+                    $to = array_values(array_filter($to, fn (array $address): bool => in_array($address['email'], $reached, true)));
+                }
+
                 $raw = $message?->toString();
                 // Remembered, for its replies.
-                $record = MatterEmail::recordSent($minutes->matter_id, $minutes, $senderKey, $message?->getMessageId(), $email->emailSubject, [...$emails, ...$copied], $userId);
+                $record = MatterEmail::recordSent($minutes->matter_id, $minutes, $senderKey, $message?->getMessageId(), $email->emailSubject, [...array_column($to, 'email'), ...$cc], $userId);
 
                 return null;
-            });
+            }, $deliveries);
+
+            // A line whose every address was refused: its delivery failed, not sent.
+            $refusedRows = [];
+            if ($refused !== []) {
+                $result['errors'][] = __('The mail server refused these addresses (they do not exist or cannot receive): :addresses', ['addresses' => implode(', ', $refused)]);
+                $lower = fn (array $addresses): array => array_map('mb_strtolower', $addresses);
+
+                foreach (array_values($group['rows']) as $i => $row) {
+                    $theirs = $lower(Addresses::emails((array) ($row['emails'] ?? [])));
+
+                    if ($theirs !== [] && array_diff($theirs, $lower($refused)) === [] && isset($deliveries[$i])) {
+                        $deliveries[$i]->update(['status' => MinutesDelivery::FAILED, 'error' => Str::limit(__('The mail server refused these addresses (they do not exist or cannot receive): :addresses', ['addresses' => implode(', ', $theirs)]), 1000)]);
+                        $result['sent']--;
+                        $result['failed']++;
+                        $refusedRows[array_keys($group['rows'])[$i]] = true;
+                    }
+                }
+            }
 
             if ($sent) {
                 // A copy in the sender's Sent folder, as a letter's.
@@ -105,7 +141,7 @@ class MinutesSender
                     $result['errors'][] = $notCopied;
                 }
 
-                $reachedRows += array_fill_keys(array_keys($group['rows']), true);
+                $reachedRows += array_diff_key(array_fill_keys(array_keys($group['rows']), true), $refusedRows);
                 $methods[MatterProgressRecorder::EMAIL] = true;
 
                 // Kept with the matter as it went — once the page has answered.
@@ -165,8 +201,9 @@ class MinutesSender
      * @param  list<array<string, mixed>>  $rows
      * @param  array{sent: int, failed: int, errors: list<string>}  $result
      * @param  callable(): ?string  $send  the message id, if any
+     * @param  list<MinutesDelivery>  $made  the deliveries made, one a row in their order — for the caller to mark one of them failed after
      */
-    private function attempt(MatterMinutes $minutes, array $rows, string $channel, string $address, ?int $userId, array &$result, callable $send): bool
+    private function attempt(MatterMinutes $minutes, array $rows, string $channel, string $address, ?int $userId, array &$result, callable $send, array &$made = []): bool
     {
         $deliveries = array_map(fn (array $row) => $minutes->deliveries()->create([
             'party_id' => filled($row['party_id'] ?? null) ? (int) $row['party_id'] : null,
@@ -176,6 +213,7 @@ class MinutesSender
             'status' => MinutesDelivery::SENT,
             'sent_by' => $userId,
         ]), $rows);
+        $made = $deliveries;
 
         try {
             $messageId = $send();

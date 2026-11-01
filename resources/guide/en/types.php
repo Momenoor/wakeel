@@ -28,6 +28,9 @@ return [
             ],
             'tips' => [
                 'Turning off "Active" hides the type from the new matter form without deleting its old matters.',
+                'When a phase of a case is finished, its folder moves to the finished matters — except the folders written in "Folders kept for the next phase", which stay with the matters in progress for the next phase to go on working in.',
+                'Renamed a folder in the structure? After saving, "Rename folders in existing matters" maps each old name to its new one: in every matter of the type with a OneDrive folder the old folder is renamed, what is in it stays in it, and the records of the emails and documents filed in it follow. A folder of the new name there already takes what was in the old. The matters in progress only, unless "Also the finished matters" is on.',
+                'A type with creditors can give them columns of its own ("Creditors\' own columns"): each a field on the creditor, a column in the creditors\' sheet and a placeholder in a bulk mail. In the folder structures, {{serial}} numbers the emails under a folder (the emails of a day 1, 2, 3), {{creditor}} is the creditor\'s name and {{creditor.number}} its number (001), for a folder a claim; the sent-emails folder takes {{creditor}} too, for what is sent to a creditor.',
                 'A type with phases can give each phase folders of its own: in "OneDrive folder structure", "Each phase\'s folders" → "Add a phase\'s folders", choose the phase and write its subfolders one per line. They are made inside a folder named after the phase, instead of the lines that start with {{matter.phase}}; the other lines are made for every phase. They are made when a matter is made, when a supplementary matter is made, and when a matter\'s phase is changed by editing it.',
             ],
         ],

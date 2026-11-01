@@ -2,6 +2,7 @@
 
 namespace App\Filament\Support;
 
+use App\Services\MMS\MatterOneDriveFolders;
 use Filament\Forms\Components\Field;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -25,14 +26,14 @@ final class AssistantSettingsFields
                 ->columnSpanFull() : null,
             TextInput::make('onedrive_path')
                 ->label(__('Folder for matters in their OneDrive'))
-                ->placeholder('Work/Matters')
-                ->helperText(__('Leave empty to put matter folders at the top of their OneDrive.'))
+                ->placeholder(fn (): string => MatterOneDriveFolders::standardFolders()['matters'])
+                ->helperText(__('Leave empty to put matter folders at the top of their OneDrive. The standard name for everyone is set under Settings → OneDrive Folders, and given to every assistant from there.'))
                 ->maxLength(255)
                 ->extraInputAttributes(['dir' => 'auto']),
             // A matter's folder is moved here once the matter is finished (its final report).
             TextInput::make('onedrive_finished_path')
                 ->label(__('Folder for finished matters in their OneDrive'))
-                ->placeholder('Work/Finished matters')
+                ->placeholder(fn (): string => MatterOneDriveFolders::standardFolders()['finished'])
                 ->helperText(__('When a matter is finished, its folder is moved here and the matter link follows it. Leave empty to keep the folders of finished matters where they are.'))
                 ->maxLength(255)
                 ->extraInputAttributes(['dir' => 'auto']),

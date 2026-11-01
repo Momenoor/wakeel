@@ -7,8 +7,10 @@ use App\Filament\Mms\Resources\Types\Schemas\TypeForm;
 use App\Filament\Shared\Clusters\Settings;
 use App\Filament\Support\EntryTable;
 use App\Filament\Support\SettingsForm;
+use App\Jobs\StandardiseAssistantFolders;
 use App\Models\Matter;
 use App\Models\MatterFieldDefinition;
+use App\Models\Party;
 use App\Models\Setting;
 use App\Models\Type;
 use App\Services\MMS\MatterOneDriveFolders;
@@ -92,6 +94,8 @@ class OneDriveSettings extends Page implements HasTable
         $this->form->fill([
             'enabled' => MatterOneDriveFolders::enabled(),
             'subfolders' => Setting::get(MatterOneDriveFolders::SUBFOLDERS, ''),
+            'matters_folder' => Setting::get(MatterOneDriveFolders::MATTERS_FOLDER, ''),
+            'finished_folder' => Setting::get(MatterOneDriveFolders::FINISHED_FOLDER, ''),
             'signed_minutes' => MatterOneDriveFolders::signedMinutesFolder(),
             'sent_emails' => MatterOneDriveFolders::sentEmailsFolder(),
             'received_emails' => MatterOneDriveFolders::receivedEmailsFolder(),
@@ -122,6 +126,7 @@ class OneDriveSettings extends Page implements HasTable
 
         $labels = [
             'onedrive_subfolders' => __('Standard subfolders'),
+            'phase_keep_folders' => __('Folders kept for the next phase'),
             'onedrive_received_emails' => __('Received emails folder structure'),
             'onedrive_received_plaintiff' => __('Emails from the plaintiff side — folder'),
             'onedrive_received_defendant' => __('Emails from the defendant side — folder'),
@@ -163,6 +168,29 @@ class OneDriveSettings extends Page implements HasTable
                             ->label(__('Matters created from'))
                             ->content(fn (): string => MatterOneDriveFolders::enabledAt()?->format(Dates::dateTimeFormat()) ?? __('Not switched on yet'))
                             ->helperText(__('Matters created before the feature was switched on are not touched.')),
+                        // The same two folders at the top of every assistant's OneDrive.
+                        TextInput::make('matters_folder')
+                            ->label(__('Standard folder for matters in progress'))
+                            ->placeholder(MatterOneDriveFolders::standardFolders()['matters'])
+                            ->helperText(__('The name of the folder at the top of each assistant\'s OneDrive that holds their matters\' folders — the same for everyone, so no one renames theirs. Set on each assistant\'s profile by "Apply to the assistants".'))
+                            ->maxLength(255)
+                            ->extraInputAttributes(['dir' => 'auto']),
+                        TextInput::make('finished_folder')
+                            ->label(__('Standard folder for finished matters'))
+                            ->placeholder(MatterOneDriveFolders::standardFolders()['finished'])
+                            ->helperText(__('The folder a finished matter\'s folder is moved to, at the top of each assistant\'s OneDrive.'))
+                            ->maxLength(255)
+                            ->extraInputAttributes(['dir' => 'auto']),
+                        Actions::make([
+                            Action::make('applyStandardFolders')
+                                ->label(__('Apply to the assistants'))
+                                ->icon(Heroicon::OutlinedFolderArrowDown)
+                                ->color('warning')
+                                ->requiresConfirmation()
+                                ->modalHeading(__('Give every assistant\'s folders the standard names'))
+                                ->modalDescription(__('For each assistant with a OneDrive account: what their folder for matters holds now is moved under the standard name at the top of their OneDrive (into a folder of that name there already, when there is one), the same for their finished matters, the paths on their profile are set to the names, and the matters\' links follow. Done one assistant at a time in the background; you are told in the bell. Save the settings first.'))
+                                ->action(fn () => $this->applyStandardFolders()),
+                        ])->columnSpanFull(),
                     ])
                     ->columns(['default' => 1, 'lg' => 2]),
 
@@ -376,6 +404,8 @@ class OneDriveSettings extends Page implements HasTable
 
         Setting::set(MatterOneDriveFolders::ENABLED, $enable, 'onedrive');
         Setting::set(MatterOneDriveFolders::SUBFOLDERS, trim((string) ($state['subfolders'] ?? '')), 'onedrive');
+        Setting::set(MatterOneDriveFolders::MATTERS_FOLDER, trim((string) ($state['matters_folder'] ?? '')), 'onedrive');
+        Setting::set(MatterOneDriveFolders::FINISHED_FOLDER, trim((string) ($state['finished_folder'] ?? '')), 'onedrive');
         Setting::set(MatterOneDriveFolders::SIGNED_MINUTES, trim((string) ($state['signed_minutes'] ?? '')), 'onedrive');
         Setting::set(MatterOneDriveFolders::SENT_EMAILS, trim((string) ($state['sent_emails'] ?? '')), 'onedrive');
         Setting::set(MatterOneDriveFolders::RECEIVED_EMAILS, trim((string) ($state['received_emails'] ?? '')), 'onedrive');
@@ -385,6 +415,25 @@ class OneDriveSettings extends Page implements HasTable
         }
 
         Notification::make()->title(__('Settings saved successfully'))->success()->send();
+    }
+
+    /**
+     * Every assistant with a OneDrive account: their two folders given the standard names (StandardiseAssistantFolders),
+     * one a job.
+     */
+    public function applyStandardFolders(): void
+    {
+        $assistants = Party::query()->whereNotNull('onedrive_email')->where('onedrive_email', '!=', '')->get(['id', 'onedrive_email']);
+
+        foreach ($assistants as $assistant) {
+            StandardiseAssistantFolders::dispatch((int) $assistant->getKey(), auth()->id())->afterCommit();
+        }
+
+        Notification::make()
+            ->info()
+            ->title(trans_choice('No assistant has a OneDrive account.|The folders of :count assistant are being renamed.|The folders of :count assistants are being renamed.', $assistants->count(), ['count' => $assistants->count()]))
+            ->body($assistants->isEmpty() ? null : __('In the background, one assistant at a time; you are told in the bell what was done for each.'))
+            ->send();
     }
 
     public function testConnection(string $email): void

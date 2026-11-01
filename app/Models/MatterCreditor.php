@@ -14,14 +14,37 @@ use Illuminate\Support\Facades\DB;
  */
 class MatterCreditor extends Model
 {
-    protected $fillable = ['matter_id', 'name', 'phones', 'claim_amount'];
+    protected $fillable = ['matter_id', 'number', 'name', 'id_number', 'phones', 'claim_amount', 'custom'];
 
     protected function casts(): array
     {
         return [
             'phones' => 'array',
             'claim_amount' => 'decimal:2',
+            'custom' => 'array',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        // Numbered as it is added: its claim's serial in the matter's list, never given twice.
+        static::creating(function (self $creditor): void {
+            $creditor->number ??= ((int) static::query()->where('matter_id', $creditor->matter_id)->max('number')) + 1;
+        });
+    }
+
+    /** Its number as a folder writes it: three digits (001), so the folders sort in order. */
+    public function paddedNumber(): string
+    {
+        return $this->number !== null ? str_pad((string) $this->number, 3, '0', STR_PAD_LEFT) : '';
+    }
+
+    /** The value of one of its own columns (Type::creditorColumns()). */
+    public function customValue(string $column): ?string
+    {
+        $value = ((array) $this->custom)[$column] ?? null;
+
+        return filled($value) ? (string) $value : null;
     }
 
     /**

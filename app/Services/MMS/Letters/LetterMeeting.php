@@ -34,9 +34,10 @@ class LetterMeeting
     public static function fields(?LetterTemplate $template): ?array
     {
         $inputs = collect($template?->inputs ?? [])->filter(fn (array $input) => filled($input['key'] ?? null));
-        $meeting = '/meeting|teams|zoom|اجتماع/iu';
-        $pick = fn (string $type): ?string => ($inputs->first(fn (array $i) => ($i['type'] ?? null) === $type && preg_match($meeting, $i['key'] ?? ''))
-            ?? $inputs->firstWhere('type', $type))['key'] ?? null;
+        $meeting = '/meeting|teams|zoom|اجتماع|جلسة/iu';
+        // Only a field named for the meeting (its key or label): a letter's own date — its issue date, a deadline —
+        // is never the meeting's, so choosing a meeting never writes over it.
+        $pick = fn (string $type): ?string => $inputs->first(fn (array $i) => ($i['type'] ?? null) === $type && preg_match($meeting, ($i['key'] ?? '').' '.($i['label'] ?? '')))['key'] ?? null;
 
         $links = $inputs
             ->filter(fn (array $i) => ($i['type'] ?? 'text') === 'url'
@@ -47,7 +48,7 @@ class LetterMeeting
         $time = $pick('time');
         $aboutAMeeting = $links !== []
             || self::usesMeetingLink((string) $template?->body)
-            || ($date && $time && preg_match($meeting, $date.' '.$time));
+            || ($date && $time);
 
         return $aboutAMeeting ? ['url' => $links[0] ?? null, 'links' => $links, 'date' => $date, 'time' => $time] : null;
     }

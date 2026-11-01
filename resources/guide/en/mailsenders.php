@@ -24,7 +24,10 @@ return [
                 ['text' => 'Click "New Mail sender". Enter the "Email address" and choose "Hosted on": "Microsoft 365" (needs the Azure app set up in the environment file) or "cPanel / other mail server (SMTP)" (this shows fields for the server, port, encryption and password).', 'shot' => 'create-1'],
                 ['text' => 'Enter the "Sender name" (as the recipient sees it) and the "Code" (an internal identifier that must be unique), and leave it "Active". In the "Signature" section, write the signature added to the emails, then click "Create".'],
             ],
-            'tips' => ['"Keep every email of this inbox" is an option for each mailbox. Off: only replies and emails from the matters\' parties are kept from the mailbox. On: every other email too (except the office\'s own) goes to "Unfiled emails", to be filed on a matter or set aside.'],
+            'tips' => [
+                '"Keep every email of this inbox" is an option for each mailbox. Off: only replies and emails from the matters\' parties are kept from the mailbox. On: every other email too goes to "Unfiled emails", to be filed on a matter or set aside. The office\'s own emails never do: a copy of one sent from Wakeel is left as it is, and one written from Outlook to someone outside is filed on its matter as sent.',
+                'A mailbox set to be read is read every round whether or not anything was ever sent from it. The "Last read" column says when each was last read: "Never read" means no round has reached it yet, "Not read" that it is not set to be read or not active.',
+            ],
         ],
         [
             'id' => 'filing',

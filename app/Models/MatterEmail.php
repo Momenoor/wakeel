@@ -434,6 +434,40 @@ class MatterEmail extends Model
     /**
      * @return HasMany<self, $this>
      */
+    /** Who read it on the matter's Emails tab, each once. */
+    public function reads(): HasMany
+    {
+        return $this->hasMany(MatterEmailRead::class);
+    }
+
+    /** Whether this user has read it there — or sent it themselves. */
+    public function isReadBy(User $user): bool
+    {
+        return ($this->direction === self::SENT && $this->user_id !== null && (int) $this->user_id === (int) $user->getKey())
+            || $this->reads->contains(fn (MatterEmailRead $read): bool => (int) $read->user_id === (int) $user->getKey());
+    }
+
+    public function markReadBy(User $user): void
+    {
+        MatterEmailRead::query()->firstOrCreate(['matter_email_id' => $this->getKey(), 'user_id' => $user->getKey()], ['read_at' => now()]);
+        $this->unsetRelation('reads');
+    }
+
+    /** Unread again — for this user alone. */
+    public function markUnreadBy(User $user): void
+    {
+        MatterEmailRead::query()->where('matter_email_id', $this->getKey())->where('user_id', $user->getKey())->delete();
+        $this->unsetRelation('reads');
+    }
+
+    /** Those this user has not read: no read of theirs, and not sent by them. */
+    public function scopeUnreadBy(Builder $query, User $user): void
+    {
+        $query
+            ->whereDoesntHave('reads', fn (Builder $q) => $q->where('user_id', $user->getKey()))
+            ->where(fn (Builder $q) => $q->where('direction', '!=', self::SENT)->orWhereNull('user_id')->orWhere('user_id', '!=', $user->getKey()));
+    }
+
     public function replies(): HasMany
     {
         return $this->hasMany(self::class, 'parent_id');

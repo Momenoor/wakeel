@@ -79,6 +79,7 @@ class CollectMatterEmails implements ShouldBeUnique, ShouldQueue
     {
         $points = [
             $result['emails'] ? trans_choice(':count other email from the parties kept.|:count other emails from the parties kept.', $result['emails'], ['count' => $result['emails']]) : null,
+            ($result['sent'] ?? 0) ? trans_choice(':count email the office sent from Outlook kept on its matter as sent.|:count emails the office sent from Outlook kept on their matters as sent.', $result['sent'], ['count' => $result['sent']]) : null,
             ($result['unfiled'] ?? 0) ? trans_choice(':count email waiting for its matter in Unfiled emails.|:count emails waiting for their matter in Unfiled emails.', $result['unfiled'], ['count' => $result['unfiled']]) : null,
             ($result['stopped'] ?? false) ? __('Stopped for time; the rest is read on the next run.') : null,
             // No folder to find them in: the matter, and the emails to download and keep by hand.

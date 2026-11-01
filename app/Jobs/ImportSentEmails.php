@@ -24,10 +24,11 @@ class ImportSentEmails
         public string $from,
         public string $to,
         public int $userId,
+        public ?int $matterId = null,
     ) {}
 
     public function handle(SentMailImporter $importer): void
     {
-        $importer->run($this->runId, $this->name, $this->senderKey, $this->subject, Carbon::parse($this->from), Carbon::parse($this->to), $this->userId);
+        $importer->run($this->runId, $this->name, $this->senderKey, $this->subject, Carbon::parse($this->from), Carbon::parse($this->to), $this->userId, $this->matterId);
     }
 }

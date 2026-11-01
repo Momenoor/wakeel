@@ -4,6 +4,7 @@ namespace Tests\Feature\Letters;
 
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
+use App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager;
 use App\Filament\Support\SameDayMeetings;
 use App\Models\CalendarEvent;
 use App\Models\LetterTemplate;
@@ -14,6 +15,8 @@ use App\Models\MatterParty;
 use App\Models\Party;
 use App\Models\User;
 use App\Services\MMS\Letters\LetterComposer;
+use App\Services\MMS\Letters\LetterIssuer;
+use App\Services\MMS\Letters\LetterMeeting;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -147,19 +150,19 @@ class ExistingMeetingTest extends TestCase
         $tomorrow = $this->event(['title' => 'غداً', 'start_datetime' => now()->addDay()->setTime(12, 0), 'end_datetime' => now()->addDay()->setTime(13, 0)]);
 
         // Today's two: the one closest to now (13:00 is an hour away, 09:00 three).
-        $this->assertSame($afternoon->id, \App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager::closestMeeting($this->matter)->id);
+        $this->assertSame($afternoon->id, MinutesRelationManager::closestMeeting($this->matter)->id);
 
         // One that has minutes is not picked again.
         MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => $this->template->id, 'calendar_event_id' => $afternoon->id, 'number' => 1, 'meeting_at' => $afternoon->start_datetime, 'status' => MatterMinutes::DRAFT]);
-        $this->assertSame($morning->id, \App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager::closestMeeting($this->matter)->id);
+        $this->assertSame($morning->id, MinutesRelationManager::closestMeeting($this->matter)->id);
 
         // Nothing today: the closest day and time, before or after.
         $morning->update(['start_datetime' => now()->subDays(5)]);
-        $this->assertSame($tomorrow->id, \App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager::closestMeeting($this->matter)->id);
+        $this->assertSame($tomorrow->id, MinutesRelationManager::closestMeeting($this->matter)->id);
 
         // None at all.
         CalendarEvent::query()->delete();
-        $this->assertNull(\App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager::closestMeeting($this->matter));
+        $this->assertNull(MinutesRelationManager::closestMeeting($this->matter));
     }
 
     public function test_a_letters_new_meeting_during_another_asks_first(): void
@@ -193,11 +196,39 @@ class ExistingMeetingTest extends TestCase
 
     public function test_a_letter_of_a_deleted_matter_is_still_composed(): void
     {
-        $letter = app(\App\Services\MMS\Letters\LetterIssuer::class)->issue($this->template, $this->matter, [], [], now());
+        $letter = app(LetterIssuer::class)->issue($this->template, $this->matter, [], [], now());
         $this->matter->delete();
 
-        $composer = \App\Services\MMS\Letters\LetterIssuer::composerFor(MatterLetter::find($letter->id));
+        $composer = LetterIssuer::composerFor(MatterLetter::find($letter->id));
         $this->assertNotNull($composer);
         $this->get(route('letters.pdf', $letter->id))->assertSuccessful();
+    }
+
+    public function test_a_letters_own_date_is_not_the_meetings_and_choosing_a_meeting_leaves_it_as_typed(): void
+    {
+        // A letter dated by itself, with the meeting's link: its date is the letter's, not the meeting's.
+        $this->template->update([
+            'inputs' => [
+                ['key' => 'letter_date', 'label' => 'تاريخ الخطاب', 'type' => 'date'],
+                ['key' => 'meeting_link', 'label' => 'الرابط', 'type' => 'url'],
+            ],
+            'body' => '<p>{{recipients}}</p><p>{{input.letter_date}} {{meeting.date}} {{input.meeting_link}}</p>',
+        ]);
+        $event = $this->event();
+
+        $fields = LetterMeeting::fields($this->template->fresh());
+        $this->assertNull($fields['date']);
+        $this->assertSame('meeting_link', $fields['url']);
+
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('issue')
+            ->setTableActionData(['letter_template_id' => $this->template->id])
+            ->setTableActionData(['inputs.letter_date' => '2026-01-05'])
+            ->setTableActionData(['existing_event_id' => $event->id])
+            ->assertSet('mountedActions.0.data.inputs.letter_date', '2026-01-05');
+
+        // A date field named for the meeting (its label) is the meeting's.
+        $this->template->update(['inputs' => [['key' => 'd1', 'label' => 'تاريخ الاجتماع', 'type' => 'date'], ['key' => 't1', 'label' => 'وقت الاجتماع', 'type' => 'time']]]);
+        $this->assertSame(['d1', 't1'], [LetterMeeting::fields($this->template->fresh())['date'], LetterMeeting::fields($this->template->fresh())['time']]);
     }
 }

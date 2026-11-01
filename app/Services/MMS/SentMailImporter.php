@@ -8,6 +8,7 @@ use App\Helpers\HtmlFormatter;
 use App\Models\BulkMailCampaign;
 use App\Models\BulkMailLog;
 use App\Models\BulkMailRecipient;
+use App\Models\MatterEmail;
 use App\Support\EmailText;
 use Carbon\CarbonInterface;
 use Closure;
@@ -48,13 +49,13 @@ class SentMailImporter
      * The whole import, reporting into the given progress run. Never throws:
      * a failure is recorded on the run for the progress window to show.
      */
-    public function run(string $runId, string $name, string $senderKey, string $subjectContains, CarbonInterface $from, CarbonInterface $to, int $userId): void
+    public function run(string $runId, string $name, string $senderKey, string $subjectContains, CarbonInterface $from, CarbonInterface $to, int $userId, ?int $matterId = null): void
     {
         $this->report = fn (array $changes = [], ?string $step = null) => SentMailImportProgress::update($runId, $changes, $step);
 
         try {
             $messages = $this->sentMessages($senderKey, $subjectContains, $from, $to);
-            $campaign = $this->import($name, $senderKey, $messages, $userId);
+            $campaign = $this->import($name, $senderKey, $messages, $userId, $matterId);
 
             SentMailImportProgress::update($runId, [
                 'status' => SentMailImportProgress::DONE,
@@ -90,11 +91,12 @@ class SentMailImporter
     }
 
     /**
-     * Create the completed campaign and its sent recipients.
+     * Create the completed campaign and its sent recipients — each email remembered as sent (on the campaign's
+     * matter, when it has one), so its replies are watched for and kept as a letter's are (MatterReplyCollector).
      *
      * @param  list<array<string, mixed>>  $messages
      */
-    public function import(string $name, string $senderKey, array $messages, int $userId): BulkMailCampaign
+    public function import(string $name, string $senderKey, array $messages, int $userId, ?int $matterId = null): BulkMailCampaign
     {
         $known = BulkMailRecipient::query()
             ->whereIn('message_id', array_filter(array_column($messages, 'internetMessageId')))
@@ -125,7 +127,11 @@ class SentMailImporter
             }
         }
 
-        return DB::transaction(function () use ($name, $senderKey, $messages, $userId, $attachments): BulkMailCampaign {
+        // One sent from Wakeel itself (a letter, minutes) is remembered already: not twice.
+        $ids = array_values(array_filter(array_map(fn (array $message): ?string => MatterEmail::messageId($message['internetMessageId'] ?? null), $messages)));
+        $remembered = $ids === [] ? [] : MatterEmail::query()->where('direction', MatterEmail::SENT)->whereIn('message_id', $ids)->pluck('message_id')->all();
+
+        return DB::transaction(function () use ($name, $senderKey, $messages, $userId, $attachments, $matterId, $remembered): BulkMailCampaign {
             $first = $messages[0];
 
             $campaign = BulkMailCampaign::create([
@@ -133,6 +139,7 @@ class SentMailImporter
                 'subject' => (string) ($first['subject'] ?? $name),
                 'body' => HtmlFormatter::cleanHtml((string) ($first['body']['content'] ?? '')),
                 'from_sender_key' => $senderKey,
+                'matter_id' => $matterId,
                 'status' => BulkMailCampaignStatus::Completed,
                 'total_recipients' => count($messages),
                 // The attachment every one of these emails carried.
@@ -170,6 +177,23 @@ class SentMailImporter
                     'metadata' => ['imported' => true, 'subject' => $message['subject'] ?? null],
                     'timestamp' => $sentAt,
                 ]);
+
+                // Remembered as sent, when it went: its replies are looked for in the mailbox and kept with it.
+                $messageId = MatterEmail::messageId($message['internetMessageId'] ?? null);
+                if ($messageId === null || ! in_array($messageId, $remembered, true)) {
+                    MatterEmail::create([
+                        'matter_id' => $matterId,
+                        'direction' => MatterEmail::SENT,
+                        'source_type' => $recipient->getMorphClass(),
+                        'source_id' => $recipient->getKey(),
+                        'sender_key' => $senderKey,
+                        'message_id' => $messageId,
+                        'subject' => mb_substr((string) ($message['subject'] ?? ''), 0, 500),
+                        'to' => array_values(array_unique(array_map('mb_strtolower', [...self::addresses($to), ...self::addresses($message['ccRecipients'] ?? [])]))),
+                        'at' => $sentAt,
+                        'user_id' => $userId,
+                    ]);
+                }
 
                 $this->report(['imported' => $i + 1]);
             }
