@@ -239,6 +239,21 @@ class OneDriveClient
         ], (array) $response->json('value'));
     }
 
+    /**
+     * A short-lived link that shows a file in a frame — a PDF, an Office document, an image — rendered as
+     * the app, so given only to someone who may see the file. Null where OneDrive has no preview for it.
+     */
+    public function preview(string $user, string $itemId): ?string
+    {
+        try {
+            $url = $this->request('post', "/users/{$this->user($user)}/drive/items/".rawurlencode($itemId).'/preview')->json('getUrl');
+        } catch (Throwable) {
+            return null;
+        }
+
+        return is_string($url) && $url !== '' ? $url : null;
+    }
+
     /** A file's contents, by the short-lived link OneDrive gives for it. */
     public function download(string $downloadUrl): string
     {

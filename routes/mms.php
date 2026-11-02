@@ -10,6 +10,7 @@ use App\Http\Controllers\IncentiveCalculationPrintController;
 use App\Http\Controllers\LeaveRequestEmailActionController;
 use App\Http\Controllers\LegacyAttachmentPathController;
 use App\Http\Controllers\MatterReceivedNotificationController;
+use App\Http\Controllers\MinutesLiveFilesController;
 use App\Http\Controllers\PayrollJournalVoucherPrintController;
 use App\Http\Controllers\SalaryAuthorizationFormPrintController;
 use App\Http\Controllers\SignatureStampImageController;
@@ -22,6 +23,7 @@ use App\Services\MMS\BulkMailService;
 use App\Services\MMS\Letters\LetterDocx;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterPdf;
+use App\Services\MMS\Letters\MinutesLiveFiles;
 use App\Services\MMS\Letters\MinutesService;
 use App\Support\Branding;
 use App\Support\EditorFonts;
@@ -124,8 +126,18 @@ Route::middleware('auth')->group(function () {
             'join' => $minutes->joinUrl(),
             // Written in the template's fonts, as the PDF.
             'fonts' => EditorFonts::make([$minutes->template?->letter_font_id, $minutes->template?->arabic_font_id])->letterCss('.text'),
+            // The matter's files in OneDrive, to show one over the minutes — where the viewer may see a folder made.
+            'files' => MinutesLiveFiles::folders($minutes->matter, auth()->user())->isNotEmpty() ? route('minutes.live.files', $minutes) : null,
+            // The file the office chose on Record the meeting, shown over the minutes.
+            'shown' => MinutesLiveFiles::shown($minutes),
         ]);
     })->name('minutes.live');
+
+    // The matter's files in OneDrive, for the live view to show one over the minutes: the list, one file's
+    // link to show it, and — a PDF or an image OneDrive has no preview for — the file itself.
+    Route::get('minutes/{minutes}/live/files', [MinutesLiveFilesController::class, 'index'])->name('minutes.live.files');
+    Route::get('minutes/{minutes}/live/files/{folder}/{item}', [MinutesLiveFilesController::class, 'show'])->where('item', '[A-Za-z0-9!_.\-]{1,200}')->name('minutes.live.file');
+    Route::get('minutes/{minutes}/live/files/{folder}/{item}/content', [MinutesLiveFilesController::class, 'content'])->where('item', '[A-Za-z0-9!_.\-]{1,200}')->name('minutes.live.file.content')->middleware('throttle:30,1');
 
     Route::get('minutes/{minutes}/live/feed', function (MatterMinutes $minutes) {
         abort_unless(auth()->user()->can('view', $minutes->matter), 403);
@@ -136,6 +148,7 @@ Route::middleware('auth')->group(function () {
             'version' => md5($html),
             'html' => $html,
             'final' => $minutes->isFinal(),
+            'file' => MinutesLiveFiles::shown($minutes),
         ])->header('Cache-Control', 'no-store');
     })->name('minutes.live.feed');
 

@@ -170,6 +170,30 @@ class MatterOneDriveExplorer
         return ['name' => $info['name'], 'contents' => $this->client->download((string) $info['downloadUrl'])];
     }
 
+    /**
+     * A file to show on a screen — one in the matter's folder: the short-lived link that renders it in a frame
+     * (OneDrive's preview, when asked for: a PDF, an Office document, an image), its download link, and its
+     * page in OneDrive.
+     *
+     * @return array{name: string, mime: ?string, webUrl: string, previewUrl: ?string, downloadUrl: ?string}
+     */
+    public function show(MatterOneDriveFolder $folder, string $itemId, bool $preview = true): array
+    {
+        $info = $this->info($folder, $itemId);
+
+        if ($info['folder']) {
+            throw new RuntimeException(__('Only a file can be shown.'));
+        }
+
+        return [
+            'name' => $info['name'],
+            'mime' => $info['mime'] ?? null,
+            'webUrl' => $info['webUrl'],
+            'previewUrl' => $preview ? $this->client->preview($this->user($folder), $itemId) : null,
+            'downloadUrl' => $info['downloadUrl'],
+        ];
+    }
+
     /** One file's name, for what was picked. */
     public function name(MatterOneDriveFolder $folder, string $itemId): string
     {

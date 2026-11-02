@@ -3,7 +3,11 @@
     the meeting (Teams), so the attendees see the minutes as they're
     written. Updated every two seconds from what "Record the meeting"
     saves; where it is being written is shown briefly and, with "Follow"
-    on, scrolled to. The meeting is joined from its bar.
+    on, scrolled to. The meeting is joined from its bar, and a file from
+    the matter's OneDrive folders ($files — MinutesLiveFilesController)
+    is shown over the minutes, which go on being drawn behind it: one the
+    viewer picks from the Files list, or the one the office chose on
+    Record the meeting ($shown, and the feed's file), on every view.
 
     The minutes are shown on their pages, as the PDF has them: the
     letterhead's background and placed elements ($layout — LetterPdf::liveLayout),
@@ -28,6 +32,25 @@
         .bar button, .bar label { background: rgba(255,255,255,.12); color: inherit; border: 0; border-radius: .4rem; padding: .3rem .6rem; font: inherit; cursor: pointer; }
         .dot { display: inline-block; width: .6rem; height: .6rem; border-radius: 50%; background: #22c55e; box-shadow: 0 0 6px 2px rgba(34,197,94,.6); margin-inline-end: .35rem; }
         .dot.off { background: #ef4444; box-shadow: none; }
+
+        /* The matter's files: a list under the bar, and the one chosen over the minutes. */
+        #filesWrap { position: relative; }
+        #filesPanel { position: absolute; top: calc(100% + .4rem); inset-inline-end: 0; width: min(26rem, calc(100vw - 2rem)); max-height: 70vh; display: flex; flex-direction: column; background: #fff; color: #111827; border-radius: .5rem; box-shadow: 0 8px 30px rgba(0,0,0,.3); overflow: hidden; }
+        #filesPanel[hidden] { display: none; }
+        #filesSearch { margin: .5rem; padding: .4rem .6rem; border: 1px solid #d1d5db; border-radius: .4rem; font: inherit; }
+        #filesList { list-style: none; margin: 0; padding: 0 0 .25rem; overflow-y: auto; }
+        #filesList button { display: block; width: 100%; text-align: start; background: none; color: inherit; border: 0; border-radius: 0; padding: .45rem .75rem; font: inherit; cursor: pointer; }
+        #filesList button:hover { background: #eff6ff; }
+        #filesList .name { display: block; font-weight: 600; word-break: break-word; }
+        #filesList .where { display: block; font-size: 12px; color: #6b7280; }
+        #filesList .note { padding: .6rem .75rem; color: #6b7280; }
+        #viewer { position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column; background: #374151; }
+        #viewer[hidden] { display: none; }
+        #viewerBar { display: flex; align-items: center; gap: .75rem; padding: .4rem 1rem; background: #1f2937; color: #f9fafb; font-size: 14px; }
+        #viewerBar .name { flex: 1; font-weight: 600; word-break: break-word; }
+        #viewerBar a, #viewerBar button { background: rgba(255,255,255,.12); color: inherit; border: 0; border-radius: .4rem; padding: .3rem .6rem; font: inherit; cursor: pointer; text-decoration: none; white-space: nowrap; }
+        #frame { flex: 1; width: 100%; border: 0; background: #fff; }
+        #viewerNote { padding: 2rem; text-align: center; color: #f9fafb; }
 
         /* The pages, side by side down the screen. */
         #pages { zoom: var(--z); display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 16px 0 32px; }
@@ -61,12 +84,31 @@
         <button type="button" onclick="resize(-2)" aria-label="{{ __('Smaller text') }}">A−</button>
         <button type="button" onclick="resize(2)" aria-label="{{ __('Larger text') }}">A+</button>
         <label><input type="checkbox" id="follow" checked> {{ __('Follow') }}</label>
+        @if ($files)
+            <span id="filesWrap">
+                <button type="button" id="filesBtn" onclick="toggleFiles()" title="{{ __('Show a file over the minutes') }}">{{ __('Files') }} ▾</button>
+                <div id="filesPanel" hidden>
+                    <input type="search" id="filesSearch" placeholder="{{ __('Search files') }}" autocomplete="off">
+                    <ul id="filesList"></ul>
+                </div>
+            </span>
+        @endif
         @if ($join)
             <a href="{{ $join }}" target="_blank" rel="noopener" style="background: #16a34a; color: #fff; border-radius: .4rem; padding: .3rem .7rem; text-decoration: none; font-weight: 600;">{{ __('Join the meeting') }}</a>
         @endif
     </div>
 
     <div id="pages"></div>
+
+    <div id="viewer" hidden>
+            <div id="viewerBar">
+                <span class="name" id="viewerName"></span>
+                <a id="viewerOpen" href="#" target="_blank" rel="noopener" hidden>{{ __('Open in OneDrive') }} ↗</a>
+                <button type="button" onclick="closeFile()">✕ {{ __('Back to the minutes') }}</button>
+            </div>
+            <div id="viewerNote" hidden></div>
+            <iframe id="frame" hidden allowfullscreen></iframe>
+        </div>
 
     <script>
         const layout = @js($layout);
@@ -220,6 +262,7 @@
                 final = Boolean(data.final);
                 document.getElementById('dot').classList.remove('off');
                 document.getElementById('state').textContent = data.final ? @js(__('Final')) : @js(__('Live'));
+                followFile(data.file ?? null);
 
                 if (data.version === version) { return; }
                 version = data.version;
@@ -240,8 +283,124 @@
             }
         }
 
+        // The matter's files in OneDrive: listed when asked for (searched when words are typed), the one
+        // chosen shown over the minutes in a frame — by OneDrive's own preview, or as it is — and closed with
+        // its button or Esc. The minutes go on being drawn behind.
+        const filesUrl = @js($files);
+        const filesPanel = document.getElementById('filesPanel');
+        const viewer = document.getElementById('viewer');
+        let filesListed = false;
+        let searchTimer = null;
+
+        function toggleFiles(open) {
+            if (! filesPanel) { return; }
+            const show = open ?? filesPanel.hidden;
+            filesPanel.hidden = ! show;
+            if (show) {
+                if (! filesListed) { loadFiles(''); }
+                document.getElementById('filesSearch').focus();
+            }
+        }
+
+        function note(list, text) {
+            const item = document.createElement('li');
+            item.className = 'note';
+            item.textContent = text;
+            list.appendChild(item);
+        }
+
+        async function loadFiles(words) {
+            const list = document.getElementById('filesList');
+            list.textContent = '';
+            note(list, @js(__('Loading…')));
+            try {
+                const response = await fetch(filesUrl + (words ? '?q=' + encodeURIComponent(words) : ''), { headers: { 'Accept': 'application/json' }, credentials: 'same-origin', cache: 'no-store' });
+                if (! response.ok) { throw new Error(response.status); }
+                const data = await response.json();
+                filesListed = words === '';
+                list.textContent = '';
+                if (data.files.length === 0) { note(list, @js(__('No files'))); }
+                data.files.forEach((file) => {
+                    const item = document.createElement('li');
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.innerHTML = '<span class="name"></span><span class="where"></span>';
+                    button.querySelector('.name').textContent = file.name;
+                    button.querySelector('.where').textContent = [file.assistant, file.where].filter(Boolean).join(' / ');
+                    button.addEventListener('click', () => showFile(file));
+                    item.appendChild(button);
+                    list.appendChild(item);
+                });
+                (data.errors || []).forEach((error) => note(list, error));
+            } catch (e) {
+                list.textContent = '';
+                note(list, @js(__('The files could not be read')));
+            }
+        }
+
+        async function showFile(file) {
+            toggleFiles(false);
+            const frame = document.getElementById('frame');
+            const message = document.getElementById('viewerNote');
+            const open = document.getElementById('viewerOpen');
+            document.getElementById('viewerName').textContent = file.name;
+            open.hidden = true;
+            frame.hidden = true;
+            frame.src = 'about:blank';
+            message.hidden = false;
+            message.textContent = @js(__('Loading…'));
+            viewer.style.top = document.querySelector('.bar').offsetHeight + 'px';
+            viewer.hidden = false;
+            try {
+                const response = await fetch(file.url, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin', cache: 'no-store' });
+                if (! response.ok) { throw new Error(response.status); }
+                const data = await response.json();
+                open.href = data.open || '#';
+                open.hidden = ! data.open;
+                if (data.url) {
+                    frame.src = data.url;
+                    frame.hidden = false;
+                    message.hidden = true;
+                } else {
+                    message.textContent = @js(__('This file cannot be shown here. Open it in OneDrive.'));
+                }
+            } catch (e) {
+                message.textContent = @js(__('The file could not be shown'));
+            }
+        }
+
+        function closeFile() {
+            viewer.hidden = true;
+            document.getElementById('frame').src = 'about:blank';
+        }
+
+        if (filesPanel) {
+            document.getElementById('filesSearch').addEventListener('input', (event) => {
+                clearTimeout(searchTimer);
+                searchTimer = setTimeout(() => loadFiles(event.target.value.trim()), 400);
+            });
+            document.addEventListener('click', (event) => {
+                if (! filesPanel.hidden && ! event.target.closest('#filesWrap')) { toggleFiles(false); }
+            });
+            document.addEventListener('keydown', (event) => {
+                if (event.key !== 'Escape') { return; }
+                if (! viewer.hidden) { closeFile(); } else { toggleFiles(false); }
+            });
+        }
+
+        // The file the office chose on Record the meeting: shown as soon as it is, taken off when hidden —
+        // a change there, not what this viewer opened or closed by hand.
+        let remoteFile = null;
+        function followFile(file) {
+            const url = file ? file.url : null;
+            if (url === remoteFile) { return; }
+            remoteFile = url;
+            if (file) { showFile(file); } else { closeFile(); }
+        }
+
         applyZoom();
         paginate(@js($html));
+        followFile(@js($shown));
         // Pusher: the text is asked for when it changes; the poll is a slow safety net.
         // Without it, every two seconds.
         // Finalised, nothing more is typed: once a minute is enough.

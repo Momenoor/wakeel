@@ -20,7 +20,7 @@ use Spatie\Activitylog\Support\LogOptions;
  * items: [{type: question|comment, text, answer}]
  * attendance: who joined its Teams call, and when (TeamsAttendance): [{name, email, role, joined_at, left_at, seconds, intervals, party_id}]
  */
-#[Fillable('matter_id', 'letter_template_id', 'letterhead_id', 'calendar_event_id', 'number', 'meeting_at', 'meeting_link', 'attendees', 'attendance', 'attendance_read_at', 'items', 'inputs', 'body', 'status', 'attachment_id', 'created_by', 'finalized_at', 'opening', 'closing', 'ended_at')]
+#[Fillable('matter_id', 'letter_template_id', 'letterhead_id', 'calendar_event_id', 'number', 'meeting_at', 'meeting_link', 'attendees', 'attendance', 'attendance_read_at', 'items', 'inputs', 'body', 'status', 'attachment_id', 'created_by', 'finalized_at', 'opening', 'closing', 'ended_at', 'live_file')]
 class MatterMinutes extends Model
 {
     use LogsActivity;
@@ -56,6 +56,7 @@ class MatterMinutes extends Model
             'attendance_read_at' => 'datetime',
             'items' => 'array',
             'inputs' => 'array',
+            'live_file' => 'array',
         ];
     }
 
