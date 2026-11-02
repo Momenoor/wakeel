@@ -33,6 +33,7 @@ use Livewire\Livewire;
 use Mockery;
 use RuntimeException;
 use Spatie\Permission\Models\Role;
+use Tests\Support\MailSenders;
 use Tests\TestCase;
 
 /**
@@ -228,10 +229,10 @@ class MatterOneDriveFilesTest extends TestCase
         Storage::fake('local');
         Storage::fake('public');
         $this->withoutDefer();
-        \Tests\Support\MailSenders::add('iflas', ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
+        MailSenders::add('iflas', ['username' => 'iflas@jpa.ae', 'address' => 'iflas@jpa.ae', 'name' => 'JPA', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
         config([
             'mail.mailers.smtp.transport' => 'array',
-            ]);
+        ]);
         $this->app->instance(SentFolder::class, Mockery::spy(SentFolder::class));
         $sent = [];
         Event::listen(MessageSent::class, function (MessageSent $event) use (&$sent) {
@@ -246,7 +247,8 @@ class MatterOneDriveFilesTest extends TestCase
 
         // At once: those at the top and one folder down; by search, any in the folder.
         $field = EmailSendFields::oneDriveFiles($this->matter);
-        $this->assertSame(['report.pdf', 'letter.docx — 01 المراسلات'], array_values($field->getOptions()));
+        // Each part in its own direction: an Arabic folder beside a Latin name.
+        $this->assertSame(['<bdi>report.pdf</bdi>', '<bdi>letter.docx</bdi> — <bdi>01 المراسلات</bdi>'], array_values($field->getOptions()));
         $this->assertSame([$this->folder->id.'|inner-id'], array_keys($field->getSearchResults('letter')));
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])

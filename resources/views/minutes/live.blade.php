@@ -41,6 +41,8 @@
         #filesList { list-style: none; margin: 0; padding: 0 0 .25rem; overflow-y: auto; }
         #filesList button { display: block; width: 100%; text-align: start; background: none; color: inherit; border: 0; border-radius: 0; padding: .45rem .75rem; font: inherit; cursor: pointer; }
         #filesList button:hover { background: #eff6ff; }
+        /* A name or a path in Arabic beside one in Latin letters: each read its own way. */
+        #filesList .name, #filesList .where, #viewerBar .name { unicode-bidi: plaintext; }
         #filesList .name { display: block; font-weight: 600; word-break: break-word; }
         #filesList .where { display: block; font-size: 12px; color: #6b7280; }
         #filesList .note { padding: .6rem .75rem; color: #6b7280; }
@@ -326,7 +328,13 @@
                     button.type = 'button';
                     button.innerHTML = '<span class="name"></span><span class="where"></span>';
                     button.querySelector('.name').textContent = file.name;
-                    button.querySelector('.where').textContent = [file.assistant, file.where].filter(Boolean).join(' / ');
+                    const where = button.querySelector('.where');
+                    [file.assistant, file.where].filter(Boolean).forEach((part, i) => {
+                        if (i > 0) { where.appendChild(document.createTextNode(' / ')); }
+                        const piece = document.createElement('bdi');
+                        piece.textContent = part;
+                        where.appendChild(piece);
+                    });
                     button.addEventListener('click', () => showFile(file));
                     item.appendChild(button);
                     list.appendChild(item);

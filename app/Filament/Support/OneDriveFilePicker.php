@@ -39,7 +39,7 @@ final class OneDriveFilePicker
                 $whose = $folders()->count() > 1 ? $folder->party?->name : null;
 
                 return collect($files)->mapWithKeys(fn (array $file): array => [
-                    $folder->getKey().self::SEPARATOR.$file['id'] => implode(' — ', array_filter([$file['name'], $file['where'], $whose])),
+                    $folder->getKey().self::SEPARATOR.$file['id'] => self::label([$file['name'], $file['where'], $whose]),
                 ])->all();
             })
             ->all();
@@ -48,13 +48,26 @@ final class OneDriveFilePicker
             ->label(__('From OneDrive'))
             ->multiple()
             ->searchable()
+            // The labels carry their parts' directions (label()).
+            ->allowHtml()
             ->options(fn (): array => $options())
             ->getSearchResultsUsing(fn (string $search): array => $options($search))
             ->getOptionLabelsUsing(fn (array $values): array => collect($values)
-                ->mapWithKeys(fn (string $value): array => [$value => self::names($matter, [$value])[0] ?? $value])
+                ->mapWithKeys(fn (string $value): array => [$value => self::label([self::names($matter, [$value])[0] ?? $value])])
                 ->all())
             ->visible(fn (): bool => $folders()->isNotEmpty())
             ->live();
+    }
+
+    /**
+     * A file's name, where it is and whose folder, as one option — each part read in its own direction, so
+     * an Arabic folder name beside a Latin file name (or the other way) is not turned about.
+     *
+     * @param  list<?string>  $parts
+     */
+    public static function label(array $parts): string
+    {
+        return implode(' — ', array_map(fn (string $part): string => '<bdi>'.e($part).'</bdi>', array_values(array_filter($parts, fn (?string $part): bool => filled($part)))));
     }
 
     /**

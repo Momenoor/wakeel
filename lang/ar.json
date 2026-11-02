@@ -5203,8 +5203,9 @@
     "This file cannot be shown here. Open it in OneDrive.": "لا يمكن عرض هذا الملف هنا. افتحه في OneDrive.",
     "Only a file can be shown.": "لا يُعرض إلا ملف.",
     "Show a file on the live view": "عرض ملف في العرض المباشر",
-    "The file is shown over the minutes on the live view the attendees watch, until it is hidden. Type words to search the whole folder.": "يُعرض الملف فوق المحضر في العرض المباشر الذي يتابعه الحاضرون حتى يُخفى. اكتب كلمات للبحث في المجلد كله.",
     "Shown on the live view": "عُرض في العرض المباشر",
     "Hide the file": "إخفاء الملف",
-    "The live view shows the minutes again": "عاد العرض المباشر إلى المحضر"
+    "The live view shows the minutes again": "عاد العرض المباشر إلى المحضر",
+    "Show on the live view": "عرض في العرض المباشر",
+    "The matter's folder in OneDrive: open its folders, and \"Show on the live view\" puts a file over the minutes on every live view the attendees watch, until it is hidden.": "مجلد القضية في OneDrive: افتح مجلداته، و«عرض في العرض المباشر» يعرض ملفاً فوق المحضر في كل عرض مباشر يتابعه الحاضرون حتى يُخفى."
 }

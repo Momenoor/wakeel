@@ -3,6 +3,7 @@
 namespace Tests\Feature\Letters;
 
 use App\Filament\Mms\Resources\Matters\Pages\RecordMinutes;
+use App\Livewire\MatterOneDriveFiles;
 use App\Models\LetterTemplate;
 use App\Models\Matter;
 use App\Models\MatterMinutes;
@@ -155,14 +156,28 @@ class MinutesLiveFilesTest extends TestCase
         $this->get(route('minutes.live.file.content', [$this->minutes, $this->folder, 'file-id']))->assertForbidden();
     }
 
-    public function test_the_office_shows_a_file_on_every_live_view_from_record_the_meeting(): void
+    public function test_the_office_shows_a_file_on_every_live_view_from_the_matters_folder_on_record_the_meeting(): void
     {
         $page = Livewire::test(RecordMinutes::class, ['record' => $this->matter->getRouteKey(), 'minutes' => $this->minutes->getKey()])
             ->assertActionVisible('showFile')
-            ->assertActionHidden('hideFile')
-            ->callAction('showFile', ['file' => $this->folder->id.'|inner-id'])
-            ->assertHasNoActionErrors()
-            ->assertNotified(__('Shown on the live view'));
+            ->assertActionHidden('hideFile');
+
+        // The matter's folder as a file manager, picking for these minutes: nothing changed or downloaded, a
+        // folder opened, a file shown — the page told, to close it and offer Hide the file.
+        Livewire::test(MatterOneDriveFiles::class, ['matter' => $this->matter, 'pickForMinutes' => $this->minutes->getKey()])
+            ->assertTableActionHidden('upload')
+            ->assertTableActionHidden('newFolder')
+            ->assertTableActionHidden('download', 'file-id')
+            ->assertTableActionHidden('onedrive', 'file-id')
+            ->assertTableActionHidden('rename', 'file-id')
+            ->assertTableActionHidden('delete', 'file-id')
+            ->assertTableActionVisible('show', 'file-id')
+            ->assertTableActionHidden('show', 'sub-id')
+            ->callTableAction('open', 'sub-id')
+            ->assertCanSeeTableRecords(['inner-id'])
+            ->callTableAction('show', 'inner-id')
+            ->assertNotified(__('Shown on the live view'))
+            ->assertDispatched('live-file-shown');
         $this->assertSame(['folder' => $this->folder->id, 'item' => 'inner-id', 'name' => 'letter.docx'], $this->minutes->fresh()->live_file);
 
         // Every live view: told by the feed, and shown from the start.
@@ -171,20 +186,15 @@ class MinutesLiveFilesTest extends TestCase
         // (Written through @js as JSON.parse('…'), its slashes escaped twice — the item's id is in it as it is.)
         $this->get(route('minutes.live', $this->minutes))->assertOk()->assertSee('followFile(JSON.parse(', false)->assertSee('inner-id')->assertSee('letter.docx');
 
-        // Not in the matter's folder: refused, the file shown left as it is.
-        $page->callAction('showFile', ['file' => $this->folder->id.'|outside-id'])->assertNotified(__('The file could not be shown'));
-        $this->assertSame('inner-id', $this->minutes->fresh()->live_file['item']);
-
-        $page->assertActionVisible('hideFile')->callAction('hideFile')->assertNotified(__('The live view shows the minutes again'));
+        $page->dispatch('live-file-shown')->assertActionVisible('hideFile')->callAction('hideFile')->assertNotified(__('The live view shows the minutes again'));
         $this->assertNull($this->minutes->fresh()->live_file);
         $this->getJson(route('minutes.live.feed', $this->minutes))->assertOk()->assertJsonPath('file', null);
     }
 
-    public function test_the_same_list_is_offered_on_record_the_meeting(): void
+    public function test_a_file_outside_the_matters_folder_is_not_shown(): void
     {
-        $options = app(MinutesLiveFiles::class)->options($this->minutes, auth()->user());
+        $this->expectException(\RuntimeException::class);
 
-        $this->assertSame([$this->folder->id.'|file-id' => 'report.pdf — Amr', $this->folder->id.'|inner-id' => 'letter.docx — Amr / 01 المراسلات'], $options);
-        $this->assertSame([$this->folder->id.'|inner-id' => 'letter.docx — Amr / 01 المراسلات'], app(MinutesLiveFiles::class)->options($this->minutes, auth()->user(), 'letter'));
+        app(MinutesLiveFiles::class)->show($this->minutes, auth()->user(), $this->folder->id.'|outside-id');
     }
 }

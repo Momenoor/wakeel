@@ -16,7 +16,8 @@ use Throwable;
  * The files in a matter's OneDrive folders, for the live view of its minutes: listed for whoever may view the
  * matter (the folders they may see, made already) to show one over the minutes on their own screen — and the
  * one the office chose on Record the meeting (matter_minutes.live_file: its folder, item and name), shown over
- * the minutes on every live view at once until it is hidden.
+ * the minutes on every live view at once until it is hidden — picked in the matter's folder as a file manager
+ * (MatterOneDriveFiles).
  */
 class MinutesLiveFiles
 {
@@ -65,24 +66,8 @@ class MinutesLiveFiles
     }
 
     /**
-     * The same, as a Select's options: "folder|item" => the name, with the assistant and where it is.
-     *
-     * @return array<string, string>
-     */
-    public function options(MatterMinutes $minutes, ?User $user, string $words = ''): array
-    {
-        $options = [];
-
-        foreach ($this->list($minutes, $user, $words)['files'] as $file) {
-            $options[$file['folder'].'|'.$file['id']] = $file['name'].' — '.implode(' / ', array_filter([$file['assistant'], $file['where']]));
-        }
-
-        return $options;
-    }
-
-    /**
-     * Show this file ("folder|item", as options() keys them) over the minutes on every live view — one in the
-     * matter's folder, in a folder the one choosing may see.
+     * Show this file ("folder|item": the folder's id and OneDrive's item id) over the minutes on every live
+     * view — one in the matter's folder, in a folder the one choosing may see.
      */
     public function show(MatterMinutes $minutes, ?User $user, string $key): void
     {

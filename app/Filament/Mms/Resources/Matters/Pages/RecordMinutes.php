@@ -10,7 +10,6 @@ use App\Models\MatterMinutes;
 use App\Services\MMS\Letters\MinutesLiveFiles;
 use App\Services\MMS\Letters\MinutesService;
 use Filament\Actions\Action;
-use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
@@ -19,15 +18,16 @@ use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\HtmlString;
-use Throwable;
+use Livewire\Attributes\On;
 
 /**
  * Recording a meeting, as a page in three steps (MinutesRecordForm):
  * attendees and opening, questions and answers, other items and closing.
  * Saved as it's typed for the live view (autosaveMinutes), and on Save —
  * when the attendees' ID numbers, phones and emails are kept on their
- * parties too. A file from the matter's OneDrive folders is shown over
- * the minutes on every live view from here (MinutesLiveFiles), and hidden.
+ * parties too. A file from the matter's OneDrive folders — its folder as
+ * a file manager (MatterOneDriveFiles) — is shown over the minutes on
+ * every live view from here (MinutesLiveFiles), and hidden.
  */
 class RecordMinutes extends Page
 {
@@ -42,9 +42,6 @@ class RecordMinutes extends Page
 
     /** @var array<string, mixed>|null */
     public ?array $data = [];
-
-    /** The files to show, read once a request: the Select's options and the one chosen's label ask for them. */
-    private ?array $filesToShow = null;
 
     public function mount(int|string $record, int|string $minutes): void
     {
@@ -123,36 +120,18 @@ class RecordMinutes extends Page
                 ->color('success')
                 ->visible(fn (): bool => $this->minutes()->joinUrl() !== null)
                 ->url(fn (): ?string => $this->minutes()->joinUrl(), shouldOpenInNewTab: true),
-            // A file from the matter's OneDrive folders — the live view's own list — shown over the minutes on
-            // every live view the attendees watch, until hidden.
+            // The matter's folder in OneDrive as a file manager: a file shown over the minutes on every live
+            // view the attendees watch, until hidden (MatterOneDriveFiles, picking for these minutes).
             Action::make('showFile')
                 ->label(__('Show a file on the live view'))
                 ->icon('heroicon-o-document-magnifying-glass')
                 ->visible(fn (): bool => MinutesLiveFiles::folders($this->getRecord(), auth()->user())->isNotEmpty())
                 ->modalHeading(__('Show a file on the live view'))
-                ->modalDescription(__('The file is shown over the minutes on the live view the attendees watch, until it is hidden. Type words to search the whole folder.'))
-                ->modalSubmitActionLabel(__('Show'))
-                ->schema([
-                    Select::make('file')
-                        ->label(__('File'))
-                        ->required()
-                        ->searchable()
-                        ->options(fn (): array => $this->filesToShow())
-                        ->getSearchResultsUsing(fn (string $search): array => app(MinutesLiveFiles::class)->options($this->minutes(), auth()->user(), $search))
-                        ->getOptionLabelUsing(fn ($value): ?string => $this->filesToShow()[$value] ?? (string) $value),
-                ])
-                ->action(function (array $data): void {
-                    try {
-                        app(MinutesLiveFiles::class)->show($this->minutes(), auth()->user(), (string) $data['file']);
-                    } catch (Throwable $e) {
-                        Notification::make()->danger()->title(__('The file could not be shown'))->body($e->getMessage())->send();
-
-                        return;
-                    }
-
-                    $this->loadedMinutes = null;
-                    Notification::make()->success()->title(__('Shown on the live view'))->body((string) ($this->minutes()->live_file['name'] ?? ''))->send();
-                }),
+                ->modalDescription(__('The matter\'s folder in OneDrive: open its folders, and "Show on the live view" puts a file over the minutes on every live view the attendees watch, until it is hidden.'))
+                ->modalWidth('6xl')
+                ->modalContent(fn () => view('filament.mms.minutes.pick-live-file', ['matter' => $this->getRecord(), 'minutesId' => $this->minutesId]))
+                ->modalSubmitAction(false)
+                ->modalCancelActionLabel(__('Close')),
             Action::make('hideFile')
                 ->label(__('Hide the file'))
                 ->icon('heroicon-o-eye-slash')
@@ -229,14 +208,12 @@ class RecordMinutes extends Page
         MinutesService::saveRecorded($minutes, (array) $this->data);
     }
 
-    /**
-     * The files that can be shown on the live view, "folder|item" => name.
-     *
-     * @return array<string, string>
-     */
-    private function filesToShow(): array
+    /** The file manager in Show a file on the live view showed one: closed, and Hide the file offered. */
+    #[On('live-file-shown')]
+    public function liveFileShown(): void
     {
-        return $this->filesToShow ??= app(MinutesLiveFiles::class)->options($this->minutes(), auth()->user());
+        $this->loadedMinutes = null;
+        $this->unmountAction();
     }
 
     /** The matter, on its minutes tab. */

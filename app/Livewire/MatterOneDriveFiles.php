@@ -5,6 +5,7 @@ namespace App\Livewire;
 use App\Filament\Concerns\RefreshesMatterPage;
 use App\Models\Matter;
 use App\Models\MatterOneDriveFolder;
+use App\Services\MMS\Letters\MinutesLiveFiles;
 use App\Services\MMS\MatterOneDriveExplorer;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Support\Dates;
@@ -37,7 +38,9 @@ use Throwable;
  * files downloaded or opened in OneDrive; for whoever can change the
  * matter, files put in, folders made, renamed or deleted (to the
  * OneDrive recycle bin). Never outside the matter's folder
- * (MatterOneDriveExplorer).
+ * (MatterOneDriveExplorer). Picking a file for the live view of minutes
+ * (Record the meeting — pickForMinutes): the folders opened the same,
+ * nothing changed, and the one thing done with a file is to show it.
  */
 class MatterOneDriveFiles extends Component implements HasActions, HasSchemas, HasTable
 {
@@ -55,6 +58,10 @@ class MatterOneDriveFiles extends Component implements HasActions, HasSchemas, H
     #[Locked]
     public ?int $folderId = null;
 
+    /** The minutes a file is picked for, to show on their live view — else the Files tab as it is. */
+    #[Locked]
+    public ?int $pickForMinutes = null;
+
     /** @var list<array{id: string, name: string}> the folders opened, from the matter folder down */
     #[Locked]
     public array $trail = [];
@@ -70,9 +77,10 @@ class MatterOneDriveFiles extends Component implements HasActions, HasSchemas, H
 
     private ?bool $mayChange = null;
 
-    public function mount(Matter $matter): void
+    public function mount(Matter $matter, ?int $pickForMinutes = null): void
     {
         $this->matterId = $matter->getKey();
+        $this->pickForMinutes = $pickForMinutes;
         $this->pickFolder();
 
         // The matter opened: its OneDrive read afresh, then kept as you browse.
@@ -143,7 +151,7 @@ class MatterOneDriveFiles extends Component implements HasActions, HasSchemas, H
 
     private function canChange(): bool
     {
-        return $this->mayChange ??= (bool) (($matter = $this->matter()) && auth()->user()?->can('update', $matter));
+        return $this->mayChange ??= $this->pickForMinutes === null && (bool) (($matter = $this->matter()) && auth()->user()?->can('update', $matter));
     }
 
     private function explorer(): MatterOneDriveExplorer
@@ -211,9 +219,9 @@ class MatterOneDriveFiles extends Component implements HasActions, HasSchemas, H
                     ->formatStateUsing(fn ($state, array $record) => $record['folder'] ? null : Number::fileSize((int) $state, maxPrecision: 1))
                     ->placeholder('—'),
             ])
-            // A folder opens; a file opens in OneDrive.
-            ->recordAction(fn (array $record): ?string => $record['folder'] ? 'open' : null)
-            ->recordUrl(fn (array $record): ?string => $record['folder'] ? null : $record['webUrl'], shouldOpenInNewTab: true)
+            // A folder opens; a file opens in OneDrive — or, picking for the live view, is shown on it.
+            ->recordAction(fn (array $record): ?string => $record['folder'] ? 'open' : ($this->pickForMinutes !== null ? 'show' : null))
+            ->recordUrl(fn (array $record): ?string => $record['folder'] || $this->pickForMinutes !== null ? null : $record['webUrl'], shouldOpenInNewTab: true)
             ->headerActions([
                 $this->uploadAction(),
                 $this->newFolderAction(),
@@ -237,15 +245,31 @@ class MatterOneDriveFiles extends Component implements HasActions, HasSchemas, H
                         $this->trail[] = ['id' => $record['id'], 'name' => $record['name']];
                         $this->resetTable();
                     }),
+                // Picking for the live view: the one thing done with a file.
+                Action::make('show')
+                    ->label(__('Show on the live view'))
+                    ->icon('heroicon-o-document-magnifying-glass')
+                    ->visible(fn (array $record): bool => $this->pickForMinutes !== null && ! $record['folder'])
+                    ->action(fn (array $record) => $this->attempt(function () use ($record): void {
+                        $matter = $this->matter();
+                        abort_unless($matter && auth()->user()?->can('update', $matter), 403);
+
+                        $minutes = $matter->minutes()->findOrFail($this->pickForMinutes);
+                        app(MinutesLiveFiles::class)->show($minutes, auth()->user(), $this->folder()->getKey().'|'.$record['id']);
+                        Notification::make()->success()->title(__('Shown on the live view'))->body($record['name'])->send();
+                        // Record the meeting closes the file manager and offers Hide the file.
+                        $this->dispatch('live-file-shown');
+                    })),
                 Action::make('download')
                     ->label(__('Download'))
                     ->icon('heroicon-o-arrow-down-tray')
-                    ->visible(fn (array $record): bool => ! $record['folder'])
+                    ->visible(fn (array $record): bool => ! $record['folder'] && $this->pickForMinutes === null)
                     ->action(fn (array $record) => $this->attempt(fn () => redirect()->away($this->explorer()->downloadUrl($this->folder(), $record['id'])))),
                 Action::make('onedrive')
                     ->label(__('Open in OneDrive'))
                     ->icon('heroicon-o-arrow-top-right-on-square')
                     ->color('gray')
+                    ->visible(fn (): bool => $this->pickForMinutes === null)
                     ->url(fn (array $record): string => $record['webUrl'], shouldOpenInNewTab: true),
                 Action::make('rename')
                     ->label(__('Rename'))
