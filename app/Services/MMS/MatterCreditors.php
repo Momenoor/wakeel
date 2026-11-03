@@ -9,6 +9,8 @@ use App\Models\MatterContact;
 use App\Models\MatterCreditor;
 use App\Models\MatterCreditorAddress;
 use App\Models\MatterEmail;
+use App\Models\MatterParty;
+use App\Models\Party;
 use App\Support\Addresses;
 use App\Support\ArabicSearch;
 use Illuminate\Database\Eloquent\Builder;
@@ -118,24 +120,120 @@ final class MatterCreditors
 
     /**
      * The Contacts tab's rows given, each made a creditor (merge()) by its name, its own addresses and phones — a
-     * party stays a party too, and is then both. One a creditor or an agent already, or with no address, is left as
-     * it is. How many were made.
+     * party stays a party too, and is then both, its representatives on the matter linked as its agents. One a
+     * creditor or an agent already, or with no address, is left as it is. How many were made, and how many
+     * representatives' addresses were linked.
      *
      * @param  iterable<array<string, mixed>>  $rows  as MatterContactsExport::rows() gives them
+     * @return array{0: int, 1: int}
      */
-    public function makeCreditors(Matter $matter, iterable $rows): int
+    public function makeCreditors(Matter $matter, iterable $rows): array
     {
+        $rows = collect($rows)->filter(fn ($row): bool => is_array($row) && ($row['creditor_id'] ?? null) === null && ($row['own'] ?? []) !== []);
+        // A representative ticked along with the party it stands for: linked as its agent when the party is made
+        // a creditor, not made a creditor of its own.
+        $partyIds = $rows->pluck('party_id')->filter()->map(fn ($id): int => (int) $id)->all();
+        $representedBy = self::representedBy($matter, $partyIds);
         $made = 0;
+        $linked = [];
 
         foreach ($rows as $row) {
-            if (! is_array($row) || ($row['creditor_id'] ?? null) !== null || ($row['own'] ?? []) === []) {
+            $partyId = filled($row['party_id'] ?? null) ? (int) $row['party_id'] : null;
+
+            if ($partyId !== null && isset($representedBy[$partyId]) && in_array($representedBy[$partyId], $partyIds, true)) {
                 continue;
             }
 
-            $made += $this->merge($matter, (string) ($row['name'] ?? ''), (array) $row['own'], null, array_map('trim', explode(',', (string) ($row['phones'] ?? '')))) !== null ? 1 : 0;
+            $creditor = $this->merge($matter, (string) ($row['name'] ?? ''), (array) $row['own'], null, array_map('trim', explode(',', (string) ($row['phones'] ?? ''))));
+
+            if ($creditor === null) {
+                continue;
+            }
+
+            $made++;
+
+            if ($partyId !== null) {
+                $linked = [...$linked, ...$this->linkRepresentatives($matter, $creditor, $partyId)];
+            }
         }
 
-        return $made;
+        if ($linked !== []) {
+            $this->refile($matter, $linked);
+        }
+
+        return [$made, count($linked)];
+    }
+
+    /**
+     * A party's representatives on the matter (its lawyers), each by its party id: its name and its addresses.
+     *
+     * @return array<int, array{name: string, emails: list<string>}>
+     */
+    public static function representativesOf(Matter $matter, int $partyId): array
+    {
+        return MatterParty::query()->where('matter_id', $matter->getKey())->where('role', 'representative')
+            ->whereHas('parentMatterParty', fn (Builder $query) => $query->where('party_id', $partyId))
+            ->with('party:id,name,email')->get()
+            ->filter(fn (MatterParty $representative): bool => $representative->party !== null)
+            ->mapWithKeys(fn (MatterParty $representative): array => [(int) $representative->party_id => [
+                'name' => (string) $representative->party->name,
+                'emails' => Addresses::emails(Party::values($representative->party->email)),
+            ]])
+            ->all();
+    }
+
+    /**
+     * Of the parties given, those that are representatives on the matter: each by its party id, the party it
+     * stands for.
+     *
+     * @param  list<int>  $partyIds
+     * @return array<int, int>
+     */
+    private static function representedBy(Matter $matter, array $partyIds): array
+    {
+        if ($partyIds === []) {
+            return [];
+        }
+
+        return MatterParty::query()->where('matter_id', $matter->getKey())->where('role', 'representative')->whereIn('party_id', $partyIds)
+            ->with('parentMatterParty:id,party_id')->get()
+            ->filter(fn (MatterParty $representative): bool => $representative->parentMatterParty?->party_id !== null)
+            ->mapWithKeys(fn (MatterParty $representative): array => [(int) $representative->party_id => (int) $representative->parentMatterParty->party_id])
+            ->all();
+    }
+
+    /**
+     * A party made a creditor: its representatives on the matter linked as the creditor's agents, by their names
+     * and addresses — an address a creditor of the matter has already is left where it is. The addresses linked,
+     * for their emails to move (refile()).
+     *
+     * @return list<string>
+     */
+    public function linkRepresentatives(Matter $matter, MatterCreditor $creditor, int $partyId): array
+    {
+        $representatives = self::representativesOf($matter, $partyId);
+
+        if ($representatives === []) {
+            return [];
+        }
+
+        $taken = $matter->creditorAddresses()->pluck('email')->map(fn ($email): string => mb_strtolower((string) $email))->all();
+        $linked = [];
+
+        foreach ($representatives as $representative) {
+            foreach ($representative['emails'] as $email) {
+                $email = mb_strtolower($email);
+
+                if (in_array($email, $taken, true)) {
+                    continue;
+                }
+
+                MatterCreditor::assign($matter, (int) $creditor->getKey(), null, $email, true, $representative['name']);
+                $taken[] = $linked[] = $email;
+            }
+        }
+
+        return $linked;
     }
 
     /** One name written two ways: letter case, spaces and أ/ا, ة/ه, ى/ي … aside. */

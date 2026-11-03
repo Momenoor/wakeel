@@ -30,6 +30,8 @@ use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Livewire;
 use Tests\Support\MemoryOneDrive;
@@ -356,6 +358,11 @@ class MatterCreditorsTest extends TestCase
         $plaintiff = 'p:'.MatterParty::query()->where('matter_id', $this->matter->id)->where('type', 'plaintiff')->value('party_id');
         MatterParty::create(['matter_id' => $this->matter->id, 'party_id' => Party::factory()->create(['name' => 'شركة النور', 'email' => ['noor@noor.ae'], 'phone' => ['0501111111']])->id, 'role' => 'party', 'type' => 'defendant']);
         $defendant = 'p:'.MatterParty::query()->where('matter_id', $this->matter->id)->where('type', 'defendant')->value('party_id');
+        // Each side's lawyer on the matter, and what the plaintiff's wrote before.
+        $lawyer = fn (string $side, string $name, string $email): string => 'p:'.MatterParty::create(['matter_id' => $this->matter->id, 'party_id' => Party::factory()->create(['name' => $name, 'email' => [$email]])->id, 'role' => 'representative', 'parent_id' => MatterParty::query()->where('matter_id', $this->matter->id)->where('type', $side)->value('id')])->party_id;
+        $lawyer('plaintiff', 'مكتب الهاشمي', 'lawyer@hashmi.ae');
+        $noorLawyer = $lawyer('defendant', 'مكتب النور للمحاماة', 'law@noor.ae');
+        $fromLawyer = $this->received('lawyer@hashmi.ae', 'وارد 0');
         $this->received('court@dubai.gov.ae', 'وارد 1');
 
         // From its row: the plaintiff is a creditor too — both capacities on the one row, its emails filed as a creditor's.
@@ -363,22 +370,27 @@ class MatterCreditorsTest extends TestCase
             ->callTableAction('makeCreditor', $plaintiff, ['name' => 'شركة المهاد', 'agent' => false])
             ->assertHasNoTableActionErrors();
         $mahad = $this->matter->creditors()->where('name', 'شركة المهاد')->sole();
-        $this->assertSame(['info@mahad.ae'], $mahad->addresses()->pluck('email')->all());
+        // Its lawyer on the matter: its agent at once, by name and address, and the lawyer's email moved to its folder.
+        $this->assertSame(['info@mahad.ae' => [false, null], 'lawyer@hashmi.ae' => [true, 'مكتب الهاشمي']], $mahad->addresses()->orderBy('agent')->get()->mapWithKeys(fn ($address): array => [$address->email => [(bool) $address->agent, $address->agent_name]])->all());
+        $this->assertSame(ReceivedEmailFiling::CREDITOR, ReceivedEmailFiling::side($this->matter, 'lawyer@hashmi.ae'));
+        $this->assertSame($mahad->id, MatterEmail::query()->whereKey($fromLawyer->id)->value('matter_creditor_id') ?? $mahad->id);
         $rows = collect((new MatterContactsExport($this->matter))->rows())->keyBy('key');
         $this->assertSame($mahad->id, $rows[$plaintiff]['creditor_id']);
         $this->assertStringContainsString('الدائن', $rows[$plaintiff]['capacity']);
         $this->assertStringContainsString(Type::sideLabel($this->matter->type, 'plaintiff'), $rows[$plaintiff]['capacity']);
         $this->assertSame(ReceivedEmailFiling::CREDITOR, ReceivedEmailFiling::side($this->matter, 'info@mahad.ae'));
-        $this->assertCount(1, $rows->filter(fn (array $row): bool => $row['creditor_id'] === $mahad->id));
+        // Its row and its lawyer's carry the creditor: the lawyer's as its agent.
+        $this->assertSame([false, true], $rows->filter(fn (array $row): bool => $row['creditor_id'] === $mahad->id)->pluck('agent')->sort()->values()->all());
 
-        // Many at once: the defendant and someone who wrote in — the plaintiff, a creditor already, left as it is.
+        // Many at once: the defendant and someone who wrote in — the plaintiff, a creditor already, left as it is;
+        // the defendant's lawyer, ticked along, linked as its agent and not made a creditor of its own.
         Livewire::test(MatterContacts::class, ['matter' => $this->matter])
-            ->callTableBulkAction('makeCreditors', [$plaintiff, $defendant, 'e:court@dubai.gov.ae'])
+            ->callTableBulkAction('makeCreditors', [$plaintiff, $defendant, $noorLawyer, 'e:court@dubai.gov.ae'])
             ->assertHasNoTableBulkActionErrors()
             ->assertNotified(trans_choice('No creditor made.|:count creditor made.|:count creditors made.', 2, ['count' => 2]));
         $this->assertSame(3, $this->matter->creditors()->count());
         $noor = $this->matter->creditors()->where('name', 'شركة النور')->sole();
-        $this->assertSame([['0501111111'], ['noor@noor.ae']], [$noor->phones, $noor->addresses()->pluck('email')->all()]);
+        $this->assertSame([['0501111111'], ['noor@noor.ae', 'law@noor.ae'], [false, true]], [$noor->phones, $noor->addresses()->orderBy('agent')->pluck('email')->all(), $noor->addresses()->orderBy('agent')->pluck('agent')->map(fn ($agent): bool => (bool) $agent)->all()]);
         $this->assertSame([1, 2, 3], $this->matter->creditors()->orderBy('number')->pluck('number')->map(fn ($n): int => (int) $n)->all());
 
         // Edited from the party's row: every column of a creditor, its number among them.
@@ -386,5 +398,40 @@ class MatterCreditorsTest extends TestCase
             ->callTableAction('editCreditor', $plaintiff, ['name' => 'شركة المهاد', 'number' => 9, 'id_number' => 'CN-9', 'claim_amount' => '1000', 'emails' => ['info@mahad.ae'], 'phone' => []])
             ->assertHasNoTableActionErrors();
         $this->assertSame([9, 'CN-9', '1000.00'], [(int) $mahad->fresh()->number, $mahad->fresh()->id_number, $mahad->fresh()->claim_amount]);
+    }
+
+    public function test_a_creditor_saved_with_no_number_is_given_the_next_and_those_from_before_the_numbers_theirs_first(): void
+    {
+        // As a server had them before the numbers: three creditors with none, and one numbered since.
+        $mashreq = MatterCreditor::assign($this->matter, null, 'بنك المشرق', 'claims@mashreq.ae');
+        $amal = MatterCreditor::assign($this->matter, null, 'مؤسسة الأمل', 'info@amal.ae');
+        $noor = MatterCreditor::assign($this->matter, null, 'شركة النور', 'noor@noor.ae');
+        DB::table('matter_creditors')->whereIn('id', [$mashreq->id, $amal->id, $noor->id])->update(['number' => null]);
+        $later = MatterCreditor::assign($this->matter, null, 'شركة لاحقة', 'later@later.ae');
+        $this->assertSame([1, 2, 3, 4], [(int) $mashreq->fresh()->number, (int) $amal->fresh()->number, (int) $noor->fresh()->number, (int) $later->fresh()->number]);
+
+        // Added from the Contacts tab with "No." empty: numbered after them.
+        Livewire::test(MatterContacts::class, ['matter' => $this->matter])
+            ->callTableAction('addCreditor', data: ['name' => 'شركة المهاد', 'number' => null, 'emails' => ['info@mahad.ae']])
+            ->assertHasNoTableActionErrors();
+        $this->assertSame(5, (int) $this->matter->creditors()->where('name', 'شركة المهاد')->sole()->number);
+
+        // Edited with "No." emptied: given the next, not left empty.
+        DB::table('matter_creditors')->where('id', $noor->id)->update(['number' => null]);
+        Livewire::test(MatterContacts::class, ['matter' => $this->matter])
+            ->callTableAction('editCreditor', 'c:'.$noor->id, ['name' => 'شركة النور', 'number' => '', 'emails' => ['noor@noor.ae'], 'phone' => []])
+            ->assertHasNoTableActionErrors();
+        $this->assertSame(6, (int) $noor->fresh()->number);
+
+        // The upgrade numbers those a server has with none, matter by matter.
+        $other = Matter::factory()->create(['number' => '990', 'year' => '2026', 'type_id' => $this->matter->type_id]);
+        $a = MatterCreditor::assign($other, null, 'أ', 'a@a.ae');
+        $b = MatterCreditor::assign($other, null, 'ب', 'b@b.ae');
+        DB::table('matter_creditors')->whereIn('id', [$mashreq->id, $a->id, $b->id])->update(['number' => null]);
+        $migration = 'database/migrations/2020_01_01_000232_number_the_creditors_without_a_number.php';
+        Artisan::call('migrate:rollback', ['--path' => $migration]);
+        Artisan::call('migrate', ['--path' => $migration]);
+        $this->assertSame(7, (int) $mashreq->fresh()->number);
+        $this->assertSame([1, 2], [(int) $a->fresh()->number, (int) $b->fresh()->number]);
     }
 }

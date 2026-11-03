@@ -110,6 +110,12 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
         return once(fn (): bool => MatterCreditors::kept($this->matter()));
     }
 
+    /** Said of a party made a creditor: how many of its representatives' addresses are its agents' now. */
+    private static function agentsLinked(int $count): string
+    {
+        return trans_choice(':count representative\'s address linked as an agent\'s.|:count representatives\' addresses linked as agents\'.', $count, ['count' => $count]);
+    }
+
     /** A creditor's line — not its agent's. */
     private static function isCreditor(array $record): bool
     {
@@ -206,10 +212,10 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                         ->icon('heroicon-o-banknotes')
                         ->visible(fn (): bool => $this->hasCreditors() && $this->canChange())
                         ->requiresConfirmation()
-                        ->modalDescription(__('Each row ticked becomes a creditor of the matter by its name and addresses — a party stays a party too. Their emails that came in move to their folders, and those that come from now on go there.'))
+                        ->modalDescription(__('Each row ticked becomes a creditor of the matter by its name and addresses — a party stays a party too, and its representatives on the matter become its agents. Their emails that came in move to their folders, and those that come from now on go there.'))
                         ->action(function (\Illuminate\Support\Collection $records): void {
                             try {
-                                $made = app(MatterCreditors::class)->makeCreditors($this->matter(), $records);
+                                [$made, $linked] = app(MatterCreditors::class)->makeCreditors($this->matter(), $records);
                             } catch (\Throwable $e) {
                                 $this->rowsRead = null;
                                 Notification::make()->danger()->title(__('The emails could not be moved'))->body($e->getMessage())->send();
@@ -218,7 +224,8 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                             }
                             $this->rowsRead = null;
 
-                            Notification::make()->success()->title(trans_choice('No creditor made.|:count creditor made.|:count creditors made.', $made, ['count' => $made]))->send();
+                            Notification::make()->success()->title(trans_choice('No creditor made.|:count creditor made.|:count creditors made.', $made, ['count' => $made]))
+                                ->body($linked > 0 ? self::agentsLinked($linked) : null)->send();
                         })
                         ->deselectRecordsAfterCompletion(),
                 ]),
@@ -414,12 +421,15 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                         ->icon('heroicon-o-banknotes')
                         ->visible(fn (array $record): bool => $this->hasCreditors() && $this->canChange() && $record['creditor_id'] === null && $record['own'] !== [])
                         ->modalHeading(fn (array $record): string => __('A creditor or their agent').': '.$record['name'])
-                        ->modalDescription(__('Their emails that came in on this matter, and those that come from now on, are saved in the creditor\'s folder.'))
+                        ->modalDescription(fn (array $record): string => __('Their emails that came in on this matter, and those that come from now on, are saved in the creditor\'s folder.').($record['party_id'] ? ' '.__('Its representatives on the matter become the creditor\'s agents.') : ''))
                         ->modalWidth('lg')
                         ->schema(fn (array $record): array => CreditorFields::schema($this->matter(), $record['name'], $record['own'][0] ?? ''))
                         ->action(function (array $record, array $data): void {
                             try {
                                 [$creditor, $moved] = CreditorFields::save($this->matter(), $data, $record['own']);
+                                // A party made a creditor: its representatives on the matter are its agents.
+                                $linked = $record['party_id'] && empty($data['agent']) ? app(MatterCreditors::class)->linkRepresentatives($this->matter(), $creditor, (int) $record['party_id']) : [];
+                                $moved += $linked !== [] ? app(MatterCreditors::class)->refile($this->matter(), $linked) : 0;
                             } catch (\Throwable $e) {
                                 $this->rowsRead = null;
                                 Notification::make()->danger()->title(__('The emails could not be moved'))->body($e->getMessage())->send();
@@ -430,7 +440,7 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
 
                             Notification::make()->success()
                                 ->title(__('Saved as :creditor\'s', ['creditor' => $creditor->name]))
-                                ->body(__(':count emails moved to the creditor\'s folder.', ['count' => $moved]))
+                                ->body(__(':count emails moved to the creditor\'s folder.', ['count' => $moved]).($linked !== [] ? ' '.self::agentsLinked(count($linked)) : ''))
                                 ->send();
                         }),
                     // Off the list: a creditor with its agents, or an agent. Their emails stay where they are.
@@ -481,6 +491,7 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
             // Its number: given as it is added, changed here when the list is numbered another way.
             TextInput::make('number')
                 ->label(__('No.'))
+                ->helperText(__('Left empty, the next number is given.'))
                 ->numeric()
                 ->integer()
                 ->minValue(1)

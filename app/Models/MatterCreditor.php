@@ -27,10 +27,37 @@ class MatterCreditor extends Model
 
     protected static function booted(): void
     {
-        // Numbered as it is added: its claim's serial in the matter's list, never given twice.
-        static::creating(function (self $creditor): void {
-            $creditor->number ??= ((int) static::query()->where('matter_id', $creditor->matter_id)->max('number')) + 1;
+        // Numbered as it is saved with no number — added, or edited with "No." left empty: its claim's serial in the
+        // matter's list, after the last given, never twice. Those of the matter with none yet (from before the
+        // numbers) are numbered first, as they were added, so this one follows them.
+        static::saving(function (self $creditor): void {
+            if ($creditor->number === null) {
+                $creditor->number = static::numberUnnumbered((int) $creditor->matter_id, $creditor->getKey());
+            }
         });
+    }
+
+    /**
+     * The matter's creditors with no number given theirs, after the last one given, in the order they were added —
+     * but the one being saved ($except), whose number is returned for it to write. The next number.
+     */
+    public static function numberUnnumbered(int $matterId, mixed $except = null): int
+    {
+        $next = ((int) static::query()->where('matter_id', $matterId)->max('number')) + 1;
+        $ids = static::query()->where('matter_id', $matterId)->whereNull('number')
+            ->when($except !== null, fn ($query) => $query->whereKeyNot($except))
+            ->orderBy('id')->pluck('id');
+
+        if ($ids->isNotEmpty()) {
+            // All at once: each its number by its id.
+            $cases = '';
+            foreach ($ids as $id) {
+                $cases .= ' WHEN '.(int) $id.' THEN '.$next++;
+            }
+            static::query()->whereKey($ids->all())->update(['number' => DB::raw("CASE id{$cases} END")]);
+        }
+
+        return $next;
     }
 
     /** Its number as a folder writes it: three digits (001), so the folders sort in order. */
