@@ -74,7 +74,7 @@ class MyMattersReport extends Page implements HasTable
     protected function getTableQuery(): Builder
     {
         return Matter::query()
-            ->with(['court', 'type'])
+            ->with(['court', 'type', 'assistantsOnly.party'])
             ->select('matters.*')
             ->selectRaw(Sql::daysSince('matters.distributed_at').' as days_open')
             ->ofParties(auth()->user()?->ownMatterPartyIds() ?? []);

@@ -6,6 +6,7 @@ use App\Models\Matter;
 use App\Models\MatterOneDriveFolder;
 use App\Services\MMS\MatterOneDriveExplorer;
 use App\Services\MMS\MatterOneDriveFolders;
+use App\Support\RequestMemo;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Support\Exceptions\Halt;
@@ -25,7 +26,8 @@ final class OneDriveFilePicker
     public static function field(?Matter $matter, string $name = 'onedrive_files'): Select
     {
         $folders = fn (): Collection => self::folders($matter);
-        $options = fn (string $words = ''): array => $folders()
+        // The listing (OneDrive, the explorer's own cache apart) once a request however many times the field is drawn.
+        $options = fn (string $words = ''): array => RequestMemo::remember('onedrive-picker.'.($matter?->getKey() ?? 0).'.'.md5($words), fn (): array => $folders()
             ->flatMap(function (MatterOneDriveFolder $folder) use ($words, $folders): array {
                 try {
                     $files = app(MatterOneDriveExplorer::class)->files($folder, $words);
@@ -39,7 +41,7 @@ final class OneDriveFilePicker
                     MatterOneDriveFolders::fileKey($folder, $file['id']) => self::label([$file['name'], $file['where'], $whose]),
                 ])->all();
             })
-            ->all();
+            ->all());
 
         return Select::make($name)
             ->label(__('From OneDrive'))
@@ -144,7 +146,7 @@ final class OneDriveFilePicker
             return collect();
         }
 
-        // Once a request: asked of the field's options, labels and visibility alike.
-        return once(fn (): Collection => MatterOneDriveFolders::readyFor($matter, auth()->user()));
+        // Read once a request there (asked of the field's options, labels and visibility alike).
+        return MatterOneDriveFolders::readyFor($matter, auth()->user());
     }
 }

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\AnnouncesChanges;
 use App\Services\MMS\MatterOneDriveFolders;
+use App\Support\RequestMemo;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -52,6 +53,10 @@ class MatterParty extends Model
         static::deleting(function (MatterParty $matterParty) {
             $matterParty->representatives()->delete();
         });
+
+        // What Matter::isOwnedBy() and isAdministeredBy() remembered for the request is stale once a row changes.
+        static::saved(fn () => RequestMemo::forget('matter-parties.'));
+        static::deleted(fn () => RequestMemo::forget('matter-parties.'));
 
         // A newly assigned assistant gets the matter's folder in their
         // OneDrive. Only on creation: changing who is on an existing row

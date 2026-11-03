@@ -81,7 +81,7 @@ class OneDriveCheckQueuedTest extends TestCase
         $this->assertSame(__('OneDrive checked'), $this->user->notifications()->sole()->data['title']);
 
         // No OneDrive folder: said so, not failed.
-        MatterOneDriveFolder::query()->where('matter_id', $this->matter->id)->delete();
+        MatterOneDriveFolder::query()->where('matter_id', $this->matter->id)->get()->each->delete();
         $this->user->notifications()->delete();
         (new CheckMatterEmailsInOneDrive($this->matter->id, $this->user->id))->handle(app(MatterOneDriveFolders::class));
         $this->assertSame(__('Nothing to check'), $this->user->notifications()->sole()->data['title']);

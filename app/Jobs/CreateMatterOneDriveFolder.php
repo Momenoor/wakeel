@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\MatterOneDriveFolder;
 use App\Services\MMS\MatterOneDriveFolders;
+use App\Support\RequestMemo;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Jobs\SyncJob;
@@ -68,5 +69,6 @@ class CreateMatterOneDriveFolder implements ShouldQueue
             'status' => MatterOneDriveFolder::FAILED,
             'error' => mb_substr($exception->getMessage(), 0, 2000),
         ]);
+        RequestMemo::forget('onedrive-folder.');
     }
 }

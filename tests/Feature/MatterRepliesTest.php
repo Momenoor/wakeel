@@ -778,7 +778,7 @@ class MatterRepliesTest extends TestCase
         $this->assertFalse(MatterOneDriveFolders::receivedEmailsNotInOneDrive($this->matter));
 
         // Not linked: kept in the system, and said — the matter named, with the way to it.
-        MatterOneDriveFolder::query()->delete();
+        MatterOneDriveFolder::query()->get()->each->delete();
         $this->assertTrue(MatterOneDriveFolders::receivedEmailsNotInOneDrive($this->matter->fresh()));
 
         $result = app(MatterReplyCollector::class)->collect($this->matter->id);

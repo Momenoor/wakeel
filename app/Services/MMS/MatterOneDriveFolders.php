@@ -21,6 +21,7 @@ use App\Models\Type;
 use App\Models\User;
 use App\Services\MMS\Calendar\MatterReferenceMatcher;
 use App\Services\Notifications\Notifier;
+use App\Support\RequestMemo;
 use Carbon\CarbonInterface;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -101,7 +102,10 @@ class MatterOneDriveFolders
      */
     public static function readyFor(Matter $matter, ?User $user): Collection
     {
-        return self::visibleTo($matter, $user)->filter(fn (MatterOneDriveFolder $folder): bool => $folder->isCreated())->values();
+        // Once a request — a file picker asks for them for its options, its labels and its visibility alike; forgotten
+        // when a folder row is saved or deleted (MatterOneDriveFolder).
+        return RequestMemo::remember('onedrive-folder.ready.'.$matter->getKey().'.'.($user?->getKey() ?? 0),
+            fn (): Collection => self::visibleTo($matter, $user)->filter(fn (MatterOneDriveFolder $folder): bool => $folder->isCreated())->values());
     }
 
     /** Between a file's folder (ours) and its item (OneDrive's) in a key. */
@@ -1454,14 +1458,16 @@ class MatterOneDriveFolders
      */
     public static function folderFor(Matter $matter): ?MatterOneDriveFolder
     {
-        return MatterOneDriveFolder::query()
+        // Once a request — a send screen asks a dozen times a draw; forgotten when a folder row is saved or deleted
+        // through the model (MatterOneDriveFolder).
+        return RequestMemo::remember('onedrive-folder.for.'.$matter->getKey(), fn (): ?MatterOneDriveFolder => MatterOneDriveFolder::query()
             ->where('matter_id', $matter->getKey())
             ->where('status', MatterOneDriveFolder::CREATED)
             ->whereNotNull('drive_item_id')
             ->with(['party', 'owner'])
             ->oldest('id')
             ->get()
-            ->first(fn (MatterOneDriveFolder $f) => filled($f->driveUser()));
+            ->first(fn (MatterOneDriveFolder $f) => filled($f->driveUser())));
     }
 
     /**

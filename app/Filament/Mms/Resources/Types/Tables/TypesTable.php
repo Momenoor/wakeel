@@ -167,13 +167,7 @@ class TypesTable
                                 ->required(),
                         ])
                         ->action(function (Collection $records, array $data): void {
-                            $ids = array_map('intval', (array) $data['templates']);
-
-                            $records->each(fn (Type $type) => match ($data['mode'] ?? 'add') {
-                                'replace' => $type->assignLetterTemplates($ids, $type->excludedLetterTemplates()->pluck('letter_templates.id')->all()),
-                                'remove' => $type->letterTemplates()->detach($ids),
-                                default => $type->assignLetterTemplates($ids, [], detach: false),
-                            });
+                            Type::assignLetterTemplatesInBulk($records->modelKeys(), (array) $data['templates'], (string) ($data['mode'] ?? 'add'));
 
                             Notification::make()->success()->title(__('Saved'))->send();
                         })

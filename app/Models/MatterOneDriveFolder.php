@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\RequestMemo;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -36,6 +37,13 @@ class MatterOneDriveFolder extends Model
         'moved_at',
         'move_error',
     ];
+
+    protected static function booted(): void
+    {
+        // What MatterOneDriveFolders::folderFor() and readyFor() remembered for the request is stale once a row changes.
+        static::saved(fn () => RequestMemo::forget('onedrive-folder.'));
+        static::deleted(fn () => RequestMemo::forget('onedrive-folder.'));
+    }
 
     protected function casts(): array
     {

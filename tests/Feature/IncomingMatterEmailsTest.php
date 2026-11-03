@@ -904,7 +904,7 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertSame(['Saved', 'Not saved', 'Saved'], [$email->oneDriveLabel('pdf') === 'Saved' ? 'Saved' : 'x', $email->oneDriveLabel('eml'), $email->oneDriveLabel('attachments')]);
 
         // No OneDrive folder on the matter: nothing to read, nothing changed.
-        MatterOneDriveFolder::query()->where('matter_id', $this->second->id)->delete();
+        MatterOneDriveFolder::query()->where('matter_id', $this->second->id)->get()->each->delete();
         $this->assertFalse(app(MatterOneDriveFolders::class)->checkEmails($this->second, [$email]));
     }
 
@@ -979,7 +979,7 @@ class IncomingMatterEmailsTest extends TestCase
 
     public function test_with_no_onedrive_folder_the_file_it_came_with_is_kept_in_the_system_so_it_is_not_lost(): void
     {
-        MatterOneDriveFolder::query()->where('matter_id', $this->second->id)->delete();
+        MatterOneDriveFolder::query()->where('matter_id', $this->second->id)->get()->each->delete();
 
         $this->collect($this->email(['subject' => 'مستندات القضية 987/2026']));
 
@@ -994,7 +994,7 @@ class IncomingMatterEmailsTest extends TestCase
     public function test_a_matter_with_no_onedrive_folder_gets_the_email_to_download_by_hand(): void
     {
         Setting::set(MatterOneDriveFolders::ENABLED, true, 'onedrive');
-        MatterOneDriveFolder::query()->where('matter_id', $this->second->id)->delete();
+        MatterOneDriveFolder::query()->where('matter_id', $this->second->id)->get()->each->delete();
         // Someone to tell: a person of the matter.
         $user = User::factory()->create();
         $party = Party::factory()->create(['user_id' => $user->id]);

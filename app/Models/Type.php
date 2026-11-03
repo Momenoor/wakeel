@@ -351,6 +351,45 @@ class Type extends Model
     }
 
     /**
+     * Letter templates assigned to several types at once (the types list's bulk action): added as offered, made
+     * the only ones offered (the excluded kept), or removed — a statement or two for all the types, not one a row.
+     *
+     * @param  list<int>  $typeIds
+     * @param  list<int>  $templateIds
+     * @param  'add'|'replace'|'remove'  $mode
+     */
+    public static function assignLetterTemplatesInBulk(array $typeIds, array $templateIds, string $mode): void
+    {
+        $typeIds = array_values(array_unique(array_map('intval', $typeIds)));
+        $templateIds = array_values(array_unique(array_map('intval', $templateIds)));
+
+        if ($typeIds === [] || $templateIds === []) {
+            return;
+        }
+
+        $pivot = DB::table('letter_template_type');
+
+        if ($mode === 'remove') {
+            $pivot->whereIn('type_id', $typeIds)->whereIn('letter_template_id', $templateIds)->delete();
+
+            return;
+        }
+
+        if ($mode === 'replace') {
+            $pivot->whereIn('type_id', $typeIds)->where('excluded', false)->whereNotIn('letter_template_id', $templateIds)->delete();
+        }
+
+        $rows = [];
+        foreach ($typeIds as $typeId) {
+            foreach ($templateIds as $templateId) {
+                $rows[] = ['type_id' => $typeId, 'letter_template_id' => $templateId, 'excluded' => false];
+            }
+        }
+        // Offered now, whether new to the type or excluded from it before.
+        $pivot->upsert($rows, ['letter_template_id', 'type_id'], ['excluded']);
+    }
+
+    /**
      * This type merged into another — the same type written another way: its matters (deleted ones too), its custom
      * fields and the letters and letter items offered for it go to that one (offered for either, still offered),
      * then it is deleted. The other keeps its own name, folders, capacities and incentive settings. How many

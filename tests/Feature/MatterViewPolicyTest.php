@@ -9,7 +9,9 @@ use App\Models\MatterParty;
 use App\Models\Party;
 use App\Models\User;
 use App\Support\MatterSearch;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
@@ -44,6 +46,30 @@ class MatterViewPolicyTest extends TestCase
 
         $this->assertTrue($user->fresh()->can('view', $mine));
         $this->assertFalse($user->fresh()->can('view', Matter::factory()->create()));
+    }
+
+    public function test_whose_a_matter_is_is_asked_once_a_request_and_seen_to_change_in_it(): void
+    {
+        $user = $this->userWith('ViewOwn:Matter');
+        $party = Party::factory()->create(['user_id' => $user->id]);
+        $matter = Matter::factory()->create();
+        $user = $user->fresh();
+
+        $queries = 0;
+        DB::listen(function (QueryExecuted $query) use (&$queries): void {
+            if (str_starts_with($query->sql, 'select exists') && str_contains($query->sql, 'matter_party')) {
+                $queries++;
+            }
+        });
+
+        $this->assertFalse($user->can('view', $matter));
+        $this->assertFalse($user->can('view', $matter));
+        $this->assertSame(1, $queries);
+
+        // On the matter now: known at once.
+        MatterParty::create(['matter_id' => $matter->id, 'role' => 'expert', 'type' => 'expert', 'party_id' => $party->id]);
+        $this->assertTrue($user->can('view', $matter));
+        $this->assertSame(2, $queries);
     }
 
     public function test_a_matter_picker_offers_only_the_matters_the_user_may_see(): void

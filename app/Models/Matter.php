@@ -14,6 +14,7 @@ use App\Models\Concerns\HasAttachments;
 use App\Models\Contracts\AttachmentOwner;
 use App\Observers\MatterObserver;
 use App\Services\MMS\Calendar\MatterReferenceMatcher;
+use App\Support\RequestMemo;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -189,7 +190,14 @@ class Matter extends Model implements AttachmentOwner
     /** @param  list<int>  $parties */
     private function isOfParties(array $parties): bool
     {
-        return $parties !== [] && $this->matterParties()->whereIn('party_id', $parties)->exists();
+        if ($parties === []) {
+            return false;
+        }
+
+        // Once a request — the policy asks on every action of the matter page; forgotten when a party row of any
+        // matter is saved or deleted (MatterParty).
+        return RequestMemo::remember('matter-parties.'.$this->getKey().'.'.md5(implode(',', $parties)),
+            fn (): bool => $this->matterParties()->whereIn('party_id', $parties)->exists());
     }
 
     protected static function booted()

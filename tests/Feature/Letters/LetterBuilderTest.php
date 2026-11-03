@@ -38,10 +38,12 @@ use App\Support\EditorHtml;
 use App\Support\EmailGrouping;
 use App\Support\InterfaceFont;
 use Filament\Facades\Filament;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\File;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Mail\Events\MessageSent;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
@@ -947,9 +949,17 @@ class LetterBuilderTest extends TestCase
         $other = LetterTemplate::create(['name' => 'آخر', 'slug' => 'other', 'locale' => 'ar', 'category' => 'letter', 'subject' => 's', 'body' => 'b']);
         $other->types()->sync([$first->id]);
 
+        // One insert for all the types, not one a row.
+        $inserts = 0;
+        DB::listen(function (QueryExecuted $query) use (&$inserts): void {
+            if (str_starts_with($query->sql, 'insert') && str_contains($query->sql, 'letter_template_type')) {
+                $inserts++;
+            }
+        });
         $table = Livewire::test(ListTypes::class);
         $table->callTableBulkAction('assignLetters', [$first, $second], ['templates' => [$this->template->id], 'mode' => 'add'])
             ->assertHasNoTableBulkActionErrors();
+        $this->assertSame(1, $inserts);
 
         $this->assertEqualsCanonicalizing([$other->id, $this->template->id], $first->letterTemplates()->pluck('letter_templates.id')->all());
         $this->assertSame([$this->template->id], $second->letterTemplates()->pluck('letter_templates.id')->all());
