@@ -31,6 +31,13 @@ final class RequestMemo
         self::instance()->values = [];
     }
 
+    /** The values whose keys start so forgotten — a page's own, before it is drawn again after a change. */
+    public static function forget(string $prefix): void
+    {
+        $memo = self::instance();
+        $memo->values = array_filter($memo->values, fn (string $key): bool => ! str_starts_with($key, $prefix), ARRAY_FILTER_USE_KEY);
+    }
+
     private static function instance(): self
     {
         if (! app()->bound(self::class)) {

@@ -10,6 +10,7 @@ use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\MinutesService;
 use App\Services\MMS\TeamsAttendance;
 use App\Support\ArabicSearch;
+use App\Support\RequestMemo;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
@@ -139,9 +140,10 @@ class MinutesRecordForm
                             ->label(__('From the parties'))
                             ->placeholder(__('Not in the system'))
                             ->searchable()
-                            ->options(fn (Get $get): array => self::partyOptions(self::isMatterLine($minutes, $get('party_id'))
-                                ? Party::query()->whereIn('id', self::matterPartyIds($minutes))
-                                : Party::query()))
+                            // The same options for every line: read once a request (once() in a static closure keeps nothing).
+                            ->options(fn (Get $get): array => self::isMatterLine($minutes, $get('party_id'))
+                                ? RequestMemo::remember('minutes-record:matter-party-options:'.($minutes->matter_id ?? 0), fn (): array => self::partyOptions(Party::query()->whereIn('id', self::matterPartyIds($minutes))))
+                                : RequestMemo::remember('minutes-record:party-options', fn (): array => self::partyOptions(Party::query())))
                             ->getSearchResultsUsing(fn (string $search, Get $get): array => self::partyOptions(self::isMatterLine($minutes, $get('party_id'))
                                 ? self::searchParties($search)->whereIn('id', self::matterPartyIds($minutes))
                                 : self::searchParties($search)))
@@ -255,7 +257,7 @@ class MinutesRecordForm
     private static function matterPartyIds(MatterMinutes $minutes): array
     {
         // Once a request: asked of each line.
-        return once(fn (): array => $minutes->matter?->matterParties()
+        return RequestMemo::remember('minutes-record:matter-party-ids:'.($minutes->matter_id ?? 0), fn (): array => $minutes->matter?->matterParties()
             ->where(fn ($q) => $q->whereNull('role')->orWhere('role', '!=', 'attendee'))
             ->pluck('party_id')->map(fn ($id) => (int) $id)->unique()->values()->all() ?? []);
     }
@@ -317,7 +319,7 @@ class MinutesRecordForm
     {
         $ids = collect($attendees)->pluck('party_id')->filter()->map(fn ($id) => (int) $id)->unique()->sort()->values()->all();
 
-        return once(fn (): array => Party::with('parent')->whereKey($ids)->get()
+        return RequestMemo::remember('minutes-record:party-labels:'.implode(',', $ids), fn (): array => Party::with('parent')->whereKey($ids)->get()
             ->mapWithKeys(fn (Party $party): array => [$party->getKey() => self::partyLabel($party)])
             ->all());
     }

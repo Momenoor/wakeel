@@ -36,6 +36,11 @@ class MatterForm
 {
     public static function configure(Schema $schema): Schema
     {
+        // Editing: the parties loaded with the matter remembered, so each row finds its own (Party::remembered()).
+        if (($record = $schema->getRecord()) instanceof Matter) {
+            Party::rememberLoaded($record);
+        }
+
         return $schema
             ->components([
                 Grid::make(3)
@@ -337,7 +342,7 @@ class MatterForm
                                                                 $query->whereJsonContains('role', [['role' => 'representative']]);
                                                             })
                                                             ->afterStateUpdated(function (Get $get, Set $set) {
-                                                                $party = Party::find($get('party_id'));
+                                                                $party = Party::remembered($get('party_id'));
                                                                 $set('party_email', $party?->latestEmail());
                                                                 $set('party_phone', $party?->latestPhone());
                                                             })
@@ -353,12 +358,12 @@ class MatterForm
                                                         TextInput::make('party_email')
                                                             ->disabled()
                                                             ->dehydrated(false)
-                                                            ->afterStateHydrated(fn (TextInput $component, Get $get) => $component->state(Party::find($get('party_id'))?->latestEmail()))
+                                                            ->afterStateHydrated(fn (TextInput $component, Get $get) => $component->state(Party::remembered($get('party_id'))?->latestEmail()))
                                                             ->extraInputAttributes(['dir' => 'ltr']),
                                                         TextInput::make('party_phone')
                                                             ->disabled()
                                                             ->dehydrated(false)
-                                                            ->afterStateHydrated(fn (TextInput $component, Get $get) => $component->state(Party::find($get('party_id'))?->latestPhone()))
+                                                            ->afterStateHydrated(fn (TextInput $component, Get $get) => $component->state(Party::remembered($get('party_id'))?->latestPhone()))
                                                             ->extraInputAttributes(['dir' => 'ltr']),
                                                         Hidden::make('role')->default('representative'),
 
@@ -522,15 +527,8 @@ class MatterForm
             return null;
         }
 
-        // Asked for on every redraw of every party row: read once a request.
-        $key = 'party_contact_'.$partyId;
-        $request = request();
-
-        if (! $request->attributes->has($key)) {
-            $request->attributes->set($key, Party::query()->find($partyId, ['id', 'phone', 'email']));
-        }
-
-        $party = $request->attributes->get($key);
+        // Asked for on every redraw of every party row: the party read once a request (Party::remembered()).
+        $party = Party::remembered($partyId);
         $parts = array_filter(['📞 '.($party?->latestPhone() ?? ''), '✉ '.($party?->latestEmail() ?? '')], fn (string $part): bool => mb_strlen($part) > 2);
 
         return $parts !== [] ? implode(' · ', $parts) : __('No phone or email yet');
@@ -562,7 +560,7 @@ class MatterForm
      */
     private static function marketerKind(array $data): array
     {
-        $party = Party::find($data['party_id'] ?? null);
+        $party = Party::remembered($data['party_id'] ?? null);
 
         return ['role' => 'marketer', 'type' => $party?->isEmployee() ? MarketingCommission::STAFF : MarketingCommission::EXTERNAL];
     }

@@ -159,13 +159,13 @@ class MatterResource extends Resource
         $query = parent::getEloquentQuery()
             ->when(auth()->user()?->can('ViewTrashed:Matter'), fn (Builder $q) => $q->withTrashed())
             ->with([
-                'mainPartiesOnly.party',
-                'mainPartiesOnly.representatives.party',
-                'expertsOnly.party',
+                // The parties once, with their representatives: the main ones, the experts, the assistants … are
+                // taken from them (Matter::getRelationValue()), not read again a relation each.
+                'matterParties.party',
+                'matterParties.representatives.party',
                 'fees.allocations',
                 'court',
                 'type',
-                'matterParties',
             ]);
 
         // Fail CLOSED. canViewAny() admits anyone holding ViewOwn:Matter, so a

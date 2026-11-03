@@ -367,15 +367,22 @@ class MatterInfolist
                     return [];
                 }
 
-                $today = now()->startOfDay();
-                $events = fn () => $record->linkedCalendarEvents()->with('matters:id');
-                $past = $events()->where('start_datetime', '<', $today)->orderByDesc('start_datetime')->limit(30)->get();
-                $pastTotal = $events()->where('start_datetime', '<', $today)->count();
+                // Read once a draw of the page — the section is built twice a draw (ViewMatter::rendering() forgets it).
+                [$upcoming, $past, $pastTotal] = RequestMemo::remember('matter-page:calendar:'.$record->getKey(), function () use ($record): array {
+                    $today = now()->startOfDay();
+                    $events = fn () => $record->linkedCalendarEvents()->with('matters:id');
+
+                    return [
+                        $events()->where('start_datetime', '>=', $today)->orderBy('start_datetime')->get(),
+                        $events()->where('start_datetime', '<', $today)->orderByDesc('start_datetime')->limit(30)->get(),
+                        $events()->where('start_datetime', '<', $today)->count(),
+                    ];
+                });
 
                 return [
                     // Upcoming first (soonest at the top), then past (latest
                     // at the top) — when there are any.
-                    static::eventsTable('upcoming_events', __('Upcoming'), $events()->where('start_datetime', '>=', $today)->orderBy('start_datetime')->get(), upcoming: true),
+                    static::eventsTable('upcoming_events', __('Upcoming'), $upcoming, upcoming: true),
                     static::eventsTable('past_events', __('Past'), $past, upcoming: false)
                         ->visible($past->isNotEmpty())
                         ->extraAttributes(['class' => 'opacity-80']),
@@ -795,7 +802,7 @@ class MatterInfolist
                     ->label(__('Meeting attendees'))
                     ->columns(5)
                     ->columnSpanFull()
-                    ->visible(fn ($record) => $record?->attendeesOnly()->exists())
+                    ->visible(fn ($record) => (bool) $record?->attendeesOnly->isNotEmpty())
                     ->schema([
                         TextEntry::make('party.name')->label(__('Name'))
                             ->icon('heroicon-o-user')->columnSpan(3),
@@ -1288,7 +1295,8 @@ class MatterInfolist
      */
     private static function visibleOneDriveFolders($record): Collection
     {
-        return MatterOneDriveFolders::visibleTo($record, auth()->user());
+        // Read once a draw of the page: asked for by the section's visibility and its entries alike.
+        return RequestMemo::remember('matter-page:onedrive-folders:'.$record->getKey().':'.(auth()->id() ?? 0), fn (): Collection => MatterOneDriveFolders::visibleTo($record, auth()->user()));
     }
 
     private static function showsOneDrive($record): bool

@@ -15,6 +15,7 @@ use App\Models\Matter;
 use App\Models\MatterFieldDefinition;
 use App\Services\MMS\MatterContactsExport;
 use App\Support\MatterEvents;
+use App\Support\RequestMemo;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -45,7 +46,7 @@ class ViewMatter extends ViewRecord
         return parent::resolveRecord($key)->loadMissing(self::EAGER);
     }
 
-    private const EAGER = ['requests.attachments', 'requests.requestBy', 'fees.ownedAttachments', 'fees.allocations.ownedAttachments', 'fees.creditNotes.ownedAttachments', 'expenses.ownedAttachments', 'marketers.party', 'marketingCommissions.party', 'marketingCommissions.calculation'];
+    private const EAGER = ['requests.attachments', 'requests.requestBy', 'fees.ownedAttachments', 'fees.allocations.ownedAttachments', 'fees.creditNotes.ownedAttachments', 'expenses.ownedAttachments', 'marketingCommissions.party', 'marketingCommissions.calculation'];
 
     /**
      * And again before each render: an action's refresh() reads the fees and requests again without what
@@ -54,6 +55,8 @@ class ViewMatter extends ViewRecord
     public function rendering(): void
     {
         $this->record->loadMissing(self::EAGER);
+        // What the page's sections read once a draw (MatterInfolist): as things are now, not as they were a draw ago.
+        RequestMemo::forget('matter-page:');
     }
 
     /**

@@ -255,6 +255,42 @@ class Matter extends Model implements AttachmentOwner
         return $this->hasMany(MatterParty::class, 'matter_id');
     }
 
+    /** The party relations that are parts of matterParties: taken from it when it is loaded, instead of a query each (getRelationValue()). */
+    private const PARTS_OF_PARTIES = ['mainParties', 'mainPartiesOnly', 'expertsOnly', 'attendeesOnly', 'marketers', 'assistantsOnly'];
+
+    /**
+     * The parties loaded (eagerly, or by load()): their parts — the main ones, the experts, the assistants … — set
+     * from them at once, so the matter page and each of its actions read the parties once, not once a relation,
+     * and a nested load of a part's parties finds the part there.
+     */
+    public function setRelation($relation, $value)
+    {
+        parent::setRelation($relation, $value);
+
+        if ($relation === 'matterParties' && $value instanceof \Illuminate\Database\Eloquent\Collection) {
+            foreach (self::PARTS_OF_PARTIES as $part) {
+                parent::setRelation($part, $this->partOfParties($part));
+            }
+        }
+
+        return $this;
+    }
+
+    private function partOfParties(string $key): \Illuminate\Database\Eloquent\Collection
+    {
+        $all = $this->matterParties;
+        $top = fn (): \Illuminate\Database\Eloquent\Collection => $all->filter(fn (MatterParty $mp): bool => empty($mp->parent_id));
+
+        return (match ($key) {
+            'mainParties' => $top(),
+            'mainPartiesOnly' => $top()->where('role', 'party'),
+            'expertsOnly' => $top()->where('role', 'expert'),
+            'attendeesOnly' => $all->where('role', 'attendee'),
+            'marketers' => $all->where('role', 'marketer'),
+            default => $all->where('role', 'expert')->where('type', 'assistant'),
+        })->values();
+    }
+
     /**
      * Top-level matter_party rows only (excludes representatives).
      * Used by the outer Filament Repeater.

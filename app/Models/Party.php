@@ -19,10 +19,38 @@ use Spatie\Activitylog\Support\LogOptions;
 
 class Party extends Model
 {
-    /** A party's name by its id, read once a request — a form's every row asks for its own on each redraw. */
+    /**
+     * A party by its id, read once a request — a form's every row asks for its own (its name, its phone and email)
+     * on each redraw, several times a row.
+     */
+    public static function remembered(mixed $id): ?static
+    {
+        return blank($id) ? null : RequestMemo::remember('party_'.$id, fn (): ?static => static::query()->find($id));
+    }
+
+    /**
+     * A matter's parties, loaded with it already (its parties and their representatives): remembered, so the edit
+     * form's rows find theirs here rather than one by one.
+     */
+    public static function rememberLoaded(Matter $matter): void
+    {
+        if (! $matter->relationLoaded('matterParties')) {
+            return;
+        }
+
+        foreach ($matter->matterParties as $row) {
+            foreach ([$row->relationLoaded('party') ? $row->party : null, ...($row->relationLoaded('representatives') ? $row->representatives->map(fn (MatterParty $rep): ?Party => $rep->relationLoaded('party') ? $rep->party : null)->all() : [])] as $party) {
+                if ($party instanceof Party) {
+                    RequestMemo::remember('party_'.$party->getKey(), fn (): Party => $party);
+                }
+            }
+        }
+    }
+
+    /** A party's name by its id, read once a request (remembered()). */
     public static function rememberedName(mixed $id): ?string
     {
-        return blank($id) ? null : RequestMemo::remember('party_name_'.$id, fn (): ?string => static::query()->whereKey($id)->value('name'));
+        return static::remembered($id)?->name;
     }
 
     use HasFactory;

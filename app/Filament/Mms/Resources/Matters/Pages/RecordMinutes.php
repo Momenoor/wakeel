@@ -170,12 +170,14 @@ class RecordMinutes extends Page
         }
 
         MinutesService::saveRecorded($minutes, $this->form->getState());
+        // As saved, read once; what follows writes through this very instance.
+        $minutes->refresh();
         // Not while typing (autosave): only names saved become parties.
-        MinutesService::registerAttendees($minutes = $minutes->fresh());
-        MinutesService::rememberContactDetails($minutes->fresh());
+        MinutesService::registerAttendees($minutes);
+        MinutesService::rememberContactDetails($minutes);
 
         // The parties found or added, on the lines (in the order saved).
-        $saved = array_values($minutes->fresh()->attendees ?? []);
+        $saved = array_values($minutes->attendees ?? []);
         foreach (array_keys((array) ($this->data['attendees'] ?? [])) as $i => $key) {
             if (filled($saved[$i]['party_id'] ?? null) && is_array($this->data['attendees'][$key])) {
                 $this->data['attendees'][$key]['party_id'] = $saved[$i]['party_id'];
