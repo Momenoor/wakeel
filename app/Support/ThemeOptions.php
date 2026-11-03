@@ -45,6 +45,11 @@ final class ThemeOptions
                 'fixed' => __('Always open'),
             ]],
             'collapsible_groups' => ['kind' => 'toggle', 'label' => __('Menu groups fold'), 'default' => true],
+            'sidebar_scroll' => ['kind' => 'choice', 'label' => __('Side menu taller than the screen'), 'default' => 'own', 'options' => [
+                'own' => __('Scrolls on its own, a bar beside it'),
+                'hidden' => __('Scrolls on its own, no bar'),
+                'page' => __('Scrolls with the page'),
+            ], 'help' => __('With the page: the menu moves with it, so the only bar is the page\'s, on the far side from the menu.')],
             'content_width' => ['kind' => 'choice', 'label' => __('Page width'), 'default' => 'default', 'options' => [
                 'default' => __('Standard'),
                 Width::FiveExtraLarge->value => __('Narrow'),

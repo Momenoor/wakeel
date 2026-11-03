@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Letters;
 
+use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
+use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
 use App\Filament\Support\EmailSendFields;
 use App\Jobs\ShareAttachments;
 use App\Models\Court;
@@ -22,9 +24,11 @@ use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\SentFolder;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Livewire;
 use Mockery;
 use Spatie\Permission\Models\Role;
 use Symfony\Component\Mime\Email;
@@ -289,5 +293,28 @@ class SharedAttachmentsTest extends TestCase
         $this->assertSame(['الصغير.pdf', 'big.pdf'], $letter->fresh()->shared_files['names']);
         $this->assertSame(SharedAttachments::DONE, SharedAttachments::progress($letter)['step']);
         $this->assertFalse(Storage::disk('local')->exists($directory));
+    }
+
+    public function test_get_the_link_now_on_the_letters_tab_shares_the_files_added(): void
+    {
+        $letter = $this->letter();
+        Storage::fake('local');
+
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $letter->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('email', $letter)
+            ->setTableActionData([
+                'sender' => 'iflas',
+                'recipients' => [$letter->recipients->first()->id],
+                'attachments' => [UploadedFile::fake()->create('statement.pdf', 12, 'application/pdf')],
+            ])
+            // The button inside the send window: no window of its own, so pressing it runs it.
+            ->call('mountAction', 'shareNow', [], ['schemaComponent' => 'mountedActionSchema0.shared_link'])
+            ->assertHasNoErrors()
+            ->assertSet('mountedActions.0.data.attachments', []);
+
+        // Shared from the matter's folder, for the recipient ticked; remembered on the letter.
+        $this->assertSame(['statement.pdf'], $letter->fresh()->shared_files['names']);
+        $this->assertCount(1, $this->od->links);
+        $this->assertSame(SharedAttachments::DONE, SharedAttachments::progress($letter)['step']);
     }
 }

@@ -118,6 +118,7 @@ class ThemeResource extends Resource
                             ToggleButtons::make('radius')->label(__('Corners'))->options(ThemeRadius::class)->default(ThemeRadius::MEDIUM)->required()->inline()->live(),
                             ToggleButtons::make('density')->label(__('Spacing'))->options(ThemeDensity::class)->default(ThemeDensity::NORMAL)->required()->inline()->live(),
                             self::optionField('collapsible_groups'),
+                            self::optionField('sidebar_scroll'),
                         ]),
 
                     Tab::make(__('Light and dark'))

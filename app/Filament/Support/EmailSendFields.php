@@ -263,7 +263,7 @@ final class EmailSendFields
                     ->link()
                     ->visible(fn (): bool => filled($record->shared_files))
                     ->action(fn () => $record->forceFill(['shared_files' => null])->save()),
-            ]),
+            ])->key('shared_link'),
             // How far the job has got, asked again every two seconds while it runs.
             Placeholder::make('share_progress')
                 ->hiddenLabel()

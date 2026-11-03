@@ -17,6 +17,7 @@ use App\Models\LetterItem;
 use App\Models\LetterTemplate;
 use App\Models\Matter;
 use App\Models\MatterLetter;
+use App\Models\MatterLetterRecipient;
 use App\Models\MatterMinutes;
 use App\Models\Party;
 use App\Services\MMS\Letters\LetterComposer;

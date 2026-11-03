@@ -168,6 +168,12 @@ class ThemeManager
     }
 
     /** The CSS itself — kept apart so the theme screen and the tests can see it. */
+    /** The sidebar on a wide screen, standing beside the page: open, or folded to its icons. */
+    private const SIDEBAR_BESIDE_THE_PAGE = [
+        '.fi-body:not(.fi-body-has-top-navigation) .fi-sidebar.fi-sidebar-open',
+        '.fi-body:not(.fi-body-has-top-navigation).fi-body-has-sidebar-collapsible-on-desktop .fi-sidebar',
+    ];
+
     public static function rules(Theme $theme): string
     {
         $scale = ($theme->radius ?? ThemeRadius::MEDIUM)->scale();
@@ -225,11 +231,28 @@ class ThemeManager
                 .' html.dark .fi-ta-table tbody > .fi-ta-row:nth-child(even) { background-color: color-mix(in oklab, #ffffff 5%, transparent); }';
         }
 
+        $css .= self::sidebarScroll((string) $theme->option('sidebar_scroll'));
+
         if ($picture = self::imageUrl($theme->option('login_background'))) {
             $css .= " .fi-simple-layout { background: url('".e($picture)."') center / cover no-repeat; }";
         }
 
         return $css;
+    }
+
+    /**
+     * The side menu when it is taller than the screen: its own bar hidden (it still scrolls under the wheel), or — on a
+     * wide screen, where it stands beside the page (not in the top bar, not folded away) — it moves with the page, so
+     * the page's bar on the far side is the only one.
+     */
+    private static function sidebarScroll(string $how): string
+    {
+        return match ($how) {
+            'hidden' => ' .fi-sidebar-nav { scrollbar-width: none; scrollbar-gutter: auto; } .fi-sidebar-nav::-webkit-scrollbar { display: none; }',
+            'page' => ' @media (min-width: 64rem) { '.self::selectors(self::SIDEBAR_BESIDE_THE_PAGE).' { position: static; height: auto; } '
+                .self::selectors(array_map(fn (string $sidebar): string => $sidebar.' .fi-sidebar-nav', self::SIDEBAR_BESIDE_THE_PAGE)).' { overflow: visible; scrollbar-gutter: auto; } }',
+            default => '',
+        };
     }
 
     /** A bar (the top bar, the sidebar) filled with a colour, its words and icons in the ink that reads on it. */

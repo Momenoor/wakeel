@@ -212,6 +212,20 @@ class ThemesTest extends TestCase
         $this->assertStringContainsString('html.dark .fi-ta-table tbody > .fi-ta-row:nth-child(even)', $css);
     }
 
+    public function test_the_side_menu_taller_than_the_screen_scrolls_as_the_theme_says(): void
+    {
+        // As Filament has it: nothing added.
+        $this->assertStringNotContainsString('.fi-sidebar-nav', ThemeManager::rules($this->theme([])));
+
+        // Its own bar hidden.
+        $this->assertStringContainsString('.fi-sidebar-nav { scrollbar-width: none; scrollbar-gutter: auto; } .fi-sidebar-nav::-webkit-scrollbar { display: none; }', ThemeManager::rules($this->theme(['options' => ['sidebar_scroll' => 'hidden']])));
+
+        // With the page: on a wide screen, beside the page — open, or folded to its icons; never in the top bar, never on a phone.
+        $css = ThemeManager::rules($this->theme(['options' => ['sidebar_scroll' => 'page']]));
+        $this->assertStringContainsString('@media (min-width: 64rem) { .fi-body:not(.fi-body-has-top-navigation) .fi-sidebar.fi-sidebar-open, .fi-body:not(.fi-body-has-top-navigation).fi-body-has-sidebar-collapsible-on-desktop .fi-sidebar { position: static; height: auto; }', $css);
+        $this->assertStringContainsString('.fi-sidebar.fi-sidebar-open .fi-sidebar-nav, .fi-body:not(.fi-body-has-top-navigation).fi-body-has-sidebar-collapsible-on-desktop .fi-sidebar .fi-sidebar-nav { overflow: visible; scrollbar-gutter: auto; } }', $css);
+    }
+
     public function test_an_option_that_is_not_one_of_its_choices_never_reaches_the_page(): void
     {
         $theme = $this->theme(['options' => ['sidebar_width' => '99rem; } body { display:none', 'navigation' => 'top']]);
