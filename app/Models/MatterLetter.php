@@ -33,6 +33,7 @@ class MatterLetter extends Model
             'sent_at' => 'datetime',
             'letter_date' => 'date',
             'inputs' => 'array',
+            'shared_files' => 'array',
             'sequence' => 'integer',
             'status' => LetterStatus::class,
         ];

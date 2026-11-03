@@ -94,6 +94,8 @@ class OneDriveSettings extends Page implements HasTable
     {
         $this->form->fill([
             'enabled' => MatterOneDriveFolders::enabled(),
+            'shortcuts' => MatterOneDriveFolders::shortcuts(),
+            'folder_check' => (bool) Setting::get(MatterOneDriveFolders::FOLDER_CHECK, false),
             'subfolders' => Setting::get(MatterOneDriveFolders::SUBFOLDERS, ''),
             'matters_folder' => Setting::get(MatterOneDriveFolders::MATTERS_FOLDER, ''),
             'finished_folder' => Setting::get(MatterOneDriveFolders::FINISHED_FOLDER, ''),
@@ -171,6 +173,12 @@ class OneDriveSettings extends Page implements HasTable
                     ->schema([
                         Toggle::make('enabled')
                             ->label(__('Create OneDrive folders for new matters')),
+                        Toggle::make('shortcuts')
+                            ->label(__('The other assistants get a shortcut, not a folder of their own'))
+                            ->helperText(__('A matter with several assistants: the folder is made in the first assistant\'s OneDrive only, and each of the others — one added later too — is given access to it and a shortcut to it under their matters folder. When the matter is finished, the folder moves with its owner and the shortcut is made anew under their finished matters. Off, each assistant gets a full folder of their own.')),
+                        Toggle::make('folder_check')
+                            ->label(__('Look for the folders the system made and tell of one missing'))
+                            ->helperText(__('Once an hour the folders the system made in the matters in progress are looked for — the standard subfolders and the folders emails were filed in — and one renamed, moved or deleted by hand is told to the matter\'s people and the super administrators in the bell, once a day. Off, nothing is looked for and nobody is told.')),
                         Placeholder::make('since')
                             ->label(__('Matters created from'))
                             ->content(fn (): string => MatterOneDriveFolders::enabledAt()?->format(Dates::dateTimeFormat()) ?? __('Not switched on yet'))
@@ -433,6 +441,8 @@ class OneDriveSettings extends Page implements HasTable
         }
 
         Setting::set(MatterOneDriveFolders::ENABLED, $enable, 'onedrive');
+        Setting::set(MatterOneDriveFolders::SHORTCUTS, (bool) ($state['shortcuts'] ?? false), 'onedrive');
+        Setting::set(MatterOneDriveFolders::FOLDER_CHECK, (bool) ($state['folder_check'] ?? false), 'onedrive');
         Setting::set(MatterOneDriveFolders::SUBFOLDERS, trim((string) ($state['subfolders'] ?? '')), 'onedrive');
         Setting::set(MatterOneDriveFolders::MATTERS_FOLDER, trim((string) ($state['matters_folder'] ?? '')), 'onedrive');
         Setting::set(MatterOneDriveFolders::FINISHED_FOLDER, trim((string) ($state['finished_folder'] ?? '')), 'onedrive');

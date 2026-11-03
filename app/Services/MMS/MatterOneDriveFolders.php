@@ -46,6 +46,12 @@ class MatterOneDriveFolders
 
     public const ENABLED_AT = 'onedrive_folders_enabled_at';
 
+    /** Whether the other assistants of a matter get a shortcut to the first one's folder, not a folder of their own. */
+    public const SHORTCUTS = 'onedrive_folders_shortcuts';
+
+    /** Whether the folders the system made are looked for once an hour and one missing told (off unless switched on). */
+    public const FOLDER_CHECK = 'onedrive_folders_check';
+
     public const SUBFOLDERS = 'onedrive_subfolders';
 
     /** The subfolder of a matter's folder signed minutes go to. */
@@ -83,14 +89,56 @@ class MatterOneDriveFolders
     public static function visibleTo(Matter $matter, ?User $user): Collection
     {
         return $matter->oneDriveFolders()
-            ->with('party')
+            ->with(['party', 'owner'])
             ->when(! ($user?->isSuperAdmin() ?? false), fn ($q) => $q->whereIn('party_id', $user?->ownMatterPartyIds() ?? []))
             ->get();
+    }
+
+    /**
+     * Those of them made already — the ones a file can be taken from or shown.
+     *
+     * @return Collection<int, MatterOneDriveFolder>
+     */
+    public static function readyFor(Matter $matter, ?User $user): Collection
+    {
+        return self::visibleTo($matter, $user)->filter(fn (MatterOneDriveFolder $folder): bool => $folder->isCreated())->values();
+    }
+
+    /** Between a file's folder (ours) and its item (OneDrive's) in a key. */
+    private const KEY_SEPARATOR = '|';
+
+    /** One file as a key a form or a list can carry: its folder's id and its item's. */
+    public static function fileKey(MatterOneDriveFolder|int $folder, string $itemId): string
+    {
+        return ($folder instanceof MatterOneDriveFolder ? $folder->getKey() : $folder).self::KEY_SEPARATOR.$itemId;
+    }
+
+    /**
+     * A key back to its folder's id and its item's — '' for an item missing.
+     *
+     * @return array{0: int, 1: string}
+     */
+    public static function splitFileKey(mixed $key): array
+    {
+        [$folderId, $itemId] = array_pad(explode(self::KEY_SEPARATOR, (string) $key, 2), 2, '');
+
+        return [(int) $folderId, $itemId];
     }
 
     public static function enabled(): bool
     {
         return (bool) Setting::get(self::ENABLED, false);
+    }
+
+    public static function shortcuts(): bool
+    {
+        return (bool) Setting::get(self::SHORTCUTS, true);
+    }
+
+    /** The hourly look for the folders the system made, telling of one missing: off unless switched on. */
+    public static function folderCheck(): bool
+    {
+        return self::enabled() && (bool) Setting::get(self::FOLDER_CHECK, false);
     }
 
     /**
@@ -231,6 +279,20 @@ class MatterOneDriveFolders
         $folder->loadMissing(['matter', 'party']);
         $review = null;
 
+        // Another assistant of the matter has its folder already: this one gets a shortcut to it, so the folder
+        // is made once and everyone works in the same one. An earlier assistant's still to be made: this waits.
+        if (self::shortcuts() && $folder->party && filled($folder->party->onedrive_email)) {
+            if ($original = self::originalFor($folder)) {
+                $this->makeShortcut($folder, $original);
+
+                return;
+            }
+
+            if ($first = self::firstToBeMade($folder)) {
+                throw new \RuntimeException(__('Waiting for the folder to be made in :name\'s OneDrive first.', ['name' => $first->party?->name ?? '—']));
+            }
+        }
+
         // Another phase of a case that already has its main folder: it goes in that one, in a
         // subfolder of its own (named by the standard structure, e.g. its phase).
         if ($folder->matter && $folder->party && filled($folder->party->onedrive_email) && ($shared = self::sharedFolderFor($folder))) {
@@ -284,6 +346,94 @@ class MatterOneDriveFolders
     }
 
     /**
+     * The matter's folder made in another assistant's own OneDrive (not a shortcut) — the one the others get a
+     * shortcut to.
+     */
+    public static function originalFor(MatterOneDriveFolder $folder): ?MatterOneDriveFolder
+    {
+        return MatterOneDriveFolder::query()
+            ->where('matter_id', $folder->matter_id)
+            ->whereKeyNot($folder->getKey())
+            ->where('party_id', '!=', $folder->party_id)
+            ->where('status', MatterOneDriveFolder::CREATED)
+            ->whereNotNull('drive_item_id')
+            ->whereNull('owner_party_id')
+            ->with('party')
+            ->oldest('id')
+            ->get()
+            ->first(fn (MatterOneDriveFolder $row): bool => filled($row->party?->onedrive_email));
+    }
+
+    /** An earlier row of the matter still to be made, of an assistant with a OneDrive account: the folder is theirs. */
+    private static function firstToBeMade(MatterOneDriveFolder $folder): ?MatterOneDriveFolder
+    {
+        return MatterOneDriveFolder::query()
+            ->where('matter_id', $folder->matter_id)
+            ->where('id', '<', $folder->getKey())
+            ->where('status', MatterOneDriveFolder::PENDING)
+            ->whereNull('owner_party_id')
+            ->with('party')
+            ->oldest('id')
+            ->get()
+            ->first(fn (MatterOneDriveFolder $row): bool => filled($row->party?->onedrive_email));
+    }
+
+    /**
+     * The folder in another assistant's OneDrive as a shortcut in this one's: given access to it, a shortcut to
+     * it under their matters folder (one there already, for another matter of the case, reused). The row then
+     * points at the folder itself, as the owner's does.
+     */
+    private function makeShortcut(MatterOneDriveFolder $folder, MatterOneDriveFolder $original): void
+    {
+        $party = $folder->party;
+        $owner = $original->party;
+
+        $existing = MatterOneDriveFolder::query()
+            ->where('party_id', $party->getKey())
+            ->whereKeyNot($folder->getKey())
+            ->where('drive_item_id', $original->drive_item_id)
+            ->whereNotNull('shortcut_item_id')
+            ->whereNull('moved_at')
+            ->value('shortcut_item_id');
+
+        $shortcutId = $existing ?? $this->placeShortcut($party, $owner, (string) $original->drive_item_id, (string) $original->folder_name, (string) $party->onedrive_path);
+
+        $folder->update([
+            'status' => MatterOneDriveFolder::CREATED,
+            'owner_party_id' => $owner->getKey(),
+            'drive_item_id' => $original->drive_item_id,
+            'web_url' => $original->web_url,
+            'folder_name' => $original->folder_name,
+            'shortcut_item_id' => $shortcutId,
+            'error' => null,
+        ]);
+    }
+
+    /**
+     * A shortcut in this assistant's OneDrive to a folder in the owner's: they are given access to the folder
+     * (no email sent), the shortcut is made at the top of their OneDrive — the only place OneDrive makes one —
+     * and moved under the path given (left at the top when the move is refused, which still works). Its id.
+     */
+    private function placeShortcut(Party $party, Party $owner, string $itemId, string $name, string $path): string
+    {
+        $user = (string) $party->onedrive_email;
+        $ownerUser = (string) $owner->onedrive_email;
+
+        $this->client->share($ownerUser, $itemId, $user);
+        $shortcut = $this->client->addShortcut($user, self::clean($name), $this->client->driveId($ownerUser), $itemId);
+
+        if (trim($path) !== '') {
+            try {
+                $this->client->move($user, $shortcut['id'], $this->client->ensureFolder($user, $path)['id']);
+            } catch (Throwable $e) {
+                Log::warning('OneDrive shortcut left at the top of the OneDrive: '.$e->getMessage(), ['party' => $party->getKey(), 'item' => $itemId]);
+            }
+        }
+
+        return $shortcut['id'];
+    }
+
+    /**
      * Those who manage the OneDrive folders hear that a new matter's folder
      * is waiting for them.
      *
@@ -293,7 +443,8 @@ class MatterOneDriveFolders
     {
         try {
             // Roles and permissions loaded at once: asked of every user here, and again for their preferences.
-            $managers = User::query()->with(['roles.permissions', 'permissions'])->get()->filter(fn (User $user): bool => $user->can('View:OneDriveSettings'));
+            // …of those who may view the matter.
+            $managers = User::query()->with(['roles.permissions', 'permissions'])->get()->filter(fn (User $user): bool => $user->can('View:OneDriveSettings') && ($folder->matter === null || $user->can('view', $folder->matter)));
 
             if ($managers->isEmpty()) {
                 return;
@@ -363,6 +514,8 @@ class MatterOneDriveFolders
             ->where('status', MatterOneDriveFolder::CREATED)
             ->whereNotNull('drive_item_id')
             ->whereNull('moved_at')
+            // Once a folder: not again through a shortcut to it.
+            ->whereNull('owner_party_id')
             ->with('party')
             ->get()
             ->filter(fn (MatterOneDriveFolder $folder): bool => filled($folder->party?->onedrive_email))
@@ -419,6 +572,7 @@ class MatterOneDriveFolders
             ->where('party_id', $folder->party_id)
             ->where('status', MatterOneDriveFolder::CREATED)
             ->whereNotNull('drive_item_id')
+            ->whereNull('owner_party_id')
             ->whereNull('moved_at')
             ->whereIn('matter_id', $ids)
             ->oldest('id')
@@ -443,7 +597,7 @@ class MatterOneDriveFolders
             return false;
         }
 
-        $user = (string) $folder->party->onedrive_email;
+        $user = $folder->driveUser();
         $apartListings = [];
 
         // Emails saved in the same folder (a day's, a side's, a report's) are read from it together.
@@ -513,8 +667,8 @@ class MatterOneDriveFolders
             return $result;
         }
 
-        $sourceUser = (string) $source->party->onedrive_email;
-        $targetUser = (string) $target->party->onedrive_email;
+        $sourceUser = $source->driveUser();
+        $targetUser = $target->driveUser();
         $items = $this->emailItems($email, $from);
 
         if ($items->isEmpty()) {
@@ -579,7 +733,7 @@ class MatterOneDriveFolders
         $folder = self::folderFor($matter);
         $items = $this->emailItems($email, $matter);
 
-        $items->each(fn (array $item) => $this->client->delete((string) $folder->party->onedrive_email, $item['id']));
+        $items->each(fn (array $item) => $this->client->delete($folder->driveUser(), $item['id']));
 
         return $items->count();
     }
@@ -599,7 +753,7 @@ class MatterOneDriveFolders
             return false;
         }
 
-        $user = (string) $folder->party->onedrive_email;
+        $user = $folder->driveUser();
         $targetId = $this->ensurePath($user, $folder, $targetPath);
         // The files kept apart (an attachments folder: the party's documents) stay where they are.
         $items->reject(fn (array $item): bool => $item['apart'] ?? false)->each(fn (array $item) => $this->client->move($user, $item['id'], $targetId));
@@ -626,7 +780,7 @@ class MatterOneDriveFolders
             return [];
         }
 
-        $user = (string) $folder->party->onedrive_email;
+        $user = $folder->driveUser();
         $fromId = $this->walk($user, (string) $folder->drive_item_id, $fromPath);
         $found = $fromId === null ? collect() : collect($this->client->children($user, $fromId))
             ->filter(fn (array $item): bool => ! $item['folder'] && in_array($item['webUrl'], $urls, true));
@@ -655,7 +809,7 @@ class MatterOneDriveFolders
             return collect();
         }
 
-        $user = (string) $folder->party->onedrive_email;
+        $user = $folder->driveUser();
         $folderId = $this->walk($user, (string) $folder->drive_item_id, self::emailFolder($email, $matter));
         $stem = mb_strtolower(self::clean($base));
 
@@ -749,8 +903,12 @@ class MatterOneDriveFolders
      */
     public function moveToFinished(MatterOneDriveFolder $folder): bool
     {
-        $folder->loadMissing(['party', 'matter']);
+        $folder->loadMissing(['party', 'matter', 'owner']);
         $party = $folder->party;
+
+        if ($folder->isShortcut()) {
+            return $this->moveShortcutToFinished($folder);
+        }
 
         if (! $folder->isCreated() || blank($folder->drive_item_id) || $folder->moved_at !== null
             || ! $party || blank($party->onedrive_email) || blank($party->onedrive_finished_path)) {
@@ -801,6 +959,59 @@ class MatterOneDriveFolders
                 ]);
             }
         }
+
+        return true;
+    }
+
+    /**
+     * A shortcut's row when the matter is finished: the folder itself goes with its owner's row (waited for,
+     * when it is to move), then the shortcut under this assistant's matters in progress is removed — unless
+     * another matter of the case still in progress uses it — and one made under their finished matters, to the
+     * folder where it now is (one there already for another finished matter of the case reused).
+     */
+    private function moveShortcutToFinished(MatterOneDriveFolder $folder): bool
+    {
+        $party = $folder->party;
+        $owner = $folder->owner;
+
+        if (! $folder->isCreated() || $folder->moved_at !== null
+            || ! $party || blank($party->onedrive_email) || blank($party->onedrive_finished_path) || ! $owner || blank($owner->onedrive_email)) {
+            return false;
+        }
+
+        $ownersRow = MatterOneDriveFolder::query()->where('matter_id', $folder->matter_id)->where('party_id', $folder->owner_party_id)->with('party')->first();
+
+        if ($ownersRow !== null && $ownersRow->moved_at === null && filled($ownersRow->party?->onedrive_finished_path)) {
+            throw new \RuntimeException(__('Waiting for the folder to be moved in :name\'s OneDrive first.', ['name' => $owner->name]));
+        }
+
+        $target = $ownersRow ?? $folder;
+        $user = (string) $party->onedrive_email;
+
+        if (filled($folder->shortcut_item_id) && ! MatterOneDriveFolder::query()->where('party_id', $party->getKey())->whereKeyNot($folder->getKey())->where('shortcut_item_id', $folder->shortcut_item_id)->whereNull('moved_at')->exists()) {
+            try {
+                $this->client->delete($user, (string) $folder->shortcut_item_id);
+            } catch (Throwable $e) {
+                Log::info('OneDrive shortcut not removed: '.$e->getMessage(), ['folder' => $folder->getKey()]);
+            }
+        }
+
+        $existing = MatterOneDriveFolder::query()
+            ->where('party_id', $party->getKey())
+            ->whereKeyNot($folder->getKey())
+            ->where('drive_item_id', $target->drive_item_id)
+            ->whereNotNull('shortcut_item_id')
+            ->whereNotNull('moved_at')
+            ->value('shortcut_item_id');
+
+        $folder->update([
+            'drive_item_id' => $target->drive_item_id,
+            'web_url' => $target->web_url,
+            'folder_name' => $target->folder_name,
+            'shortcut_item_id' => $existing ?? $this->placeShortcut($party, $owner, (string) $target->drive_item_id, (string) $target->folder_name, (string) $party->onedrive_finished_path),
+            'moved_at' => now(),
+            'move_error' => null,
+        ]);
 
         return true;
     }
@@ -1247,10 +1458,10 @@ class MatterOneDriveFolders
             ->where('matter_id', $matter->getKey())
             ->where('status', MatterOneDriveFolder::CREATED)
             ->whereNotNull('drive_item_id')
-            ->with('party')
+            ->with(['party', 'owner'])
             ->oldest('id')
             ->get()
-            ->first(fn (MatterOneDriveFolder $f) => filled($f->party?->onedrive_email));
+            ->first(fn (MatterOneDriveFolder $f) => filled($f->driveUser()));
     }
 
     /**
@@ -1270,20 +1481,36 @@ class MatterOneDriveFolders
      */
     public function uploadToSubfolder(Matter $matter, string $subfolder, string $name, string $contents, string $mime, bool $replace = false): ?string
     {
+        $target = $this->subfolder($matter, $subfolder);
+
+        if ($target === null) {
+            return null;
+        }
+
+        // A name with no extension stays without one: "name." is refused ("illegal characters").
+        $extension = pathinfo($name, PATHINFO_EXTENSION);
+        $file = (self::clean(pathinfo($name, PATHINFO_FILENAME)) ?: 'file').($extension !== '' ? '.'.$extension : '');
+
+        return $this->client->upload($target['user'], $target['id'], $file, $contents, $mime, $replace)['webUrl'];
+    }
+
+    /**
+     * A subfolder of the matter's folder in its assistant's OneDrive ("a/b", made when missing; the folder itself
+     * for none): the account it is in, its id and its path. Null when the matter has no folder.
+     *
+     * @return ?array{user: string, id: string, path: string}
+     */
+    public function subfolder(Matter $matter, string $subfolder): ?array
+    {
         $folder = self::folderFor($matter);
 
         if (! $folder) {
             return null;
         }
 
-        $user = (string) $folder->party->onedrive_email;
-        $target = $this->ensurePath($user, $folder, $subfolder);
+        $user = $folder->driveUser();
 
-        // A name with no extension stays without one: "name." is refused ("illegal characters").
-        $extension = pathinfo($name, PATHINFO_EXTENSION);
-        $file = (self::clean(pathinfo($name, PATHINFO_FILENAME)) ?: 'file').($extension !== '' ? '.'.$extension : '');
-
-        return $this->client->upload($user, $target, $file, $contents, $mime, $replace)['webUrl'];
+        return ['user' => $user, 'id' => $this->ensurePath($user, $folder, $subfolder), 'path' => self::cleanPath($subfolder)];
     }
 
     /** The test folder's name — fixed, so the test can find it to remove it. */
@@ -1386,12 +1613,14 @@ class MatterOneDriveFolders
             ->where('matter_id', $matter->getKey())
             ->where('status', MatterOneDriveFolder::CREATED)
             ->whereNotNull('drive_item_id')
+            // Once a folder: not again through a shortcut to it.
+            ->whereNull('owner_party_id')
             ->with('party')
             ->get()
             ->filter(fn (MatterOneDriveFolder $folder): bool => filled($folder->party?->onedrive_email));
 
         foreach ($folders as $folder) {
-            $done['folders'] += $this->renameIn((string) $folder->party->onedrive_email, (string) $folder->drive_item_id, $from, $to) ? 1 : 0;
+            $done['folders'] += $this->renameIn($folder->driveUser(), (string) $folder->drive_item_id, $from, $to) ? 1 : 0;
         }
 
         return [...$done, ...$this->repathKept($matter, $from, $to)];
@@ -1592,8 +1821,10 @@ class MatterOneDriveFolders
             } else {
                 // At the top of their OneDrive: only the matters' folders go, not everything there.
                 $rows = $party->matterOneDriveFolders()->where('status', MatterOneDriveFolder::CREATED)->whereNotNull('drive_item_id')->when($which === 'matters', fn ($q) => $q->whereNull('moved_at'), fn ($q) => $q->whereNotNull('moved_at'))->get();
-                foreach ($rows->unique('drive_item_id') as $row) {
-                    $this->client->move($user, (string) $row->drive_item_id, $target['id']);
+                // A shortcut to another's folder: the shortcut itself goes, not the folder.
+                $itemOf = fn (MatterOneDriveFolder $row): string => (string) ($row->shortcut_item_id ?? $row->drive_item_id);
+                foreach ($rows->unique($itemOf) as $row) {
+                    $this->client->move($user, $itemOf($row), $target['id']);
                 }
             }
 
@@ -1604,7 +1835,7 @@ class MatterOneDriveFolders
 
         // Their matters' links: where each folder is now.
         if ($changed) {
-            foreach ($party->matterOneDriveFolders()->where('status', MatterOneDriveFolder::CREATED)->whereNotNull('drive_item_id')->get() as $row) {
+            foreach ($party->matterOneDriveFolders()->where('status', MatterOneDriveFolder::CREATED)->whereNotNull('drive_item_id')->whereNull('owner_party_id')->get() as $row) {
                 try {
                     $row->update(['web_url' => $this->client->itemInfo($user, (string) $row->drive_item_id)['webUrl'] ?: $row->web_url]);
                 } catch (Throwable $e) {

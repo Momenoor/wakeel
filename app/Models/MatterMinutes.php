@@ -57,6 +57,7 @@ class MatterMinutes extends Model
             'items' => 'array',
             'inputs' => 'array',
             'live_file' => 'array',
+            'shared_files' => 'array',
         ];
     }
 

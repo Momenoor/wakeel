@@ -2,7 +2,7 @@
     @if ($folders->isEmpty())
         <p class="text-sm text-gray-500 dark:text-gray-400">{{ __('No folders yet.') }}</p>
     @else
-        {{-- Whose folder: one an assistant. --}}
+        {{-- Whose folder: one an assistant — a link icon for a shortcut to the folder in another's OneDrive. --}}
         <div class="flex flex-wrap gap-1">
             @foreach ($folders as $each)
                 <x-filament::button
@@ -10,7 +10,7 @@
                     :color="$each->id === $folder?->id ? 'primary' : 'gray'"
                     :outlined="$each->id !== $folder?->id"
                     :icon="match ($each->status) {
-                        \App\Models\MatterOneDriveFolder::CREATED => 'heroicon-o-user',
+                        \App\Models\MatterOneDriveFolder::CREATED => $each->isShortcut() ? 'heroicon-o-link' : 'heroicon-o-user',
                         \App\Models\MatterOneDriveFolder::FAILED => 'heroicon-o-exclamation-triangle',
                         default => 'heroicon-o-clock',
                     }"

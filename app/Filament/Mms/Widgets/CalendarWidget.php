@@ -31,6 +31,8 @@ class CalendarWidget extends FullCalendarWidget
     public function fetchEvents(array $info): array
     {
         return $date = CalendarEvent::query()
+            // Of the matters the viewer may see, and of no matter.
+            ->visibleTo(auth()->user())
             ->with('matters') // Eager load the relationship
             ->where('start_datetime', '>=', $info['start'])
             ->where('end_datetime', '<=', $info['end'])

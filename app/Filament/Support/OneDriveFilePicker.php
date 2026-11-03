@@ -22,9 +22,6 @@ use Throwable;
  */
 final class OneDriveFilePicker
 {
-    /** Between a pick's folder (ours) and its item (OneDrive's). */
-    private const SEPARATOR = '|';
-
     public static function field(?Matter $matter, string $name = 'onedrive_files'): Select
     {
         $folders = fn (): Collection => self::folders($matter);
@@ -39,7 +36,7 @@ final class OneDriveFilePicker
                 $whose = $folders()->count() > 1 ? $folder->party?->name : null;
 
                 return collect($files)->mapWithKeys(fn (array $file): array => [
-                    $folder->getKey().self::SEPARATOR.$file['id'] => self::label([$file['name'], $file['where'], $whose]),
+                    MatterOneDriveFolders::fileKey($folder, $file['id']) => self::label([$file['name'], $file['where'], $whose]),
                 ])->all();
             })
             ->all();
@@ -78,14 +75,25 @@ final class OneDriveFilePicker
      */
     public static function names(?Matter $matter, array $picked): array
     {
+        return array_column(self::details($matter, $picked), 'name');
+    }
+
+    /**
+     * The names and sizes of the files picked — one that cannot be read left out.
+     *
+     * @param  list<string>  $picked
+     * @return list<array{name: string, size: int}>
+     */
+    public static function details(?Matter $matter, array $picked): array
+    {
         $folders = self::folders($matter)->keyBy('id');
 
-        return array_values(array_filter(array_map(function ($value) use ($folders): ?string {
-            [$folderId, $itemId] = self::split($value);
+        return array_values(array_filter(array_map(function ($value) use ($folders): ?array {
+            [$folderId, $itemId] = MatterOneDriveFolders::splitFileKey($value);
             $folder = $folders->get($folderId);
 
             try {
-                return $folder ? app(MatterOneDriveExplorer::class)->name($folder, $itemId) : null;
+                return $folder ? app(MatterOneDriveExplorer::class)->details($folder, $itemId) : null;
             } catch (Throwable) {
                 return null;
             }
@@ -109,7 +117,7 @@ final class OneDriveFilePicker
 
         try {
             return array_map(function ($value) use ($folders): array {
-                [$folderId, $itemId] = self::split($value);
+                [$folderId, $itemId] = MatterOneDriveFolders::splitFileKey($value);
                 $folder = $folders->get($folderId);
 
                 if (! $folder) {
@@ -137,18 +145,6 @@ final class OneDriveFilePicker
         }
 
         // Once a request: asked of the field's options, labels and visibility alike.
-        return once(fn (): Collection => MatterOneDriveFolders::visibleTo($matter, auth()->user())
-            ->filter(fn (MatterOneDriveFolder $f) => $f->isCreated())
-            ->values());
-    }
-
-    /**
-     * @return array{0: int, 1: string}
-     */
-    private static function split(mixed $value): array
-    {
-        [$folderId, $itemId] = array_pad(explode(self::SEPARATOR, (string) $value, 2), 2, '');
-
-        return [(int) $folderId, $itemId];
+        return once(fn (): Collection => MatterOneDriveFolders::readyFor($matter, auth()->user()));
     }
 }

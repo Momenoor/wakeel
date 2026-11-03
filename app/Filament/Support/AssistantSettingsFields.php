@@ -6,6 +6,7 @@ use App\Services\MMS\MatterOneDriveFolders;
 use Filament\Forms\Components\Field;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * An assistant's own settings, on their party: where their matter folders are made in OneDrive (and moved
@@ -49,11 +50,12 @@ final class AssistantSettingsFields
             // Who handles this assistant's matters with them: those matters theirs to open and work on, and told of them.
             Select::make('administrators')
                 ->label(__('Administrators of their matters'))
-                ->relationship('administrators', 'name')
+                // Users of the "admin" role only — the role that sees its administered assistants' matters and no others.
+                ->relationship('administrators', 'name', modifyQueryUsing: fn (Builder $query) => $query->whereHas('roles', fn (Builder $roles) => $roles->where('name', 'admin')))
                 ->multiple()
                 ->preload()
                 ->searchable()
-                ->helperText(__('These users open and work on this assistant\'s matters (as their own role allows), see this assistant\'s OneDrive folders and incentive on them and have them in their "My Matters", and are told of what happens on them: emails sent and received, requests, minutes, new matters and appointment reminders. A role given "View administered assistants\' matters only" instead of "View own matters" sees these assistants\' matters and no others.'))
+                ->helperText(__('These users open and work on this assistant\'s matters (as their own role allows), see this assistant\'s OneDrive folders and incentive on them and have them in their "My Matters", and are told of what happens on them: emails sent and received, requests, minutes, new matters and appointment reminders. Only users of the "admin" role are offered: that role sees its administered assistants\' matters and no others.'))
                 ->columnSpanFull(),
         ]));
     }

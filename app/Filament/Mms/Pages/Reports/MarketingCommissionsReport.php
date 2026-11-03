@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Pages\Reports;
 use App\Filament\Concerns\PrintableReport;
 use App\Filament\Mms\Clusters\Reports;
 use App\Models\MarketingCommission;
+use App\Models\Matter;
 use App\Models\Party;
 use App\Services\MMS\MarketingCommissions;
 use App\Support\ReportDateRangeFilter;
@@ -72,7 +73,8 @@ class MarketingCommissionsReport extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(MarketingCommission::query()->with(['matter', 'party', 'calculation']))
+            // Of the matters the viewer may see.
+            ->query(MarketingCommission::query()->with(['matter', 'party', 'calculation'])->when(Matter::visibleIds(auth()->user()), fn ($q, $ids) => $q->whereIn('matter_id', $ids)))
             ->paginated([25, 50, 100, 'all'])
             ->defaultPaginationPageOption(50)
             ->defaultSort('date', 'desc')

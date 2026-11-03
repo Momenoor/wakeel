@@ -103,6 +103,7 @@ class FeeCollectionAgingReport extends Page implements HasTable
             ->groupBy('fees.matter_id');
 
         return Matter::query()
+            ->visibleTo(auth()->user())
             ->joinSub($owed, 'billed', 'billed.matter_id', '=', 'matters.id')
             ->leftJoinSub($received, 'paid', 'paid.matter_id', '=', 'matters.id')
             ->with(['court', 'type', 'assistantsOnly.party'])

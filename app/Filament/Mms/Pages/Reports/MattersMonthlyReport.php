@@ -192,6 +192,8 @@ class MattersMonthlyReport extends Page implements HasTable
 
             // Explicitly enforce soft deletes inside since we're breaking away from standard Eloquent scoping
             $q->whereNull('deleted_at');
+            // The matters the viewer may see.
+            $q->when(Matter::visibleIds(auth()->user()), fn ($q, $ids) => $q->whereIn('matters.id', $ids));
 
             return $q->when($filters['year']['value'] ?? null, fn ($q, $year) => $q->where('year', $year))
                 ->when($filters['assistant']['value'] ?? null, fn ($q, $assistantId) => $q->whereExists(
@@ -267,6 +269,7 @@ class MattersMonthlyReport extends Page implements HasTable
             ->selectRaw('COALESCE(SUM('.Fee::totalSql().'), 0)')
             ->whereRaw(Sql::yearMonth('matters.distributed_at').' = months.period')
             ->whereNull('matters.deleted_at') // Protect the join from deleted matters
+            ->when(Matter::visibleIds(auth()->user()), fn ($q, $ids) => $q->whereIn('matters.id', $ids))
             ->when($filters['year']['value'] ?? null, fn ($q, $year) => $q->where('matters.year', $year))
             ->when($filters['assistant']['value'] ?? null, fn ($q, $assistantId) => $q->whereExists(fn ($qe) => $qe->select(DB::raw(1))->from('matter_party')->whereColumn('matter_party.matter_id', 'matters.id')->where('matter_party.party_id', $assistantId)->where('role', 'expert')->where('type', 'assistant')))
             ->when($filters['court']['value'] ?? null, fn ($q, $courtId) => $q->where('matters.court_id', $courtId))

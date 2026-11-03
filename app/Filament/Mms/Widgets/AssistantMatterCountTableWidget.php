@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Widgets;
 
 use App\Filament\Mms\Resources\Matters\MatterResource;
+use App\Models\Matter;
 use App\Models\MatterParty;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
@@ -45,6 +46,8 @@ class AssistantMatterCountTableWidget extends TableWidget
         return MatterParty::query()
             ->where('matter_party.role', 'expert')
             ->where('matter_party.type', 'assistant')
+            // The matters the viewer may see.
+            ->when(Matter::visibleIds(auth()->user()), fn ($q, $ids) => $q->whereIn('matter_party.matter_id', $ids))
             ->whereHas('party', fn ($q) => $q->whereJsonContains('role', ['role' => 'expert', 'type' => 'assistant'])
             )
             ->whereHas('matter', fn ($q) => $q->whereNotNull('distributed_at')

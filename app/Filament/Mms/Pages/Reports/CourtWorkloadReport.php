@@ -6,6 +6,7 @@ use App\Enums\FeeType;
 use App\Filament\Concerns\PrintableReport;
 use App\Filament\Mms\Clusters\Reports;
 use App\Models\Court;
+use App\Models\Matter;
 use App\Support\ReportDateRangeFilter;
 use App\Support\ReportPrintAction;
 use BackedEnum;
@@ -30,7 +31,16 @@ use Illuminate\Database\Eloquent\Builder;
  */
 class CourtWorkloadReport extends Page implements HasTable
 {
-    use HasPageShield, PrintableReport;
+    use HasPageShield, PrintableReport {
+        HasPageShield::canAccess as shieldCanAccess;
+    }
+
+    /** Its own permission, and every matter in view: the figures are the whole office's, not a share of them. */
+    public static function canAccess(): bool
+    {
+        return static::shieldCanAccess() && ! Matter::restrictedFor(auth()->user());
+    }
+
     use InteractsWithTable;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-building-library';

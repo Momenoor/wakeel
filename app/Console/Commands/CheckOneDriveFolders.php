@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 
 /**
  * The folders the system made in the matters' OneDrive folders looked for (OneDriveFolderCheck): one renamed or
- * moved by hand told to the matter's people. Scheduled once a day; run by hand to check now.
+ * moved by hand told to the matter's people. Scheduled hourly while switched on; run by hand to check now.
  */
 class CheckOneDriveFolders extends Command
 {
@@ -20,6 +20,12 @@ class CheckOneDriveFolders extends Command
     {
         if (! MatterOneDriveFolders::enabled()) {
             $this->info('OneDrive folders are off.');
+
+            return self::SUCCESS;
+        }
+
+        if (! MatterOneDriveFolders::folderCheck()) {
+            $this->info('The folder check is off (Settings → OneDrive folders).');
 
             return self::SUCCESS;
         }

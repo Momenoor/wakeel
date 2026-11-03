@@ -9,6 +9,7 @@ use App\Models\Matter;
 use App\Models\MatterMinutes;
 use App\Services\MMS\Letters\MinutesLiveFiles;
 use App\Services\MMS\Letters\MinutesService;
+use App\Services\MMS\MatterOneDriveFolders;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
@@ -125,7 +126,7 @@ class RecordMinutes extends Page
             Action::make('showFile')
                 ->label(__('Show a file on the live view'))
                 ->icon('heroicon-o-document-magnifying-glass')
-                ->visible(fn (): bool => MinutesLiveFiles::folders($this->getRecord(), auth()->user())->isNotEmpty())
+                ->visible(fn (): bool => MatterOneDriveFolders::readyFor($this->getRecord(), auth()->user())->isNotEmpty())
                 ->modalHeading(__('Show a file on the live view'))
                 ->modalDescription(__('The matter\'s folder in OneDrive: open its folders, and "Show on the live view" puts a file over the minutes on every live view the attendees watch, until it is hidden.'))
                 ->modalWidth('6xl')

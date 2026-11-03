@@ -99,7 +99,8 @@ class VatSummaryReport extends Page implements HasTable
 
         return Fee::query()
             ->fromSub($fees->unionAll($notes), 'fees')
-            ->whereHas('matter')
+            // Of the matters the viewer may see.
+            ->whereHas('matter', fn ($matter) => $matter->visibleTo(auth()->user()))
             ->with(['matter.court', 'matter.type']);
     }
 

@@ -108,7 +108,7 @@ class SentEmailArchive
                 $to,
                 $cc,
                 [],
-                array_map(fn (array $file): array => ['name' => $file['name'], 'size' => strlen((string) $file['data'])], $email->files),
+                [...array_map(fn (array $file): array => ['name' => $file['name'], 'size' => strlen((string) $file['data'])], $email->files), ...$email->sharedFiles],
                 now(),
             );
 

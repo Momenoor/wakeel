@@ -255,7 +255,7 @@ class MatterOneDriveFiles extends Component implements HasActions, HasSchemas, H
                         abort_unless($matter && auth()->user()?->can('update', $matter), 403);
 
                         $minutes = $matter->minutes()->findOrFail($this->pickForMinutes);
-                        app(MinutesLiveFiles::class)->show($minutes, auth()->user(), $this->folder()->getKey().'|'.$record['id']);
+                        app(MinutesLiveFiles::class)->show($minutes, auth()->user(), MatterOneDriveFolders::fileKey($this->folder(), $record['id']));
                         Notification::make()->success()->title(__('Shown on the live view'))->body($record['name'])->send();
                         // Record the meeting closes the file manager and offers Hide the file.
                         $this->dispatch('live-file-shown');

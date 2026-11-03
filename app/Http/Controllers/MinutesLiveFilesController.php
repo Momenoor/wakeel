@@ -22,9 +22,6 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class MinutesLiveFilesController extends Controller
 {
-    /** How much is read from OneDrive and sent on at a time. */
-    private const CHUNK = 1024 * 1024;
-
     public function __construct(private readonly MatterOneDriveExplorer $explorer, private readonly OneDriveClient $client) {}
 
     /** The files at the top of each folder and in the folders directly in it — or, with words (q), those found anywhere in it. */
@@ -59,17 +56,7 @@ class MinutesLiveFilesController extends Controller
             abort(502, $e->getMessage());
         }
 
-        return new StreamedResponse(function () use ($body): void {
-            // A big file over a slow line takes longer than a page may.
-            @set_time_limit(0);
-
-            while (! $body->eof()) {
-                echo $body->read(self::CHUNK);
-                flush();
-            }
-
-            $body->close();
-        }, 200, [
+        return new StreamedResponse(OneDriveClient::passOn($body), 200, [
             'Content-Type' => (string) $file['mime'],
             'Content-Disposition' => 'inline',
             'X-Content-Type-Options' => 'nosniff',

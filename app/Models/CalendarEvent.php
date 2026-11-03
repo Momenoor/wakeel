@@ -98,6 +98,36 @@ class CalendarEvent extends Model
         return $this->belongsTo(Matter::class);
     }
 
+    /**
+     * The events someone may see: every one, for whoever may see every matter; else those of the matters they may
+     * see — by the matter on the event or any linked to it — and those of no matter at all (a holiday, a meeting).
+     */
+    public function scopeVisibleTo(Builder $query, ?User $user): void
+    {
+        $ids = Matter::visibleIds($user);
+
+        if ($ids === null) {
+            return;
+        }
+
+        $query->where(fn (Builder $q) => $q
+            ->whereIn('calendar_events.matter_id', $ids)
+            ->orWhereHas('matters', fn (Builder $matters) => $matters->whereIn('matters.id', $ids))
+            ->orWhere(fn (Builder $none) => $none->whereNull('calendar_events.matter_id')->whereDoesntHave('matters')));
+    }
+
+    /** Whether someone may see this event: one of no matter, or of a matter they may view (scopeVisibleTo()). */
+    public function isVisibleTo(?User $user): bool
+    {
+        if (! Matter::restrictedFor($user)) {
+            return true;
+        }
+
+        $linked = collect([$this->matter])->merge($this->matters)->filter();
+
+        return $linked->isEmpty() || $linked->contains(fn (Matter $matter): bool => $user->can('view', $matter));
+    }
+
     public function matters(): BelongsToMany
     {
         return $this->belongsToMany(Matter::class, 'calendar_event_matter')->using(CalendarEventMatter::class);

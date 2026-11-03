@@ -2,11 +2,13 @@
 
 namespace App\Services\MMS;
 
+use Closure;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Psr\Http\Message\StreamInterface;
 use RuntimeException;
 use Throwable;
@@ -279,6 +281,81 @@ class OneDriveClient
         }
 
         return $response->toPsrResponse()->getBody();
+    }
+
+    /** The id of a user's OneDrive — a shortcut in another's names a folder by it. */
+    public function driveId(string $user): string
+    {
+        return (string) $this->request('get', "/users/{$this->user($user)}/drive")->json('id');
+    }
+
+    /** A folder (or file) shared with another user of the tenant — to write in, no email sent. */
+    public function share(string $user, string $itemId, string $withEmail): void
+    {
+        $this->request('post', "/users/{$this->user($user)}/drive/items/".rawurlencode($itemId).'/invite', [
+            'recipients' => [['email' => $withEmail]],
+            'roles' => ['write'],
+            'requireSignIn' => true,
+            'sendInvitation' => false,
+        ]);
+    }
+
+    /**
+     * A link to a folder (or file) that anyone with it may open, to view — or, where the tenant allows no such
+     * links, one for the office's own accounts. The link, and whether anyone may open it.
+     *
+     * @return array{url: string, anyone: bool}
+     */
+    public function createLink(string $user, string $itemId): array
+    {
+        $uri = "/users/{$this->user($user)}/drive/items/".rawurlencode($itemId).'/createLink';
+
+        try {
+            return ['url' => (string) $this->request('post', $uri, ['type' => 'view', 'scope' => 'anonymous'])->json('link.webUrl'), 'anyone' => true];
+        } catch (RuntimeException $e) {
+            Log::warning('OneDrive refused a link for anyone; one for the organisation made instead: '.$e->getMessage());
+
+            return ['url' => (string) $this->request('post', $uri, ['type' => 'view', 'scope' => 'organization'])->json('link.webUrl'), 'anyone' => false];
+        }
+    }
+
+    /**
+     * A shortcut in a user's OneDrive to a folder in another's (one shared with them): made at the top of
+     * their OneDrive — the only place OneDrive makes one — to be moved from there. Its id and link.
+     *
+     * @return array{id: string, webUrl: string}
+     */
+    public function addShortcut(string $user, string $name, string $driveId, string $itemId): array
+    {
+        return $this->item($this->request('post', "/users/{$this->user($user)}/drive/root/children", [
+            'name' => $name,
+            'remoteItem' => ['id' => $itemId, 'parentReference' => ['driveId' => $driveId]],
+            '@microsoft.graph.conflictBehavior' => 'rename',
+        ]));
+    }
+
+    /** How much of a file passed on is read from OneDrive and sent at a time. */
+    private const CHUNK = 1024 * 1024;
+
+    /**
+     * A file's contents (stream()) passed on to the browser as they come, a piece at a time, never held
+     * whole — for a StreamedResponse. Bytes read from it already (to look at its head) go first.
+     */
+    public static function passOn(StreamInterface $body, string $head = ''): Closure
+    {
+        return function () use ($head, $body): void {
+            // A big file over a slow line takes longer than a page may.
+            @set_time_limit(0);
+
+            echo $head;
+
+            while (! $body->eof()) {
+                echo $body->read(self::CHUNK);
+                flush();
+            }
+
+            $body->close();
+        };
     }
 
     /**

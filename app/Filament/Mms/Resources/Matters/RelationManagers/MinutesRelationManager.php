@@ -21,6 +21,7 @@ use App\Models\MinutesDelivery;
 use App\Models\WhatsAppTemplate;
 use App\Services\MMS\Letters\MinutesSender;
 use App\Services\MMS\Letters\MinutesService;
+use App\Services\MMS\Letters\SharedAttachments;
 use App\Services\WhatsAppCloud;
 use App\Support\Dates;
 use App\Support\EmailGrouping;
@@ -439,12 +440,14 @@ class MinutesRelationManager extends RelationManager
                             ->label(__('Email'))
                             ->helperText(__(':placeholder greets each by name; the minutes PDF is attached.', ['placeholder' => '{{recipient.name}}']))
                             ->email()
-                            ->placeholders(['recipient.name' => __('Recipient name (separate emails)'), ...Honorific::catalog(), 'recipient.role' => __('Recipient capacity (separate emails)')])
+                            ->placeholders(['recipient.name' => __('Recipient name (separate emails)'), ...Honorific::catalog(), 'recipient.role' => __('Recipient capacity (separate emails)'), ...SharedAttachments::catalog()])
                             ->contentDirection(MinutesService::composer($record)->isArabic() ? 'rtl' : 'ltr')
                             ->live(onBlur: true),
                         // Files of this send's own, beside the minutes.
                         EmailSendFields::attachments('minutes-attachments', __('Sent by email with the minutes, for this send only.')),
                         EmailSendFields::oneDriveFiles($record->matter),
+                        // The files shared by link now, to copy the link into the email by hand.
+                        ...EmailSendFields::sharedLink($record->matter, $record, MinutesService::fileName($record), fn (): array => []),
                     ]),
                 // The first email as it will go, its placeholders filled for whom it goes to.
                 Section::make(__('Preview'))
@@ -455,7 +458,7 @@ class MinutesRelationManager extends RelationManager
                             ? $preview['to'].' — '.__('and a separate email to each of the other :count', ['count' => $preview['others']])
                             : $preview['to'];
 
-                        return EmailSendFields::previewEntries($to, implode(', ', (array) ($get('cc') ?? [])), $preview, [MinutesService::fileName($record).'.pdf']);
+                        return EmailSendFields::previewEntries($to, implode(', ', (array) ($get('cc') ?? [])), $preview, [MinutesService::fileName($record).'.pdf'], EmailSendFields::sharedNote($record->matter, ['attachments' => $get('attachments'), 'onedrive_files' => $get('onedrive_files')], $record->shared_files));
                     }),
                 Section::make('WhatsApp')
                     ->collapsible()

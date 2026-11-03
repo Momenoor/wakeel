@@ -43,16 +43,20 @@ class MatterStatsWidget extends StatsOverviewWidget
         // matter (with its enum casts and activity-log trait) on every dashboard
         // load just to count three of them. `status` is a computed accessor, not
         // a column, so it is expressed here as the null-checks it derives from.
-        $totalCount = Matter::count();
+        // The matters the viewer may see: all of them, or their own or their administered assistants'.
+        $user = auth()->user();
+        $totalCount = Matter::query()->visibleTo($user)->count();
 
         $unpaidCount = Matter::query()
+            ->visibleTo($user)
             ->whereIn('collection_status', [MatterCollectionStatus::UNPAID, MatterCollectionStatus::PARTIAL])
             ->whereNotNull('final_report_at')
             ->count();
 
-        $currentCount = Matter::whereNull('initial_report_at')->count();
+        $currentCount = Matter::query()->visibleTo($user)->whereNull('initial_report_at')->count();
 
         $submittedCount = Matter::query()
+            ->visibleTo($user)
             ->whereNotNull('initial_report_at')
             ->whereNotNull('final_report_at')
             ->count();

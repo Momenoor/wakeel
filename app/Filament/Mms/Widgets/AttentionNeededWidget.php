@@ -44,23 +44,29 @@ class AttentionNeededWidget extends StatsOverviewWidget
 
     protected function getStats(): array
     {
+        // The matters the viewer may see: all of them, or their own or their administered assistants'.
+        $user = auth()->user();
         $sessionsSoon = Matter::query()
+            ->visibleTo($user)
             ->whereNotNull('next_session_date')
             ->whereBetween('next_session_date', [now()->startOfDay(), now()->addDays(7)->endOfDay()])
             ->count();
 
         // Approved for final reporting but not yet submitted.
         $awaitingFinalReport = Matter::query()
+            ->visibleTo($user)
             ->whereNotNull('final_report_memo_date')
             ->whereNull('final_report_at')
             ->count();
 
         $pendingRequests = MatterRequest::query()
+            ->when(Matter::visibleIds($user), fn ($q, $ids) => $q->whereIn('matter_id', $ids))
             ->whereIn('status', [RequestStatus::PENDING->value, RequestStatus::DISPUTED->value])
             ->count();
 
         // A matter nobody is assigned to earns no incentive and has no owner.
         $unassigned = Matter::query()
+            ->visibleTo($user)
             ->whereDoesntHave('assistantsOnly')
             ->whereNull('final_report_at')
             ->count();

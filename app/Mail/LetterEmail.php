@@ -21,6 +21,7 @@ class LetterEmail extends Mailable
     /**
      * @param  array<string, string>  $images  placeholder token => file path
      * @param  list<array{name: string, data: string, mime: string}>  $files
+     * @param  list<array{name: string, size: int}>  $sharedFiles  files too large to attach, sent as a link in the email (SharedAttachments)
      */
     public function __construct(
         public string $emailSubject,
@@ -28,6 +29,7 @@ class LetterEmail extends Mailable
         public bool $rtl,
         public array $images = [],
         public array $files = [],
+        public array $sharedFiles = [],
     ) {}
 
     public function envelope(): Envelope

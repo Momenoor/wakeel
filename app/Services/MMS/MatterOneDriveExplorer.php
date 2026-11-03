@@ -197,7 +197,21 @@ class MatterOneDriveExplorer
     /** One file's name, for what was picked. */
     public function name(MatterOneDriveFolder $folder, string $itemId): string
     {
-        return Cache::remember('onedrive-name:'.$folder->getKey().':'.md5($itemId), 600, fn (): string => $this->info($folder, $itemId)['name']);
+        return $this->details($folder, $itemId)['name'];
+    }
+
+    /**
+     * One file's name and size, for what was picked — kept a while, asked for again as the form is worked on.
+     *
+     * @return array{name: string, size: int}
+     */
+    public function details(MatterOneDriveFolder $folder, string $itemId): array
+    {
+        return Cache::remember('onedrive-details:'.$folder->getKey().':'.md5($itemId), 600, function () use ($folder, $itemId): array {
+            $info = $this->info($folder, $itemId);
+
+            return ['name' => (string) $info['name'], 'size' => (int) ($info['size'] ?? 0)];
+        });
     }
 
     public function upload(MatterOneDriveFolder $folder, ?string $itemId, string $name, string $contents, string $mime): void
@@ -314,7 +328,7 @@ class MatterOneDriveExplorer
 
     private function user(MatterOneDriveFolder $folder): string
     {
-        $email = $folder->party?->onedrive_email;
+        $email = $folder->driveUser();
 
         if (blank($email)) {
             throw new RuntimeException(__('The assistant has no OneDrive account set.'));

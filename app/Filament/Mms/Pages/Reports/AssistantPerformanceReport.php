@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Pages\Reports;
 use App\Enums\FeeType;
 use App\Filament\Concerns\PrintableReport;
 use App\Filament\Mms\Clusters\Reports;
+use App\Models\Matter;
 use App\Models\Party;
 use App\Support\ReportDateRangeFilter;
 use App\Support\ReportPrintAction;
@@ -76,6 +77,8 @@ class AssistantPerformanceReport extends Page implements HasTable
 
         return Party::query()
             ->withRole('expert', 'assistant')
+            // A viewer kept to some matters: their own assistants only (their matters are the ones the viewer may see).
+            ->when(Matter::restrictedFor(auth()->user()), fn ($q) => $q->whereIn('parties.id', auth()->user()->can('ViewOwn:Matter') ? auth()->user()->ownMatterPartyIds() : auth()->user()->administeredPartyIds()))
             ->select('parties.*')
             ->selectRaw(
                 "(SELECT COUNT(DISTINCT m.id) FROM matters m

@@ -77,7 +77,7 @@ class ChangeDistributedAtRequestService extends BaseRequestService
     /** The assistant disputed the received date: the admins are told, to decide it. */
     public function onDisputeNotify(): void
     {
-        $users = self::admins();
+        $users = self::admins($this->request->matter);
         $type = NotificationType::REQUEST_CREATED;
         $title = __('Received date disputed');
         $body = __('The assistant disputed the received date of matter #:number / :year and proposes :date.', [

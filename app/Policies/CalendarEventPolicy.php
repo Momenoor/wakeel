@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Policies;
 
 use App\Models\CalendarEvent;
+use App\Models\User;
 use Illuminate\Auth\Access\HandlesAuthorization;
 use Illuminate\Foundation\Auth\User as AuthUser;
 
@@ -19,7 +20,13 @@ class CalendarEventPolicy
 
     public function view(AuthUser $authUser, ?CalendarEvent $calendarEvent = null): bool
     {
-        return $authUser->can('View:CalendarEvent');
+        return $authUser->can('View:CalendarEvent') && self::theirs($authUser, $calendarEvent);
+    }
+
+    /** An event of no matter, or of a matter the user may view (CalendarEvent::isVisibleTo()). */
+    private static function theirs(AuthUser $authUser, ?CalendarEvent $calendarEvent): bool
+    {
+        return $calendarEvent === null || ! $authUser instanceof User || $calendarEvent->isVisibleTo($authUser);
     }
 
     public function create(AuthUser $authUser): bool
@@ -29,12 +36,12 @@ class CalendarEventPolicy
 
     public function update(AuthUser $authUser, ?CalendarEvent $calendarEvent = null): bool
     {
-        return $authUser->can('Update:CalendarEvent');
+        return $authUser->can('Update:CalendarEvent') && self::theirs($authUser, $calendarEvent);
     }
 
     public function delete(AuthUser $authUser, ?CalendarEvent $calendarEvent = null): bool
     {
-        return $authUser->can('Delete:CalendarEvent');
+        return $authUser->can('Delete:CalendarEvent') && self::theirs($authUser, $calendarEvent);
     }
 
     public function restore(AuthUser $authUser, ?CalendarEvent $calendarEvent = null): bool

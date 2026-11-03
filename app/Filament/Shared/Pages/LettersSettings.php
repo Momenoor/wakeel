@@ -7,6 +7,7 @@ use App\Models\LetterFont;
 use App\Models\MatterLetter;
 use App\Models\Party;
 use App\Models\Setting;
+use App\Services\MMS\Letters\SharedAttachments;
 use App\Services\MMS\SenderMailer;
 use App\Support\Branding;
 use App\Support\ScreenPermissions;
@@ -51,6 +52,7 @@ class LettersSettings extends SettingsFormPage
             'letter_reference_format' => Setting::get('letter_reference_format', MatterLetter::DEFAULT_REFERENCE_FORMAT),
             'letter_cc_expert_types' => MatterLetter::ccExpertTypes(),
             EmailSendFields::DEFAULT_SENDER => Setting::get(EmailSendFields::DEFAULT_SENDER),
+            SharedAttachments::LIMIT => Setting::get(SharedAttachments::LIMIT, SharedAttachments::DEFAULT_LIMIT),
             Branding::EMAIL_PDF => Setting::get(Branding::EMAIL_PDF, Branding::EMAIL_PDF_OUTLOOK),
             Branding::EMAIL_PDF_FONT => Setting::get(Branding::EMAIL_PDF_FONT),
             'leave_request_recipients' => (array) Setting::get('leave_request_recipients', []),
@@ -59,7 +61,7 @@ class LettersSettings extends SettingsFormPage
 
     protected function groups(): array
     {
-        return [EmailSendFields::DEFAULT_SENDER => 'mail'];
+        return [EmailSendFields::DEFAULT_SENDER => 'mail', SharedAttachments::LIMIT => 'mail'];
     }
 
     protected function fields(): array
@@ -96,6 +98,15 @@ class LettersSettings extends SettingsFormPage
                         ->options(fn () => SenderMailer::options(sharedOnly: true))
                         ->placeholder(__('As the system emails'))
                         ->helperText(__('The mailbox a letter, minutes or a bulk mail campaign starts from when sent; another can be chosen each time.'))
+                        ->columnSpanFull(),
+                    // Files over this go by a link to a folder in the matter's OneDrive folder (SharedAttachments).
+                    TextInput::make(SharedAttachments::LIMIT)
+                        ->label(__('Files sent as a link above (MB)'))
+                        ->numeric()
+                        ->minValue(1)
+                        ->maxValue(150)
+                        ->required()
+                        ->helperText(__('When a letter\'s or minutes\' email with its files would be over this, the files added are put in a folder of the matter\'s OneDrive folder, under the sent emails, and sent as a link anyone with it may open — the letter or minutes attached as usual. The mail providers take about 25 MB an email. The link goes where {{attachments.link}} is written in the covering email or the letter, else in a note at the end of the email.'))
                         ->columnSpanFull(),
                 ]),
 

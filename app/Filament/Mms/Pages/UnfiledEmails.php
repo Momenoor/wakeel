@@ -130,7 +130,7 @@ class UnfiledEmails extends Page implements HasTable
         // All of them, or those that may be about their own matters (and their own mailbox's): as set for them (User::seesAllUnfiled).
         $query = ! $user || $user->seesAllUnfiled()
             ? MatterEmail::pending()
-            : MatterEmail::pending(Matter::query()->ownedBy($user)->pluck('id')->map(fn ($id) => (int) $id)->all(), $own);
+            : MatterEmail::pending(Matter::query()->when(Matter::restrictedFor($user), fn (Builder $q) => $q->visibleTo($user), fn (Builder $q) => $q->ownedBy($user))->pluck('id')->map(fn ($id) => (int) $id)->all(), $own);
 
         return $query->when($others !== [], fn (Builder $q) => $q->where(fn (Builder $q) => $q->whereNull('sender_key')->orWhereNotIn('sender_key', $others)));
     }

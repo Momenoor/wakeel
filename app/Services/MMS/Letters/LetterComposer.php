@@ -1151,6 +1151,7 @@ class LetterComposer
             'stamp' => __('Stamp'),
             'meeting.link' => __('Teams meeting link (when made on issue)'),
             'meeting.link.url' => __('Teams meeting link').' — '.__('full address'),
+            ...SharedAttachments::catalog(),
             'minutes.number' => __('Minutes').' — '.__('number'),
             'minutes.attendees' => __('Minutes').' — '.__('attendees'),
             'minutes.attendees.count' => __('Minutes').' — '.__('how many attended'),

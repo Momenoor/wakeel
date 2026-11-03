@@ -279,14 +279,17 @@ abstract class BaseRequestService
     }
 
     /**
-     * Those told of a request to decide: the admins and super admins.
+     * Those told of a request to decide: of the admins and super admins, those who may view its matter — an admin
+     * kept to their administered assistants' matters hears of those only.
      *
      * @return Collection<int, User>
      */
-    protected static function admins(): Collection
+    protected static function admins(?Matter $matter): Collection
     {
         // By name rather than User::role(), which throws for a role an installation does not have.
-        return User::query()->whereHas('roles', fn ($query) => $query->whereIn('name', ['admin', Utils::getSuperAdminName()]))->get();
+        return User::query()->whereHas('roles', fn ($query) => $query->whereIn('name', ['admin', Utils::getSuperAdminName()]))->get()
+            ->filter(fn (User $user): bool => $matter === null || $user->can('view', $matter))
+            ->values();
     }
 
     /** Tells the admins and the report's reviewers of a request made (or sent again) — on the queue. */
@@ -303,7 +306,7 @@ abstract class BaseRequestService
             // about "which users hold this role" — so this still names the
             // role, but through Shield's own configured name rather than a
             // hardcoded literal that has to be kept in sync with it by hand.
-            $users = self::admins();
+            $users = self::admins($this->request->matter);
 
             // The assistant's reviewers (Parties → the assistant): the report on WhatsApp, to answer there. One who
             // got it is not also told of a new request, by bell, email or WhatsApp: it is the same thing.

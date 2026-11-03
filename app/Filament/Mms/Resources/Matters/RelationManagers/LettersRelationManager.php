@@ -216,6 +216,8 @@ class LettersRelationManager extends RelationManager
                 // Files of this send's own, beside the letter — whichever way it goes.
                 EmailSendFields::attachments('letter-attachments', __('Sent with the letter, for this email only.')),
                 EmailSendFields::oneDriveFiles($record->matter),
+                // The files shared by link now, to copy the link into the email or the letter by hand.
+                ...EmailSendFields::sharedLink($record->matter, $record, LetterIssuer::fileName($record), fn (Get $get): array => $record->recipients->whereIn('id', array_map('intval', (array) ($get('recipients') ?? [])))->flatMap(fn (MatterLetterRecipient $r): array => $r->allEmails())->all()),
                 EmailSendFields::grouping(),
 
                 // This email's own wording: starts from the template, with the
@@ -324,15 +326,15 @@ class LettersRelationManager extends RelationManager
             $worked[$key] = self::workEmailPreview($record, $get);
             request()->attributes->set('letter-email-preview', $worked);
         }
-        [$to, $cc, $preview, $attachments, $mode] = $worked[$key];
+        [$to, $cc, $preview, $attachments, $mode, $sharedNote] = $worked[$key];
 
-        return EmailSendFields::previewEntries($to, $cc, $preview, $attachments);
+        return EmailSendFields::previewEntries($to, $cc, $preview, $attachments, $sharedNote);
     }
 
     /**
-     * To whom, CC, the email (subject, body), the files and how it goes.
+     * To whom, CC, the email (subject, body), the files, how it goes, and that the files will go by link when they will.
      *
-     * @return array{0: string, 1: string, 2: array<string, mixed>, 3: list<string>, 4: string}
+     * @return array{0: string, 1: string, 2: array<string, mixed>, 3: list<string>, 4: string, 5: ?string}
      */
     private static function workEmailPreview(MatterLetter $record, Get $get): array
     {
@@ -374,7 +376,7 @@ class LettersRelationManager extends RelationManager
             ...EmailSendFields::oneDriveNames($record->matter, (array) ($get('onedrive_files') ?? [])),
         ];
 
-        return [$to, implode(', ', $get('cc') ?? []), $preview, $attachments, $mode];
+        return [$to, implode(', ', $get('cc') ?? []), $preview, $attachments, $mode, EmailSendFields::sharedNote($record->matter, ['attachments' => $get('attachments'), 'onedrive_files' => $get('onedrive_files')], $record->shared_files)];
     }
 
     /**

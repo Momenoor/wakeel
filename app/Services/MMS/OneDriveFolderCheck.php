@@ -39,6 +39,8 @@ final class OneDriveFolderCheck
             ->where('status', MatterOneDriveFolder::CREATED)
             ->whereNotNull('drive_item_id')
             ->whereNull('moved_at')
+            // Once a folder: not again through a shortcut to it.
+            ->whereNull('owner_party_id')
             ->whereHas('matter', fn ($query) => $query->whereNull('final_report_at'))
             ->with(['matter', 'party'])
             ->orderBy('checked_at')
@@ -80,7 +82,7 @@ final class OneDriveFolderCheck
     public function missingIn(MatterOneDriveFolder $row): array
     {
         $matter = $row->matter;
-        $user = (string) $row->party->onedrive_email;
+        $user = $row->driveUser();
 
         try {
             $this->client->itemInfo($user, (string) $row->drive_item_id);

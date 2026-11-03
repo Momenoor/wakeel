@@ -1066,4 +1066,26 @@ class MatterOneDriveFolderTest extends TestCase
         $this->assertStringContainsString('01 المراسلات', $notifications[0]->data['body']);
         $this->assertNotNull(MatterOneDriveFolder::where('matter_id', $matter->id)->sole()->checked_at);
     }
+
+    public function test_the_folder_check_is_off_unless_switched_on(): void
+    {
+        $this->switchOn('01 المراسلات');
+        $od = (new FakeOneDrive)->install();
+        $admin = User::factory()->create()->assignRole(Role::firstOrCreate(['name' => config('filament-shield.super_admin.name', 'super_admin'), 'guard_name' => 'web']));
+        $matter = $this->matter();
+        $this->assign($matter, $this->assistant());
+        $od->items[(string) $od->find('Work/Matters/2026-123 - خبرة - محاكم دبي/01 المراسلات')]['name'] = 'renamed';
+
+        // Off, as it is unless switched on: the command looks for nothing and tells nobody.
+        $this->assertFalse(MatterOneDriveFolders::folderCheck());
+        $this->artisan('onedrive:check-folders')->expectsOutputToContain('off')->assertSuccessful();
+        $this->assertNull(MatterOneDriveFolder::where('matter_id', $matter->id)->sole()->checked_at);
+        $this->assertCount(0, $admin->notifications()->get());
+
+        // Switched on from the settings page: looked for and told.
+        Setting::set(MatterOneDriveFolders::FOLDER_CHECK, true, 'onedrive');
+        $this->assertTrue(MatterOneDriveFolders::folderCheck());
+        $this->artisan('onedrive:check-folders')->expectsOutputToContain('1 with folders missing')->assertSuccessful();
+        $this->assertCount(1, $admin->notifications()->get());
+    }
 }

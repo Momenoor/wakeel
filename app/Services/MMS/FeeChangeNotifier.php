@@ -86,7 +86,8 @@ class FeeChangeNotifier
             try {
                 Notifier::send(
                     NotificationType::FEES_CHANGED,
-                    User::query()->whereKeyNot($by->getKey())->get(),
+                    // Everyone who may view the matter, but the one who changed it.
+                    User::query()->whereKeyNot($by->getKey())->get()->filter(fn (User $user): bool => $user->can('view', $matter))->values(),
                     __(':user changed the fees of matter :matter', ['user' => $by->display_name ?: $by->name, 'matter' => $matter->year.'/'.$matter->number]),
                     implode("\n", array_unique($change['lines'])),
                     MatterResource::getUrl('view', ['record' => $matter], panel: 'mms').'?tab=fees',

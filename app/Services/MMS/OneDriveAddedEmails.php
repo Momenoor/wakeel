@@ -121,7 +121,7 @@ class OneDriveAddedEmails
     private function readGroup(Collection $group, ?int $userId, ?float $deadline, array &$errors): int
     {
         $first = $group->first();
-        $user = (string) $first->party->onedrive_email;
+        $user = $first->driveUser();
         $matters = $group->map(fn (MatterOneDriveFolder $folder): Matter => $folder->matter)->values();
         $added = 0;
 

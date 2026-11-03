@@ -44,6 +44,8 @@ class LetterMailer
 
     public const BODY = 'body';
 
+    public function __construct(private readonly SharedAttachments $shared) {}
+
     /**
      * @param  list<int>|null  $recipientIds  MatterLetterRecipient ids — exactly these (none ticked: none of them); null: every recipient of the letter
      * @param  list<string>  $formats  'pdf' and/or 'docx'
@@ -83,10 +85,32 @@ class LetterMailer
             return $result;
         }
 
-        $files = [
-            ...($mode === self::ATTACHMENT ? $this->files($letter, $composer, $formats) : []),
-            ...self::attachedFiles($attachments),
-        ];
+        // The letter (when attached) and the files added. Over what an email takes, the added ones go by a link in
+        // the email instead (SharedAttachments) — the letter made again when its own template writes the link.
+        $own = $mode === self::ATTACHMENT ? $this->files($letter, $composer, $formats) : [];
+
+        try {
+            ['files' => $files, 'shared' => $shared] = $this->shared->offload($letter->matter, [...$own, ...self::attachedFiles($attachments)], count($own), LetterIssuer::fileName($letter), $withEmail->flatMap(fn (MatterLetterRecipient $r): array => $this->emails($r))->all(), $letter->shared_files);
+        } catch (\RuntimeException $e) {
+            return [...$result, 'failed' => $withEmail->count(), 'errors' => [$e->getMessage()]];
+        }
+
+        if ($shared !== null) {
+            // Remembered: the link to copy, and the folder for files added later.
+            if ($shared !== $letter->shared_files) {
+                $letter->forceFill(['shared_files' => $shared])->save();
+            }
+
+            $composer->extra = [...$composer->extra, ...SharedAttachments::values($shared, $composer->isArabic())];
+
+            if ($own !== [] && str_contains((string) $composer->template->body, 'attachments.link')) {
+                $files = $this->files($letter, $composer, $formats);
+            }
+
+            if (! $shared['anyone']) {
+                $result['errors'][] = __('Microsoft 365 allows no links for anyone here: the link to the files opens for the office\'s own accounts only.');
+            }
+        }
         $grouping = EmailGrouping::from($separate);
         $cc = Addresses::emails($cc);
         // Every inbox once: a party and its representative (or two parties)
@@ -117,7 +141,7 @@ class LetterMailer
             // …and whom these recipients brought into the matter.
             $theirs = MatterContact::copiedFor($letter->matter_id, $to, $group->pluck('recipient_id')->filter()->all(), $contactsCc);
             $groupCc = Addresses::without(Addresses::emails([...$cc, ...$theirs]), $to);
-            $email = $this->email($composer, $mode, $template, $unit['greet'], $files, $subject, $body, $unit['name'], $sender);
+            $email = $this->email($composer, $mode, $template, $unit['greet'], $files, $subject, $body, $unit['name'], $sender, $shared);
 
             try {
                 try {
@@ -323,8 +347,9 @@ class LetterMailer
 
     /**
      * @param  list<array{name: string, data: string, mime: string}>  $files
+     * @param  ?array{url: string, anyone: bool, folder: string, names: list<string>, bytes: int}  $shared  the files sent as a link instead (SharedAttachments)
      */
-    private function email(LetterComposer $composer, string $mode, ?EmailTemplate $template, ?MatterLetterRecipient $recipient, array $files, ?string $subjectOverride = null, ?string $bodyOverride = null, ?string $name = null, ?array $sender = null): LetterEmail
+    private function email(LetterComposer $composer, string $mode, ?EmailTemplate $template, ?MatterLetterRecipient $recipient, array $files, ?string $subjectOverride = null, ?string $bodyOverride = null, ?string $name = null, ?array $sender = null, ?array $shared = null): LetterEmail
     {
         $values = [
             ...$composer->values(),
@@ -342,7 +367,8 @@ class LetterMailer
             $own = clone $composer;
             $own->withoutSignature = true;
 
-            [$html, $images] = $this->embeddable(SenderMailer::withSignature($header.SignatureLayouts::forEmail($own->bodyHtml()), $sender));
+            // The files sent by link, where the letter does not say so itself: a note after it.
+            [$html, $images] = $this->embeddable(SenderMailer::withSignature(SharedAttachments::withNote($header.SignatureLayouts::forEmail($own->bodyHtml()), $shared, $arabic), $sender));
 
             return new LetterEmail(
                 BulkMailPlaceholders::apply(filled($subjectOverride) ? $subjectOverride : self::bodySubject($values), array_map('strip_tags', $values)),
@@ -351,13 +377,15 @@ class LetterMailer
                 $images,
                 // Only what was added: the letter is the email itself.
                 $files,
+                SharedAttachments::listed($shared),
             );
         }
 
         $subject = filled($subjectOverride) ? $subjectOverride : ($template?->subject ?? '{{reference}} — {{subject}}');
         $body = filled(strip_tags((string) $bodyOverride)) ? $bodyOverride : ($template?->body ?? self::defaultCoverNote($composer->isArabic()));
         $rtl = ($template?->locale ?? ($composer->isArabic() ? 'ar' : 'en')) !== 'en';
-        $html = BulkMailPlaceholders::apply(LetterComposer::normalizeMergeTags($body), array_map('strip_tags', $values), escape: true);
+        // The link to the files sent by link where the email puts it — and, nowhere, in a note at its end.
+        $html = SharedAttachments::withNote(SharedAttachments::fill(LetterComposer::normalizeMergeTags($body), array_map('strip_tags', $values), $shared, $rtl), $shared, $rtl);
         // Outlook knows no start or end: the editor's alignment as left/right.
         [$html, $images] = $this->embeddable(SenderMailer::withSignature(RichHtml::forOutput($html, $rtl), $sender));
 
@@ -367,6 +395,7 @@ class LetterMailer
             $rtl,
             $images,
             $files,
+            SharedAttachments::listed($shared),
         );
     }
 

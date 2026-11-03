@@ -79,6 +79,7 @@ class MatterExpensesReport extends Page implements HasTable
         $type = FeeType::MATTER_EXPENSES->value;
 
         return Matter::query()
+            ->visibleTo(auth()->user())
             ->with(['court', 'type'])
             ->where(fn (Builder $query) => $query
                 ->whereHas('fees', fn (Builder $fees) => $fees->where('type', $type))

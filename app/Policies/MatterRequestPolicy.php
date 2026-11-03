@@ -19,7 +19,13 @@ class MatterRequestPolicy
 
     public function view(AuthUser $authUser, MatterRequest $request): bool
     {
-        return $authUser->can('View:MatterRequest');
+        return $authUser->can('View:MatterRequest') && self::onTheirMatter($authUser, $request);
+    }
+
+    /** A request of a matter the user may view (MatterPolicy::view()) — one kept to some matters sees the others' requests nowhere. */
+    private static function onTheirMatter(AuthUser $authUser, MatterRequest $request): bool
+    {
+        return $request->matter === null || $authUser->can('view', $request->matter);
     }
 
     public function create(AuthUser $authUser): bool
@@ -29,12 +35,12 @@ class MatterRequestPolicy
 
     public function update(AuthUser $authUser, MatterRequest $request): bool
     {
-        return $authUser->can('Update:MatterRequest');
+        return $authUser->can('Update:MatterRequest') && self::onTheirMatter($authUser, $request);
     }
 
     public function delete(AuthUser $authUser, MatterRequest $request): bool
     {
-        return $authUser->can('Delete:MatterRequest');
+        return $authUser->can('Delete:MatterRequest') && self::onTheirMatter($authUser, $request);
     }
 
     public function restore(AuthUser $authUser, MatterRequest $request): bool

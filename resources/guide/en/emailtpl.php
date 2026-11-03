@@ -25,7 +25,10 @@ return [
                 ['text' => 'Enter the "Name" (to recognise it), choose the "Language" and enter the "Subject" (merge tags work here). In the text editor, use the "Merge tags" menu to insert placeholders. "Default" makes it the first choice when sending, and "Active" shows it in the lists.', 'shot' => 'create-2-filled'],
                 ['text' => 'Click "Create". The template appears in the table.', 'shot' => 'create-3-done'],
             ],
-            'tips' => ['Only one template can be the "Default". You link an email template to a letter template with the "Covering email" field.'],
+            'tips' => [
+                'Only one template can be the "Default". You link an email template to a letter template with the "Covering email" field.',
+                '{{attachments.link}} is the link to the files of a send too large to attach (Settings → Letters & emails): a folder in the matter\'s OneDrive folder anyone with the link may open. Write it where the link should go — between << and >> the part is left out when the files are attached as usual — or leave it out, and a note at the end of the email carries the link.',
+            ],
         ],
         [
             'id' => 'edit',

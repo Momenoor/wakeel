@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Widgets;
 
 use App\Filament\Concerns\RefreshesLive;
 use App\Models\Fee;
+use App\Models\Matter;
 use App\Support\Currency;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Widgets\ChartWidget;
@@ -86,6 +87,8 @@ class CollectionsAgingWidget extends ChartWidget
             ->join('matters', 'matters.id', '=', 'owed.matter_id')
             ->leftJoinSub($received, 'paid', 'paid.matter_id', '=', 'owed.matter_id')
             ->whereNull('matters.deleted_at')
+            // The matters the viewer may see.
+            ->when(Matter::visibleIds(auth()->user()), fn ($q, $ids) => $q->whereIn('matters.id', $ids))
             ->selectRaw('owed.first_billed, (owed.owed - COALESCE(paid.received, 0)) as outstanding')
             // WHERE on the expression, not HAVING on its alias: the same rows,
             // and portable (HAVING without GROUP BY is MySQL's own).

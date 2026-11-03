@@ -84,6 +84,7 @@ class MatterQualityReport extends Page implements HasTable
     protected function getTableQuery(): Builder
     {
         return Matter::query()
+            ->visibleTo(auth()->user())
             ->with(['court', 'type', 'assistantsOnly.party'])
             ->where(fn (Builder $q) => $q
                 ->where('review_count', '>', 0)

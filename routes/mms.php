@@ -25,6 +25,7 @@ use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterPdf;
 use App\Services\MMS\Letters\MinutesLiveFiles;
 use App\Services\MMS\Letters\MinutesService;
+use App\Services\MMS\MatterOneDriveFolders;
 use App\Support\Branding;
 use App\Support\EditorFonts;
 use Illuminate\Support\Facades\Route;
@@ -127,7 +128,7 @@ Route::middleware('auth')->group(function () {
             // Written in the template's fonts, as the PDF.
             'fonts' => EditorFonts::make([$minutes->template?->letter_font_id, $minutes->template?->arabic_font_id])->letterCss('.text'),
             // The matter's files in OneDrive, to show one over the minutes — where the viewer may see a folder made.
-            'files' => MinutesLiveFiles::folders($minutes->matter, auth()->user())->isNotEmpty() ? route('minutes.live.files', $minutes) : null,
+            'files' => MatterOneDriveFolders::readyFor($minutes->matter, auth()->user())->isNotEmpty() ? route('minutes.live.files', $minutes) : null,
             // The file the office chose on Record the meeting, shown over the minutes.
             'shown' => MinutesLiveFiles::shown($minutes),
         ]);

@@ -33,7 +33,7 @@ class MinutesSender
     /** Between those one email greets, each on their own line (a <br> once filled in). */
     private const LINE = "\u{2028}";
 
-    public function __construct(private readonly WhatsAppCloud $whatsapp) {}
+    public function __construct(private readonly WhatsAppCloud $whatsapp, private readonly SharedAttachments $shared) {}
 
     /**
      * @param  list<array{name?: string, party_id?: ?int, emails?: list<string>, email?: ?string, phone?: ?string, by_email?: bool, by_whatsapp?: bool}>  $recipients
@@ -79,11 +79,30 @@ class MinutesSender
 
         // By email: in one email each, by party, or all together.
         $byEmail = $senderKey ? self::emailLines($recipients) : [];
+        // Over what an email takes: the files added go by a link in the email, the minutes attached as usual.
+        $shared = null;
+        if ($byEmail !== []) {
+            try {
+                ['files' => $files, 'shared' => $shared] = $this->shared->offload($minutes->matter, $files, 1, MinutesService::fileName($minutes), Addresses::emails(collect($byEmail)->flatMap(fn (array $row): array => (array) ($row['emails'] ?? []))->all()), $minutes->shared_files);
+            } catch (\RuntimeException $e) {
+                $result['errors'][] = $e->getMessage();
+                $result['failed'] += count($byEmail);
+                $byEmail = [];
+            }
+
+            if ($shared !== null && $shared !== $minutes->shared_files) {
+                $minutes->forceFill(['shared_files' => $shared])->save();
+            }
+
+            if ($shared !== null && ! $shared['anyone']) {
+                $result['errors'][] = __('Microsoft 365 allows no links for anyone here: the link to the files opens for the office\'s own accounts only.');
+            }
+        }
         foreach (self::emailGroups($byEmail, EmailGrouping::from($grouping), $arabic) as $group) {
             $emails = Addresses::emails(collect($group['rows'])->flatMap(fn (array $r) => $r['emails'])->all());
             $greeting = $personal($group);
 
-            $email = self::letterEmail($subject, $body, $greeting, $arabic, $files, SenderMailer::sender($senderKey));
+            $email = self::letterEmail($subject, $body, $greeting, $arabic, $files, SenderMailer::sender($senderKey), $shared);
             // …and whom these recipients brought into the matter.
             $theirs = MatterContact::copiedFor($minutes->matter_id, $emails, collect($group['rows'])->pluck('party_id')->filter()->all(), $contactsCc);
             $copied = Addresses::without(Addresses::emails([...$cc, ...$theirs]), $emails);
@@ -351,16 +370,19 @@ class MinutesSender
      *
      * @param  array<string, string>  $greeting
      * @param  list<array<string, mixed>>  $files
+     * @param  ?array{url: string, anyone: bool, folder: string, names: list<string>, bytes: int}  $shared  the files sent as a link instead (SharedAttachments)
      */
-    private static function letterEmail(?string $subject, ?string $body, array $greeting, bool $arabic, array $files, ?array $sender = null): LetterEmail
+    private static function letterEmail(?string $subject, ?string $body, array $greeting, bool $arabic, array $files, ?array $sender = null, ?array $shared = null): LetterEmail
     {
         return new LetterEmail(
             BulkMailPlaceholders::apply((string) ($subject ?: self::defaultSubject($arabic)), array_map(fn ($value) => str_replace(self::LINE, $arabic ? '، ' : '; ', strip_tags((string) $value)), $greeting)),
-            // The mailbox's signature at its end, as every email sent from a mailbox.
-            SenderMailer::withSignature(str_replace(self::LINE, '<br>', BulkMailPlaceholders::apply((string) ($body ?: self::defaultBody($arabic)), $greeting, escape: true)), $sender),
+            // The mailbox's signature at its end, as every email sent from a mailbox — the link to the files sent by
+            // link where the email puts it, else in a note before the signature.
+            SenderMailer::withSignature(str_replace(self::LINE, '<br>', SharedAttachments::withNote(SharedAttachments::fill((string) ($body ?: self::defaultBody($arabic)), $greeting, $shared, $arabic), $shared, $arabic)), $sender),
             $arabic,
             [],
             $files,
+            SharedAttachments::listed($shared),
         );
     }
 

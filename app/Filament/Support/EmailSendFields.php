@@ -2,27 +2,40 @@
 
 namespace App\Filament\Support;
 
+use App\Jobs\ShareAttachments;
 use App\Models\EmailTemplate;
 use App\Models\MailSender;
 use App\Models\Matter;
 use App\Models\MatterContact;
 use App\Models\MatterLetter;
 use App\Models\Setting;
+use App\Services\MMS\Letters\LetterMailer;
+use App\Services\MMS\Letters\SharedAttachments;
 use App\Services\MMS\MatterOneDriveExplorer;
+use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\SenderMailer;
 use App\Support\Addresses;
 use App\Support\Branding;
 use App\Support\EmailGrouping;
+use Closure;
+use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Component;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 /**
  * The fields every "send by email" screen shares — letters, minutes: who
@@ -168,6 +181,143 @@ final class EmailSendFields
     }
 
     /**
+     * What the files added come to — the uploads as the form holds them (still being uploaded, or stored), and
+     * the OneDrive files picked — for the send screen to say when they will go by link (SharedAttachments).
+     *
+     * @param  list<TemporaryUploadedFile|string>  $attachments
+     * @param  list<string>  $picked
+     */
+    public static function addedBytes(?Matter $matter, array $attachments, array $picked): int
+    {
+        $uploaded = array_sum(array_map(fn ($file): int => $file instanceof TemporaryUploadedFile
+            ? (int) $file->getSize()
+            : (int) (Storage::disk(self::DISK)->exists((string) $file) ? Storage::disk(self::DISK)->size((string) $file) : 0), array_values($attachments)));
+
+        return $uploaded + array_sum(array_column(OneDriveFilePicker::details($matter, array_values($picked)), 'size'));
+    }
+
+    /**
+     * What the send screen says of the files: those shared by link already (the letter's or minutes' shared_files),
+     * else that those added will go by link — null when nothing is to be said.
+     *
+     * @param  ?array{names: list<string>}  $existing
+     */
+    public static function sharedNote(?Matter $matter, array $data, ?array $existing = null): ?string
+    {
+        return SharedAttachments::warning(self::addedBytes($matter, (array) ($data['attachments'] ?? []), (array) ($data['onedrive_files'] ?? [])), $existing);
+    }
+
+    /**
+     * The files added shared by link now, before sending, to copy the link into the covering email or the letter
+     * by hand: "Get the link now" puts the files added (uploaded, or picked from OneDrive) in the folder — in the
+     * background (ShareAttachments), a progress bar following each file copied and the link made — and shows the
+     * link, to copy; remembered on the letter or minutes (shared_files), the send reuses it, and files added over
+     * the limit later go into the same folder. "Forget the link" drops it (the folder stays in OneDrive).
+     *
+     * @param  Model  $record  the letter or minutes, with shared_files
+     * @param  string  $folderName  the folder the files go in, as those with the link see it
+     * @param  Closure(Get): list<string>  $to  whom the email goes to, for the folder
+     * @return list<Component>
+     */
+    public static function sharedLink(?Matter $matter, Model $record, string $folderName, Closure $to): array
+    {
+        return [
+            Actions::make([
+                Action::make('shareNow')
+                    ->label(__('Get the link now'))
+                    ->icon('heroicon-o-link')
+                    ->color('gray')
+                    ->visible(fn (): bool => $matter !== null && MatterOneDriveFolders::folderFor($matter) !== null)
+                    ->action(function (Get $get, Set $set) use ($matter, $record, $folderName, $to): void {
+                        $files = LetterMailer::attachedFiles(self::addedNow($matter, [
+                            'attachments' => $get('attachments'), 'attachment_names' => $get('attachment_names'), 'onedrive_files' => $get('onedrive_files'),
+                        ]));
+
+                        if ($files === []) {
+                            Notification::make()->warning()->title(__('Add or pick the files to share first.'))->send();
+
+                            return;
+                        }
+
+                        // Staged in a folder of their own for the job, which removes it when done; the OneDrive files fetched
+                        // are copied there too, their own files let go.
+                        $directory = 'shared-attachments/'.Str::uuid();
+                        $disk = Storage::disk(self::DISK);
+                        $staged = [];
+                        foreach ($files as $i => $file) {
+                            if (! is_file($file['path'])) {
+                                continue;
+                            }
+
+                            $path = $directory.'/'.$i.'-'.MatterOneDriveExplorer::cleanName($file['name']);
+                            $disk->put($path, (string) file_get_contents($file['path']));
+                            $staged[] = ['path' => $disk->path($path), 'name' => $file['name']];
+                        }
+                        self::forget([]);
+
+                        SharedAttachments::setProgress($record, SharedAttachments::QUEUED, 0, count($staged));
+                        ShareAttachments::dispatch($record, $staged, $directory, $folderName, $to($get));
+                        // Shared: not to be attached as well.
+                        $set('attachments', []);
+                        $set('onedrive_files', []);
+
+                        // Done already (no queue worker: run at once), or under way.
+                        $progress = SharedAttachments::progress($record);
+                        if (($progress['step'] ?? null) === SharedAttachments::DONE) {
+                            Notification::make()->success()
+                                ->title(__('The files are shared by link'))
+                                ->body(__('Copy the link below into the covering email or the letter where you want it; left out, it goes in a note at the end of the email.').(($record->fresh()->shared_files['anyone'] ?? true) ? '' : ' '.__('Microsoft 365 allows no links for anyone here: the link to the files opens for the office\'s own accounts only.')))
+                                ->send();
+                        } elseif (($progress['step'] ?? null) === SharedAttachments::FAILED) {
+                            Notification::make()->danger()->title(__('The files could not be shared'))->body((string) $progress['error'])->send();
+                        } else {
+                            Notification::make()->info()->title(__('Sharing the files…'))->body(__('The files are being copied to the matter\'s OneDrive folder; the link shows below when it is ready.'))->send();
+                        }
+                    }),
+                Action::make('forgetLink')
+                    ->label(__('Forget the link'))
+                    ->color('gray')
+                    ->link()
+                    ->visible(fn (): bool => filled($record->shared_files))
+                    ->action(fn () => $record->forceFill(['shared_files' => null])->save()),
+            ]),
+            // How far the job has got, asked again every two seconds while it runs.
+            Placeholder::make('share_progress')
+                ->hiddenLabel()
+                ->content(fn (): HtmlString => new HtmlString(SharedAttachments::progressBar(SharedAttachments::progress($record))))
+                ->extraAttributes(fn (): array => SharedAttachments::running($record) ? ['wire:poll.2s' => ''] : [])
+                ->visible(fn (): bool => SharedAttachments::progressBar(SharedAttachments::progress($record)) !== ''),
+            TextEntry::make('shared_link')
+                ->label(__('Files shared by link'))
+                ->state(fn (): string => (string) ($record->fresh()?->shared_files['url'] ?? ''))
+                ->helperText(fn (): string => implode(' · ', (array) ($record->fresh()?->shared_files['names'] ?? [])))
+                ->copyable()
+                ->copyMessage(__('Copied'))
+                ->icon('heroicon-o-link')
+                ->extraAttributes(['dir' => 'ltr', 'style' => 'word-break: break-all;'])
+                ->visible(fn (): bool => filled($record->fresh()?->shared_files['url'] ?? null)),
+        ];
+    }
+
+    /**
+     * The files added, as they are now — an upload still only in the browser's temporary store too — and the
+     * OneDrive files picked, fetched (kept until forget()): for sharing before the send.
+     *
+     * @param  array<string, mixed>  $data
+     * @return list<array{path: string, name: string}>
+     */
+    public static function addedNow(?Matter $matter, array $data): array
+    {
+        $attachments = array_values((array) ($data['attachments'] ?? []));
+        $temporary = array_values(array_filter($attachments, fn ($file): bool => $file instanceof TemporaryUploadedFile));
+
+        return [
+            ...array_map(fn (TemporaryUploadedFile $file): array => ['path' => (string) $file->getRealPath(), 'name' => $file->getClientOriginalName()], $temporary),
+            ...self::uploaded([...$data, 'attachments' => array_values(array_filter($attachments, 'is_string'))], $matter),
+        ];
+    }
+
+    /**
      * The files added — uploaded, and from OneDrive (fetched now, kept until
      * forget()) — as the mailers take them.
      *
@@ -224,15 +374,17 @@ final class EmailSendFields
      *
      * @param  array{subject: string, html: string, rtl: bool}  $preview
      * @param  list<string>  $attachments
+     * @param  ?string  $sharedNote  that the files will go by link, when they will (sharedNote())
      * @return list<Component>
      */
-    public static function previewEntries(string $to, string $cc, array $preview, array $attachments): array
+    public static function previewEntries(string $to, string $cc, array $preview, array $attachments, ?string $sharedNote = null): array
     {
         return [
             TextEntry::make('preview_to')->label(__('To'))->inlineLabel()->state($to ?: '—')->extraAttributes(['dir' => 'auto']),
             TextEntry::make('preview_cc')->label(__('CC'))->inlineLabel()->state($cc)->extraAttributes(['dir' => 'ltr'])->visible(filled($cc)),
             TextEntry::make('preview_subject')->label(__('Subject'))->inlineLabel()->state($preview['subject'])->extraAttributes(['dir' => 'auto']),
             TextEntry::make('preview_attachments')->label(__('Attachments'))->inlineLabel()->state(implode(' · ', $attachments))->extraAttributes(['dir' => 'auto'])->visible($attachments !== []),
+            TextEntry::make('preview_shared')->hiddenLabel()->state((string) $sharedNote)->color('warning')->icon('heroicon-o-link')->visible(filled($sharedNote)),
             // The email itself, as the mail program shows it.
             TextEntry::make('preview_body')
                 ->hiddenLabel()

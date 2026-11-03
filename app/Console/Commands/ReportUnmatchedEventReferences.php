@@ -38,10 +38,11 @@ class ReportUnmatchedEventReferences extends Command
             return self::SUCCESS;
         }
 
-        // Of the admins, those who want it by email (a role can make it mandatory, a user can mute it).
+        // Of the admins, those who want it by email (a role can make it mandatory, a user can mute it) — and who may
+        // see every matter: a reference matching none is nobody's assistant's.
         $recipients = NotificationPreferences::wanting(
             NotificationType::CALENDAR_UNMATCHED,
-            User::role(['admin', Utils::getSuperAdminName()])->get()->filter(fn (User $user) => filled($user->email))->unique('email'),
+            User::query()->whereHas('roles', fn ($query) => $query->whereIn('name', ['admin', Utils::getSuperAdminName()]))->get()->filter(fn (User $user) => filled($user->email) && $user->can('ViewAny:Matter'))->unique('email'),
             NotificationChannel::MAIL,
         );
 

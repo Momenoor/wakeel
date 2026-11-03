@@ -27,6 +27,9 @@ class FakeOneDrive
     /** So many of the next parts answered "503 unavailable", as a dropped line would be. */
     public int $failParts = 0;
 
+    /** @var list<array{0: string, 1: string}> the items links were made to, with the scope asked for */
+    public array $links = [];
+
     public function __construct()
     {
         $this->items[self::ROOT] = ['name' => '', 'parent' => null, 'folder' => true];
@@ -175,6 +178,14 @@ class FakeOneDrive
             $id = $this->find2($parent, $m[3]);
 
             return $id === null ? Http::response(['error' => ['message' => 'not found']], 404) : Http::response($this->resource($id));
+        }
+
+        // A link to an item, for anyone or the organisation.
+        if ($method === 'POST' && preg_match('~^items/([^/]+)/createLink$~', $path, $m)) {
+            $scope = (string) ($request->data()['scope'] ?? '');
+            $this->links[] = [$m[1], $scope];
+
+            return Http::response(['link' => ['webUrl' => 'https://od.test/share/'.$m[1].'?s='.$scope, 'scope' => $scope]], 201);
         }
 
         if (! preg_match('~^(root|items/([^/]+))(/children)?$~', $path, $m)) {

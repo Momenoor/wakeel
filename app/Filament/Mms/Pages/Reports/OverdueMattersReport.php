@@ -115,6 +115,7 @@ class OverdueMattersReport extends Page implements HasTable
     protected function getTableQuery(): Builder
     {
         return Matter::query()
+            ->visibleTo(auth()->user())
             ->with(['court', 'type', 'assistantsOnly.party'])
             ->whereNull('final_report_at')
             ->whereNotNull('distributed_at')

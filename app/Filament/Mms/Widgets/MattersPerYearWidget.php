@@ -39,7 +39,8 @@ class MattersPerYearWidget extends ChartWidget
 
     protected function getData(): array
     {
-        $data = Trend::model(Matter::class)
+        // The matters the viewer may see.
+        $data = Trend::query(Matter::query()->visibleTo(auth()->user()))
             ->dateColumn('received_at')
             ->between(
                 start: now()->subYears(9)->startOfYear(),

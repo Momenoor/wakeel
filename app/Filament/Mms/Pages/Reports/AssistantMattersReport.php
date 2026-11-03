@@ -8,6 +8,7 @@ use App\Filament\Mms\Clusters\Reports;
 use App\Filament\Mms\Exports\AssistantMattersExporter;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Models\Allocation;
+use App\Models\Matter;
 use App\Models\MatterParty;
 use App\Models\Party;
 use App\Models\Type;
@@ -292,6 +293,8 @@ class AssistantMattersReport extends Page implements HasTable
         return MatterParty::query()
             ->where('matter_party.role', 'expert')
             ->where('matter_party.type', 'assistant')
+            // The matters the viewer may see.
+            ->when(Matter::visibleIds(auth()->user()), fn ($q, $ids) => $q->whereIn('matter_party.matter_id', $ids))
             ->withSum(['matter_fees as total_fees' => function ($q) {
                 $q->where('type', '!=', FeeType::VAT->value);
             }], 'amount')

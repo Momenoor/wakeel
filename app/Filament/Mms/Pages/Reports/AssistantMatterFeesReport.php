@@ -6,6 +6,7 @@ use App\Enums\FeeType;
 use App\Filament\Concerns\PrintableReport;
 use App\Filament\Mms\Clusters\Reports;
 use App\Filament\Mms\Exports\AssistantMatterFeesExporter;
+use App\Models\Matter;
 use App\Models\MatterParty;
 use App\Models\Party;
 use App\Support\ReportDateRangeFilter;
@@ -126,6 +127,8 @@ class AssistantMatterFeesReport extends Page implements HasTable
         return MatterParty::query()
             ->where('matter_party.role', 'expert')
             ->where('matter_party.type', 'assistant')
+            // The matters the viewer may see.
+            ->when(Matter::visibleIds(auth()->user()), fn ($q, $ids) => $q->whereIn('matter_party.matter_id', $ids))
             ->with([
                 'matter.court',
                 'matter.type',

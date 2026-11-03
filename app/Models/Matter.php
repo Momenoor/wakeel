@@ -159,6 +159,21 @@ class Matter extends Model implements AttachmentOwner
         }
     }
 
+    /** Whether someone is kept to some matters (no ViewAny:Matter): the lists, counts and reports of the matters' things are narrowed for them. */
+    public static function restrictedFor(?User $user): bool
+    {
+        return $user !== null && ! $user->can('ViewAny:Matter');
+    }
+
+    /**
+     * The ids of the matters someone may see, as a subquery to narrow the matters' things (fees, requests, events,
+     * the parties on them) to — null for one who may see them all: `->when(Matter::visibleIds($user), fn ($q, $ids) => $q->whereIn('matter_id', $ids))`.
+     */
+    public static function visibleIds(?User $user): ?Builder
+    {
+        return self::restrictedFor($user) ? self::query()->visibleTo($user)->select('matters.id') : null;
+    }
+
     /** Whether it is one of someone's own matters (scopeOwnedBy()). */
     public function isOwnedBy(User $user): bool
     {

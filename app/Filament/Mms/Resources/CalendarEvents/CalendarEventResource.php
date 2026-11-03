@@ -81,6 +81,12 @@ class CalendarEventResource extends Resource
 
     }
 
+    /** The events of the matters the viewer may see, and those of no matter (CalendarEvent::scopeVisibleTo()). */
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->visibleTo(auth()->user());
+    }
+
     public static function table(Table $table): Table
     {
         return CalendarEventsTable::configure($table);

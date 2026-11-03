@@ -108,6 +108,7 @@ class DeductionsReconciliationReport extends Page implements HasTable
         $deductionPlaceholders = $this->deductionPlaceholders();
 
         return Matter::query()
+            ->visibleTo(auth()->user())
             ->with(['court', 'type'])
             ->whereHas('fees', fn ($q) => $q->whereIn('type', $deductions))
             ->select('matters.*')

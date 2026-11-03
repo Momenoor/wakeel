@@ -39,6 +39,7 @@ class UpcomingSessionsWidget extends TableWidget
     protected function getTableQuery(): Builder
     {
         return Matter::query()
+            ->visibleTo(auth()->user())
             ->with(['court', 'type', 'assistantsOnly.party'])
             ->whereNotNull('next_session_date')
             ->whereBetween('next_session_date', [now()->startOfDay(), now()->addDays(14)->endOfDay()])

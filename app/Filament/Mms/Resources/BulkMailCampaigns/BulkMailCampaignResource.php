@@ -11,6 +11,7 @@ use App\Filament\Mms\Resources\BulkMailCampaigns\RelationManagers\RecipientsRela
 use App\Filament\Mms\Resources\BulkMailCampaigns\Schema\BulkMailCampaignSchema;
 use App\Filament\Mms\Resources\BulkMailCampaigns\Tables\BulkMailCampaignTable;
 use App\Models\BulkMailCampaign;
+use App\Models\Matter;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -85,6 +86,8 @@ class BulkMailCampaignResource extends Resource
         return parent::getEloquentQuery()
             ->withoutGlobalScopes([
                 SoftDeletingScope::class,
-            ]);
+            ])
+            // A viewer kept to some matters: the campaigns of those, and the general ones (of no matter).
+            ->when(Matter::visibleIds(auth()->user()), fn (Builder $q, $ids) => $q->where(fn (Builder $q) => $q->whereNull('matter_id')->orWhereIn('matter_id', $ids)));
     }
 }

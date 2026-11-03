@@ -24,6 +24,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -398,7 +399,8 @@ class MatterRequestTest extends TestCase
     public function test_the_request_notification_has_an_icon_and_its_button_in_the_readers_language(): void
     {
         Mail::fake();
-        $admin = User::factory()->create()->assignRole(Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']));
+        // An admin who may view the matter: told of its requests.
+        $admin = User::factory()->create()->assignRole(Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']))->givePermissionTo(Permission::findOrCreate('View:Matter'));
         $request = MatterRequest::create([
             'matter_id' => $this->makeMatter()->id,
             'request_by' => User::factory()->create()->id,

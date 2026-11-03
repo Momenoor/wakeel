@@ -16,6 +16,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -34,7 +35,8 @@ class UnmatchedEventReferencesTest extends TestCase
         app()->setLocale('en');
         Filament::setCurrentPanel('mms');
         Role::firstOrCreate(['name' => 'super-admin', 'guard_name' => 'web']);
-        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        // Admins who may see every matter: a reference matching no matter is theirs to sort out.
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web'])->givePermissionTo(Permission::findOrCreate('ViewAny:Matter'));
     }
 
     private function event(string $title, string $when = '+2 days'): CalendarEvent

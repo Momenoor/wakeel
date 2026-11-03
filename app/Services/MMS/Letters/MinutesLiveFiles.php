@@ -2,13 +2,10 @@
 
 namespace App\Services\MMS\Letters;
 
-use App\Models\Matter;
 use App\Models\MatterMinutes;
-use App\Models\MatterOneDriveFolder;
 use App\Models\User;
 use App\Services\MMS\MatterOneDriveExplorer;
 use App\Services\MMS\MatterOneDriveFolders;
-use Illuminate\Support\Collection;
 use RuntimeException;
 use Throwable;
 
@@ -24,16 +21,6 @@ class MinutesLiveFiles
     public function __construct(private readonly MatterOneDriveExplorer $explorer) {}
 
     /**
-     * The matter's folders this user may see, made already.
-     *
-     * @return Collection<int, MatterOneDriveFolder>
-     */
-    public static function folders(Matter $matter, ?User $user): Collection
-    {
-        return MatterOneDriveFolders::visibleTo($matter, $user)->filter(fn (MatterOneDriveFolder $folder): bool => $folder->isCreated())->values();
-    }
-
-    /**
      * The files at the top of each folder and in the folders directly in it — or, with words, those found
      * anywhere in it. Each with its folder, the assistant whose folder it is, where in it it sits, and the
      * address the live view shows it by; with why a folder could not be read, if one could not.
@@ -45,7 +32,7 @@ class MinutesLiveFiles
         $files = [];
         $errors = [];
 
-        foreach (self::folders($minutes->matter, $user) as $folder) {
+        foreach (MatterOneDriveFolders::readyFor($minutes->matter, $user) as $folder) {
             try {
                 foreach ($this->explorer->files($folder, $words) as $file) {
                     $files[] = [
@@ -66,13 +53,13 @@ class MinutesLiveFiles
     }
 
     /**
-     * Show this file ("folder|item": the folder's id and OneDrive's item id) over the minutes on every live
-     * view — one in the matter's folder, in a folder the one choosing may see.
+     * Show this file (its key — MatterOneDriveFolders::fileKey()) over the minutes on every live view — one in
+     * the matter's folder, in a folder the one choosing may see.
      */
     public function show(MatterMinutes $minutes, ?User $user, string $key): void
     {
-        [$folderId, $itemId] = array_pad(explode('|', $key, 2), 2, '');
-        $folder = self::folders($minutes->matter, $user)->firstWhere('id', (int) $folderId);
+        [$folderId, $itemId] = MatterOneDriveFolders::splitFileKey($key);
+        $folder = MatterOneDriveFolders::readyFor($minutes->matter, $user)->firstWhere('id', $folderId);
 
         if ($folder === null || $itemId === '') {
             throw new RuntimeException(__('That is not in this matter\'s folder.'));

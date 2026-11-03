@@ -17,9 +17,6 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class SplitPdfOneDriveController extends Controller
 {
-    /** How much is read from OneDrive and sent on at a time. */
-    private const CHUNK = 1024 * 1024;
-
     public function __invoke(Request $request, string $item, PersonalOneDrive $drive, OneDriveClient $client): StreamedResponse
     {
         abort_unless($request->user()->can(ScreenPermissions::SPLIT_PDF), 403);
@@ -35,19 +32,7 @@ class SplitPdfOneDriveController extends Controller
         $head = self::read($body, 1024);
         abort_unless(str_contains($head, '%PDF-'), 403, __('This is not a PDF file.'));
 
-        return new StreamedResponse(function () use ($head, $body): void {
-            // A big file over a slow line takes longer than a page may.
-            @set_time_limit(0);
-
-            echo $head;
-
-            while (! $body->eof()) {
-                echo $body->read(self::CHUNK);
-                flush();
-            }
-
-            $body->close();
-        }, 200, [
+        return new StreamedResponse(OneDriveClient::passOn($body, $head), 200, [
             'Content-Type' => 'application/pdf',
             // For the page's progress only: the length itself is left to the transfer.
             'X-File-Size' => (string) ($file['size'] ?? ''),

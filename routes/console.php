@@ -32,10 +32,11 @@ Schedule::command('mail:forward-folders')
     ->withoutOverlapping(15);
 
 // The folders the system made in the matters' OneDrive folders looked for, a slice an hour (the longest
-// unchecked first): one renamed or moved by hand is told to the matter's people, once a day.
+// unchecked first): one renamed or moved by hand is told to the matter's people, once a day. Only when switched
+// on (Settings → OneDrive folders).
 Schedule::command('onedrive:check-folders --max-seconds=50')
     ->hourly()
-    ->when(fn (): bool => MatterOneDriveFolders::enabled())
+    ->when(fn (): bool => MatterOneDriveFolders::folderCheck())
     ->withoutOverlapping(30);
 
 // The emails put in the matters' OneDrive folders by hand (.eml, .msg): added to their matters.
