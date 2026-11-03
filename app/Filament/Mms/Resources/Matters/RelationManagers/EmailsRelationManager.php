@@ -4,9 +4,11 @@ namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Concerns\RefreshesMatterPage;
+use App\Filament\Forms\Components\RichText;
 use App\Filament\Mms\Pages\UnfiledEmails;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Support\CreditorFields;
+use App\Filament\Support\EmailSendFields;
 use App\Filament\Support\RegenerateEmailAction;
 use App\Jobs\CheckMatterEmailsInOneDrive;
 use App\Jobs\CollectMatterEmails;
@@ -17,16 +19,21 @@ use App\Models\MatterContact;
 use App\Models\MatterEmail;
 use App\Models\Type;
 use App\Models\User;
+use App\Services\MMS\EmailReplySender;
 use App\Services\MMS\MatterCreditors;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterReplyCollector;
 use App\Services\MMS\ReceivedEmailFiling;
+use App\Services\MMS\SenderMailer;
 use App\Support\Dates;
 use App\Support\Documents;
 use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TagsInput;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -242,6 +249,71 @@ class EmailsRelationManager extends RelationManager
                             ->title(__('Saved as :creditor\'s', ['creditor' => $creditor->name]))
                             ->body(__(':count emails moved to the creditor\'s folder.', ['count' => $moved]))
                             ->send();
+                    }),
+                // An answer to an email that came in: to whoever wrote it (and their party's own address when they wrote
+                // from another of theirs), copied to the others it reached, under the same thread — kept beside it.
+                Action::make('reply')
+                    ->label(__('Reply'))
+                    ->icon('heroicon-o-arrow-uturn-left')
+                    ->color('success')
+                    ->modalWidth('4xl')
+                    ->modalSubmitActionLabel(__('Send'))
+                    ->visible(fn (MatterEmail $record): bool => $record->direction === MatterEmail::RECEIVED && $record->matter_id !== null
+                        && SenderMailer::options() !== [] && (auth()->user()?->can('update', $this->getOwnerRecord()) ?? false))
+                    ->fillForm(fn (MatterEmail $record): array => [
+                        // From the mailbox it came to, when the user may send from it.
+                        'sender' => array_key_exists((string) $record->sender_key, SenderMailer::options()) ? $record->sender_key : EmailSendFields::defaultSender(),
+                        'to' => EmailReplySender::to($record),
+                        'cc' => EmailReplySender::cc($record),
+                        'contacts_cc' => EmailSendFields::startingContactsCc($this->getOwnerRecord(), EmailReplySender::to($record), EmailReplySender::partyIds($record)),
+                        'subject' => EmailReplySender::subject($record),
+                        'attach_original' => EmailReplySender::hasOriginalPdf($record),
+                    ])
+                    ->schema(fn (MatterEmail $record): array => [
+                        EmailSendFields::sender(),
+                        TagsInput::make('to')
+                            ->label(__('To'))
+                            ->helperText(__('Whoever wrote — and, when they wrote from another address of a party\'s, the party\'s own.'))
+                            ->placeholder('name@example.com')
+                            ->splitKeys(['Tab', ' ', ',', 'Enter'])
+                            ->nestedRecursiveRules(['email'])
+                            ->required(),
+                        EmailSendFields::cc(),
+                        // The other addresses they brought in, to copy in or not.
+                        EmailSendFields::contactsCc($this->getOwnerRecord(), EmailReplySender::to($record), EmailReplySender::partyIds($record)),
+                        TextInput::make('subject')
+                            ->label(__('Subject'))
+                            ->required()
+                            ->maxLength(255),
+                        RichText::make('body')
+                            ->label(__('Email'))
+                            ->email()
+                            ->contentDirection(preg_match('/\p{Arabic}/u', (string) $record->subject) ? 'rtl' : 'ltr')
+                            ->required(),
+                        Toggle::make('attach_original')
+                            ->label(__('Attach the email replied to, as its PDF'))
+                            ->visible(EmailReplySender::hasOriginalPdf($record)),
+                        EmailSendFields::attachments('reply-attachments', __('Sent with the reply, for this email only.')),
+                        EmailSendFields::oneDriveFiles($this->getOwnerRecord()),
+                    ])
+                    ->action(function (MatterEmail $record, array $data): void {
+                        try {
+                            $result = app(EmailReplySender::class)->send($record, $data, auth()->id());
+                        } catch (\Throwable $e) {
+                            Notification::make()->danger()->title(__('The reply could not be sent'))->body($e->getMessage())->send();
+
+                            return;
+                        }
+
+                        $notification = Notification::make()
+                            ->title($result['sent'] ? __('The reply is sent') : __('The reply could not be sent'))
+                            ->body($result['errors'] !== [] ? implode("\n", $result['errors']) : null);
+                        match (true) {
+                            ! $result['sent'] => $notification->danger(),
+                            $result['errors'] !== [] => $notification->warning(),
+                            default => $notification->success(),
+                        };
+                        $notification->send();
                     }),
                 Action::make('markRead')
                     ->label(__('Mark as read'))

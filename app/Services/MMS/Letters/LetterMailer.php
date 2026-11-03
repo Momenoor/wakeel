@@ -70,6 +70,7 @@ class LetterMailer
         ?string $body = null,
         array $attachments = [],
         ?array $contactsCc = null,
+        array $alsoTo = [],
     ): array {
         $sender = SenderMailer::sender($senderKey);
         $composer = LetterIssuer::composerFor($letter);
@@ -81,7 +82,7 @@ class LetterMailer
         $withEmail = $recipients->filter(fn (MatterLetterRecipient $r) => $this->emails($r) !== []);
         $result = ['sent' => 0, 'failed' => 0, 'skipped' => $recipients->count() - $withEmail->count(), 'errors' => []];
 
-        if ($withEmail->isEmpty() && $cc === []) {
+        if ($withEmail->isEmpty() && $cc === [] && $alsoTo === []) {
             return $result;
         }
 
@@ -90,7 +91,7 @@ class LetterMailer
         $own = $mode === self::ATTACHMENT ? $this->files($letter, $composer, $formats) : [];
 
         try {
-            ['files' => $files, 'shared' => $shared] = $this->shared->offload($letter->matter, [...$own, ...self::attachedFiles($attachments)], count($own), LetterIssuer::fileName($letter), $withEmail->flatMap(fn (MatterLetterRecipient $r): array => $this->emails($r))->all(), $letter->shared_files);
+            ['files' => $files, 'shared' => $shared] = $this->shared->offload($letter->matter, [...$own, ...self::attachedFiles($attachments)], count($own), LetterIssuer::fileName($letter), [...$withEmail->flatMap(fn (MatterLetterRecipient $r): array => $this->emails($r))->all(), ...array_column($alsoTo, 'email')], $letter->shared_files);
         } catch (\RuntimeException $e) {
             return [...$result, 'failed' => $withEmail->count(), 'errors' => [$e->getMessage()]];
         }
@@ -124,7 +125,7 @@ class LetterMailer
         // Whom it reached, for the matter's progress.
         $names = [];
 
-        foreach (self::emailGroups($withEmail, $grouping) as $unit) {
+        foreach (self::emailGroups($withEmail, $grouping, $alsoTo) as $unit) {
             $group = $unit['recipients'];
             $to = Addresses::without($unit['emails'], $reached);
             // Each address under the name of whose it is.
@@ -287,7 +288,7 @@ class LetterMailer
      * @param  Collection<int, MatterLetterRecipient>  $recipients
      * @return list<array{recipients: Collection<int, MatterLetterRecipient>, to: list<array{email: string, name: string}>, emails: list<string>, greet: ?MatterLetterRecipient, name: ?string}>
      */
-    public static function emailGroups(Collection $recipients, string $grouping): array
+    public static function emailGroups(Collection $recipients, string $grouping, array $alsoTo = []): array
     {
         $unit = fn (Collection $group, array $to, ?MatterLetterRecipient $greet, ?string $name): array => [
             'recipients' => $group,
@@ -296,9 +297,11 @@ class LetterMailer
             'greet' => $greet,
             'name' => $name,
         ];
+        // The matter's other contacts sent to as well: with everyone when all go together, else one each.
+        $contacts = array_map(fn (array $contact): array => ['name' => (string) $contact['name'], 'emails' => [$contact['email']]], $alsoTo);
 
-        if ($grouping === EmailGrouping::ALL || $recipients->isEmpty()) {
-            return [$unit($recipients->values(), Addresses::named($recipients->flatMap(fn (MatterLetterRecipient $r) => $r->addressRows())), null, null)];
+        if ($grouping === EmailGrouping::ALL || ($recipients->isEmpty() && $alsoTo === [])) {
+            return [$unit($recipients->values(), Addresses::named([...$recipients->flatMap(fn (MatterLetterRecipient $r) => $r->addressRows())->all(), ...$contacts]), null, null)];
         }
 
         $units = [];
@@ -315,6 +318,13 @@ class LetterMailer
                 if ($to !== []) {
                     $units[] = $unit(collect([$recipient]), $to, $recipient, $i === 0 ? null : ($row['name'] ?: null));
                 }
+            }
+        }
+
+        foreach ($contacts as $contact) {
+            $to = Addresses::named([$contact]);
+            if ($to !== []) {
+                $units[] = $unit(collect(), $to, null, $contact['name'] ?: null);
             }
         }
 

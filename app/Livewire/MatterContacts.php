@@ -332,8 +332,9 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                     ->label(__('Edit'))
                     ->icon('heroicon-o-pencil-square')
                     ->color('gray')
+                    // A party that is a creditor too: one Edit, the creditor's (its emails and phones on this matter).
                     ->visible(fn (array $record): bool => ($party = $this->party($record)) !== null
-                        ? (auth()->user()?->can('update', $party) ?? false)
+                        ? $record['creditor_id'] === null && (auth()->user()?->can('update', $party) ?? false)
                         : ! $record['party_id'] && $record['creditor_id'] === null && $record['own'] !== [] && $this->canChange())
                     ->modalHeading(fn (array $record): string => __('Edit contact').': '.$record['name'])
                     ->modalDescription(fn (array $record): string => $this->party($record)
@@ -343,7 +344,7 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                     ->modalSubmitActionLabel(__('Save'))
                     ->fillForm(fn (array $record): array => ($party = $this->party($record))
                         ? ['name' => $party->name, 'phone' => Party::values($party->phone), 'email' => Party::values($party->email)]
-                        : ['name' => $record['name'], 'capacity' => $record['capacity'], 'phone' => Party::values(explode(',', $record['phones']))])
+                        : ['name' => $record['name'], 'capacity' => $record['capacity'], 'phone' => Party::values(explode(',', $record['phones'])), 'email' => $record['own']])
                     ->schema(fn (array $record): array => ($party = $this->party($record))
                         ? [
                             TextInput::make('name')
@@ -364,6 +365,11 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                                 ->maxLength(191),
                             // Anywhere in the world: not checked as a party's UAE number.
                             ContactFields::phone(),
+                            // The addresses they wrote from, which the line is theirs by: shown, not changed here.
+                            ContactFields::email()
+                                ->disabled()
+                                ->dehydrated(false)
+                                ->helperText(__('The addresses they wrote from. More of theirs, to copy in, under "Other emails".')),
                         ])
                     ->action(function (array $record, array $data): void {
                         if ($party = $this->party($record)) {

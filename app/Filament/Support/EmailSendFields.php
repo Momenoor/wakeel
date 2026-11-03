@@ -10,12 +10,14 @@ use App\Models\MatterContact;
 use App\Models\MatterLetter;
 use App\Models\Setting;
 use App\Services\MMS\Letters\SharedAttachments;
+use App\Services\MMS\MatterContactsExport;
 use App\Services\MMS\MatterOneDriveExplorer;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\SenderMailer;
 use App\Support\Addresses;
 use App\Support\Branding;
 use App\Support\EmailGrouping;
+use App\Support\RequestMemo;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
@@ -139,6 +141,72 @@ final class EmailSendFields
         return array_keys(MatterContact::options($matter?->getKey(), $to, $partyIds));
     }
 
+    /**
+     * The matter's other contacts to send to as well — everyone on its Contacts tab with an email, those it goes to
+     * already and the office's own mailboxes left out: each address an option, named as the tab names them.
+     *
+     * @param  list<string>  $exclude  addresses it goes to already
+     */
+    public static function alsoTo(?Matter $matter, array $exclude = []): CheckboxList
+    {
+        $options = self::contactOptions($matter, $exclude);
+
+        return CheckboxList::make('also_to')
+            ->label(__('Also to'))
+            ->helperText(__('The matter\'s other contacts: each ticked gets the email too — with everyone when sent to all at once, else an email of their own.'))
+            ->options($options)
+            ->columns(2)
+            ->bulkToggleable()
+            ->live()
+            ->visible($options !== []);
+    }
+
+    /**
+     * Those ticked, each named as the Contacts tab names them — for the mailer.
+     *
+     * @param  list<string>  $emails
+     * @return list<array{email: string, name: string}>
+     */
+    public static function alsoToNamed(?Matter $matter, array $emails): array
+    {
+        $options = self::contactOptions($matter, []);
+
+        return array_values(array_map(
+            fn (string $email): array => ['email' => $email, 'name' => trim((string) strstr($options[mb_strtolower($email)] ?? '', ' — ', true))],
+            array_values(array_unique(Addresses::emails($emails))),
+        ));
+    }
+
+    /**
+     * @param  list<string>  $exclude
+     * @return array<string, string> address => "name — address (capacity)"
+     */
+    private static function contactOptions(?Matter $matter, array $exclude): array
+    {
+        if (! $matter) {
+            return [];
+        }
+
+        $exclude = array_map('mb_strtolower', Addresses::emails($exclude));
+        $options = [];
+        // The tab's rows, read once a request: the field asks for them as it is drawn, and when sent.
+        $rows = RequestMemo::remember('matter-contact-rows.'.$matter->getKey(), fn (): array => (new MatterContactsExport($matter))->rows());
+
+        foreach ($rows as $row) {
+            foreach ((array) $row['own'] as $email) {
+                $key = mb_strtolower($email);
+
+                if (in_array($key, $exclude, true) || isset($options[$key]) || MatterContact::isOurs($email)) {
+                    continue;
+                }
+
+                $options[$key] = trim((string) $row['name']).' — '.$email.($row['capacity'] !== '' ? ' ('.$row['capacity'].')' : '');
+            }
+        }
+
+        return $options;
+    }
+
     public static function grouping(): Radio
     {
         return Radio::make('grouping')
@@ -161,7 +229,7 @@ final class EmailSendFields
     {
         return FileUpload::make('attachments')
             ->label(__('More attachments'))
-            ->helperText($helperText.' '.__('Up to :size a file; past what an email takes (Settings → Letters & emails) the files added are shared by link at once.', ['size' => '300 MB']))
+            ->helperText($helperText.' '.__('Up to :size a file; past what an email takes (Settings → Letters & emails) the files go by link.', ['size' => '300 MB']))
             ->multiple()
             ->disk(self::DISK)
             ->directory($directory)

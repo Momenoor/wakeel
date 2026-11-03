@@ -381,6 +381,11 @@ class MatterCreditorsTest extends TestCase
         $this->assertSame(ReceivedEmailFiling::CREDITOR, ReceivedEmailFiling::side($this->matter, 'info@mahad.ae'));
         // Its row and its lawyer's carry the creditor: the lawyer's as its agent.
         $this->assertSame([false, true], $rows->filter(fn (array $row): bool => $row['creditor_id'] === $mahad->id)->pluck('agent')->sort()->values()->all());
+        // One Edit on its row: the creditor's.
+        Livewire::test(MatterContacts::class, ['matter' => $this->matter])
+            ->assertTableActionVisible('editCreditor', $plaintiff)
+            ->assertTableActionHidden('edit', $plaintiff)
+            ->assertTableActionVisible('edit', $defendant);
 
         // Many at once: the defendant and someone who wrote in — the plaintiff, a creditor already, left as it is;
         // the defendant's lawyer, ticked along, linked as its agent and not made a creditor of its own.

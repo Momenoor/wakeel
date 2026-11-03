@@ -184,7 +184,7 @@ class MatterContact extends Model
     }
 
     /** The party whose address this is — one on the matter first. */
-    private static function partyOf(int $matterId, string $address): ?int
+    public static function partyOf(int $matterId, string $address): ?int
     {
         $parties = self::partiesWith($address);
         if ($parties->isEmpty()) {

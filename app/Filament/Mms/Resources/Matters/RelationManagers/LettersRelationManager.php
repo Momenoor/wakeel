@@ -219,6 +219,8 @@ class LettersRelationManager extends RelationManager
                         ->live(),
                     EmailSendFields::cc(),
                     EmailSendFields::contactsCc($record->matter, ...self::reached($record)),
+                    // The matter's other contacts, to send the letter to as well.
+                    EmailSendFields::alsoTo($record->matter, self::reached($record)[0]),
                     // Files of this send's own, beside the letter — whichever way it goes; shared by link at once past what an email takes.
                     EmailSendFields::attachments('letter-attachments', __('Sent with the letter, for this email only.'), $shareWhenOver),
                     EmailSendFields::oneDriveFiles($record->matter, $shareWhenOver),
@@ -266,6 +268,7 @@ class LettersRelationManager extends RelationManager
                     ($data['mode'] ?? null) === LetterMailer::ATTACHMENT ? ($data['body'] ?? null) : null,
                     EmailSendFields::uploaded($data, $record->matter),
                     array_values((array) ($data['contacts_cc'] ?? [])),
+                    EmailSendFields::alsoToNamed($record->matter, (array) ($data['also_to'] ?? [])),
                 );
 
                 EmailSendFields::forget($data);
@@ -327,7 +330,7 @@ class LettersRelationManager extends RelationManager
         $attachments = array_map(fn ($file) => $file instanceof TemporaryUploadedFile ? $file->getClientOriginalName() : $file, array_values((array) ($get('attachments') ?? [])));
         $key = $record->getKey().'|'.md5(serialize([
             $get('mode'), $get('recipients'), $get('grouping'), $get('email_template_id'), $get('body'), $get('subject'),
-            $get('sender'), $get('formats'), $get('cc'), $attachments, $get('onedrive_files'),
+            $get('sender'), $get('formats'), $get('cc'), $attachments, $get('onedrive_files'), $get('also_to'),
         ]));
         if (! isset($worked[$key])) {
             $worked[$key] = self::workEmailPreview($record, $get);
@@ -351,7 +354,7 @@ class LettersRelationManager extends RelationManager
         $template = filled($get('email_template_id')) ? EmailTemplate::find($get('email_template_id')) : null;
         $body = $get('body');
         // The first email as it will go: to all, or the first party or person.
-        $units = LetterMailer::emailGroups($ticked, $grouping);
+        $units = LetterMailer::emailGroups($ticked, $grouping, EmailSendFields::alsoToNamed($record->matter, (array) ($get('also_to') ?? [])));
         $first = $units[0] ?? null;
 
         $preview = app(LetterMailer::class)->preview(

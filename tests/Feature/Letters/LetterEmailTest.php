@@ -6,6 +6,7 @@ use App\Enums\LetterStatus;
 use App\Filament\Mms\Resources\EmailTemplates\EmailTemplateResource;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
+use App\Filament\Support\EmailSendFields;
 use App\Models\EmailTemplate;
 use App\Models\Letterhead;
 use App\Models\LetterTemplate;
@@ -118,6 +119,32 @@ class LetterEmailTest extends TestCase
         $this->assertSame(LetterStatus::SENT, $letter->status);
         $this->assertSame('iflas', $letter->sender_key);
         $this->assertSame([LetterStatus::SENT, LetterStatus::SENT, LetterStatus::DRAFT], $letter->recipients->pluck('delivery_status')->all());
+    }
+
+    public function test_the_matters_other_contacts_can_be_sent_the_letter_too(): void
+    {
+        $matter = $this->letter->matter;
+        MatterParty::create(['matter_id' => $matter->id, 'party_id' => Party::factory()->create(['name' => 'شركة الإضافي', 'email' => ['extra@x.ae']])->id, 'role' => 'party', 'type' => 'defendant']);
+
+        // Offered: the matter's contacts with an email, the letter's own recipients and our mailboxes left out.
+        $options = EmailSendFields::alsoTo($matter, $this->letter->recipients->flatMap->allEmails()->all())->getOptions();
+        $this->assertArrayHasKey('extra@x.ae', $options);
+        $this->assertStringStartsWith('شركة الإضافي — extra@x.ae', $options['extra@x.ae']);
+        $this->assertSame([['email' => 'extra@x.ae', 'name' => 'شركة الإضافي']], EmailSendFields::alsoToNamed($matter, ['extra@x.ae']));
+
+        // To all at once: with everyone.
+        app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::ATTACHMENT, null, ['pdf'], alsoTo: [['email' => 'extra@x.ae', 'name' => 'شركة الإضافي']]);
+        $this->assertCount(1, $this->sent);
+        $this->assertContains('extra@x.ae', array_map(fn ($a) => $a->getAddress(), $this->sent[0]->getTo()));
+
+        // Each on their own: an email of theirs, greeting them by name.
+        $this->sent = [];
+        $cover = EmailTemplate::create(['name' => 'Cover', 'subject' => '{{reference}}', 'body' => '<p>السادة/ {{recipient.name}}</p>']);
+        $result = app(LetterMailer::class)->send($this->letter, 'iflas', LetterMailer::ATTACHMENT, $cover, ['pdf'], separate: true, alsoTo: [['email' => 'extra@x.ae', 'name' => 'شركة الإضافي']]);
+        $this->assertSame(3, $result['sent']);
+        $last = end($this->sent);
+        $this->assertSame(['extra@x.ae'], array_map(fn ($a) => $a->getAddress(), $last->getTo()));
+        $this->assertStringContainsString('شركة الإضافي', $last->getHtmlBody());
     }
 
     public function test_the_letter_itself_as_the_email_has_no_signature_of_its_own_but_the_mailboxs(): void
