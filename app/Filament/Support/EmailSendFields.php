@@ -9,7 +9,6 @@ use App\Models\Matter;
 use App\Models\MatterContact;
 use App\Models\MatterLetter;
 use App\Models\Setting;
-use App\Services\MMS\Letters\LetterMailer;
 use App\Services\MMS\Letters\SharedAttachments;
 use App\Services\MMS\MatterOneDriveExplorer;
 use App\Services\MMS\MatterOneDriveFolders;
@@ -229,31 +228,15 @@ final class EmailSendFields
                     ->color('gray')
                     ->visible(fn (): bool => $matter !== null && MatterOneDriveFolders::folderFor($matter) !== null)
                     ->action(function (Get $get, Set $set) use ($matter, $record, $folderName, $to): void {
-                        $files = LetterMailer::attachedFiles(self::addedNow($matter, [
+                        [$directory, $staged] = self::stage($matter, [
                             'attachments' => $get('attachments'), 'attachment_names' => $get('attachment_names'), 'onedrive_files' => $get('onedrive_files'),
-                        ]));
+                        ]);
 
-                        if ($files === []) {
+                        if ($staged === []) {
                             Notification::make()->warning()->title(__('Add or pick the files to share first.'))->send();
 
                             return;
                         }
-
-                        // Staged in a folder of their own for the job, which removes it when done; the OneDrive files fetched
-                        // are copied there too, their own files let go.
-                        $directory = 'shared-attachments/'.Str::uuid();
-                        $disk = Storage::disk(self::DISK);
-                        $staged = [];
-                        foreach ($files as $i => $file) {
-                            if (! is_file($file['path'])) {
-                                continue;
-                            }
-
-                            $path = $directory.'/'.$i.'-'.MatterOneDriveExplorer::cleanName($file['name']);
-                            $disk->put($path, (string) file_get_contents($file['path']));
-                            $staged[] = ['path' => $disk->path($path), 'name' => $file['name']];
-                        }
-                        self::forget([]);
 
                         SharedAttachments::setProgress($record, SharedAttachments::QUEUED, 0, count($staged));
                         ShareAttachments::dispatch($record, $staged, $directory, $folderName, $to($get));
@@ -297,6 +280,32 @@ final class EmailSendFields
                 ->extraAttributes(['dir' => 'ltr', 'style' => 'word-break: break-all;'])
                 ->visible(fn (): bool => filled($record->fresh()?->shared_files['url'] ?? null)),
         ];
+    }
+
+    /**
+     * The files added (addedNow()) staged in a folder of their own for the sharing job, which removes it when
+     * done: each copied there under its position and name, the OneDrive files fetched let go once copied.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{0: string, 1: list<array{path: string, name: string}>} the folder on the local disk, and the files staged in it
+     */
+    public static function stage(?Matter $matter, array $data): array
+    {
+        $directory = 'shared-attachments/'.Str::uuid();
+        $disk = Storage::disk(self::DISK);
+        $staged = [];
+        foreach (self::addedNow($matter, $data) as $i => $file) {
+            if (! is_file($file['path'])) {
+                continue;
+            }
+
+            $path = $directory.'/'.$i.'-'.MatterOneDriveExplorer::cleanName($file['name']);
+            $disk->put($path, (string) file_get_contents($file['path']));
+            $staged[] = ['path' => $disk->path($path), 'name' => $file['name']];
+        }
+        self::forget([]);
+
+        return [$directory, $staged];
     }
 
     /**

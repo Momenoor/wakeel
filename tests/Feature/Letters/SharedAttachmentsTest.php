@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Letters;
 
+use App\Filament\Support\EmailSendFields;
 use App\Jobs\ShareAttachments;
 use App\Models\Court;
 use App\Models\EmailTemplate;
@@ -263,5 +264,30 @@ class SharedAttachmentsTest extends TestCase
         $smallId = (string) array_key_first(array_filter($this->od->items, fn (array $item): bool => $item['name'] === 'small.pdf'));
         $this->assertSame($this->od->items[$smallId]['parent'], $this->od->items[$laterId]['parent']);
         $this->assertStringContainsString('<li>small.pdf</li><li>later.pdf</li>', $this->sent[1]->getHtmlBody());
+    }
+
+    public function test_get_the_link_now_stages_the_files_added_for_the_job_and_they_come_out_shared(): void
+    {
+        $letter = $this->letter();
+        $this->file('small.pdf', 10 * 1024);
+        $this->file('big.pdf', 1100 * 1024);
+
+        // Nothing added: nothing staged, and said so on the screen.
+        $this->assertSame([], EmailSendFields::stage($letter->matter, ['attachments' => [], 'onedrive_files' => []])[1]);
+
+        // The uploads, under their own names, in a folder of their own — the files as the job takes them (a path and a name).
+        [$directory, $staged] = EmailSendFields::stage($letter->matter, [
+            'attachments' => ['letter-attachments/small.pdf', 'letter-attachments/big.pdf'],
+            'attachment_names' => ['letter-attachments/small.pdf' => 'الصغير.pdf'],
+        ]);
+        $this->assertStringStartsWith('shared-attachments/', $directory);
+        $this->assertSame(['الصغير.pdf', 'big.pdf'], array_column($staged, 'name'));
+        $this->assertSame([Storage::disk('local')->path($directory.'/0-الصغير.pdf'), Storage::disk('local')->path($directory.'/1-big.pdf')], array_column($staged, 'path'));
+        $this->assertSame(1100 * 1024, Storage::disk('local')->size($directory.'/1-big.pdf'));
+
+        ShareAttachments::dispatchSync($letter, $staged, $directory, LetterIssuer::fileName($letter), []);
+        $this->assertSame(['الصغير.pdf', 'big.pdf'], $letter->fresh()->shared_files['names']);
+        $this->assertSame(SharedAttachments::DONE, SharedAttachments::progress($letter)['step']);
+        $this->assertFalse(Storage::disk('local')->exists($directory));
     }
 }
