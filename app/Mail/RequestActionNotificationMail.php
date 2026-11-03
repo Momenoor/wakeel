@@ -48,13 +48,14 @@ class RequestActionNotificationMail extends Mailable
     }
 
     /**
-     * Get the attachments for the message.
+     * The decision's files — what the reviewer sent back — go with the email; the request's own, which the
+     * assistant has, are linked in it (mails.partials.request-attachments).
      *
      * @return array<int, Attachment>
      */
     public function attachments(): array
     {
-        $attachments = $this->matterRequest->attachments()->get();
+        $attachments = $this->matterRequest->decisionAttachments();
         $mailAttachments = [];
 
         foreach ($attachments as $attachment) {

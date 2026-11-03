@@ -8,6 +8,7 @@ use App\Enums\RequestType;
 use App\Models\Concerns\AnnouncesChanges;
 use App\Models\Concerns\HasAttachments;
 use App\Models\Contracts\AttachmentOwner;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
@@ -78,6 +79,27 @@ class MatterRequest extends Model implements AttachmentOwner
     public function attachments(): MorphMany
     {
         return $this->ownedAttachments();
+    }
+
+    /** In extra: the id of its last file before the decision's own were added (BaseRequestService::storeDecisionFiles()). */
+    public const DECISION_FILES_FROM = 'decision_files_from';
+
+    /**
+     * The files that came with the decision — attached when it was decided here, or sent by the reviewer on
+     * WhatsApp — not the request's own: shown apart on its page, and returned to the assistant with the decision.
+     * None while it is pending (sent again after changes), or for one decided before they were told apart.
+     *
+     * @return Collection<int, Attachment>
+     */
+    public function decisionAttachments(): Collection
+    {
+        $from = $this->extra[self::DECISION_FILES_FROM] ?? null;
+
+        if ($from === null || in_array($this->status, [RequestStatus::PENDING, RequestStatus::DISPUTED], true)) {
+            return new Collection;
+        }
+
+        return $this->attachments->filter(fn (Attachment $file): bool => $file->getKey() > (int) $from)->values();
     }
 
     public function attachmentMatterId(): ?int

@@ -78,8 +78,21 @@ class MatterRequestInfolist
                                             ->label(__('Handling Note'))
                                             ->color('gray')
                                             ->placeholder('-'),
+                                        // What came with the decision — sent back on WhatsApp, or attached when deciding here.
+                                        RepeatableEntry::make('decision_files')
+                                            ->label(__('Files sent with the decision'))
+                                            ->state(fn ($record): array => $record->decisionAttachments()->map(fn ($file): array => ['name' => $file->name, 'url' => $file->url()])->all())
+                                            ->visible(fn ($record): bool => $record->decisionAttachments()->isNotEmpty())
+                                            ->contained(false)
+                                            ->schema([
+                                                TextEntry::make('name')
+                                                    ->hiddenLabel()
+                                                    ->color('primary')
+                                                    ->icon('heroicon-o-paper-clip')
+                                                    ->url(fn (TextEntry $component): ?string => data_get($component->getContainer()->getConstantState(), 'url'))
+                                                    ->openUrlInNewTab(),
+                                            ]),
                                     ]),
-
                                 Section::make(__('Timestamps'))
                                     ->icon('heroicon-m-clock')
                                     ->compact()

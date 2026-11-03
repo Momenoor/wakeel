@@ -10,6 +10,23 @@
         <x-mail.row :label="__('Action Date')" :value="$matterRequest->approved_at->locale(app()->getLocale())->format(\App\Support\Dates::dateTimeFormat())" />
     </x-mail.info>
 
+    @if($matterRequest->decisionAttachments()->isNotEmpty())
+        {{-- The decision's own files: attached to this email, and here to open. --}}
+        <div style="margin-top: 20px;">
+            <p><strong>{{ __('Files sent with the decision') }}:</strong></p>
+            <ul style="font-size: 14px; color: #1B3A5C; padding-inline-start: 20px;">
+                @foreach($matterRequest->decisionAttachments() as $attachment)
+                    <li>
+                        <a href="{{ $attachment->url() }}"
+                           style="color: #1B3A5C; text-decoration: underline;">
+                            {{ $attachment->name }}
+                        </a>
+                    </li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
     @include('mails.partials.request-attachments')
 
     <x-mail.actions>

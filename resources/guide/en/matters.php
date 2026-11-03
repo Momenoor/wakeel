@@ -214,7 +214,8 @@ return [
             ],
             'tips' => [
                 'Each request has a "History": request made, changes asked for, made again, approved or rejected, with the "Step", "By", "Date" and "Note" of each step. It shows on the request\'s page and under the request on the matter, and covers older requests too.',
-                'A report sent for review on WhatsApp (to the report reviewers set on the assistant\'s page): when it is approved from WhatsApp, an optional comment is asked for (text, pictures or files), then "Approve" a second time to settle it. The comment and its files are kept with the request and the assistant is told.',
+                'A report sent for review on WhatsApp (to the report reviewers set on the assistant\'s page): when it is approved from WhatsApp, an optional comment is asked for (text, pictures, or PDF, Word and other files), then "Approve" a second time to settle it. The comment and its files are kept with the request and the assistant is told.',
+                'The files that come with a decision — attached in the approve or reject window, or sent by the reviewer on WhatsApp — are kept apart as "Files sent with the decision" under "Approval Details" (the request\'s own files stay under "Attachments"), and go back to the assistant: attached to the decision email, and on WhatsApp each in a message of its own when a "Notification with a file" template is set up (Templates → WhatsApp templates); without one they follow the notification as plain files, which WhatsApp delivers only within 24 hours of the assistant\'s last message to the office\'s number.',
             ],
         ],
 

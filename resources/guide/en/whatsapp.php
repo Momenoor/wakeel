@@ -24,7 +24,10 @@ return [
                 ['text' => 'Click "New WhatsApp template" and enter the "Name", "Used for" (the template\'s purpose), "Template name in Meta" and "Language code" (such as ar).', 'shot' => 'create-1'],
                 ['text' => 'Choose the "Header" (attach the minutes as a PDF, or none), and write the "Message text" with the numbered parameters {{1}} {{2}}. Then define each "Parameter" and what it is "Filled with" (fields such as matter.reference). In "Reply when the signed copy arrives", write the automatic reply to the recipient. Then click "Create".'],
             ],
-            'tips' => ['Turn on "Default" to make it the usual template for its purpose, and "Active" to use it.'],
+            'tips' => [
+                'Turn on "Default" to make it the usual template for its purpose, and "Active" to use it.',
+                '"Used for" says what the template carries: minutes for signature, a report for review, a notification (the bell\'s title, text and link, for whoever turned WhatsApp on in their notification preferences: its parameters may use {{user}}, {{title}}, {{body}} and {{link}}), or a notification with a file — the same with the document header and {{file}}, used when a notification carries files (a request\'s decision sent back to the assistant: one message a file). Without it, the files follow the notification as plain files, which Meta delivers only within 24 hours of the recipient\'s last message to the office\'s number.',
+            ],
         ],
         [
             'id' => 'webhook',

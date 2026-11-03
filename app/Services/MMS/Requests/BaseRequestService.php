@@ -131,7 +131,7 @@ abstract class BaseRequestService
             'approved_at' => now(),
             'approved_comment' => $data['approved_comment'] ?? null,
         ]);
-        $this->storeFile($data['attachments'] ?? []);
+        $this->storeDecisionFiles($data['attachments'] ?? []);
 
         $this->request->matter->increment('review_count');
         $this->request->update(['extra' => [...(array) $this->request->extra, 'modifications' => (int) ($this->request->extra['modifications'] ?? 0) + 1]]);
@@ -153,6 +153,8 @@ abstract class BaseRequestService
     public function resubmit(array $data = [], $component = null): void
     {
         $extra = (array) $this->request->extra;
+        // The files of the decision asked for changes are of that round now, not of a decision.
+        unset($extra[MatterRequest::DECISION_FILES_FROM]);
         $extra['rounds'] = [...($extra['rounds'] ?? []), [
             'asked_at' => $this->request->approved_at?->toDateTimeString(),
             'asked_by' => $this->request->approved_by,
@@ -184,7 +186,7 @@ abstract class BaseRequestService
             'approved_comment' => $data['approved_comment'] ?? null,
         ]);
 
-        $this->storeFile($data['attachments']);
+        $this->storeDecisionFiles($data['attachments']);
     }
 
     protected function markRejected(array $data): void
@@ -196,7 +198,17 @@ abstract class BaseRequestService
             'approved_at' => now(),
             'approved_comment' => $data['approved_comment'],
         ]);
-        $this->storeFile($data['attachments']);
+        $this->storeDecisionFiles($data['attachments']);
+    }
+
+    /**
+     * The decision's files — attached when deciding here, or sent by the reviewer on WhatsApp — stored as the
+     * request's, and told apart from those it had (MatterRequest::decisionAttachments()).
+     */
+    private function storeDecisionFiles($attachments): void
+    {
+        $this->request->update(['extra' => [...(array) $this->request->extra, MatterRequest::DECISION_FILES_FROM => (int) $this->request->attachments()->max('id')]]);
+        $this->storeFile($attachments);
     }
 
     public function refresh($component): void
@@ -275,7 +287,8 @@ abstract class BaseRequestService
 
         $this->notify($type, $title, $body, $assistants);
         $this->mailEach($type, $assistants, fn () => new RequestActionNotificationMail($this->request->matter, $this->request, $statusLabel));
-        Notifier::whatsapp(NotificationPreferences::wanting($type, $assistants, NotificationChannel::WHATSAPP), $title, $body, $this->requestUrl());
+        // The decision's files go back to them with it: with the email, and on WhatsApp (Notifier::whatsapp()).
+        Notifier::whatsapp(NotificationPreferences::wanting($type, $assistants, NotificationChannel::WHATSAPP), $title, $body, $this->requestUrl(), $this->request->decisionAttachments());
     }
 
     /**

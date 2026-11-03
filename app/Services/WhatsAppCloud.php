@@ -116,6 +116,22 @@ class WhatsAppCloud
     }
 
     /**
+     * A file (uploaded already: its media id) as a message of its own — allowed, like a plain message, only
+     * within 24 hours of theirs; a template with the file in its header reaches anyone. The message id.
+     */
+    public function sendDocument(string $to, string $mediaId, string $filename, ?string $caption = null): string
+    {
+        $response = $this->http()->post(self::GRAPH.'/'.config('services.whatsapp.phone_id').'/messages', [
+            'messaging_product' => 'whatsapp',
+            'to' => $to,
+            'type' => 'document',
+            'document' => array_filter(['id' => $mediaId, 'filename' => $filename, 'caption' => $caption]),
+        ]);
+
+        return (string) $this->ok($response)->json('messages.0.id');
+    }
+
+    /**
      * A plain message — allowed only within 24 hours of theirs.
      */
     public function sendText(string $to, string $text): void

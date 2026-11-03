@@ -7,6 +7,7 @@ use App\Enums\RequestStatus;
 use App\Enums\RequestType;
 use App\Filament\Mms\Actions\Request\ResubmitRequestAction;
 use App\Mail\NewRequestNotificationMail;
+use App\Mail\RequestActionNotificationMail;
 use App\Models\Matter;
 use App\Models\MatterParty;
 use App\Models\MatterRequest;
@@ -454,5 +455,50 @@ class ReportReviewWhatsAppTest extends TestCase
 
         $this->assertSame(RequestStatus::APPROVED, $request->refresh()->status);
         $this->assertNotNull($this->matter->refresh()->final_report_memo_date);
+    }
+
+    public function test_the_files_sent_with_a_decision_go_back_to_the_assistant_with_it(): void
+    {
+        $this->withoutDefer();
+        // The office has the notification templates, with and without a file; the assistant wants decisions on WhatsApp.
+        WhatsAppTemplate::create(['name' => 'Notification', 'purpose' => WhatsAppTemplate::NOTIFICATION, 'meta_name' => 'user_notification', 'language' => 'ar', 'header' => 'none', 'body' => '{{title}}', 'is_active' => true, 'is_default' => true, 'parameters' => [['name' => 'title', 'value' => '{{title}}']]]);
+        NotificationPreferences::make()->saveUser($this->assistant, [NotificationType::REQUEST_DECIDED->value => ['whatsapp' => true]]);
+        WhatsAppTemplate::create([
+            'name' => 'With a file', 'purpose' => WhatsAppTemplate::NOTIFICATION_FILE, 'meta_name' => 'notification_file', 'language' => 'ar',
+            'header' => 'document', 'body' => '{{title}}: {{file}}', 'is_active' => true, 'is_default' => true,
+            'parameters' => [['name' => 'title', 'value' => '{{title}}'], ['name' => 'file', 'value' => '{{file}}']],
+        ]);
+        app(ReportReviewWhatsApp::class)->send($this->request);
+        $mine = $this->deliveryOf($this->reviewer);
+        $reviews = app(ReportReviewWhatsApp::class);
+
+        // Approved, the signed report sent back as a Word file and a PDF.
+        $this->press($mine, 'approve');
+        $this->assertTrue($reviews->receive(['type' => 'document', 'from' => $mine->phone, 'id' => 'd1', 'document' => ['id' => 'media-d1', 'mime_type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'filename' => 'signed report.docx']]));
+        $this->assertTrue($reviews->receive(['type' => 'document', 'from' => $mine->phone, 'id' => 'd2', 'document' => ['id' => 'media-d2', 'mime_type' => 'application/pdf', 'filename' => 'stamp.pdf']]));
+        $this->calls = [];
+        $this->press($mine, 'done');
+
+        $request = $this->request->refresh();
+        $this->assertSame([RequestStatus::APPROVED, 3], [$request->status, $request->attachments()->count()]);
+        // Told apart from the report the assistant sent.
+        $this->assertSame(['signed report.docx', 'stamp.pdf'], $request->decisionAttachments()->pluck('name')->all());
+
+        // With the decision email — not the report, which the assistant has.
+        Mail::assertSent(RequestActionNotificationMail::class, fn (RequestActionNotificationMail $mail): bool => $mail->hasTo($this->assistant->email)
+            && array_map(fn ($file) => $file->as, $mail->attachments()) === ['signed report.docx', 'stamp.pdf']);
+
+        // On WhatsApp: a message a file, each on the template with the file in its header and the title in its text.
+        $sent = collect($this->calls)->filter(fn (array $call): bool => str_ends_with($call['url'], '/messages'))->pluck('data')->where('to', '971500000001')->values();
+        $this->assertSame(['notification_file', 'notification_file'], $sent->pluck('template.name')->all());
+        $headers = $sent->map(fn (array $message) => collect($message['template']['components'])->firstWhere('type', 'header')['parameters'][0]['document']['filename'])->all();
+        $this->assertSame(['signed report.docx', 'stamp.pdf'], $headers);
+        $this->assertSame('signed report.docx', collect($sent[0]['template']['components'])->firstWhere('type', 'body')['parameters'][1]['text']);
+
+        // Sent again after changes: the files are that round's, no decision's.
+        RequestServiceFactory::make($request)->requestChanges(['approved_comment' => 'Once more']);
+        $this->assertCount(0, $request->refresh()->decisionAttachments());
+        RequestServiceFactory::make($request)->resubmit(['attachments' => []]);
+        $this->assertSame([RequestStatus::PENDING, false], [$request->refresh()->status, array_key_exists(MatterRequest::DECISION_FILES_FROM, (array) $request->extra)]);
     }
 }

@@ -218,6 +218,8 @@ class AttachmentMoveTest extends TestCase
 
         // Its files go with the email from wherever each is kept (one moved, one not yet).
         $this->assertCount(2, (new NewRequestNotificationMail($matter, $request->fresh()))->attachments());
+        // The decision's own files (both, here) go with the decision email.
+        $request->update(['status' => 'approved', 'extra' => [MatterRequest::DECISION_FILES_FROM => 0]]);
         $this->assertCount(2, (new RequestActionNotificationMail($matter, $request->fresh(), 'Approved'))->attachments());
         $this->assertSame(1, Attachment::where('disk', 'attachments')->count());
     }

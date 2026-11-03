@@ -5,6 +5,7 @@ namespace App\Services\Notifications;
 use App\Enums\NotificationChannel;
 use App\Enums\NotificationType;
 use App\Mail\UserNotificationMail;
+use App\Models\Attachment;
 use App\Models\User;
 use App\Models\WhatsAppTemplate;
 use App\Services\WhatsAppCloud;
@@ -89,13 +90,22 @@ class Notifier
      * parameters may use {{user}}, {{title}}, {{body}} and {{link}}. Nothing when there is none, or
      * WhatsApp is not set up, or the user has no number.
      *
+     * With files (a decision's, back to the assistant): each goes in a message of its own on the
+     * "Notification with a file" template, in its header, with the title and text — and reaches anyone
+     * Meta lets a template reach. Without that template, the notification goes as usual and each file
+     * after it as a plain file, which Meta delivers only within 24 hours of their last message to the
+     * office's number; one not delivered is logged, and the files are with the email and on the page.
+     *
      * @param  Collection<int, User>  $users
+     * @param  iterable<Attachment>  $files
      */
-    public static function whatsapp(Collection $users, string $title, ?string $body, ?string $url): void
+    public static function whatsapp(Collection $users, string $title, ?string $body, ?string $url, iterable $files = []): void
     {
         $template = WhatsAppTemplate::default(WhatsAppTemplate::NOTIFICATION);
+        $files = collect($files)->filter(fn (Attachment $file): bool => $file->fileExists())->values();
+        $withFile = $files->isNotEmpty() ? WhatsAppTemplate::default(WhatsAppTemplate::NOTIFICATION_FILE) : null;
 
-        if ($users->isEmpty() || ! $template || ! WhatsAppCloud::configured()) {
+        if ($users->isEmpty() || (! $template && ! $withFile) || ! WhatsAppCloud::configured()) {
             return;
         }
 
@@ -104,7 +114,19 @@ class Notifier
 
         // Once the answer has gone back: each message is a call to Meta, and whoever approved a leave or filed a
         // request waited a second or more for them all.
-        defer(function () use ($users, $template, $oneLine, $title, $body, $url): void {
+        defer(function () use ($users, $template, $withFile, $files, $oneLine, $title, $body, $url): void {
+            $cloud = app(WhatsAppCloud::class);
+            $media = [];
+            // Each file uploaded once, for everyone: its media id and the name it is sent under.
+            $uploaded = function (int $index) use (&$media, $files, $cloud): array {
+                $file = $files[$index];
+
+                return $media[$index] ??= [
+                    'id' => $cloud->upload((string) $file->storage()->get($file->path), (string) ($file->mime ?: $file->storage()->mimeType($file->path) ?: 'application/octet-stream'), (string) $file->name),
+                    'filename' => (string) $file->name,
+                ];
+            };
+
             foreach ($users as $user) {
                 $phone = WhatsAppService::formatWhatsAppNumber($user->phone);
 
@@ -112,13 +134,31 @@ class Notifier
                     continue;
                 }
 
+                $values = [
+                    'user' => $oneLine($user->display_name ?: $user->name, 60),
+                    'title' => $oneLine($title, 100),
+                    'body' => $oneLine($body, 300),
+                    'link' => (string) ($url ?: config('app.url')),
+                ];
+
                 try {
-                    app(WhatsAppCloud::class)->sendTemplate($phone, $template->meta_name, $template->language, $template->parameterValues([
-                        'user' => $oneLine($user->display_name ?: $user->name, 60),
-                        'title' => $oneLine($title, 100),
-                        'body' => $oneLine($body, 300),
-                        'link' => (string) ($url ?: config('app.url')),
-                    ]));
+                    if ($withFile) {
+                        foreach ($files->keys() as $index) {
+                            $cloud->sendTemplate($phone, $withFile->meta_name, $withFile->language, $withFile->parameterValues([...$values, 'file' => $oneLine($files[$index]->name, 100)]), $uploaded($index));
+                        }
+
+                        continue;
+                    }
+
+                    $cloud->sendTemplate($phone, $template->meta_name, $template->language, $template->parameterValues($values));
+
+                    foreach ($files->keys() as $index) {
+                        try {
+                            $cloud->sendDocument($phone, ...$uploaded($index));
+                        } catch (Throwable $e) {
+                            Log::warning('A notification\'s file not sent on WhatsApp (sent as a plain file: Meta delivers one within 24 hours of their last message only — a "Notification with a file" template reaches anyone)', ['user' => $user->getKey(), 'file' => $files[$index]->name, 'error' => $e->getMessage()]);
+                        }
+                    }
                 } catch (Throwable $e) {
                     Log::warning('Notification not sent on WhatsApp', ['user' => $user->getKey(), 'error' => $e->getMessage()]);
                 }
