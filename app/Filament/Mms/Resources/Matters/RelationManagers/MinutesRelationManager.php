@@ -443,9 +443,9 @@ class MinutesRelationManager extends RelationManager
                             ->placeholders(['recipient.name' => __('Recipient name (separate emails)'), ...Honorific::catalog(), 'recipient.role' => __('Recipient capacity (separate emails)'), ...SharedAttachments::catalog()])
                             ->contentDirection(MinutesService::composer($record)->isArabic() ? 'rtl' : 'ltr')
                             ->live(onBlur: true),
-                        // Files of this send's own, beside the minutes.
-                        EmailSendFields::attachments('minutes-attachments', __('Sent by email with the minutes, for this send only.')),
-                        EmailSendFields::oneDriveFiles($record->matter),
+                        // Files of this send's own, beside the minutes; shared by link at once past what an email takes.
+                        EmailSendFields::attachments('minutes-attachments', __('Sent by email with the minutes, for this send only.'), EmailSendFields::shareWhenOver($record->matter, $record, MinutesService::fileName($record), fn (): array => [])),
+                        EmailSendFields::oneDriveFiles($record->matter, EmailSendFields::shareWhenOver($record->matter, $record, MinutesService::fileName($record), fn (): array => [])),
                         // The files shared by link now, to copy the link into the email by hand.
                         ...EmailSendFields::sharedLink($record->matter, $record, MinutesService::fileName($record), fn (): array => []),
                     ]),

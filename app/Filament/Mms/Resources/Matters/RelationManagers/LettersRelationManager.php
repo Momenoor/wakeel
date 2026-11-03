@@ -175,77 +175,83 @@ class LettersRelationManager extends RelationManager
                 'contacts_cc' => EmailSendFields::startingContactsCc($record->matter, ...self::reached($record)),
                 ...app(LetterMailer::class)->draft($record, LetterMailer::ATTACHMENT, self::coverEmail($record)),
             ])
-            ->schema(fn (MatterLetter $record) => [
-                EmailSendFields::sender(),
-                Radio::make('mode')
-                    ->label(__('Send the letter'))
-                    ->options([
-                        LetterMailer::ATTACHMENT => __('As an attachment, with a covering email'),
-                        LetterMailer::BODY => __('As the email itself'),
-                    ])
-                    ->required()
-                    ->live()
-                    ->afterStateUpdated(fn (Get $get, Set $set) => self::redraft($record, $get, $set)),
-                Select::make('email_template_id')
-                    ->label(__('Covering email'))
-                    ->options(fn () => EmailTemplate::options(EmailTemplate::LETTER))
-                    ->placeholder(__('A short standard note'))
-                    ->live()
-                    ->afterStateUpdated(function ($old, Get $get, Set $set) use ($record): void {
-                        self::redraft($record, $get, $set);
-                        // Its own CC in place of the one before's.
-                        $set('cc', EmailTemplate::swapCc((array) ($get('cc') ?? []), $old, $get('email_template_id')));
-                    })
-                    ->visible(fn (Get $get) => $get('mode') === LetterMailer::ATTACHMENT),
-                CheckboxList::make('formats')
-                    ->label(__('Attach as'))
-                    ->options(['pdf' => 'PDF', 'docx' => 'Word'])
-                    ->required(fn (Get $get) => $get('mode') === LetterMailer::ATTACHMENT)
-                    ->visible(fn (Get $get) => $get('mode') === LetterMailer::ATTACHMENT)
-                    ->columns(2),
-                CheckboxList::make('recipients')
-                    ->label(__('To'))
-                    // Nobody ticked is nobody (not everybody): then the copy addresses must say who it goes to.
-                    ->required(fn (Get $get): bool => blank($get('cc')))
-                    ->validationMessages(['required' => __('Tick whom it goes to, or add copy addresses.')])
-                    ->options($record->recipients->mapWithKeys(fn ($r) => [$r->id => trim($r->name.($r->role ? ' ('.$r->role.')' : ''))]))
-                    ->descriptions($record->recipients->mapWithKeys(fn ($r) => [$r->id => collect($r->addressed())->map(fn (array $a): string => trim($a['name'].' <'.$a['email'].'>', ' <>'))->implode(' · ') ?: __('No email')]))
-                    ->bulkToggleable()
-                    ->live(),
-                EmailSendFields::cc(),
-                EmailSendFields::contactsCc($record->matter, ...self::reached($record)),
-                // Files of this send's own, beside the letter — whichever way it goes.
-                EmailSendFields::attachments('letter-attachments', __('Sent with the letter, for this email only.')),
-                EmailSendFields::oneDriveFiles($record->matter),
-                // The files shared by link now, to copy the link into the email or the letter by hand.
-                ...EmailSendFields::sharedLink($record->matter, $record, LetterIssuer::fileName($record), fn (Get $get): array => $record->recipients->whereIn('id', array_map('intval', (array) ($get('recipients') ?? [])))->flatMap(fn (MatterLetterRecipient $r): array => $r->allEmails())->all()),
-                EmailSendFields::grouping(),
+            ->schema(function (MatterLetter $record): array {
+                // Whom the email goes to, for the folder the files shared by link go in.
+                $to = fn (Get $get): array => $record->recipients->whereIn('id', array_map('intval', (array) ($get('recipients') ?? [])))->flatMap(fn (MatterLetterRecipient $r): array => $r->allEmails())->all();
+                $shareWhenOver = EmailSendFields::shareWhenOver($record->matter, $record, LetterIssuer::fileName($record), $to);
 
-                // This email's own wording: starts from the template, with the
-                // letter's details filled in; changed here, for this send only.
-                Section::make(__('The email'))
-                    ->description(__('Changes here are for this email only — the email template stays as it is.'))
-                    ->schema([
-                        TextInput::make('subject')
-                            ->label(__('Subject'))
-                            ->required()
-                            ->maxLength(255)
-                            ->live(onBlur: true),
-                        RichText::make('body')
-                            ->label(__('Email'))
-                            ->email()
-                            ->contentDirection(LetterIssuer::composerFor($record)->isArabic() ? 'rtl' : 'ltr')
-                            ->live(onBlur: true)
-                            ->visible(fn (Get $get) => $get('mode') === LetterMailer::ATTACHMENT),
-                        Placeholder::make('as_body')
-                            ->hiddenLabel()
-                            ->content(__('The letter itself is the email. To change its wording, use Edit on the letter.'))
-                            ->visible(fn (Get $get) => $get('mode') === LetterMailer::BODY),
-                    ]),
-                Section::make(__('Preview'))
-                    ->collapsible()
-                    ->schema(fn (Get $get): array => self::emailPreview($record, $get)),
-            ])
+                return [
+                    EmailSendFields::sender(),
+                    Radio::make('mode')
+                        ->label(__('Send the letter'))
+                        ->options([
+                            LetterMailer::ATTACHMENT => __('As an attachment, with a covering email'),
+                            LetterMailer::BODY => __('As the email itself'),
+                        ])
+                        ->required()
+                        ->live()
+                        ->afterStateUpdated(fn (Get $get, Set $set) => self::redraft($record, $get, $set)),
+                    Select::make('email_template_id')
+                        ->label(__('Covering email'))
+                        ->options(fn () => EmailTemplate::options(EmailTemplate::LETTER))
+                        ->placeholder(__('A short standard note'))
+                        ->live()
+                        ->afterStateUpdated(function ($old, Get $get, Set $set) use ($record): void {
+                            self::redraft($record, $get, $set);
+                            // Its own CC in place of the one before's.
+                            $set('cc', EmailTemplate::swapCc((array) ($get('cc') ?? []), $old, $get('email_template_id')));
+                        })
+                        ->visible(fn (Get $get) => $get('mode') === LetterMailer::ATTACHMENT),
+                    CheckboxList::make('formats')
+                        ->label(__('Attach as'))
+                        ->options(['pdf' => 'PDF', 'docx' => 'Word'])
+                        ->required(fn (Get $get) => $get('mode') === LetterMailer::ATTACHMENT)
+                        ->visible(fn (Get $get) => $get('mode') === LetterMailer::ATTACHMENT)
+                        ->columns(2),
+                    CheckboxList::make('recipients')
+                        ->label(__('To'))
+                        // Nobody ticked is nobody (not everybody): then the copy addresses must say who it goes to.
+                        ->required(fn (Get $get): bool => blank($get('cc')))
+                        ->validationMessages(['required' => __('Tick whom it goes to, or add copy addresses.')])
+                        ->options($record->recipients->mapWithKeys(fn ($r) => [$r->id => trim($r->name.($r->role ? ' ('.$r->role.')' : ''))]))
+                        ->descriptions($record->recipients->mapWithKeys(fn ($r) => [$r->id => collect($r->addressed())->map(fn (array $a): string => trim($a['name'].' <'.$a['email'].'>', ' <>'))->implode(' · ') ?: __('No email')]))
+                        ->bulkToggleable()
+                        ->live(),
+                    EmailSendFields::cc(),
+                    EmailSendFields::contactsCc($record->matter, ...self::reached($record)),
+                    // Files of this send's own, beside the letter — whichever way it goes; shared by link at once past what an email takes.
+                    EmailSendFields::attachments('letter-attachments', __('Sent with the letter, for this email only.'), $shareWhenOver),
+                    EmailSendFields::oneDriveFiles($record->matter, $shareWhenOver),
+                    // The files shared by link now, to copy the link into the email or the letter by hand.
+                    ...EmailSendFields::sharedLink($record->matter, $record, LetterIssuer::fileName($record), $to),
+                    EmailSendFields::grouping(),
+
+                    // This email's own wording: starts from the template, with the
+                    // letter's details filled in; changed here, for this send only.
+                    Section::make(__('The email'))
+                        ->description(__('Changes here are for this email only — the email template stays as it is.'))
+                        ->schema([
+                            TextInput::make('subject')
+                                ->label(__('Subject'))
+                                ->required()
+                                ->maxLength(255)
+                                ->live(onBlur: true),
+                            RichText::make('body')
+                                ->label(__('Email'))
+                                ->email()
+                                ->contentDirection(LetterIssuer::composerFor($record)->isArabic() ? 'rtl' : 'ltr')
+                                ->live(onBlur: true)
+                                ->visible(fn (Get $get) => $get('mode') === LetterMailer::ATTACHMENT),
+                            Placeholder::make('as_body')
+                                ->hiddenLabel()
+                                ->content(__('The letter itself is the email. To change its wording, use Edit on the letter.'))
+                                ->visible(fn (Get $get) => $get('mode') === LetterMailer::BODY),
+                        ]),
+                    Section::make(__('Preview'))
+                        ->collapsible()
+                        ->schema(fn (Get $get): array => self::emailPreview($record, $get)),
+                ];
+            })
             ->action(function (MatterLetter $record, array $data) {
                 $result = app(LetterMailer::class)->send(
                     $record,

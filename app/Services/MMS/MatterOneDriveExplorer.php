@@ -22,6 +22,13 @@ class MatterOneDriveExplorer
      */
     private const LISTING_SECONDS = 3600;
 
+    /**
+     * The send screens' list of the folder's files (files()), kept — a day, or until Refresh is pressed on the Files
+     * tab or a file is changed through it; a file the system puts in the folder is added to it (fileAdded()). Opening
+     * the matter (reread()) reads the Files tab afresh and keeps this list: the send screen opens at once.
+     */
+    private const PICKER_SECONDS = 86400;
+
     /** @var array<int, string> the matter folder's own place, by folder */
     private array $roots = [];
 
@@ -44,8 +51,15 @@ class MatterOneDriveExplorer
         return $items;
     }
 
-    /** Every listing of the folder read afresh next time — a new version of them. */
+    /** Refresh pressed: every listing of the folder read afresh next time, the send screens' list too. */
     public function refresh(MatterOneDriveFolder $folder): void
+    {
+        $this->reread($folder);
+        Cache::forget($this->pickerKey($folder));
+    }
+
+    /** The matter opened: the Files tab's listings read afresh next time — a new version of them; the send screens' list kept. */
+    public function reread(MatterOneDriveFolder $folder): void
     {
         Cache::forever($this->versionKey($folder), Str::random(10));
     }
@@ -126,8 +140,18 @@ class MatterOneDriveExplorer
                 ->all();
         }
 
+        return Cache::remember($this->pickerKey($folder), self::PICKER_SECONDS, fn (): array => $this->filesListing($folder, $root));
+    }
+
+    /**
+     * The files at the top of the folder and in the folders in it, read from OneDrive — each with the folder it is in.
+     *
+     * @return list<array{id: string, name: string, where: string, in: string}>
+     */
+    private function filesListing(MatterOneDriveFolder $folder, string $root): array
+    {
         $top = $this->list($folder);
-        $files = collect($top)->reject(fn (array $i) => $i['folder'])->map(fn (array $i): array => ['id' => $i['id'], 'name' => $i['name'], 'where' => '']);
+        $files = collect($top)->reject(fn (array $i) => $i['folder'])->map(fn (array $i): array => ['id' => $i['id'], 'name' => $i['name'], 'where' => '', 'in' => $root]);
 
         // The folders in it: those not kept already read all at once.
         $subs = collect($top)->filter(fn (array $i) => $i['folder'] && $i['children'] > 0)->take(15)->keyBy('id');
@@ -143,10 +167,39 @@ class MatterOneDriveExplorer
         foreach ($listings as $id => $items) {
             $files = $files->concat(collect($items)
                 ->reject(fn (array $i) => $i['folder'])
-                ->map(fn (array $i): array => ['id' => $i['id'], 'name' => $i['name'], 'where' => $subs[$id]['name']]));
+                ->map(fn (array $i): array => ['id' => $i['id'], 'name' => $i['name'], 'where' => $subs[$id]['name'], 'in' => $id]));
         }
 
         return $files->take(100)->values()->all();
+    }
+
+    /**
+     * A file the system put in the folder (a letter sent, an email saved, the signed minutes): on the send screens'
+     * kept list at once, in place of one of the same id, with no reading — unless it went into a folder the list has
+     * not read (one new, or empty when it was read): then the list is read again next time.
+     */
+    public function fileAdded(MatterOneDriveFolder $folder, string $parentId, string $id, string $name): void
+    {
+        $key = $this->pickerKey($folder);
+        $files = Cache::get($key);
+
+        if (! is_array($files)) {
+            return;
+        }
+
+        $where = $parentId === (string) $folder->drive_item_id
+            ? ''
+            : (collect($files)->firstWhere('in', $parentId)['where'] ?? null);
+
+        if ($where === null) {
+            Cache::forget($key);
+
+            return;
+        }
+
+        $files = array_values(array_filter($files, fn (array $file): bool => $file['id'] !== $id));
+        $files[] = ['id' => $id, 'name' => $name, 'where' => $where, 'in' => $parentId];
+        Cache::put($key, array_slice($files, 0, 100), self::PICKER_SECONDS);
     }
 
     /**
@@ -355,9 +408,17 @@ class MatterOneDriveExplorer
         return 'onedrive-listing-version:'.$folder->getKey();
     }
 
+    /** A folder changed through the Files tab: its listing, and the send screens' list, read again next time. */
     private function forget(MatterOneDriveFolder $folder, string $itemId): void
     {
         Cache::forget($this->listingKey($folder, $itemId));
+        Cache::forget($this->pickerKey($folder));
+    }
+
+    /** The send screens' list of the folder's files: not of a version — kept when the matter is opened again. */
+    private function pickerKey(MatterOneDriveFolder $folder): string
+    {
+        return 'onedrive:'.$folder->getKey().':picker';
     }
 
     private static function normalPath(string $path): string

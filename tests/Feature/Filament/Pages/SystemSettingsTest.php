@@ -311,7 +311,7 @@ class SystemSettingsTest extends TestCase
         $keys = [
             GeneralSettings::class => ['app_name', 'company_name', 'company_phone', 'company_whatsapp', 'company_email', 'app_locale', 'currency_code', 'records_per_page', ...Branding::KEYS, OutlookCalendarService::INVITES, CompanyContact::NAME_AR, CompanyContact::ADDRESS_EN, CompanyContact::ADDRESS_AR, CompanyContact::LICENSE_NO, CalendarEventForm::SESSIONS_PREFIX, Dates::DATE_SETTING, Dates::TIME_SETTING],
             MailServerSettings::class => ['mail_sender_key', 'mail_mailer', 'mail_host', 'mail_port', 'mail_username', 'mail_password', 'mail_encryption', 'mail_from_address', 'mail_from_name'],
-            LettersSettings::class => ['letter_reference_format', 'letter_cc_expert_types', EmailSendFields::DEFAULT_SENDER, SharedAttachments::LIMIT, Branding::EMAIL_PDF, Branding::EMAIL_PDF_FONT, 'leave_request_recipients'],
+            LettersSettings::class => ['letter_reference_format', 'letter_cc_expert_types', EmailSendFields::DEFAULT_SENDER, SharedAttachments::LIMIT, SharedAttachments::LINK_TYPE, Branding::EMAIL_PDF, Branding::EMAIL_PDF_FONT, 'leave_request_recipients'],
             OfflineSettings::class => ['app_offline', 'offline_message', 'offline_allow_admins'],
             AnnouncementSettings::class => [LiveRefresh::SETTING, 'system_announcement', 'show_system_announcement'],
             IntegrationsSettings::class => Integrations::KEYS,

@@ -83,9 +83,9 @@ class MatterOneDriveFiles extends Component implements HasActions, HasSchemas, H
         $this->pickForMinutes = $pickForMinutes;
         $this->pickFolder();
 
-        // The matter opened: its OneDrive read afresh, then kept as you browse.
+        // The matter opened: its OneDrive read afresh, then kept as you browse (the send screens' list of files kept).
         foreach ($this->folders()->filter(fn (MatterOneDriveFolder $f) => $f->isCreated()) as $folder) {
-            $this->explorer()->refresh($folder);
+            $this->explorer()->reread($folder);
         }
     }
 

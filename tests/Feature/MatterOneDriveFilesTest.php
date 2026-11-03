@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\MatterOneDriveExplorer;
 use App\Services\MMS\SentFolder;
+use App\Support\RequestMemo;
 use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Filament\Support\Exceptions\Halt;
@@ -289,6 +290,42 @@ class MatterOneDriveFilesTest extends TestCase
         $this->assertSame('attachments', $attachment->disk);
         $this->assertSame('%PDF-report', Storage::disk('attachments')->get($attachment->path));
         $this->assertSame('pdf', $attachment->extension);
+    }
+
+    public function test_the_send_screens_list_of_files_is_kept_and_kept_up_with_what_the_system_adds(): void
+    {
+        $explorer = app(MatterOneDriveExplorer::class);
+        $labels = fn (): array => array_map('strip_tags', array_values(EmailSendFields::oneDriveFiles($this->matter)->getOptions()));
+
+        $this->assertSame(['report.pdf', 'letter.docx — 01 المراسلات'], $labels());
+        $read = $this->listings;
+
+        // Another request, the matter opened again (its Files tab reading afresh): the list as kept, nothing read.
+        RequestMemo::flush();
+        $explorer->reread($this->folder);
+        $this->assertSame(['report.pdf', 'letter.docx — 01 المراسلات'], $labels());
+        $this->assertSame($read, $this->listings);
+
+        // A file the system put at the top, and one in a folder the list has: on it at once; put again, once.
+        $explorer->fileAdded($this->folder, 'root-id', 'added-id', 'added.pdf');
+        $explorer->fileAdded($this->folder, 'sub-id', 'deep-id', 'deep.pdf');
+        $explorer->fileAdded($this->folder, 'sub-id', 'deep-id', 'deep.pdf');
+        RequestMemo::flush();
+        $this->assertSame(['report.pdf', 'letter.docx — 01 المراسلات', 'added.pdf', 'deep.pdf — 01 المراسلات'], $labels());
+        $this->assertSame($read, $this->listings);
+
+        // In a folder the list has not read: read again next time.
+        $explorer->fileAdded($this->folder, 'new-folder-id', 'x-id', 'x.pdf');
+        RequestMemo::flush();
+        $this->assertSame(['report.pdf', 'letter.docx — 01 المراسلات'], $labels());
+        $this->assertGreaterThan($read, $this->listings);
+
+        // Refresh pressed on the Files tab: read again too.
+        $read = $this->listings;
+        $explorer->refresh($this->folder);
+        RequestMemo::flush();
+        $labels();
+        $this->assertGreaterThan($read, $this->listings);
     }
 
     public function test_a_onedrive_file_that_cannot_be_had_stops_the_send(): void

@@ -129,7 +129,7 @@ class SharedAttachmentsTest extends TestCase
         $this->assertSame('Work/Matters/2026-123 - خبرة - محاكم دبي/'.MatterOneDriveFolders::DEFAULT_SENT_EMAILS.'/'.$folderName.'/statement.pdf', $this->od->pathOf($statementId));
         $this->assertNotEmpty(array_filter($this->od->items, fn (array $item): bool => $item['name'] === 'photos.zip'));
         $folderId = $this->od->items[$statementId]['parent'];
-        $this->assertSame([[$folderId, 'anonymous']], $this->od->links);
+        $this->assertSame([[$folderId, 'anonymous', 'view']], $this->od->links);
 
         // The email ends with a note: how many, how big, the link and the files' names.
         $html = $this->sent[0]->getHtmlBody();
@@ -316,5 +316,53 @@ class SharedAttachmentsTest extends TestCase
         $this->assertSame(['statement.pdf'], $letter->fresh()->shared_files['names']);
         $this->assertCount(1, $this->od->links);
         $this->assertSame(SharedAttachments::DONE, SharedAttachments::progress($letter)['step']);
+    }
+
+    public function test_the_link_opens_the_files_to_view_or_to_edit_as_set_and_forget_the_link_removes_the_folder(): void
+    {
+        $letter = $this->letter();
+        $small = $this->file('small.pdf', 10 * 1024);
+
+        // To view, unless set otherwise.
+        $shared = app(SharedAttachments::class)->shareNow($letter->matter, LetterMailer::attachedFiles([$small]), LetterIssuer::fileName($letter), []);
+        $this->assertSame('view', $this->od->links[0][2]);
+        $letter->forceFill(['shared_files' => $shared])->save();
+        $folderName = basename($shared['folder']);
+        $this->assertCount(1, collect($this->od->items)->where('name', $folderName));
+
+        // Forget the link: the folder, with the files, removed from OneDrive; the link dropped.
+        $this->assertTrue(app(SharedAttachments::class)->forget($letter));
+        $this->assertCount(0, collect($this->od->items)->where('name', $folderName));
+        $this->assertNull($letter->fresh()->shared_files);
+        // Forgotten already: nothing to remove.
+        $this->assertFalse(app(SharedAttachments::class)->forget($letter->fresh()));
+
+        // Set to edit: the next link lets those with it edit the files.
+        Setting::set(SharedAttachments::LINK_TYPE, SharedAttachments::EDIT, 'mail');
+        Setting::clearCache();
+        app(SharedAttachments::class)->shareNow($letter->matter, LetterMailer::attachedFiles([$small]), LetterIssuer::fileName($letter), []);
+        $this->assertSame('edit', $this->od->links[1][2]);
+    }
+
+    public function test_files_added_past_what_an_email_takes_are_shared_by_link_by_themselves(): void
+    {
+        $letter = $this->letter();
+        Storage::fake('local');
+
+        $screen = Livewire::test(LettersRelationManager::class, ['ownerRecord' => $letter->matter, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('email', $letter)
+            ->setTableActionData(['sender' => 'iflas', 'recipients' => [$letter->recipients->first()->id]]);
+
+        // Under the limit: attached as usual, nothing shared.
+        $screen->setTableActionData(['attachments' => [UploadedFile::fake()->create('small.pdf', 100, 'application/pdf')]]);
+        $this->assertNull($letter->fresh()->shared_files);
+        $this->assertCount(1, $screen->get('mountedActions.0.data.attachments'));
+
+        // Over it: shared by link the moment the file is there, the fields emptied, and said.
+        $screen->setTableActionData(['attachments' => [UploadedFile::fake()->create('small.pdf', 100, 'application/pdf'), UploadedFile::fake()->create('big.pdf', 1100, 'application/pdf')]])
+            ->assertNotified(__('More than an email takes: the files are shared by link'))
+            ->assertSet('mountedActions.0.data.attachments', []);
+        $this->assertSame(['small.pdf', 'big.pdf'], $letter->fresh()->shared_files['names']);
+        $this->assertCount(1, $this->od->links);
     }
 }

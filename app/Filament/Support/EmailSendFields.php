@@ -149,25 +149,59 @@ final class EmailSendFields
             ->live();
     }
 
-    /** Files of this send's own, beside the letter or minutes. */
-    public static function attachments(string $directory, string $helperText): FileUpload
+    /** The most a file added to a send may be, in KB (300 MB): past what an email takes, it goes by link. */
+    public const MAX_UPLOAD_KB = 307200;
+
+    /**
+     * Files of this send's own, beside the letter or minutes.
+     *
+     * @param  ?Closure  $afterStateUpdated  what to do once a file is added (shareWhenOver())
+     */
+    public static function attachments(string $directory, string $helperText, ?Closure $afterStateUpdated = null): FileUpload
     {
         return FileUpload::make('attachments')
             ->label(__('More attachments'))
-            ->helperText($helperText)
+            ->helperText($helperText.' '.__('Up to :size a file; past what an email takes (Settings → Letters & emails) the files added are shared by link at once.', ['size' => '300 MB']))
             ->multiple()
             ->disk(self::DISK)
             ->directory($directory)
             ->storeFileNamesIn('attachment_names')
-            ->maxSize(20480)
-            ->live();
+            ->maxSize(self::MAX_UPLOAD_KB)
+            ->live()
+            ->afterStateUpdated($afterStateUpdated);
     }
 
-    /** Files from the matter's OneDrive folder (OneDriveFilePicker). */
-    public static function oneDriveFiles(?Matter $matter): Select
+    /**
+     * Files from the matter's OneDrive folder (OneDriveFilePicker).
+     *
+     * @param  ?Closure  $afterStateUpdated  what to do once a file is picked (shareWhenOver())
+     */
+    public static function oneDriveFiles(?Matter $matter, ?Closure $afterStateUpdated = null): Select
     {
         return OneDriveFilePicker::field($matter)
-            ->helperText(__('Files from this matter\'s OneDrive folder, attached as they are now.'));
+            ->helperText(__('Files from this matter\'s OneDrive folder, attached as they are now.'))
+            ->afterStateUpdated($afterStateUpdated);
+    }
+
+    /**
+     * For a file added or picked: the files added shared by link at once — as Get the link now does — once they
+     * come to more than an email takes (SharedAttachments::LIMIT), when the matter has a OneDrive folder.
+     *
+     * @param  Model  $record  the letter or minutes, with shared_files
+     * @param  string  $folderName  the folder the files go in, as those with the link see it
+     * @param  Closure(Get): list<string>  $to  whom the email goes to, for the folder
+     */
+    public static function shareWhenOver(?Matter $matter, Model $record, string $folderName, Closure $to): Closure
+    {
+        return function (Get $get, Set $set) use ($matter, $record, $folderName, $to): void {
+            if ($matter === null || MatterOneDriveFolders::folderFor($matter) === null) {
+                return;
+            }
+
+            if (SharedAttachments::over(self::addedBytes($matter, (array) ($get('attachments') ?? []), (array) ($get('onedrive_files') ?? [])))) {
+                self::share($matter, $record, $folderName, $to, $get, $set, byItself: true);
+            }
+        };
     }
 
     /**
@@ -227,42 +261,22 @@ final class EmailSendFields
                     ->icon('heroicon-o-link')
                     ->color('gray')
                     ->visible(fn (): bool => $matter !== null && MatterOneDriveFolders::folderFor($matter) !== null)
-                    ->action(function (Get $get, Set $set) use ($matter, $record, $folderName, $to): void {
-                        [$directory, $staged] = self::stage($matter, [
-                            'attachments' => $get('attachments'), 'attachment_names' => $get('attachment_names'), 'onedrive_files' => $get('onedrive_files'),
-                        ]);
-
-                        if ($staged === []) {
-                            Notification::make()->warning()->title(__('Add or pick the files to share first.'))->send();
-
-                            return;
-                        }
-
-                        SharedAttachments::setProgress($record, SharedAttachments::QUEUED, 0, count($staged));
-                        ShareAttachments::dispatch($record, $staged, $directory, $folderName, $to($get));
-                        // Shared: not to be attached as well.
-                        $set('attachments', []);
-                        $set('onedrive_files', []);
-
-                        // Done already (no queue worker: run at once), or under way.
-                        $progress = SharedAttachments::progress($record);
-                        if (($progress['step'] ?? null) === SharedAttachments::DONE) {
-                            Notification::make()->success()
-                                ->title(__('The files are shared by link'))
-                                ->body(__('Copy the link below into the covering email or the letter where you want it; left out, it goes in a note at the end of the email.').(($record->fresh()->shared_files['anyone'] ?? true) ? '' : ' '.__('Microsoft 365 allows no links for anyone here: the link to the files opens for the office\'s own accounts only.')))
-                                ->send();
-                        } elseif (($progress['step'] ?? null) === SharedAttachments::FAILED) {
-                            Notification::make()->danger()->title(__('The files could not be shared'))->body((string) $progress['error'])->send();
-                        } else {
-                            Notification::make()->info()->title(__('Sharing the files…'))->body(__('The files are being copied to the matter\'s OneDrive folder; the link shows below when it is ready.'))->send();
-                        }
-                    }),
+                    ->action(fn (Get $get, Set $set) => self::share($matter, $record, $folderName, $to, $get, $set)),
                 Action::make('forgetLink')
                     ->label(__('Forget the link'))
                     ->color('gray')
                     ->link()
                     ->visible(fn (): bool => filled($record->shared_files))
-                    ->action(fn () => $record->forceFill(['shared_files' => null])->save()),
+                    ->requiresConfirmation()
+                    ->modalHeading(__('Forget the link'))
+                    ->modalDescription(__('The link is dropped, and the folder the files were put in is removed from OneDrive (to its owner\'s recycle bin). The files added again will be shared anew.'))
+                    ->action(function () use ($record): void {
+                        $removed = app(SharedAttachments::class)->forget($record);
+
+                        Notification::make()->success()
+                            ->title($removed ? __('The link is forgotten and its folder removed from OneDrive') : __('The link is forgotten'))
+                            ->send();
+                    }),
             ])->key('shared_link'),
             // How far the job has got, asked again every two seconds while it runs.
             Placeholder::make('share_progress')
@@ -280,6 +294,46 @@ final class EmailSendFields
                 ->extraAttributes(['dir' => 'ltr', 'style' => 'word-break: break-all;'])
                 ->visible(fn (): bool => filled($record->fresh()?->shared_files['url'] ?? null)),
         ];
+    }
+
+    /**
+     * The files added shared by link now: staged (stage()), the job queued, the fields emptied (shared: not to be
+     * attached as well), and said — done already (no queue worker: run at once), under way, or failed.
+     *
+     * @param  Closure(Get): list<string>  $to  whom the email goes to, for the folder
+     * @param  bool  $byItself  not Get the link now pressed, but the files added come to more than an email takes
+     */
+    public static function share(?Matter $matter, Model $record, string $folderName, Closure $to, Get $get, Set $set, bool $byItself = false): void
+    {
+        [$directory, $staged] = self::stage($matter, [
+            'attachments' => $get('attachments'), 'attachment_names' => $get('attachment_names'), 'onedrive_files' => $get('onedrive_files'),
+        ]);
+
+        if ($staged === []) {
+            if (! $byItself) {
+                Notification::make()->warning()->title(__('Add or pick the files to share first.'))->send();
+            }
+
+            return;
+        }
+
+        SharedAttachments::setProgress($record, SharedAttachments::QUEUED, 0, count($staged));
+        ShareAttachments::dispatch($record, $staged, $directory, $folderName, $to($get));
+        $set('attachments', []);
+        $set('onedrive_files', []);
+
+        $title = $byItself ? __('More than an email takes: the files are shared by link') : __('The files are shared by link');
+        $progress = SharedAttachments::progress($record);
+        if (($progress['step'] ?? null) === SharedAttachments::DONE) {
+            Notification::make()->success()
+                ->title($title)
+                ->body(__('Copy the link below into the covering email or the letter where you want it; left out, it goes in a note at the end of the email.').(($record->fresh()->shared_files['anyone'] ?? true) ? '' : ' '.__('Microsoft 365 allows no links for anyone here: the link to the files opens for the office\'s own accounts only.')))
+                ->send();
+        } elseif (($progress['step'] ?? null) === SharedAttachments::FAILED) {
+            Notification::make()->danger()->title(__('The files could not be shared'))->body((string) $progress['error'])->send();
+        } else {
+            Notification::make()->info()->title($byItself ? $title : __('Sharing the files…'))->body(__('The files are being copied to the matter\'s OneDrive folder; the link shows below when it is ready.'))->send();
+        }
     }
 
     /**

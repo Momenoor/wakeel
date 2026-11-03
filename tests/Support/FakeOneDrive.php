@@ -183,7 +183,7 @@ class FakeOneDrive
         // A link to an item, for anyone or the organisation.
         if ($method === 'POST' && preg_match('~^items/([^/]+)/createLink$~', $path, $m)) {
             $scope = (string) ($request->data()['scope'] ?? '');
-            $this->links[] = [$m[1], $scope];
+            $this->links[] = [$m[1], $scope, (string) ($request->data()['type'] ?? '')];
 
             return Http::response(['link' => ['webUrl' => 'https://od.test/share/'.$m[1].'?s='.$scope, 'scope' => $scope]], 201);
         }

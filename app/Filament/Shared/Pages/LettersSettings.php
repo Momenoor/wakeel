@@ -53,6 +53,7 @@ class LettersSettings extends SettingsFormPage
             'letter_cc_expert_types' => MatterLetter::ccExpertTypes(),
             EmailSendFields::DEFAULT_SENDER => Setting::get(EmailSendFields::DEFAULT_SENDER),
             SharedAttachments::LIMIT => Setting::get(SharedAttachments::LIMIT, SharedAttachments::DEFAULT_LIMIT),
+            SharedAttachments::LINK_TYPE => SharedAttachments::linkType(),
             Branding::EMAIL_PDF => Setting::get(Branding::EMAIL_PDF, Branding::EMAIL_PDF_OUTLOOK),
             Branding::EMAIL_PDF_FONT => Setting::get(Branding::EMAIL_PDF_FONT),
             'leave_request_recipients' => (array) Setting::get('leave_request_recipients', []),
@@ -61,7 +62,7 @@ class LettersSettings extends SettingsFormPage
 
     protected function groups(): array
     {
-        return [EmailSendFields::DEFAULT_SENDER => 'mail', SharedAttachments::LIMIT => 'mail'];
+        return [EmailSendFields::DEFAULT_SENDER => 'mail', SharedAttachments::LIMIT => 'mail', SharedAttachments::LINK_TYPE => 'mail'];
     }
 
     protected function fields(): array
@@ -107,6 +108,16 @@ class LettersSettings extends SettingsFormPage
                         ->maxValue(150)
                         ->required()
                         ->helperText(__('When a letter\'s or minutes\' email with its files would be over this, the files added are put in a folder of the matter\'s OneDrive folder, under the sent emails, and sent as a link anyone with it may open — the letter or minutes attached as usual. The mail providers take about 25 MB an email. The link goes where {{attachments.link}} is written in the covering email or the letter, else in a note at the end of the email.'))
+                        ->columnSpanFull(),
+                    Radio::make(SharedAttachments::LINK_TYPE)
+                        ->label(__('The link to the shared files'))
+                        ->options([
+                            SharedAttachments::VIEW => __('Opens the files to view and download'),
+                            SharedAttachments::EDIT => __('Opens the files to view and edit'),
+                        ])
+                        ->default(SharedAttachments::VIEW)
+                        ->required()
+                        ->helperText(__('What anyone with the link may do with the files in the folder. The link is the one OneDrive makes for the folder; a link made before keeps what it allowed.'))
                         ->columnSpanFull(),
                 ]),
 

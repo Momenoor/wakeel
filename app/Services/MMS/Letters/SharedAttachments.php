@@ -35,6 +35,13 @@ final class SharedAttachments
 
     public const DEFAULT_LIMIT = 25;
 
+    /** Setting: what the link lets those with it do with the files — view them (default), or view and edit them. */
+    public const LINK_TYPE = 'email_attachments_link_type';
+
+    public const VIEW = 'view';
+
+    public const EDIT = 'edit';
+
     /** The placeholders: the link to click, and its address. */
     public const LINK = 'attachments.link';
 
@@ -52,6 +59,38 @@ final class SharedAttachments
     public const FAILED = 'failed';
 
     public function __construct(private readonly MatterOneDriveFolders $folders, private readonly OneDriveClient $client) {}
+
+    /** @return 'view'|'edit' what the link lets those with it do with the files, as set */
+    public static function linkType(): string
+    {
+        return Setting::get(self::LINK_TYPE, self::VIEW) === self::EDIT ? self::EDIT : self::VIEW;
+    }
+
+    /**
+     * Forget the link: the folder the files were put in removed from OneDrive (to the owner's recycle bin) when
+     * it is still there, and the link dropped from the letter or minutes. Whether the folder was removed.
+     *
+     * @param  Model  $record  the letter or minutes, with shared_files and a matter
+     */
+    public function forget(Model $record): bool
+    {
+        $shared = $record->shared_files;
+        $removed = false;
+
+        if (is_array($shared) && filled($shared['folder'] ?? null) && $record->matter && ($folder = MatterOneDriveFolders::folderFor($record->matter)) !== null) {
+            $user = (string) $folder->driveUser();
+            $id = $this->folders->walk($user, (string) $folder->drive_item_id, (string) $shared['folder']);
+
+            if ($id !== null) {
+                $this->client->delete($user, $id);
+                $removed = true;
+            }
+        }
+
+        $record->forceFill(['shared_files' => null])->save();
+
+        return $removed;
+    }
 
     /** The limit, in bytes. */
     public static function limitBytes(): int
@@ -152,7 +191,7 @@ final class SharedAttachments
         }
 
         $progress !== null && $progress(self::LINKING, count($files), count($files), '');
-        $link = $existing !== null ? ['url' => $existing['url'], 'anyone' => $existing['anyone']] : $this->client->createLink($folder['user'], $folder['id']);
+        $link = $existing !== null ? ['url' => $existing['url'], 'anyone' => $existing['anyone']] : $this->client->createLink($folder['user'], $folder['id'], self::linkType());
 
         return [
             'url' => $link['url'],

@@ -306,16 +306,17 @@ class OneDriveClient
      *
      * @return array{url: string, anyone: bool}
      */
-    public function createLink(string $user, string $itemId): array
+    /** @param  'view'|'edit'  $type  what the link lets those with it do with the files */
+    public function createLink(string $user, string $itemId, string $type = 'view'): array
     {
         $uri = "/users/{$this->user($user)}/drive/items/".rawurlencode($itemId).'/createLink';
 
         try {
-            return ['url' => (string) $this->request('post', $uri, ['type' => 'view', 'scope' => 'anonymous'])->json('link.webUrl'), 'anyone' => true];
+            return ['url' => (string) $this->request('post', $uri, ['type' => $type, 'scope' => 'anonymous'])->json('link.webUrl'), 'anyone' => true];
         } catch (RuntimeException $e) {
             Log::warning('OneDrive refused a link for anyone; one for the organisation made instead: '.$e->getMessage());
 
-            return ['url' => (string) $this->request('post', $uri, ['type' => 'view', 'scope' => 'organization'])->json('link.webUrl'), 'anyone' => false];
+            return ['url' => (string) $this->request('post', $uri, ['type' => $type, 'scope' => 'organization'])->json('link.webUrl'), 'anyone' => false];
         }
     }
 

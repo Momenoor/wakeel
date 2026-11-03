@@ -1497,7 +1497,11 @@ class MatterOneDriveFolders
         $extension = pathinfo($name, PATHINFO_EXTENSION);
         $file = (self::clean(pathinfo($name, PATHINFO_FILENAME)) ?: 'file').($extension !== '' ? '.'.$extension : '');
 
-        return $this->client->upload($target['user'], $target['id'], $file, $contents, $mime, $replace)['webUrl'];
+        $item = $this->client->upload($target['user'], $target['id'], $file, $contents, $mime, $replace);
+        // On the send screens' kept list of the folder's files at once.
+        app(MatterOneDriveExplorer::class)->fileAdded($target['folder'], $target['id'], $item['id'], $file);
+
+        return $item['webUrl'];
     }
 
     /**
@@ -1516,7 +1520,7 @@ class MatterOneDriveFolders
 
         $user = $folder->driveUser();
 
-        return ['user' => $user, 'id' => $this->ensurePath($user, $folder, $subfolder), 'path' => self::cleanPath($subfolder)];
+        return ['user' => $user, 'id' => $this->ensurePath($user, $folder, $subfolder), 'path' => self::cleanPath($subfolder), 'folder' => $folder];
     }
 
     /** The test folder's name — fixed, so the test can find it to remove it. */
