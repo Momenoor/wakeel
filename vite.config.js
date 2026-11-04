@@ -16,6 +16,8 @@ export default defineConfig({
                 'resources/js/pdf-splitter.js',
                 'resources/js/pdf-merger.js',
                 'resources/js/pdf-compressor.js',
+                // Compress PDF's workers (its page gives their address: Vite::asset()).
+                'resources/js/pdf-compressor/image-worker.js',
                 'resources/js/signature-pad-field.js',
                 'resources/js/rich-text-field.js',
             ],

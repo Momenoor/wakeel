@@ -1,0 +1,1 @@
+import{e as a}from"./encode-image-B3fhOggW.js";import"./browser-BfEhbsZ6.js";self.onmessage=async({data:s})=>{try{const e=await a(s);self.postMessage({id:s.id,result:e},e?[e.bytes.buffer]:[])}catch(e){self.postMessage({id:s.id,error:String(e?.message??e)})}};self.postMessage("ready");

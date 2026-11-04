@@ -7,12 +7,13 @@ use App\Support\ScreenPermissions;
 use BackedEnum;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Renderless;
 
 /**
  * Making a PDF smaller in the browser (resources/js/pdf-compressor.js): its scanned pages and pictures saved again
- * at a lower resolution — light, balanced or strong — its text left sharp and searchable. The PDF comes from the
+ * at a lower resolution — light, balanced, strong or maximum — its text left sharp and searchable. The PDF comes from the
  * computer, the user's own OneDrive or Merge PDF, and goes on, if wanted, to Split PDF.
  *
  * Nothing is uploaded: only a line in the activity log says who compressed which file, and how much.
@@ -23,7 +24,7 @@ class CompressPdf extends Page
 
     public const LOG = 'pdf-compress';
 
-    public const LEVELS = ['light', 'balanced', 'strong'];
+    public const LEVELS = ['light', 'balanced', 'strong', 'maximum'];
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedArrowsPointingIn;
 
@@ -57,6 +58,8 @@ class CompressPdf extends Page
         return [
             ...$this->oneDriveConfig(),
             'next' => ['split' => MergePdf::nextSteps()['split']],
+            // The workers that make several pictures smaller at once: an entry of the build of its own.
+            'workerUrl' => Vite::asset('resources/js/pdf-compressor/image-worker.js'),
             'labels' => [
                 ...$this->oneDriveLabels(),
                 'protected' => __('This PDF is protected with a password, so it cannot be compressed here.'),

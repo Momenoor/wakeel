@@ -67,12 +67,14 @@ return [
         [
             'id' => 'compress',
             'title' => 'Compress a PDF',
-            'description' => 'A PDF made smaller in the browser, for a portal\'s upload limit or an email: its scanned pages and pictures of every kind (JPEG, JPEG 2000, colour for print, pages scanned in strips …) are saved again at a lower resolution, while its text stays sharp and searchable. What is in the file twice (the same fonts and pictures in every part of a merged file) is kept once, what is left over from earlier edits and never shown is dropped, and its text and drawings are packed tighter. "Light" barely changes how it looks, "Medium" (about 150 dpi) usually suits court papers, and "Strong" (about 100 dpi) makes the smallest file. A PDF that cannot be made smaller (one with few or small pictures) is given back as it was.',
+            'description' => 'A PDF made smaller in the browser, for a portal\'s upload limit or an email: its scanned pages and pictures of every kind (JPEG, JPEG 2000, colour for print, pages scanned in strips …) are saved again at a lower resolution, while its text stays sharp and searchable. What is in the file twice (the same fonts and pictures in every part of a merged file) is kept once, what is left over from earlier edits and never shown is dropped, and its text and drawings are packed tighter. "Light" barely changes how it looks, "Medium" (about 130 dpi) usually suits court papers, "Strong" (about 100 dpi) makes a much smaller file, and "Maximum" (about 75 dpi) the smallest, though small print may blur. Several pictures are made smaller at once, one on each of the computer\'s processor cores. A PDF that cannot be made smaller (one with few or small pictures) is given back as it was.',
             'roles' => [$admin, $withPermission],
             'permissions' => ['Use:CompressPdf'],
             'steps' => [
                 ['text' => 'Under "PDF tools" → "Compress PDF", click "Choose a PDF" or "From OneDrive" (or come from Merge PDF with "Then compress it"). "Discard" puts the file aside to choose another.'],
-                ['text' => 'Choose "How much to compress", then click "Compress". The result says the size before and after. Click "Download", or "Then split it" to split the smaller file.'],
+                ['text' => 'Choose "How much to compress", then click "Compress". The result says the size before and after.'],
+                ['text' => 'Check it under "Preview": each page "Before compressing" and "After compressing" side by side. Go to a page with the arrows or by typing its number, and choose a "Zoom" (150% to 300%) to see whether small print is still sharp: zoomed in, both scroll together.'],
+                ['text' => 'Click "Download", or "Then split it" to split the smaller file. Not sharp enough? Choose a lighter level and click "Compress" again.'],
             ],
             'tips' => ['A PDF protected with a password cannot be compressed or merged here.'],
         ],

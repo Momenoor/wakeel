@@ -1,7 +1,7 @@
 // The Compress PDF page (App\Filament\Mms\Pages\CompressPdf): a PDF from the computer, the user's own OneDrive, or
 // handed on from Merge PDF, made smaller in the browser (pdf-compressor/compress.js) at the level chosen, and the
 // result downloaded or handed on to Split PDF. Nothing is uploaded. Loaded by Alpine (x-load) on that page only.
-import { fill, megabytes, pdfName, save } from './pdf/common.js';
+import { fill, megabytes, numberFrom, pdfName, save } from './pdf/common.js';
 import { handOn, takeHandoff } from './pdf/handoff.js';
 import { isPdf } from './pdf/is-pdf.js';
 import { withOneDrivePicker } from './pdf/onedrive-picker.js';
@@ -13,6 +13,11 @@ export default function pdfCompressor(config) {
     let source = null;
     let result = null;
     let signal = null;
+    // The preview's two documents, opened by pdf.js: the PDF before and after.
+    let before = null;
+    let after = null;
+    let following = false;
+    const previewer = () => import('./pdf-compressor/preview.js');
 
     return withOneDrivePicker({
         config,
@@ -24,6 +29,8 @@ export default function pdfCompressor(config) {
         percent: null,
         error: null,
         done: null,
+        // A page of the PDF before and after, side by side: which, of how many, how large, and the number typed.
+        preview: null,
 
         async init() {
             const handed = await takeHandoff();
@@ -62,6 +69,7 @@ export default function pdfCompressor(config) {
         },
 
         reset() {
+            this.closePreview();
             source = null;
             result = null;
             this.file = null;
@@ -77,6 +85,7 @@ export default function pdfCompressor(config) {
             this.busy = true;
             this.error = null;
             this.done = null;
+            this.closePreview();
             result = null;
             signal = { cancelled: false };
             this.status = this.labels.reading;
@@ -85,6 +94,7 @@ export default function pdfCompressor(config) {
             try {
                 const outcome = await compressPdf(new Uint8Array(await source.arrayBuffer()), this.level, {
                     signal,
+                    workerUrl: config.workerUrl,
                     onImage: (number, total) => {
                         this.status = fill(this.labels.progress, { number, total });
                         this.percent = Math.round((number / total) * 100);
@@ -113,6 +123,98 @@ export default function pdfCompressor(config) {
                 this.percent = null;
                 signal = null;
             }
+
+            if (this.done?.smaller) {
+                this.openPreview();
+            }
+        },
+
+        // ── The preview, before and after ───────────────────────────────────
+
+        async openPreview() {
+            const { openDocument } = await previewer();
+            const compressed = result;
+            let opened;
+
+            try {
+                opened = await Promise.all([openDocument(source), openDocument(compressed)]);
+            } catch (error) {
+                console.error(error);
+
+                return this.closePreview();
+            }
+
+            // Discarded, or compressed again, while they opened: these two are no longer wanted.
+            if (result !== compressed || this.busy) {
+                return opened.forEach((doc) => doc.destroy());
+            }
+
+            [before, after] = opened;
+
+            this.preview = { page: 1, pages: after.numPages, zoom: 1, typed: '1' };
+            await this.$nextTick();
+            await this.drawPreview();
+        },
+
+        async drawPreview() {
+            if (! this.preview || ! before || ! after) {
+                return;
+            }
+
+            const { drawPage } = await previewer();
+            const { page, zoom } = this.preview;
+
+            try {
+                await Promise.all([drawPage(before, page, this.$refs.before, zoom), drawPage(after, page, this.$refs.after, zoom)]);
+            } catch (error) {
+                console.error(error);
+            }
+        },
+
+        // To page `number` (as typed, in any digits), within the PDF's pages.
+        goTo(number) {
+            if (! this.preview) {
+                return;
+            }
+
+            const wanted = typeof number === 'number' ? number : numberFrom(number);
+            const page = Number.isFinite(wanted) ? Math.min(this.preview.pages, Math.max(1, Math.round(wanted))) : this.preview.page;
+
+            this.preview.typed = String(page);
+
+            if (page !== this.preview.page) {
+                this.preview.page = page;
+                this.drawPreview();
+            }
+        },
+
+        zoomTo(zoom) {
+            if (this.preview) {
+                this.preview.zoom = Number(zoom) || 1;
+                this.drawPreview();
+            }
+        },
+
+        // Zoomed in, the two pages scroll together: the same part of the page seen in both.
+        follow(event, other) {
+            if (following) {
+                return;
+            }
+
+            const from = event.target;
+            const to = this.$refs[other];
+            following = true;
+            to.scrollTop = (from.scrollTop / Math.max(1, from.scrollHeight - from.clientHeight)) * (to.scrollHeight - to.clientHeight);
+            to.scrollLeft = (from.scrollLeft / Math.max(1, from.scrollWidth - from.clientWidth)) * (to.scrollWidth - to.clientWidth);
+            requestAnimationFrame(() => (following = false));
+        },
+
+        closePreview() {
+            this.preview = null;
+            before?.destroy();
+            after?.destroy();
+            before = null;
+            after = null;
         },
 
         cancel() {

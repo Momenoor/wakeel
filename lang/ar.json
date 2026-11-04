@@ -5359,9 +5359,11 @@
     "Then compress it": "ثم اضغطه",
     "Then split it": "ثم قسّمه",
     "Barely visible: pictures kept sharp. The smallest saving.": "لا يكاد يُلاحظ: تبقى الصور حادة. أقل توفير.",
-    "Scans stay easy to read, at about 150 dpi. Usually the best choice.": "تبقى الصفحات الممسوحة سهلة القراءة، بنحو 150 نقطة في البوصة. الخيار الأفضل عادةً.",
+    "Scans stay easy to read, at about 130 dpi. Usually the best choice.": "تبقى الصفحات الممسوحة سهلة القراءة، بنحو 130 نقطة في البوصة. الخيار الأفضل عادةً.",
     "Strong": "قوي",
-    "The smallest file: scans at about 100 dpi, still readable on screen.": "أصغر ملف: الصفحات الممسوحة بنحو 100 نقطة في البوصة، وتبقى مقروءة على الشاشة.",
+    "A much smaller file: scans at about 100 dpi, still readable on screen.": "ملف أصغر بكثير: الصفحات الممسوحة بنحو 100 نقطة في البوصة، وتبقى مقروءة على الشاشة.",
+    "Maximum": "أقصى",
+    "The smallest file: scans at about 75 dpi. Small print may blur: open the file to check it.": "أصغر ملف: الصفحات الممسوحة بنحو 75 نقطة في البوصة. قد يتشوش الخط الصغير: افتح الملف لتتحقق منه.",
     "From the step before": "من الخطوة السابقة",
     "The PDF is compressed in your browser and is not uploaded: only a note that you compressed it is kept.": "يُضغط الملف في متصفحك ولا يُرفع: لا يُحفظ إلا أنك ضغطته.",
     "Its scanned pages and pictures are saved again at a lower resolution; its text stays sharp and searchable.": "تُحفظ صفحاته الممسوحة وصوره من جديد بدقة أقل، ويبقى نصه واضحاً وقابلاً للبحث.",
@@ -5380,5 +5382,11 @@
     "Including VAT. Empty: the one in Financial Settings → Payroll.": "شاملة الضريبة. فارغ: الرسوم في الإعدادات المالية ← الرواتب.",
     "Employees with no company": "الموظفون بلا شركة",
     "Its employees are those the company sponsors (the employee's \"Sponsor\"), and its forms carry the company's own details.": "موظفوها هم من على كفالة الشركة («الكفيل» في ملف الموظف)، ونماذجها تحمل بيانات الشركة نفسها.",
-    "The employee is not paid in this payroll run: choose the run of the company that sponsors them.": "الموظف لا يُصرف راتبه في دورة الرواتب هذه: اختر دورة رواتب الشركة الكفيلة له."
+    "The employee is not paid in this payroll run: choose the run of the company that sponsors them.": "الموظف لا يُصرف راتبه في دورة الرواتب هذه: اختر دورة رواتب الشركة الكفيلة له.",
+    "Previous page": "الصفحة السابقة",
+    "Next page": "الصفحة التالية",
+    "Zoom": "التكبير",
+    "Fit width": "بعرض الإطار",
+    "Before compressing": "قبل الضغط",
+    "After compressing": "بعد الضغط"
 }

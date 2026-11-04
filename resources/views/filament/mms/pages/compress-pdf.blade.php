@@ -7,8 +7,9 @@
     $card = 'rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10';
     $levels = [
         'light' => [__('Light'), __('Barely visible: pictures kept sharp. The smallest saving.')],
-        'balanced' => [__('Medium'), __('Scans stay easy to read, at about 150 dpi. Usually the best choice.')],
-        'strong' => [__('Strong'), __('The smallest file: scans at about 100 dpi, still readable on screen.')],
+        'balanced' => [__('Medium'), __('Scans stay easy to read, at about 130 dpi. Usually the best choice.')],
+        'strong' => [__('Strong'), __('A much smaller file: scans at about 100 dpi, still readable on screen.')],
+        'maximum' => [__('Maximum'), __('The smallest file: scans at about 75 dpi. Small print may blur: open the file to check it.')],
     ];
 @endphp
 
@@ -66,7 +67,7 @@
         <section x-show="file" x-cloak class="{{ $card }}">
             <h3 class="mb-3 text-sm font-semibold text-gray-950 dark:text-white">{{ __('How much to compress') }}</h3>
 
-            <div class="grid gap-4 sm:grid-cols-3" role="radiogroup" aria-label="{{ __('How much to compress') }}">
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" role="radiogroup" aria-label="{{ __('How much to compress') }}">
                 @foreach ($levels as $value => [$label, $hint])
                     <div class="flex cursor-pointer flex-col gap-1 rounded-lg p-3 ring-1" x-on:click="busy || (level = '{{ $value }}')" x-bind:class="level === '{{ $value }}' ? 'ring-2 ring-primary-500' : 'ring-gray-200 dark:ring-white/10'">
                         <div class="flex items-center gap-2 text-sm font-medium text-gray-950 dark:text-white">
@@ -104,6 +105,50 @@
                 </x-filament::button>
             </div>
         </section>
+
+        {{-- The preview: a page before and after, side by side --}}
+        <template x-if="preview && ! busy">
+            <section class="{{ $card }}">
+                <div class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <h3 class="text-sm font-semibold text-gray-950 dark:text-white">{{ __('Preview') }}</h3>
+
+                    <div class="flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300">
+                        <x-filament::icon-button icon="heroicon-o-chevron-left" class="rtl:rotate-180" color="gray" :label="__('Previous page')" x-on:click="goTo(preview.page - 1)" x-bind:disabled="preview.page <= 1" />
+                        <span>{{ __('Page') }}</span>
+                        <input type="text" inputmode="numeric" dir="ltr" aria-label="{{ __('Page') }}"
+                            class="w-14 rounded-lg border-none bg-white px-2 py-1 text-center text-sm text-gray-950 ring-1 ring-gray-950/10 focus:ring-2 focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/20"
+                            x-model="preview.typed" x-on:change="goTo(preview.typed)" x-on:keydown.enter.prevent="goTo(preview.typed)">
+                        <span>{{ __('of') }} <span x-text="preview.pages"></span></span>
+                        <x-filament::icon-button icon="heroicon-o-chevron-right" class="rtl:rotate-180" color="gray" :label="__('Next page')" x-on:click="goTo(preview.page + 1)" x-bind:disabled="preview.page >= preview.pages" />
+                    </div>
+
+                    <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <span>{{ __('Zoom') }}</span>
+                        <x-filament::input.wrapper>
+                            <x-filament::input.select x-on:change="zoomTo($event.target.value)">
+                                <option value="1">{{ __('Fit width') }}</option>
+                                <option value="1.5">150%</option>
+                                <option value="2">200%</option>
+                                <option value="3">300%</option>
+                            </x-filament::input.select>
+                        </x-filament::input.wrapper>
+                    </label>
+                </div>
+
+                <div class="grid gap-4 md:grid-cols-2">
+                    @foreach (['before' => [__('Before compressing'), 'sizeOf(file.size)', 'after'], 'after' => [__('After compressing'), 'sizeOf(done.size)', 'before']] as $side => [$caption, $size, $other])
+                        <figure class="flex min-w-0 flex-col gap-2">
+                            <figcaption class="flex items-center justify-between text-xs font-medium text-gray-600 dark:text-gray-400">
+                                <span>{{ $caption }}</span>
+                                <span x-text="{{ $size }}"></span>
+                            </figcaption>
+                            <div x-ref="{{ $side }}" x-on:scroll="follow($event, '{{ $other }}')"
+                                class="max-h-[75vh] min-h-48 overflow-auto rounded-lg bg-gray-100 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10"></div>
+                        </figure>
+                    @endforeach
+                </div>
+            </section>
+        </template>
 
         @include('filament.mms.pages.pdf-tools.onedrive-picker')
     </div>

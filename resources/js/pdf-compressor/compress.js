@@ -4,8 +4,8 @@
 //   2. what is in it twice is kept once — the same font, colour profile or picture in every part of a merged file;
 //   3. its pictures — the scanned pages that make most court papers heavy — drawn again at a lower resolution and
 //      saved as JPEG at the level's quality, whatever kind they are: what the browser reads itself (JPEG, 8-bit RGB
-//      or grey) directly, anything else (JPEG 2000, CMYK, a palette, 16 bits, Lab, a Decode array …) through
-//      pdf.js (draw-image.js);
+//      or grey) directly, anything else (JPEG 2000, CMYK, a palette, 16 bits, Lab, a Decode array …) drawn by
+//      pdf.js first (draw-image.js); several at once, each in a worker of its own (image-pool.js, encode-image.js);
 //   4. its text, lines and fonts kept as they are (still sharp, still searchable), but packed: a stream stored
 //      uncompressed, or in an old encoding (ASCII, LZW, run length), compressed again with Flate; its small objects
 //      packed together (object streams).
@@ -14,13 +14,15 @@
 import { zlibSync } from 'fflate';
 import { PDFArray, PDFBool, PDFDict, PDFName, PDFNumber, PDFRawStream, PDFRef, PDFStream, decodePDFRawStream } from 'pdf-lib';
 import { loadPdf, pause } from '../pdf-splitter/split.js';
+import { imagePool } from './image-pool.js';
 
-// The longest side a picture keeps (an A4 page's long side is 11.7 inches: 1750 px is about 150 dpi, a screen's
+// The longest side a picture keeps (an A4 page's long side is 11.7 inches: 1500 px is about 130 dpi, a screen's
 // sharpness), and the JPEG quality it is saved at.
 export const LEVELS = {
-    light: { maxSide: 2400, quality: 0.75 },
-    balanced: { maxSide: 1750, quality: 0.6 },
-    strong: { maxSide: 1200, quality: 0.45 },
+    light: { maxSide: 2000, quality: 0.7 },
+    balanced: { maxSide: 1500, quality: 0.55 },
+    strong: { maxSide: 1150, quality: 0.45 },
+    maximum: { maxSide: 900, quality: 0.35 },
 };
 
 // A picture smaller than this is not worth redrawing. Small, because a scanner may cut each page into strips of
@@ -32,7 +34,7 @@ const PACKABLE = new Set(['FlateDecode', 'LZWDecode', 'ASCII85Decode', 'ASCIIHex
 
 const N = (name) => PDFName.of(name);
 
-export async function compressPdf(bytes, level, { signal, onImage = () => {} }) {
+export async function compressPdf(bytes, level, { signal, workerUrl, onImage = () => {} }) {
     const settings = LEVELS[level] ?? LEVELS.balanced;
     const doc = await loadPdf(bytes);
     const context = doc.context;
@@ -66,18 +68,19 @@ export async function compressPdf(bytes, level, { signal, onImage = () => {} }) 
 
     const kept = {};
     let redrawn = 0;
+    let done = 0;
     let drawer = null;
+    const pool = await imagePool(workerUrl);
+    const drawerOf = async () => (drawer ??= (await import('./draw-image.js')).imageDrawer());
 
     try {
-        for (let index = 0; index < images.length; index++) {
-            const [ref, image] = images[index];
-            onImage(index + 1, images.length);
+        // Several pictures on the way at once, each made smaller in a worker of its own.
+        await atOnce(images, pool.size, signal, async ([ref, image]) => {
+            let outcome = masks.has(ref.toString()) ? 'mask' : plan(context, image, settings);
 
-            let outcome = 'mask';
-
-            if (! masks.has(ref.toString())) {
+            if (typeof outcome !== 'string') {
                 try {
-                    outcome = await redraw(context, image, settings, async () => (drawer ??= (await import('./draw-image.js')).imageDrawer()));
+                    outcome = await shrink(context, image, outcome, pool, drawerOf);
                 } catch (error) {
                     // Left as it was: one picture that will not decode does not stop the rest.
                     console.warn('Compress PDF: a picture left as it was', ref.toString(), error);
@@ -92,9 +95,10 @@ export async function compressPdf(bytes, level, { signal, onImage = () => {} }) 
                 kept[outcome] = (kept[outcome] ?? 0) + 1;
             }
 
-            await pause(signal);
-        }
+            onImage(++done, images.length);
+        });
     } finally {
+        pool.close();
         drawer?.close();
     }
 
@@ -111,8 +115,22 @@ export async function compressPdf(bytes, level, { signal, onImage = () => {} }) 
     return { blob: new Blob([result], { type: 'application/pdf' }), pages: doc.getPageCount(), images: images.length, redrawn, smaller: result !== bytes };
 }
 
-// The picture drawn again, smaller, as a new image stream — or why it is left as it was.
-async function redraw(context, image, { maxSide, quality }, drawer) {
+// `task` for each item, `limit` of them at a time.
+async function atOnce(items, limit, signal, task) {
+    let next = 0;
+
+    const runner = async () => {
+        while (next < items.length) {
+            await task(items[next++]);
+            await pause(signal);
+        }
+    };
+
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, runner));
+}
+
+// How a picture is to be made smaller — its size to be, and how it is read — or why it is left as it was.
+function plan(context, image, { maxSide, quality }) {
     const dict = image.dict;
     const filters = filtersOf(dict);
     const bits = numberOf(dict.get(N('BitsPerComponent')));
@@ -138,70 +156,99 @@ async function redraw(context, image, { maxSide, quality }, drawer) {
     }
 
     const scale = Math.min(1, maxSide / Math.max(width, height));
-    const w = Math.max(1, Math.round(width * scale));
-    const h = Math.max(1, Math.round(height * scale));
     const channels = channelsOf(context, dict.get(N('ColorSpace')));
-    const picture = (await readDirectly(context, image, filters, bits, channels, width, height)) ?? (await (await drawer()).draw(context, image, w, h));
-    const canvas = paint(picture, w, h);
-    picture.close?.();
+    const lossy = filters.some((filter) => filter === 'DCTDecode' || filter === 'JPXDecode');
 
-    // As JPEG; and a picture that was not saved as one (a grey scan of a typed page, mostly white, packs small
-    // without loss) also kept without loss at the lower resolution: whichever is smaller.
-    const candidates = [await jpegOf(canvas, quality)];
-
-    if (! filters.some((filter) => filter === 'DCTDecode' || filter === 'JPXDecode')) {
-        candidates.push(losslessOf(canvas, channels === 1 ? 1 : 3));
-    }
-
-    const best = candidates.reduce((a, b) => (b.bytes.length < a.bytes.length ? b : a));
-
-    // Not worth it unless it comes out clearly smaller.
-    if (best.bytes.length >= image.contents.length * 0.9) {
-        return 'no-gain';
-    }
-
-    const redrawn = context.obj({ Type: 'XObject', Subtype: 'Image', Width: w, Height: h, BitsPerComponent: 8, ...best.dict });
-
-    // Its soft mask (transparency) and how it is to be shown stay with it.
-    for (const key of ['SMask', 'Interpolate', 'Intent']) {
-        if (dict.has(N(key))) {
-            redrawn.set(N(key), dict.get(N(key)));
-        }
-    }
-
-    return PDFRawStream.of(redrawn, best.bytes);
+    return {
+        w: Math.max(1, Math.round(width * scale)),
+        h: Math.max(1, Math.round(height * scale)),
+        quality,
+        // A picture that was not saved as JPEG (a grey scan of a typed page, mostly white, packs small without loss)
+        // is also tried without loss at the lower resolution: grey or RGB.
+        lossless: lossy ? 0 : channels === 1 ? 1 : 3,
+        // Not worth it unless it comes out clearly smaller.
+        limit: image.contents.length * 0.9,
+        source: directly(image, filters, bits, channels, width, height),
+    };
 }
 
-// The picture as the browser reads it itself — a JPEG in RGB or grey (also one compressed again inside the PDF,
-// Flate over JPEG, as some scanners save it), or 8-bit RGB or grey samples — or null for pdf.js to draw it.
-async function readDirectly(context, image, filters, bits, channels, width, height) {
+// How the browser reads the picture itself — a JPEG in RGB or grey (also one compressed again with Flate, as some
+// scanners save it), or 8-bit RGB or grey samples, as they are or with Flate and PNG's predictor — or null for
+// pdf.js to draw it.
+function directly(image, filters, bits, channels, width, height) {
+    const params = image.dict.get(N('DecodeParms'));
+
     if (! channels || image.dict.has(N('Decode'))) {
         return null;
     }
 
-    try {
-        if (filters.at(-1) === 'DCTDecode') {
-            const outer = filters.slice(0, -1);
+    if (filters.at(-1) === 'DCTDecode') {
+        const outer = filters.slice(0, -1);
 
-            if (! outer.every((filter) => PACKABLE.has(filter)) || (outer.length && image.dict.has(N('DecodeParms')))) {
-                return null;
-            }
-
-            const jpeg = outer.length ? decodePDFRawStream(PDFRawStream.of(context.obj({ Filter: outer }), image.contents)).decode() : image.contents;
-
-            return await createImageBitmap(new Blob([jpeg], { type: 'image/jpeg' }));
-        }
-
-        if (filters.length <= 1 && (filters[0] ?? 'FlateDecode') === 'FlateDecode' && bits === 8) {
-            const pixels = rawPixels(image, filters.length === 1, channels, width);
-
-            return pixels && pixels.length >= width * height * channels ? await createImageBitmap(toImageData(pixels, width, height, channels)) : null;
-        }
-    } catch {
-        // Not for the browser after all: pdf.js draws it.
+        return outer.length === 0 || (outer.length === 1 && outer[0] === 'FlateDecode' && ! params) ? { kind: 'jpeg', inflate: outer.length === 1 } : null;
     }
 
-    return null;
+    if (bits !== 8 || filters.length > 1 || (filters.length === 1 && filters[0] !== 'FlateDecode')) {
+        return null;
+    }
+
+    const predictor = params instanceof PDFDict ? numberOf(params.get(N('Predictor'))) : 1;
+
+    if (predictor > 1 && (predictor < 10 || (numberOf(params.get(N('Colors'))) || 1) !== channels)) {
+        return null; // TIFF's predictor, or one that does not match the picture: pdf.js draws it.
+    }
+
+    return { kind: 'samples', inflate: filters.length === 1, width, height, channels, columns: predictor > 1 ? numberOf(params.get(N('Columns'))) || width : 0 };
+}
+
+// The picture made smaller as a new image stream, or 'no-gain'. Read directly in a worker when it can be; drawn by
+// pdf.js on the page (then made smaller in a worker) when not, or when reading it directly failed.
+async function shrink(context, image, { source, ...job }, pool, drawerOf) {
+    let result;
+    let read = false;
+
+    if (source) {
+        try {
+            // A copy: the picture's bytes are handed over to the worker, and the file's own must stay.
+            result = await pool.run({ ...job, source: { ...source, bytes: image.contents.slice() } });
+            read = true;
+        } catch {
+            // Not for the browser after all: pdf.js draws it.
+        }
+    }
+
+    if (! read) {
+        const canvas = await (await drawerOf()).draw(context, image, job.w, job.h);
+        result = await pool.run({ ...job, source: { kind: 'bitmap', bitmap: await createImageBitmap(canvas) } });
+    }
+
+    if (! result) {
+        return 'no-gain';
+    }
+
+    const redrawn = context.obj({
+        Type: 'XObject',
+        Subtype: 'Image',
+        Width: job.w,
+        Height: job.h,
+        BitsPerComponent: 8,
+        ...(result.kind === 'jpeg'
+            ? { ColorSpace: 'DeviceRGB', Filter: 'DCTDecode' }
+            : {
+                  ColorSpace: result.channels === 1 ? 'DeviceGray' : 'DeviceRGB',
+                  Filter: 'FlateDecode',
+                  DecodeParms: { Predictor: 15, Colors: result.channels, BitsPerComponent: 8, Columns: job.w },
+              }),
+    });
+
+    // Its soft mask (transparency) and how it is to be shown stay with it.
+    for (const key of ['SMask', 'Interpolate', 'Intent']) {
+        if (image.dict.has(N(key))) {
+            redrawn.set(N(key), image.dict.get(N(key)));
+        }
+    }
+
+    return PDFRawStream.of(redrawn, result.bytes);
 }
 
 // Streams alike in every byte (and in their dictionaries) kept once, everything that pointed at a copy pointed at
@@ -391,135 +438,4 @@ function channelsOf(context, space) {
     }
 
     return null;
-}
-
-// The picture's samples, a row after another: inflated, its PNG predictor undone if it has one.
-function rawPixels(image, compressed, channels, width) {
-    const data = compressed ? decodePDFRawStream(image).decode() : image.contents;
-    const params = image.dict.get(N('DecodeParms'));
-    const predictor = params instanceof PDFDict ? numberOf(params.get(N('Predictor'))) : 1;
-
-    if (predictor <= 1) {
-        return data;
-    }
-
-    if (predictor < 10) {
-        return null; // TIFF's predictor: pdf.js draws it.
-    }
-
-    const colors = numberOf(params.get(N('Colors'))) || 1;
-    const columns = numberOf(params.get(N('Columns'))) || width;
-
-    return colors === channels ? unpredict(data, colors, columns) : null;
-}
-
-// PNG's row filters undone (None, Sub, Up, Average, Paeth), 8 bits a sample.
-function unpredict(data, bytesPerPixel, columns) {
-    const rowLength = bytesPerPixel * columns;
-    const rows = Math.floor(data.length / (rowLength + 1));
-    const out = new Uint8Array(rows * rowLength);
-    let previous = new Uint8Array(rowLength);
-
-    for (let row = 0; row < rows; row++) {
-        const start = row * (rowLength + 1);
-        const type = data[start];
-        const line = data.subarray(start + 1, start + 1 + rowLength);
-        const current = out.subarray(row * rowLength, (row + 1) * rowLength);
-
-        for (let i = 0; i < rowLength; i++) {
-            const left = i >= bytesPerPixel ? current[i - bytesPerPixel] : 0;
-            const up = previous[i];
-            const upLeft = i >= bytesPerPixel ? previous[i - bytesPerPixel] : 0;
-            let value = line[i];
-
-            if (type === 1) {
-                value += left;
-            } else if (type === 2) {
-                value += up;
-            } else if (type === 3) {
-                value += (left + up) >> 1;
-            } else if (type === 4) {
-                const p = left + up - upLeft;
-                const pa = Math.abs(p - left);
-                const pb = Math.abs(p - up);
-                const pc = Math.abs(p - upLeft);
-                value += pa <= pb && pa <= pc ? left : pb <= pc ? up : upLeft;
-            }
-
-            current[i] = value & 0xff;
-        }
-
-        previous = current;
-    }
-
-    return out;
-}
-
-function toImageData(pixels, width, height, channels) {
-    const rgba = new Uint8ClampedArray(width * height * 4);
-
-    for (let pixel = 0, source = 0; pixel < width * height; pixel++, source += channels) {
-        const target = pixel * 4;
-
-        if (channels === 1) {
-            rgba[target] = rgba[target + 1] = rgba[target + 2] = pixels[source];
-        } else {
-            rgba[target] = pixels[source];
-            rgba[target + 1] = pixels[source + 1];
-            rgba[target + 2] = pixels[source + 2];
-        }
-
-        rgba[target + 3] = 255;
-    }
-
-    return new ImageData(rgba, width, height);
-}
-
-// The picture drawn at w × h on white (a JPEG has no transparency).
-function paint(picture, w, h) {
-    const canvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h });
-    const context = canvas.getContext('2d', { willReadFrequently: true });
-    context.fillStyle = '#fff';
-    context.fillRect(0, 0, w, h);
-    context.imageSmoothingQuality = 'high';
-    context.drawImage(picture, 0, 0, w, h);
-
-    return canvas;
-}
-
-async function jpegOf(canvas, quality) {
-    const blob = canvas.convertToBlob
-        ? await canvas.convertToBlob({ type: 'image/jpeg', quality })
-        : await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
-
-    return { bytes: new Uint8Array(await blob.arrayBuffer()), dict: { ColorSpace: 'DeviceRGB', Filter: 'DCTDecode' } };
-}
-
-// The canvas's samples, grey (1) or RGB (3), each row after PNG's Up filter, packed with Flate.
-function losslessOf(canvas, channels) {
-    const { width: w, height: h } = canvas;
-    const rgba = canvas.getContext('2d').getImageData(0, 0, w, h).data;
-    const row = w * channels;
-    const rows = new Uint8Array((row + 1) * h);
-
-    for (let y = 0; y < h; y++) {
-        const start = y * (row + 1);
-        rows[start] = 2;
-
-        for (let x = 0; x < w; x++) {
-            for (let c = 0; c < channels; c++) {
-                const at = (y * w + x) * 4 + c;
-                rows[start + 1 + x * channels + c] = rgba[at] - (y ? rgba[at - w * 4] : 0);
-            }
-        }
-    }
-
-    return {
-        bytes: zlibSync(rows, { level: 6 }),
-        dict: {
-            ColorSpace: channels === 1 ? 'DeviceGray' : 'DeviceRGB',
-            Filter: 'FlateDecode',
-            DecodeParms: { Predictor: 15, Colors: channels, BitsPerComponent: 8, Columns: w },
-        },
-    };
 }
