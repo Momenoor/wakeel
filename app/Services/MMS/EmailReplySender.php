@@ -40,17 +40,19 @@ final class EmailReplySender
     }
 
     /**
-     * Whom to copy in: the others the email was sent to and copied to — the office's own mailboxes left out.
+     * Whom to copy in: the others the email was sent to and copied to — the office's own mailboxes left out, and
+     * those the sender brought in on the matter too, which the screen offers on their own (contactsCc), not twice.
      *
      * @return list<string>
      */
     public static function cc(MatterEmail $email): array
     {
         $from = self::from($email);
+        $offered = array_map('mb_strtolower', array_keys(MatterContact::options((int) $email->matter_id, self::to($email), self::partyIds($email))));
 
         return array_values(array_filter(
             array_unique(Addresses::emails([...(array) $email->to, ...(array) $email->cc])),
-            fn (string $address): bool => mb_strtolower($address) !== $from && ! MatterContact::isOurs($address),
+            fn (string $address): bool => mb_strtolower($address) !== $from && ! MatterContact::isOurs($address) && ! in_array(mb_strtolower($address), $offered, true),
         ));
     }
 

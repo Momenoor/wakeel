@@ -86,6 +86,10 @@ class EmailReplyTest extends TestCase
         $this->assertSame('Re: x', EmailReplySender::subject(new MatterEmail(['subject' => 'Re: x'])));
         $this->assertTrue(EmailReplySender::hasOriginalPdf($this->email));
 
+        // One of those it reached is among the addresses he brought in: offered to copy in, not put in CC as well.
+        MatterContact::create(['matter_id' => $this->matter->id, 'party_id' => $this->salem->id, 'owner_email' => 'main@x.ae', 'owner_name' => 'سالم', 'email' => 'colleague@x.ae']);
+        $this->assertSame(['cc@x.ae'], EmailReplySender::cc($this->email->fresh()));
+
         // Written from his own address: that alone.
         $this->email->update(['from' => 'main@x.ae']);
         $this->assertSame(['main@x.ae'], EmailReplySender::to($this->email->fresh()));
