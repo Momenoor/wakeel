@@ -9,6 +9,7 @@ use App\Filament\Mms\Resources\Matters\Pages\RecordMinutes;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\MinutesRelationManager;
 use App\Filament\Mms\Resources\Matters\Schemas\MinutesRecordForm;
+use App\Filament\Support\EmailSendFields;
 use App\Models\CalendarEvent;
 use App\Models\Letterhead;
 use App\Models\LetterTemplate;
@@ -744,6 +745,23 @@ class MinutesTest extends TestCase
         // {{recipient.name}} is the name without its title (that is {{recipient.title}}).
         $this->assertStringContainsString('محمد عبد المقصود المحترم', $preview['html']);
         $this->assertStringNotContainsString('{{', $preview['subject'].$preview['html']);
+    }
+
+    public function test_the_matters_other_contacts_can_be_sent_the_minutes_too(): void
+    {
+        $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => 8, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
+        $this->lawyer->update(['email' => ['lawyer@firm.ae']]);
+        $rows = [['name' => 'السادة/ شركة أخرى', 'emails' => ['other@co.ae'], 'by_email' => true]];
+
+        // Offered: the lawyer, on the matter's Contacts tab; ticked, a recipient of their own, by email.
+        $this->assertArrayHasKey('lawyer@firm.ae', EmailSendFields::alsoTo($this->matter, ['other@co.ae'])->getOptions());
+        $lines = EmailSendFields::alsoToLines($this->matter, ['lawyer@firm.ae']);
+        $this->assertSame([['name' => $this->lawyer->name, 'capacity' => '', 'emails' => ['lawyer@firm.ae'], 'by_email' => true, 'by_whatsapp' => false]], $lines);
+
+        $preview = MinutesSender::preview($minutes, [...$rows, ...$lines], EmailGrouping::SEPARATE, 'محضر', '<p>{{recipient.name}}</p>');
+        $this->assertSame('السادة/ شركة أخرى <other@co.ae>', $preview['to']);
+        $this->assertSame(1, $preview['others']);
     }
 
     public function test_a_party_and_its_lawyer_each_keep_their_own_contact_though_they_share_one(): void

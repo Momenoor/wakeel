@@ -178,6 +178,20 @@ final class EmailSendFields
     }
 
     /**
+     * Those ticked as the minutes' send screen takes its recipients: a line each, by email.
+     *
+     * @param  list<string>  $emails
+     * @return list<array{name: string, capacity: string, emails: list<string>, by_email: bool, by_whatsapp: bool}>
+     */
+    public static function alsoToLines(?Matter $matter, array $emails): array
+    {
+        return array_map(
+            fn (array $contact): array => ['name' => $contact['name'], 'capacity' => '', 'emails' => [$contact['email']], 'by_email' => true, 'by_whatsapp' => false],
+            self::alsoToNamed($matter, $emails),
+        );
+    }
+
+    /**
      * @param  list<string>  $exclude
      * @return array<string, string> address => "name — address (capacity)"
      */

@@ -420,6 +420,8 @@ class MinutesRelationManager extends RelationManager
                         EmailSendFields::grouping(),
                         EmailSendFields::cc(),
                         EmailSendFields::contactsCc($record->matter, ...self::reached(MinutesSender::recipients($record))),
+                        // The matter's other contacts, to send the minutes to as well.
+                        EmailSendFields::alsoTo($record->matter, self::reached(MinutesSender::recipients($record))[0]),
                         // From Templates → Email templates ("Minutes for
                         // signature"); another one chosen starts the email again.
                         Select::make('email_template_id')
@@ -453,7 +455,7 @@ class MinutesRelationManager extends RelationManager
                 Section::make(__('Preview'))
                     ->collapsible()
                     ->schema(function (Get $get) use ($record): array {
-                        $preview = MinutesSender::preview($record, array_values((array) ($get('recipients') ?? [])), (string) ($get('grouping') ?: EmailGrouping::SEPARATE), $get('subject'), is_string($get('body')) ? $get('body') : null, $get('sender'));
+                        $preview = MinutesSender::preview($record, [...array_values((array) ($get('recipients') ?? [])), ...EmailSendFields::alsoToLines($record->matter, (array) ($get('also_to') ?? []))], (string) ($get('grouping') ?: EmailGrouping::SEPARATE), $get('subject'), is_string($get('body')) ? $get('body') : null, $get('sender'));
                         $to = $preview['to'] !== '' && $preview['others'] > 0
                             ? $preview['to'].' — '.__('and a separate email to each of the other :count', ['count' => $preview['others']])
                             : $preview['to'];
@@ -486,7 +488,7 @@ class MinutesRelationManager extends RelationManager
             ->action(function (MatterMinutes $record, array $data): void {
                 $result = app(MinutesSender::class)->send(
                     $record,
-                    array_values((array) ($data['recipients'] ?? [])),
+                    [...array_values((array) ($data['recipients'] ?? [])), ...EmailSendFields::alsoToLines($record->matter, (array) ($data['also_to'] ?? []))],
                     $data['sender'] ?? null,
                     $data['subject'] ?? null,
                     $data['body'] ?? null,
