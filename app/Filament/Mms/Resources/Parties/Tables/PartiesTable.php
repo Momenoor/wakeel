@@ -4,15 +4,20 @@ namespace App\Filament\Mms\Resources\Parties\Tables;
 
 use App\Models\ExpertiseArea;
 use App\Models\Party;
+use App\Services\MMS\PartyMerger;
+use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\Select;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 
 class PartiesTable
 {
@@ -110,6 +115,44 @@ class PartiesTable
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
+                    // The same person or company entered twice (or more): the ones ticked made one (PartyMerger).
+                    BulkAction::make('merge')
+                        ->label(__('Merge into one party'))
+                        ->icon('heroicon-o-arrows-pointing-in')
+                        ->color('warning')
+                        ->visible(fn () => auth()->user()->can('deleteAny', Party::class))
+                        ->modalHeading(__('Merge the parties ticked into one'))
+                        ->modalDescription(__('Everything of the others — their matters and capacities on them, representatives, letters, minutes, emails, contacts, creditors, folders, payroll and the rest — moves to the party kept; its phones and emails take theirs where not there already; then they are deleted. It cannot be undone.'))
+                        ->schema([
+                            Select::make('into')
+                                ->label(__('The party kept'))
+                                ->options(fn ($livewire): array => collect($livewire->getSelectedTableRecords())->sortBy('id')->mapWithKeys(fn (Party $party): array => [$party->getKey() => $party->name.' (#'.$party->getKey().')'])->all())
+                                ->default(fn ($livewire) => collect($livewire->getSelectedTableRecords())->min('id'))
+                                ->required(),
+                        ])
+                        ->action(function (Collection $records, array $data): void {
+                            if ($records->count() < 2) {
+                                Notification::make()->warning()->title(__('Tick two parties or more.'))->send();
+
+                                return;
+                            }
+
+                            $into = $records->firstWhere('id', (int) $data['into']) ?? $records->sortBy('id')->first();
+
+                            try {
+                                $result = app(PartyMerger::class)->merge($into, $records->reject(fn (Party $party): bool => $party->is($into)));
+                            } catch (\Throwable $e) {
+                                Notification::make()->danger()->title(__('The parties could not be merged'))->body($e->getMessage())->send();
+
+                                return;
+                            }
+
+                            Notification::make()->success()
+                                ->title(trans_choice(':count party merged into :into.|:count parties merged into :into.', $result['removed'], ['count' => $result['removed'], 'into' => $into->name]))
+                                ->body(__('Phones: :phones. Emails: :emails.', ['phones' => implode(', ', Party::values($into->phone)) ?: '—', 'emails' => implode(', ', Party::values($into->email)) ?: '—']))
+                                ->send();
+                        })
+                        ->deselectRecordsAfterCompletion(),
                     DeleteBulkAction::make()->visible(fn () => auth()->user()->can('deleteAny', Party::class)),
                 ]),
             ]);

@@ -72,7 +72,10 @@ return [
                 ['text' => 'Click the "Edit" icon on the party\'s row. The form opens with its current values, and "View" and "Delete" buttons at the top.', 'shot' => 'edit-1'],
                 ['text' => 'Change what you need, then click "Save changes". Or click "Delete" and confirm in the window.', 'shot' => 'delete-1'],
             ],
-            'tips' => ['Be careful when deleting a party: they are linked to earlier matters and letters.'],
+            'tips' => [
+                'Be careful when deleting a party: they are linked to earlier matters and letters.',
+                'The same person or company entered twice: tick both on the list and choose "Merge into one party", then the one to keep. Everything of the others — their matters and capacities, representatives, letters, minutes, emails, contacts, creditors, folders, payroll — moves to it, its phones and emails take theirs where not there already, and they are deleted. From a terminal, the same: php artisan parties:merge 12 34 56 keeps party 12. It cannot be undone.',
+            ],
         ],
     ],
 ];
