@@ -330,6 +330,7 @@
     "Confirm": "تأكيد",
     "Confirm Office Work": "إعتماد مباشرة التقرير من خلال المكتب",
     "Confirm Password": "تأكيد كلمة المرور",
+    "Confirm Report can be asked for once a Review Report request on this matter is approved.": "لا يمكن طلب اعتماد التقرير النهائي إلا بعد اعتماد طلب مراجعة التقرير المبدئي على هذه القضية.",
     "Confirm Report": "إعتماد التقرير النهائي   ",
     "Confirms the days, leave and deductions are correct, and passes the run to Finance.": "يؤكد صحة الأيام والإجازات والخصومات، ويحيل الدورة إلى المالية.",
     "Conflict": "تعارض",

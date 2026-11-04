@@ -6,6 +6,7 @@ use App\Enums\MatterDifficulty;
 use App\Enums\RequestStatus;
 use App\Enums\RequestType;
 use App\Filament\Mms\Actions\Request\ApproveRequestAction;
+use App\Filament\Mms\Actions\Request\CreateRequestAction;
 use App\Filament\Mms\Actions\Request\ResubmitRequestAction;
 use App\Filament\Mms\Resources\MatterRequests\Pages\ViewMatterRequest;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
@@ -446,5 +447,39 @@ class MatterRequestTest extends TestCase
             ->assertHasNoErrors();
 
         $this->assertSame(['new_difficulty' => 'hard'], $matter->requests()->sole()->extra);
+    }
+
+    public function test_confirm_report_can_be_asked_for_only_once_the_initial_reports_review_is_approved(): void
+    {
+        $this->allowEverything();
+        Mail::fake();
+        $this->actingAs(User::factory()->create());
+        $matter = $this->makeMatter();
+        $open = fn (): bool => in_array(RequestType::CONFIRM_REPORT->value, CreateRequestAction::allowedTypes($matter), true);
+        $ask = fn () => Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])
+            ->call('mountAction', 'add_request', [], ['recordKey' => (string) $matter->getKey(), 'schemaComponent' => 'infolist'])
+            ->set('mountedActions.0.data.type', RequestType::CONFIRM_REPORT->value)
+            ->set('mountedActions.0.data.comment', 'final')
+            ->call('callMountedAction');
+
+        // No review yet: closed, and asking for it refused.
+        $this->assertFalse($open());
+        $this->assertTrue(CreateRequestAction::awaitsReview($matter));
+        $ask()->assertHasErrors(['mountedActions.0.data.type']);
+        $this->assertSame(0, $matter->requests()->count());
+
+        // A review pending, then sent back for changes, then rejected: still closed.
+        $review = MatterRequest::create(['matter_id' => $matter->id, 'request_by' => auth()->id(), 'type' => RequestType::REVIEW_REPORT, 'status' => RequestStatus::PENDING, 'comment' => 'initial']);
+        foreach ([RequestStatus::PENDING, RequestStatus::NEEDS_CHANGES, RequestStatus::REJECTED] as $status) {
+            $review->update(['status' => $status]);
+            $this->assertFalse($open(), $status->value);
+        }
+
+        // Approved: open, and the hint gone.
+        $review->update(['status' => RequestStatus::APPROVED]);
+        $this->assertTrue($open());
+        $this->assertFalse(CreateRequestAction::awaitsReview($matter));
+        $this->assertContains(RequestType::CHANGE_DIFFICULTY->value, CreateRequestAction::allowedTypes($matter));
+        $this->assertNotContains(RequestType::REVIEW_REPORT->value, CreateRequestAction::allowedTypes($matter));
     }
 }

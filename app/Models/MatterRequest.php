@@ -8,6 +8,7 @@ use App\Enums\RequestType;
 use App\Models\Concerns\AnnouncesChanges;
 use App\Models\Concerns\HasAttachments;
 use App\Models\Contracts\AttachmentOwner;
+use App\Support\RequestMemo;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -49,6 +50,10 @@ class MatterRequest extends Model implements AttachmentOwner
 
     protected static function booted(): void
     {
+        // The types a matter can be asked for now (CreateRequestAction) read again.
+        static::saved(fn () => RequestMemo::forget('matter-request-types.'));
+        static::deleted(fn () => RequestMemo::forget('matter-request-types.'));
+
         static::deleting(function (MatterRequest $request) {
             // The review it was (a Review Report) and each time a reviewer asked for changes to it.
             $counted = ($request->type == RequestType::REVIEW_REPORT ? 1 : 0) + (int) ($request->extra['modifications'] ?? 0);

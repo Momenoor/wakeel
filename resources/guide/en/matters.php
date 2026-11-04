@@ -197,7 +197,7 @@ return [
                 ['text' => 'Choose the "Request Type".', 'shot' => 'req-1'],
                 ['text' => 'The fields for that type appear (such as "New Difficulty" to change the difficulty). Write a "Comment" explaining why, add an attachment if needed, then click "Submit".', 'shot' => 'req-2'],
             ],
-            'tips' => ['The person in charge gets a notification in the system and an email with a signed link to review it.'],
+            'tips' => ['The person in charge gets a notification in the system and an email with a signed link to review it.', '"Confirm Report" (the final report) stays greyed out in the list until a "Review Report" request (the initial report) on the matter is approved.'],
         ],
 
         [
