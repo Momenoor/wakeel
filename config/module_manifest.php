@@ -70,6 +70,7 @@ return [
             'app/Models/LeaveRequestPeriod.php',
             'app/Models/EmployeeRequest.php',
             'app/Models/HrListItem.php',
+            'app/Models/Company.php',
             'app/Models/LeaveEntitlement.php',
             'app/Models/PartyLeave.php',
             'app/Models/PayrollRun.php',
@@ -110,6 +111,7 @@ return [
             'app/Console/Commands/ResetIncentiveData.php',
             'app/Console/Commands/SendBulkCampaignsCommand.php',
             'app/Console/Commands/SyncMatterMetas.php',
+            'app/Console/Commands/WarnExpiringDocuments.php',
 
             // Livewire
             'app/Livewire/ChatWidget.php',

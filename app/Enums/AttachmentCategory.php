@@ -26,6 +26,20 @@ enum AttachmentCategory: string
     case BANK_TRANSFER = 'bank_transfer';
     case CHEQUE = 'cheque';
 
+    // An employee's documents
+    case LABOUR_CONTRACT = 'labour_contract';
+    case EMIRATES_ID = 'emirates_id';
+    case VISA = 'visa';
+    case PASSPORT = 'passport';
+    case PERSONAL_PHOTO = 'personal_photo';
+
+    // A company's documents
+    case TRADE_LICENSE = 'trade_license';
+    case ESTABLISHMENT_CARD = 'establishment_card';
+
+    // Anything else of an employee's or a company's
+    case OTHER = 'other';
+
     public function label(): string
     {
         return match ($this) {
@@ -43,6 +57,14 @@ enum AttachmentCategory: string
             self::PAYMENT_RECEIPT => __('Payment receipt'),
             self::BANK_TRANSFER => __('Bank transfer'),
             self::CHEQUE => __('Cheque'),
+            self::LABOUR_CONTRACT => __('Labour contract'),
+            self::EMIRATES_ID => __('Emirates ID'),
+            self::VISA => __('Visa'),
+            self::PASSPORT => __('Passport'),
+            self::PERSONAL_PHOTO => __('Personal picture'),
+            self::TRADE_LICENSE => __('Trade licence'),
+            self::ESTABLISHMENT_CARD => __('Establishment card'),
+            self::OTHER => __('Others'),
         };
     }
 

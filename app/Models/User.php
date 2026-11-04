@@ -9,6 +9,7 @@ use Filament\Models\Contracts\FilamentUser;
 use Filament\Models\Contracts\HasAvatar;
 use Filament\Panel;
 use FilamentInbox\Concerns\HasInbox;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -122,6 +123,22 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     public function isSuperAdmin(): bool
     {
         return $this->hasRole(Utils::getSuperAdminName());
+    }
+
+    /**
+     * Those holding the permission — through a role or as their own — and the super administrators, who hold
+     * every one.
+     *
+     * @param  Builder<User>  $query
+     * @return Builder<User>
+     */
+    public function scopeHolding(Builder $query, string $permission): Builder
+    {
+        $holds = fn (Builder $p) => $p->where('name', $permission);
+
+        return $query->where(fn (Builder $q) => $q
+            ->whereHas('roles', fn (Builder $role) => $role->where('name', Utils::getSuperAdminName())->orWhereHas('permissions', $holds))
+            ->orWhereHas('permissions', $holds));
     }
 
     /**

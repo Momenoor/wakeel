@@ -216,11 +216,36 @@ final class AttachmentFields
         return $attached;
     }
 
-    /** Whether this user may add files to the record: whoever may change its matter. */
+    /**
+     * Whether this user may add files to the record: whoever may change its matter — or, for a record with none
+     * that says who may (an employee, a company: allowsAttachment()), whoever it lets.
+     */
     public static function canAttach(Model $owner): bool
     {
-        return $owner instanceof AttachmentOwner
-            && (auth()->user()?->can('create', [Attachment::class, self::matterOf($owner)]) ?? false);
+        if (! $owner instanceof AttachmentOwner) {
+            return false;
+        }
+
+        $matter = self::matterOf($owner);
+
+        return $matter === null && method_exists($owner, 'allowsAttachment')
+            ? self::ownerAllows($owner, 'update')
+            : (auth()->user()?->can('create', [Attachment::class, $matter]) ?? false);
+    }
+
+    /**
+     * Whether a record with no matter lets this user see ('view') or change ('update') its files — its own rule
+     * when it has one (allowsAttachment(), as AttachmentPolicy asks), else anyone.
+     */
+    public static function ownerAllows(Model $owner, string $ability): bool
+    {
+        if (! method_exists($owner, 'allowsAttachment')) {
+            return true;
+        }
+
+        $user = auth()->user();
+
+        return $user !== null && $owner->allowsAttachment($user, $ability);
     }
 
     /** The matter a record's files belong to (null for a record with none). */

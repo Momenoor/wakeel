@@ -52,7 +52,7 @@ class PayrollModulePermissionsSeeder extends Seeder
      * @var list<string>
      */
     private const SUBJECTS = [
-        'EmployeeProfile', 'LeaveRequest', 'EmployeeLoan', 'PayrollRun',
+        'EmployeeProfile', 'LeaveRequest', 'EmployeeLoan', 'PayrollRun', 'Company',
     ];
 
     /**

@@ -7,8 +7,6 @@ use App\Enums\NotificationType;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\Notifications\NotificationPreferences;
-use BezhanSalleh\FilamentShield\Support\Utils;
-use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Who hears of an employee's request — leave, a loan, petty cash, a certificate — and decides it: the addresses
@@ -29,10 +27,7 @@ class HrRecipients
         }
 
         return User::query()
-            ->where(fn (Builder $query) => $query
-                ->whereHas('roles', fn (Builder $role) => $role->where('name', Utils::getSuperAdminName())
-                    ->orWhereHas('permissions', fn (Builder $p) => $p->where('name', $permission)))
-                ->orWhereHas('permissions', fn (Builder $p) => $p->where('name', $permission)))
+            ->holding($permission)
             ->whereNotNull('email')
             ->orderBy('id')
             ->pluck('email')

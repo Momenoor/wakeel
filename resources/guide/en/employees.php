@@ -9,13 +9,15 @@ return [
         [
             'id' => 'list',
             'title' => 'View the employees',
-            'description' => 'A table with the employee number, name, designation and date of joining, with the "New Employee" and "Import Employees" (from a file) buttons and the edit and delete icons.',
+            'description' => 'A table with each employee\'s personal picture, number, name, designation and date of joining, with the "New Employee" and "Import Employees" (from a file) buttons and the edit and delete icons. The "Expiring Documents" column is the alarm: a badge for each document (passport, Emirates ID, labour card, residency) that has expired (red) or expires within 60 days (amber), with its date and the days left.',
             'roles' => [$admin, $withPermission],
             'permissions' => ['ViewAny:EmployeeProfile', 'View:EmployeeProfile'],
             'steps' => [
-                ['text' => 'In the side menu, go to "Human Resources" → "Employees".', 'shot' => 'list-1'],
+                ['text' => 'In the side menu, go to "Human Resources" → "Employees". The red number beside "Employees" in the menu counts the employees on staff with a document expired or expiring within 60 days.', 'shot' => 'list-1'],
+                ['text' => 'Use the "Has Expiring Documents" filter to list only those employees.'],
                 ['text' => 'Use the "Import Employees" button to upload a list of employees from a file in one go.', 'shot' => 'list-import'],
             ],
+            'tips' => ['Whoever may change employees is told on the bell (and by email, as they choose under "Notification preferences") 60, 30 and 7 days before a document expires, and on the day itself.'],
         ],
         [
             'id' => 'create',
@@ -40,6 +42,19 @@ return [
                 ['text' => 'Click "Edit" on the employee\'s row, change the details, then click "Save changes". "Delete" is at the top of the page.', 'shot' => 'edit-1'],
                 ['text' => 'Scroll down to "Salary Structure" and click "Add / Revise Component" to record a new salary or allowance with its effective date.', 'shot' => 'edit-2-salary'],
             ],
+        ],
+        [
+            'id' => 'documents',
+            'title' => 'Attach an employee\'s documents',
+            'description' => 'The "Documents" table on the employee\'s page keeps the copies of their legal documents, each of its kind: "Labour contract", "Emirates ID", "Visa", "Passport", "Personal picture" and "Others". They open only for whoever may see the employee, and only whoever may change the employee adds or deletes them.',
+            'roles' => [$admin, $withPermission],
+            'permissions' => ['View:EmployeeProfile', 'Update:EmployeeProfile'],
+            'steps' => [
+                ['text' => 'Click "Edit" on the employee\'s row and scroll down to "Documents".'],
+                ['text' => 'Click "Attach files", choose the files (several at once if you like), choose their "Category" (the kind of document) and add a description if needed, then click "Submit".'],
+                ['text' => 'Click a document\'s name, or the eye icon, to open it; the arrow downloads it and the bin deletes it. Use the "Category" filter to show one kind only.'],
+            ],
+            'tips' => ['The latest "Personal picture" shows beside the employee\'s name in the employees table.', 'The expiry dates themselves are entered in the employee\'s form ("Identity Documents" and "Residency & Visa"): they are what the alarm watches.'],
         ],
         [
             'id' => 'designations',

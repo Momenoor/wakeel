@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Filament\Mms\Clusters\Templates;
 use App\Filament\Mms\Pages\SignPdf;
+use App\Filament\Mms\Pages\CompressPdf;
+use App\Filament\Mms\Pages\MergePdf;
 use App\Filament\Mms\Pages\SplitPdf;
 use App\Filament\Mms\Resources\BulkMailCampaigns\BulkMailCampaignResource;
 use App\Filament\Mms\Resources\CalendarEvents\CalendarEventResource;
@@ -353,6 +355,9 @@ return [
             SignPdf::class,
             // Answers to its custom permission (ScreenPermissions::SPLIT_PDF), which its OneDrive download route checks too.
             SplitPdf::class,
+            // Answer to their custom permissions (ScreenPermissions::MERGE_PDF, COMPRESS_PDF), as the OneDrive route does.
+            MergePdf::class,
+            CompressPdf::class,
         ],
     ],
 

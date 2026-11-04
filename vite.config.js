@@ -10,10 +10,12 @@ export default defineConfig({
                 'resources/js/app.js',
                 'resources/css/filament/admin/theme.css',
                 'resources/css/print.css',
-                // Loaded by Alpine (x-load) only where they are used: the Sign PDF and Split PDF pages, the
+                // Loaded by Alpine (x-load) only where they are used: the Sign, Split, Merge and Compress PDF pages, the
                 // SignaturePad field and the RichText field (TinyMCE itself: public/vendor/tinymce).
                 'resources/js/pdf-signer.js',
                 'resources/js/pdf-splitter.js',
+                'resources/js/pdf-merger.js',
+                'resources/js/pdf-compressor.js',
                 'resources/js/signature-pad-field.js',
                 'resources/js/rich-text-field.js',
             ],
@@ -27,7 +29,7 @@ export default defineConfig({
             // shaken off as an app's entries' exports otherwise are.
             preserveEntrySignatures: 'exports-only',
             output: {
-                // pdf-lib, shared by the Sign PDF and Split PDF pages, in a file of its own name (not whichever
+                // pdf-lib, shared by the Sign, Split, Merge and Compress PDF pages, in a file of its own name (not whichever
                 // small module the two happen to share with it).
                 manualChunks: (id) => (id.includes('/node_modules/pdf-lib/') ? 'pdf-lib' : undefined),
             },

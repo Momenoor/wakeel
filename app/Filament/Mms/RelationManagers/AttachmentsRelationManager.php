@@ -59,7 +59,7 @@ class AttachmentsRelationManager extends RelationManager
 
         $matter = AttachmentFields::matterOf($ownerRecord);
 
-        return $matter ? (auth()->user()?->can('view', $matter) ?? false) : true;
+        return $matter ? (auth()->user()?->can('view', $matter) ?? false) : AttachmentFields::ownerAllows($ownerRecord, 'view');
     }
 
     public function isReadOnly(): bool

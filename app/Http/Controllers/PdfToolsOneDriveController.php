@@ -11,15 +11,15 @@ use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * A PDF from the signed-in user's own OneDrive, for the Split PDF page to split in the browser. Asked for by
+ * A PDF from the signed-in user's own OneDrive, for the PDF tools (Split, Merge, Compress PDF) to work on in the browser. Asked for by
  * its id only — never by an address the browser sends — and looked up in their own drive alone. Passed on a
  * piece at a time as OneDrive sends it: nothing is kept on the server, nor held whole in its memory.
  */
-class SplitPdfOneDriveController extends Controller
+class PdfToolsOneDriveController extends Controller
 {
     public function __invoke(Request $request, string $item, PersonalOneDrive $drive, OneDriveClient $client): StreamedResponse
     {
-        abort_unless($request->user()->can(ScreenPermissions::SPLIT_PDF), 403);
+        abort_unless($request->user()->canAny(ScreenPermissions::PDF_TOOLS), 403);
 
         try {
             $file = $drive->pdf($request->user(), $item);

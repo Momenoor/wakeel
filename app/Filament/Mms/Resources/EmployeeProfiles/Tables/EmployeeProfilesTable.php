@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Resources\EmployeeProfiles\Tables;
 
+use App\Filament\Support\ExpiringDocuments;
 use App\Models\EmployeeProfile;
 use App\Support\Currency;
 use Filament\Actions\BulkAction;
@@ -15,8 +16,8 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -24,17 +25,22 @@ use Illuminate\Database\Eloquent\Collection;
 
 class EmployeeProfilesTable
 {
-    /**
-     * How far ahead a document counts as "expiring soon".
-     */
-    private const EXPIRY_WINDOW_DAYS = 60;
-
     public static function configure(Table $table): Table
     {
         return $table
             ->modifyQueryUsing(fn (Builder $query) => $query
+                ->with('photo')
                 ->withSum('leaveBalanceEntries as leave_balance', 'days'))
             ->columns([
+                // Their latest personal picture (Documents), opened through the permission check.
+                ImageColumn::make('photo')
+                    ->label('')
+                    ->circular()
+                    ->imageSize(36)
+                    ->checkFileExistence(false)
+                    ->state(fn (EmployeeProfile $record): ?string => $record->photo?->isPreviewable() && strtolower((string) $record->photo->extension) !== 'pdf'
+                        ? $record->photo->url(inline: true)
+                        : null),
                 TextColumn::make('party.name')
                     ->label(__('Employee'))
                     ->searchable()
@@ -52,18 +58,8 @@ class EmployeeProfilesTable
                     ->label(__('Date of Joining'))
                     ->date()
                     ->sortable(),
-                // One column for four expiry dates. Four separate columns would
-                // push the table past the fold and still leave the reader to work
-                // out which of them is the urgent one.
-                TextColumn::make('expiring')
-                    ->label(__('Expiring Documents'))
-                    ->badge()
-                    ->color('danger')
-                    ->state(fn (EmployeeProfile $record): array => array_map(
-                        fn (string $key): string => __(self::documentLabels()[$key]),
-                        array_keys($record->expiringDocuments(self::EXPIRY_WINDOW_DAYS)),
-                    ))
-                    ->placeholder('—'),
+                // One column for the four expiry dates: a badge each for one expired (red) or due soon (amber).
+                ExpiringDocuments::column(EmployeeProfile::EXPIRING),
                 TextColumn::make('date_of_leaving')
                     ->label(__('Date of Leaving'))
                     ->date()
@@ -90,13 +86,7 @@ class EmployeeProfilesTable
                         blank: fn (Builder $query) => $query,
                     )
                     ->default(true),
-                Filter::make('expiring_documents')
-                    ->label(__('Has Expiring Documents'))
-                    ->query(fn (Builder $query) => $query->where(function (Builder $query): void {
-                        foreach (array_keys(self::documentLabels()) as $column) {
-                            $query->orWhereBetween($column, [now()->toDateString(), now()->addDays(self::EXPIRY_WINDOW_DAYS)->toDateString()]);
-                        }
-                    })),
+                ExpiringDocuments::filter(EmployeeProfile::EXPIRING),
             ])
             ->recordActions([
                 EditAction::make()->iconButton(),
@@ -217,20 +207,5 @@ class EmployeeProfilesTable
             ])
             ->action(fn (Collection $records, array $data) => self::updateEach($records, [$column => (bool) $data['value']]))
             ->deselectRecordsAfterCompletion();
-    }
-
-    /**
-     * The expiry columns and the label each one shows as a badge.
-     *
-     * @return array<string, string>
-     */
-    private static function documentLabels(): array
-    {
-        return [
-            'passport_expiry' => __('Passport'),
-            'emirates_id_expiry' => __('Emirates ID'),
-            'labour_card_expiry' => __('Labour Card'),
-            'residency_expiry' => __('Residency'),
-        ];
     }
 }

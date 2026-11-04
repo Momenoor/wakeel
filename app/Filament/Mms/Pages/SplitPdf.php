@@ -2,31 +2,31 @@
 
 namespace App\Filament\Mms\Pages;
 
-use App\Services\MMS\OneDriveNotFound;
-use App\Services\MMS\PersonalOneDrive;
+use App\Filament\Mms\Pages\Concerns\PicksPdfsFromOneDrive;
 use App\Support\ScreenPermissions;
 use BackedEnum;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Renderless;
-use Throwable;
 
 /**
  * Splitting a PDF into parts in the browser (resources/js/pdf-splitter.js) — at most so many megabytes each,
  * for a portal's upload limit, or so many pages each — and downloading them all in one zip.
  *
- * The PDF is chosen from the computer or from the user's own OneDrive (PersonalOneDrive, fetched through
- * SplitPdfOneDriveController). It is never kept on the server: only a line in the activity log says it was
- * split (who, the file's name, where it came from, how, into how many parts).
+ * The PDF is chosen from the computer or from the user's own OneDrive (PicksPdfsFromOneDrive, fetched through
+ * PdfToolsOneDriveController), or handed on from Merge PDF or Compress PDF. It is never kept on the server: only
+ * a line in the activity log says it was split (who, the file's name, where it came from, how, into how many parts).
  */
 class SplitPdf extends Page
 {
+    use PicksPdfsFromOneDrive;
+
     public const LOG = 'pdf-split';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedScissors;
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 4;
 
     protected string $view = 'filament.mms.pages.split-pdf';
 
@@ -59,20 +59,13 @@ class SplitPdf extends Page
     public function splitterConfig(): array
     {
         return [
-            'maxBytes' => PersonalOneDrive::MAX_BYTES,
-            // The item's id goes where "__ID__" is.
-            'oneDriveUrl' => route('split-pdf.onedrive', ['item' => '__ID__']),
+            ...$this->oneDriveConfig(),
             'labels' => [
-                'tooBig' => __('The file is bigger than :size MB.', ['size' => PersonalOneDrive::MAX_BYTES / 1024 / 1024]),
-                'notPdf' => __('This is not a PDF file.'),
-                'loadFailed' => __('The PDF could not be opened.'),
+                ...$this->oneDriveLabels(),
                 'protected' => __('This PDF is protected with a password, so it cannot be split here.'),
-                'downloadFailed' => __('The file could not be fetched from OneDrive.'),
                 'splitFailed' => __('The PDF could not be split. Please try again.'),
                 'badLimit' => __('Enter at least 0.5 MB per part.'),
                 'badPages' => __('Enter at least 1 page per part.'),
-                'reading' => __('Reading the PDF…'),
-                'downloading' => __('Fetching from OneDrive… :percent'),
                 'preparing' => __('Looking through page :page of :pages…'),
                 'progress' => __('Part :part — page :page of :pages'),
                 'progressOf' => __('Part :part of :parts — page :page of :pages'),
@@ -81,7 +74,6 @@ class SplitPdf extends Page
                 'page' => __('Page :from'),
                 'tooBigPage' => __('Page :page alone is :size MB — larger than the :limit MB limit.'),
                 'listLine' => __(':name — pages :from–:to — :size MB'),
-                'mb' => __(':size MB'),
                 'summary' => __('Done: ":name" (:pages pages, :size MB) was split :how into :parts parts in :seconds s.'),
                 'summaryOne' => __('Done: ":name" (:pages pages, :size MB) was split :how — it all fits in one part — in :seconds s.'),
                 'howSize' => __('by size, at most :limit MB each,'),
@@ -90,32 +82,6 @@ class SplitPdf extends Page
                 'summaryNext' => __('Nothing was uploaded. Download them all as a zip, or one by one below.'),
             ],
         ];
-    }
-
-    /**
-     * What's in one of the user's OneDrive folders (its top when none): folders and PDFs only.
-     *
-     * @return array{items: list<array<string, mixed>>, error: ?string}
-     */
-    #[Renderless]
-    public function oneDriveFolder(?string $folderId = null): array
-    {
-        return $this->fromOneDrive(fn (PersonalOneDrive $drive): array => $drive->folder(auth()->user(), filled($folderId) ? $folderId : null));
-    }
-
-    /**
-     * Folders and PDFs anywhere in the user's OneDrive whose name has these words.
-     *
-     * @return array{items: list<array<string, mixed>>, error: ?string}
-     */
-    #[Renderless]
-    public function oneDriveSearch(string $words): array
-    {
-        if (mb_strlen(trim($words)) < 2) {
-            return ['items' => [], 'error' => null];
-        }
-
-        return $this->fromOneDrive(fn (PersonalOneDrive $drive): array => $drive->search(auth()->user(), $words));
     }
 
     /**
@@ -130,7 +96,7 @@ class SplitPdf extends Page
             ->event('split')
             ->withProperties([
                 'file' => Str::limit($fileName, 250, ''),
-                'source' => $source === 'onedrive' ? 'onedrive' : 'upload',
+                'source' => self::source($source),
                 'mode' => $mode === 'pages' ? 'pages' : 'size',
                 // Megabytes per part, or pages per part.
                 'limit' => $mode === 'pages' ? max(1, (int) $limit) : round(max(0, min($limit, 100000)), 2),
@@ -138,31 +104,5 @@ class SplitPdf extends Page
                 'pages' => max(0, min($pages, 100000)),
             ])
             ->log('Split a PDF');
-    }
-
-    /**
-     * @param  callable(PersonalOneDrive): list<array<string, mixed>>  $read
-     * @return array{items: list<array<string, mixed>>, error: ?string}
-     */
-    private function fromOneDrive(callable $read): array
-    {
-        $drive = app(PersonalOneDrive::class);
-
-        if ($reason = $drive->unavailable(auth()->user())) {
-            return ['items' => [], 'error' => $reason];
-        }
-
-        try {
-            return ['items' => $read($drive), 'error' => null];
-        } catch (OneDriveNotFound $e) {
-            // A folder not in their OneDrive, or no OneDrive yet: theirs to know, not a fault to log.
-            return ['items' => [], 'error' => $e->isItem()
-                ? __('Your OneDrive could not be read: :error', ['error' => __('That folder or file is not in your OneDrive.')])
-                : __('Your account has no OneDrive yet. Open OneDrive once with it (office.com), then try again.')];
-        } catch (Throwable $e) {
-            report($e);
-
-            return ['items' => [], 'error' => __('Your OneDrive could not be read: :error', ['error' => Str::limit($e->getMessage(), 300)])];
-        }
     }
 }

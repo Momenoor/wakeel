@@ -22,10 +22,8 @@ use App\Services\Notifications\NotificationPreferences;
 use App\Services\Notifications\Notifier;
 use App\Support\Addresses;
 use App\Support\Dates;
-use BezhanSalleh\FilamentShield\Support\Utils;
 use Carbon\CarbonInterface;
 use Filament\Notifications\Notification;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -334,12 +332,7 @@ class EmployeeRequestService
     /** Approved money: the accountants hear it is to be paid. */
     private function tellPayers(EmployeeRequest $request): void
     {
-        $payers = User::query()
-            ->where(fn (Builder $q) => $q
-                ->whereHas('roles', fn (Builder $role) => $role->where('name', Utils::getSuperAdminName())
-                    ->orWhereHas('permissions', fn (Builder $p) => $p->where('name', self::PAY)))
-                ->orWhereHas('permissions', fn (Builder $p) => $p->where('name', self::PAY)))
-            ->get();
+        $payers = User::query()->holding(self::PAY)->get();
 
         Notifier::send(
             NotificationType::EMPLOYEE_REQUEST_TO_PAY,

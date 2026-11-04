@@ -2,24 +2,37 @@
 
 namespace App\Models;
 
+use App\Enums\AttachmentCategory;
+use App\Models\Concerns\HasAttachments;
+use App\Models\Contracts\AttachmentOwner;
 use App\Services\MMS\LeaveBalanceService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Carbon;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
 /**
  * The employment record hanging off a party that holds the `employee` role.
  */
-class EmployeeProfile extends Model
+class EmployeeProfile extends Model implements AttachmentOwner
 {
+    use HasAttachments;
     use HasFactory;
     use LogsActivity;
     use SoftDeletes;
+
+    /** The documents whose expiry is watched (ExpiringDocuments): column => label. */
+    public const EXPIRING = [
+        'passport_expiry' => 'Passport',
+        'emirates_id_expiry' => 'Emirates ID',
+        'labour_card_expiry' => 'Labour Card',
+        'residency_expiry' => 'Residency',
+    ];
 
     protected $fillable = [
         'party_id',
@@ -126,26 +139,35 @@ class EmployeeProfile extends Model
         return $leaving === null || $leaving->isFuture();
     }
 
-    /**
-     * The documents falling due within the given window, as label => date.
-     *
-     * @return array<string, Carbon>
-     */
-    public function expiringDocuments(int $withinDays = 60): array
+    public function attachmentMatterId(): ?int
     {
-        $limit = now()->addDays($withinDays);
+        return null;
+    }
 
-        $documents = [
-            'passport_expiry' => $this->getAttribute('passport_expiry'),
-            'emirates_id_expiry' => $this->getAttribute('emirates_id_expiry'),
-            'labour_card_expiry' => $this->getAttribute('labour_card_expiry'),
-            'residency_expiry' => $this->getAttribute('residency_expiry'),
+    /** Their documents: the legal ones, their picture and anything else. */
+    public function attachmentCategories(): array
+    {
+        return [
+            AttachmentCategory::LABOUR_CONTRACT,
+            AttachmentCategory::EMIRATES_ID,
+            AttachmentCategory::VISA,
+            AttachmentCategory::PASSPORT,
+            AttachmentCategory::PERSONAL_PHOTO,
+            AttachmentCategory::OTHER,
         ];
+    }
 
-        return array_filter(
-            $documents,
-            fn ($date): bool => $date !== null && $date->lessThanOrEqualTo($limit),
-        );
+    /** Their documents are seen by whoever may see the employee, and added or removed by whoever may change them. */
+    public function allowsAttachment(User $user, string $ability): bool
+    {
+        return $user->can($ability === 'view' ? 'view' : 'update', $this);
+    }
+
+    /** Their latest personal picture, when one is kept. */
+    public function photo(): MorphOne
+    {
+        return $this->morphOne(Attachment::class, 'attachable')
+            ->ofMany(['id' => 'max'], fn (Builder $query) => $query->where('category', AttachmentCategory::PERSONAL_PHOTO->value));
     }
 
     public function salaryComponents()

@@ -3,6 +3,8 @@
 namespace App\Filament\Mms\Resources\EmployeeProfiles;
 
 use App\Filament\Concerns\HasModuleGate;
+use App\Filament\Mms\RelationManagers\DocumentsRelationManager;
+use App\Filament\Support\ExpiringDocuments;
 use App\Filament\Mms\Resources\EmployeeProfiles\Pages\CreateEmployeeProfile;
 use App\Filament\Mms\Resources\EmployeeProfiles\Pages\EditEmployeeProfile;
 use App\Filament\Mms\Resources\EmployeeProfiles\Pages\ListEmployeeProfiles;
@@ -100,10 +102,27 @@ class EmployeeProfileResource extends Resource
     public static function getRelations(): array
     {
         return [
+            DocumentsRelationManager::class,
             SalaryComponentsRelationManager::class,
             LeaveBalanceRelationManager::class,
             FlightTicketsRelationManager::class,
         ];
+    }
+
+    /** How many employees on staff have a document expired or expiring soon — an alarm on the menu. */
+    public static function getNavigationBadge(): ?string
+    {
+        return ExpiringDocuments::badge(EmployeeProfile::query()->whereNull('date_of_leaving'), EmployeeProfile::EXPIRING);
+    }
+
+    public static function getNavigationBadgeColor(): string
+    {
+        return 'danger';
+    }
+
+    public static function getNavigationBadgeTooltip(): ?string
+    {
+        return ExpiringDocuments::badgeTooltip();
     }
 
     public static function getPages(): array

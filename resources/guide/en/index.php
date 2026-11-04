@@ -28,7 +28,7 @@ return [
         $m('Correspondence and templates', 'letterheads', 'mms', 'heroicon-o-document', 'Letterheads, signature blocks and fonts', 'The office\'s official paper'),
         $m('Correspondence and templates', 'whatsapp', 'mms', 'heroicon-o-chat-bubble-oval-left', 'WhatsApp templates', 'Meta templates and incoming replies'),
         $m('Correspondence and templates', 'mailsenders', 'mms', 'heroicon-o-at-symbol', 'Mail senders', 'Microsoft 365 and SMTP sending mailboxes and the filing mailbox'),
-        $m('Correspondence and templates', 'pdftools', 'mms', 'heroicon-o-pencil-square', 'PDF tools', 'Signing, stamping, editing text and splitting'),
+        $m('Correspondence and templates', 'pdftools', 'mms', 'heroicon-o-pencil-square', 'PDF tools', 'Signing, stamping, editing text, merging, compressing and splitting'),
 
         $m('Finance', 'incentive', 'mms', 'heroicon-o-calculator', 'Incentive Calculations', 'Working out assistants\' incentives, their tiers and rules'),
         $m('Finance', 'payroll', 'mms', 'heroicon-o-banknotes', 'Payroll Runs', 'The monthly payroll, approvals and the journal voucher'),
@@ -36,6 +36,7 @@ return [
         $m('Finance', 'finconfig', 'mms', 'heroicon-o-cog-8-tooth', 'Financial Settings', 'Incentive rates, payroll figures and the law'),
 
         $m('Human Resources', 'employees', 'mms', 'heroicon-o-identification', 'Employees', 'Profiles, documents, salary structure and designations'),
+        $m('Human Resources', 'companies', 'mms', 'heroicon-o-building-office-2', 'Companies', 'Trade licences, establishment cards and their expiry'),
         $m('Human Resources', 'employeerequests', 'mms', 'heroicon-o-hand-raised', 'Employee requests', 'Loans, tickets paid in advance and certificates'),
         $m('Human Resources', 'leave', 'mms', 'heroicon-o-calendar', 'Leave', 'Requests, approval and the absence ledger'),
         $m('Human Resources', 'tickets', 'mms', 'heroicon-o-paper-airplane', 'Flight tickets and end of service', 'Tickets and the gratuity settlement voucher'),

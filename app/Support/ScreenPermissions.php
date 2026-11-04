@@ -136,6 +136,15 @@ final class ScreenPermissions
     /** Splitting a PDF into parts (the Split PDF page), from the computer or the user's own OneDrive. */
     public const SPLIT_PDF = 'Use:SplitPdf';
 
+    /** Merging PDFs into one (the Merge PDF page) — files chosen, or a whole folder — from the computer or OneDrive. */
+    public const MERGE_PDF = 'Use:MergePdf';
+
+    /** Making a PDF smaller (the Compress PDF page): its pictures and scans saved again at a lower resolution. */
+    public const COMPRESS_PDF = 'Use:CompressPdf';
+
+    /** The PDF tools that work in the browser on a file from the computer or OneDrive. */
+    public const PDF_TOOLS = [self::SPLIT_PDF, self::MERGE_PDF, self::COMPRESS_PDF];
+
     /**
      * Each permission, and the existing permissions whose holders could
      * already see that part — any one of them is enough.
@@ -213,6 +222,9 @@ final class ScreenPermissions
             self::MANAGE_SHARED_SIGNATURES => ['Update:Letterhead'],
             // Splitting: whoever signs PDFs, as they too add files to matters (and meet the portals' size limits).
             self::SPLIT_PDF => ['CreateAttachment:Matter'],
+            // Merging and compressing: whoever splits PDFs — the same work on the way to a portal.
+            self::MERGE_PDF => [self::SPLIT_PDF],
+            self::COMPRESS_PDF => [self::SPLIT_PDF],
         ];
     }
 

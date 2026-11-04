@@ -4,7 +4,7 @@
 
 return [
     'title' => 'PDF tools',
-    'intro' => 'The "PDF tools" group in the side menu: "Sign PDF" puts a signature, stamp, date or text on a file and edits its text, "Split PDF" splits a large file into parts, and "Signatures & stamps" is the library of your signatures and the office\'s stamps. The file is handled in your browser and is not uploaded to the server. Only a note that you signed or split it is kept.',
+    'intro' => 'The "PDF tools" group in the side menu: "Sign PDF" puts a signature, stamp, date or text on a file and edits its text, "Merge PDF" puts several files (or a whole folder) into one, "Compress PDF" makes a file smaller, "Split PDF" splits a large file into parts — each on its own, or one after another (merge, then compress, then split) — and "Signatures & stamps" is the library of your signatures and the office\'s stamps. The file is handled in your browser and is not uploaded to the server. Only a note of what you did with it is kept.',
     'actions' => [
         [
             'id' => 'sign',
@@ -49,7 +49,32 @@ return [
                 ['text' => 'Under "PDF tools" → "Split PDF", click "Choose a PDF" or "From OneDrive". The largest size allowed shows under the buttons.', 'shot' => 'split-0'],
                 ['text' => 'Choose "How to split" and enter the number, then click "Split". The result shows in words (the number of parts and their sizes). Then click "Download all (zip)", or "Download" for each part.', 'shot' => 'split-1'],
             ],
-            'tips' => ['Very large files are best split on a computer: a phone may run out of memory.'],
+            'tips' => ['Very large files are best split on a computer: a phone may run out of memory.', '"Discard" beside the chosen file puts it aside, so you can choose another.'],
+        ],
+        [
+            'id' => 'merge',
+            'title' => 'Merge PDFs',
+            'description' => 'Several PDFs put together into one, in the browser: chosen one by one, or a whole folder — every PDF in it, in the order of their names (1, 2, … 10) — from your computer or your OneDrive. Change the order before merging, and each file can get a bookmark at its first page. Nothing is uploaded.',
+            'roles' => [$admin, $withPermission],
+            'permissions' => ['Use:MergePdf'],
+            'steps' => [
+                ['text' => 'Under "PDF tools" → "Merge PDF", click "Choose PDFs" (several at once), "Choose a folder" (every PDF in it and in its sub-folders), or "From OneDrive" — where you can pick PDFs one by one, or open a folder and click "Add every PDF in this folder".'],
+                ['text' => 'The files are listed in the order they will be merged. Move one with the up and down arrows, take one out with ×, or click "Sort by name". "Discard all" empties the list.'],
+                ['text' => 'Give the merged file a "Name", leave "A bookmark for each file" on or turn it off, then click "Merge". Then click "Download", or carry on: "Then compress it" or "Then split it" opens that tool with the merged PDF already chosen.'],
+            ],
+            'tips' => ['To merge, compress and split in one go: merge, click "Then compress it", compress, then click "Then split it".'],
+        ],
+        [
+            'id' => 'compress',
+            'title' => 'Compress a PDF',
+            'description' => 'A PDF made smaller in the browser, for a portal\'s upload limit or an email: its scanned pages and pictures are saved again at a lower resolution, while its text stays sharp and searchable. "Light" barely changes how it looks, "Medium" (about 170 dpi) usually suits court papers, and "Strong" (about 120 dpi) makes the smallest file. A PDF that cannot be made smaller (one with few or small pictures) is given back as it was.',
+            'roles' => [$admin, $withPermission],
+            'permissions' => ['Use:CompressPdf'],
+            'steps' => [
+                ['text' => 'Under "PDF tools" → "Compress PDF", click "Choose a PDF" or "From OneDrive" (or come from Merge PDF with "Then compress it"). "Discard" puts the file aside to choose another.'],
+                ['text' => 'Choose "How much to compress", then click "Compress". The result says the size before and after. Click "Download", or "Then split it" to split the smaller file.'],
+            ],
+            'tips' => ['A PDF protected with a password cannot be compressed or merged here.'],
         ],
         [
             'id' => 'stamps',

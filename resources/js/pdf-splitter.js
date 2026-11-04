@@ -1,40 +1,15 @@
-// The Split PDF page (App\Filament\Mms\Pages\SplitPdf): a PDF from the computer or the user's own OneDrive,
-// split in the browser — by size or by pages (pdf-splitter/split.js) — and its parts downloaded in one zip
-// (pdf-splitter/zip.js) or one by one. Loaded by Alpine (x-load) on that page only.
+// The Split PDF page (App\Filament\Mms\Pages\SplitPdf): a PDF from the computer, the user's own OneDrive, or handed
+// on from Merge PDF or Compress PDF (pdf/handoff.js), split in the browser — by size or by pages
+// (pdf-splitter/split.js) — and its parts downloaded in one zip (pdf-splitter/zip.js) or one by one. Loaded by
+// Alpine (x-load) on that page only.
+import { MB, fill, megabytes, numberFrom, save } from './pdf/common.js';
+import { takeHandoff } from './pdf/handoff.js';
 import { isPdf } from './pdf/is-pdf.js';
+import { withOneDrivePicker } from './pdf/onedrive-picker.js';
 import { Cancelled, Protected, analyse, loadPdf, splitByPages, splitBySize } from './pdf-splitter/split.js';
 import { zipFiles } from './pdf-splitter/zip.js';
 
-// A megabyte as the size limits on upload pages are safest read: a million bytes (a part of "4.99 MB" here is
-// under 5 MB however the page receiving it counts).
-const MB = 1_000_000;
-
-// A number as typed on any keyboard: Arabic-Indic (٠–٩) and Persian (۰–۹) digits, and "٫" or "," for the decimal
-// point. A number field (type="number") took none of them — on an Arabic phone keyboard what was typed read as
-// empty — so the fields are text, read here.
-export function numberFrom(typed) {
-    const text = String(typed ?? '')
-        .trim()
-        .replace(/[٠-٩]/g, (digit) => String(digit.charCodeAt(0) - 0x0660))
-        .replace(/[۰-۹]/g, (digit) => String(digit.charCodeAt(0) - 0x06f0))
-        .replace(/[٫,]/g, '.')
-        .replace(/\s+/g, '');
-
-    return /^\d+(\.\d+)?$|^\.\d+$/.test(text) ? Number(text) : NaN;
-}
-
-const fill = (text, values) => Object.entries(values).reduce((result, [key, value]) => result.replaceAll(`:${key}`, value), text);
-const megabytes = (bytes) => (bytes / MB).toFixed(2);
-
-function save(blob, name) {
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = name;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(link.href), 60_000);
-}
+export { numberFrom };
 
 export default function pdfSplitter(config) {
     // Kept out of Alpine's reach: pdf-lib's objects and big files have no business in its reactive proxies.
@@ -44,7 +19,8 @@ export default function pdfSplitter(config) {
     let zip = null;
     let blobs = [];
 
-    return {
+    return withOneDrivePicker({
+        config,
         labels: config.labels,
         file: null,
         pageCount: 0,
@@ -61,13 +37,14 @@ export default function pdfSplitter(config) {
         // What was done, in words, once it is done.
         summary: '',
 
-        // The OneDrive picker.
-        pickerOpen: false,
-        pickerLoading: false,
-        pickerError: null,
-        trail: [],
-        items: [],
-        search: '',
+        // A PDF handed on from Merge PDF or Compress PDF.
+        async init() {
+            const handed = await takeHandoff();
+
+            if (handed) {
+                await this.open(handed.blob, handed.name, 'handoff');
+            }
+        },
 
         // ── The PDF ─────────────────────────────────────────────────────────
 
@@ -278,105 +255,25 @@ export default function pdfSplitter(config) {
 
         // ── From OneDrive ───────────────────────────────────────────────────
 
-        openPicker() {
-            this.pickerOpen = true;
-
-            if (! this.items.length && ! this.pickerError) {
-                this.browse(null);
-            }
-        },
-
-        // A folder of theirs (their OneDrive's top when none); the path to it is kept for the breadcrumbs.
-        async browse(folder) {
-            this.search = '';
-            this.trail = folder ? [...this.trail, folder] : [];
-            await this.load(() => this.$wire.oneDriveFolder(folder?.id ?? null));
-        },
-
-        async goTo(index) {
-            this.search = '';
-            this.trail = this.trail.slice(0, index + 1);
-            const folder = this.trail[this.trail.length - 1];
-            await this.load(() => this.$wire.oneDriveFolder(folder?.id ?? null));
-        },
-
-        async find() {
-            const words = this.search.trim();
-
-            if (words.length < 2) {
-                const folder = this.trail[this.trail.length - 1];
-
-                return this.load(() => this.$wire.oneDriveFolder(folder?.id ?? null));
-            }
-
-            await this.load(() => this.$wire.oneDriveSearch(words));
-        },
-
-        async load(read) {
-            this.pickerLoading = true;
-            this.pickerError = null;
-
-            try {
-                const { items, error } = await read();
-                this.items = items ?? [];
-                this.pickerError = error;
-            } catch {
-                this.items = [];
-                this.pickerError = this.labels.downloadFailed;
-            } finally {
-                this.pickerLoading = false;
-            }
-        },
-
-        async choose(item) {
-            if (item.folder) {
-                // A folder found by searching: its path starts again from it.
-                if (this.search.trim().length >= 2) {
-                    this.trail = [];
-                }
-
-                return this.browse({ id: item.id, name: item.name });
-            }
-
-            this.pickerOpen = false;
-            await this.fetchFromOneDrive(item);
-        },
-
         // Fetched through the server (it alone may reach the user's OneDrive), shown arriving.
-        async fetchFromOneDrive(item) {
+        async pickedFromOneDrive(item) {
+            this.pickerOpen = false;
+
             if (this.busy) {
                 return;
             }
 
             this.reset();
             this.busy = true;
-            this.status = fill(this.labels.downloading, { percent: '' });
+            this.status = this.downloadingStatus(null);
 
             let blob = null;
 
             try {
-                const response = await fetch(config.oneDriveUrl.replace('__ID__', encodeURIComponent(item.id)), { credentials: 'same-origin' });
-
-                if (! response.ok || ! response.body) {
-                    throw new Error(String(response.status));
-                }
-
-                const total = Number(response.headers.get('X-File-Size')) || item.size || 0;
-                const reader = response.body.getReader();
-                const chunks = [];
-                let received = 0;
-
-                for (let read = await reader.read(); ! read.done; read = await reader.read()) {
-                    chunks.push(read.value);
-                    received += read.value.length;
-
-                    if (total) {
-                        this.percent = Math.min(100, Math.round((received / total) * 100));
-                        this.status = fill(this.labels.downloading, { percent: `${this.percent}%` });
-                    }
-                }
-
-                blob = new Blob(chunks, { type: 'application/pdf' });
+                blob = await this.fetchOneDrive(item, (percent) => {
+                    this.percent = percent;
+                    this.status = this.downloadingStatus(percent);
+                });
             } catch {
                 this.fail(this.labels.downloadFailed);
             } finally {
@@ -393,5 +290,5 @@ export default function pdfSplitter(config) {
         fail(message) {
             this.error = message;
         },
-    };
+    });
 }

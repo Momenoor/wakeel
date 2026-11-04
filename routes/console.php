@@ -1,5 +1,6 @@
 <?php
 
+use App\Console\Commands\WarnExpiringDocuments;
 use App\Services\MMS\MailboxFolderForwarder;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterReplyCollector;
@@ -14,6 +15,13 @@ Artisan::command('inspire', function () {
 Schedule::command('mail:send-bulk-campaigns')
     ->dailyAt('08:00')
     ->timezone('Asia/Dubai');
+
+// The employees' and companies' documents expiring in 60, 30 or 7 days, or today: told to whoever looks after them,
+// once a day from 8 in the morning — asked every minute, so a minute the web cron misses never loses a day.
+Schedule::command('documents:warn-expiring')
+    ->everyMinute()
+    ->when(fn (): bool => WarnExpiringDocuments::isDue())
+    ->withoutOverlapping(30);
 
 // Replies to the matters' emails, kept with them and in OneDrive. Asked every minute and run when
 // due (ten minutes after the last run, or at once while a backlog is left) — not only on the exact

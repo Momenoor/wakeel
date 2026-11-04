@@ -28,7 +28,7 @@ return [
         $m('المراسلات والقوالب', 'letterheads', 'mms', 'heroicon-o-document', 'الترويسات وكتل التوقيع والخطوط', 'أوراق المكتب الرسمية'),
         $m('المراسلات والقوالب', 'whatsapp', 'mms', 'heroicon-o-chat-bubble-oval-left', 'قوالب واتساب', 'قوالب Meta وردود الاستقبال'),
         $m('المراسلات والقوالب', 'mailsenders', 'mms', 'heroicon-o-at-symbol', 'مرسلو البريد', 'صناديق الإرسال Microsoft 365 وSMTP وبريد الأرشفة'),
-        $m('المراسلات والقوالب', 'pdftools', 'mms', 'heroicon-o-pencil-square', 'أدوات PDF', 'التوقيع والختم وتعديل النصوص والتقسيم'),
+        $m('المراسلات والقوالب', 'pdftools', 'mms', 'heroicon-o-pencil-square', 'أدوات PDF', 'التوقيع والختم وتعديل النصوص والدمج والضغط والتقسيم'),
 
         $m('المالية', 'incentive', 'mms', 'heroicon-o-calculator', 'حسابات الحوافز', 'احتساب حوافز المساعدين وشرائحها وقواعدها'),
         $m('المالية', 'payroll', 'mms', 'heroicon-o-banknotes', 'دورات الرواتب', 'المسير الشهري والاعتمادات وقيد اليومية'),
@@ -36,6 +36,7 @@ return [
         $m('المالية', 'finconfig', 'mms', 'heroicon-o-cog-8-tooth', 'الإعدادات المالية', 'نسب الحوافز وأرقام الرواتب والقانون'),
 
         $m('الموارد البشرية', 'employees', 'mms', 'heroicon-o-identification', 'الموظفون', 'الملفات والوثائق وهيكل الراتب والمسميات'),
+        $m('الموارد البشرية', 'companies', 'mms', 'heroicon-o-building-office-2', 'الشركات', 'الرخص التجارية وبطاقات المنشأة وانتهاؤها'),
         $m('الموارد البشرية', 'employeerequests', 'mms', 'heroicon-o-hand-raised', 'طلبات الموظفين', 'السلف والتذاكر المقدمة والشهادات'),
         $m('الموارد البشرية', 'leave', 'mms', 'heroicon-o-calendar', 'الإجازات', 'الطلبات والاعتماد وسجل الغياب'),
         $m('الموارد البشرية', 'tickets', 'mms', 'heroicon-o-paper-airplane', 'تذاكر السفر ونهاية الخدمة', 'التذاكر وسند إقفال المكافأة'),

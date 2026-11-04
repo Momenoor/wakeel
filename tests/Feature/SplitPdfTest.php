@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Mms\Pages\CompressPdf;
+use App\Filament\Mms\Pages\MergePdf;
 use App\Filament\Mms\Pages\SplitPdf;
 use App\Models\Party;
 use App\Models\User;
@@ -189,7 +191,7 @@ class SplitPdfTest extends TestCase
     {
         $this->actingAs($this->userWith());
 
-        $response = $this->get(route('split-pdf.onedrive', ['item' => 'report-id']));
+        $response = $this->get(route('pdf-tools.onedrive', ['item' => 'report-id']));
 
         $response->assertOk();
         $this->assertSame('application/pdf', $response->headers->get('Content-Type'));
@@ -203,20 +205,20 @@ class SplitPdfTest extends TestCase
 
     public function test_the_onedrive_route_refuses_what_is_not_theirs_not_a_pdf_or_not_allowed(): void
     {
-        $this->get(route('split-pdf.onedrive', ['item' => 'report-id']))->assertRedirect();
+        $this->get(route('pdf-tools.onedrive', ['item' => 'report-id']))->assertRedirect();
 
         $this->actingAs($this->userWith([]));
-        $this->get(route('split-pdf.onedrive', ['item' => 'report-id']))->assertForbidden();
+        $this->get(route('pdf-tools.onedrive', ['item' => 'report-id']))->assertForbidden();
 
         $this->actingAs($this->userWith());
         // Not in their drive.
-        $this->get(route('split-pdf.onedrive', ['item' => 'someone-elses-id']))->assertNotFound();
+        $this->get(route('pdf-tools.onedrive', ['item' => 'someone-elses-id']))->assertNotFound();
         // A folder, a Word file, and a "PDF" whose contents are not one.
-        $this->get(route('split-pdf.onedrive', ['item' => 'court-id']))->assertForbidden();
-        $this->get(route('split-pdf.onedrive', ['item' => 'letter-id']))->assertForbidden();
-        $this->get(route('split-pdf.onedrive', ['item' => 'fake-id']))->assertForbidden();
+        $this->get(route('pdf-tools.onedrive', ['item' => 'court-id']))->assertForbidden();
+        $this->get(route('pdf-tools.onedrive', ['item' => 'letter-id']))->assertForbidden();
+        $this->get(route('pdf-tools.onedrive', ['item' => 'fake-id']))->assertForbidden();
         // Never an address: only an id is taken.
-        $this->get('/split-pdf/onedrive/'.rawurlencode('https://evil.example/x.pdf'))->assertNotFound();
+        $this->get('/pdf-tools/onedrive/'.rawurlencode('https://evil.example/x.pdf'))->assertNotFound();
 
         Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'download.od/letter') || str_contains($request->url(), 'evil.example'));
     }
@@ -235,6 +237,60 @@ class SplitPdfTest extends TestCase
         $this->assertSame(['file' => 'Other.pdf', 'source' => 'upload', 'mode' => 'pages', 'limit' => 10, 'parts' => 3, 'pages' => 25], $byPages->properties->all());
         $this->assertNull($bySize->subject_id);
         $this->assertSame([], Storage::disk('local')->allFiles());
+    }
+
+    public function test_merge_and_compress_open_each_for_its_own_permission_and_hand_on_only_to_the_tools_allowed(): void
+    {
+        $this->actingAs($this->userWith([ScreenPermissions::MERGE_PDF]));
+        $this->get(MergePdf::getUrl())->assertOk()->assertSee('pdfMerger', false)->assertSee(__('Choose a folder'));
+        $this->get(CompressPdf::getUrl())->assertForbidden();
+        $this->get(SplitPdf::getUrl())->assertForbidden();
+        // Its files from OneDrive too.
+        $this->get(route('pdf-tools.onedrive', ['item' => 'report-id']))->assertOk();
+        $this->assertSame(['compress' => null, 'split' => null], MergePdf::nextSteps());
+
+        $this->actingAs($this->userWith(ScreenPermissions::PDF_TOOLS));
+        $this->get(CompressPdf::getUrl())->assertOk()->assertSee('pdfCompressor', false)->assertSee(__('Medium'));
+        $this->assertSame(
+            ['compress' => CompressPdf::getUrl(['handoff' => 1]), 'split' => SplitPdf::getUrl(['handoff' => 1])],
+            MergePdf::nextSteps(),
+        );
+        $this->assertStringContainsString('handoff=1', MergePdf::nextSteps()['split']);
+    }
+
+    public function test_a_merge_and_a_compression_leave_only_a_line_in_the_activity_log(): void
+    {
+        $this->actingAs($me = $this->userWith(ScreenPermissions::PDF_TOOLS));
+
+        Livewire::test(MergePdf::class)->call('recordMerge', 'Bundle.pdf', ['1 - claim.pdf', '2 - reply.pdf'], 'onedrive', 40);
+        Livewire::test(CompressPdf::class)->call('recordCompress', 'Bundle.pdf', 'handoff', 'extreme', 9_000_000, 2_500_000, 40);
+
+        $merge = Activity::query()->where('log_name', MergePdf::LOG)->sole();
+        $this->assertSame($me->getKey(), (int) $merge->causer_id);
+        $this->assertSame(['file' => 'Bundle.pdf', 'files' => ['1 - claim.pdf', '2 - reply.pdf'], 'source' => 'onedrive', 'pages' => 40], $merge->properties->all());
+
+        $compress = Activity::query()->where('log_name', CompressPdf::LOG)->sole();
+        $this->assertSame('compress', $compress->event);
+        // A level it does not know is kept as the usual one.
+        $this->assertSame(['file' => 'Bundle.pdf', 'source' => 'handoff', 'level' => 'balanced', 'before' => 9_000_000, 'after' => 2_500_000, 'pages' => 40], $compress->properties->all());
+        $this->assertSame([], Storage::disk('local')->allFiles());
+    }
+
+    public function test_merging_and_compressing_are_given_to_whoever_splits_pdfs(): void
+    {
+        $clerk = Role::create(['name' => 'clerk', 'guard_name' => 'web']);
+        $clerk->givePermissionTo(Permission::findOrCreate(ScreenPermissions::SPLIT_PDF, 'web'));
+        $viewer = Role::create(['name' => 'viewer', 'guard_name' => 'web']);
+        $viewer->givePermissionTo(Permission::findOrCreate('View:Matter', 'web'));
+
+        DB::table('permissions')->whereIn('name', [ScreenPermissions::MERGE_PDF, ScreenPermissions::COMPRESS_PDF])->delete();
+        (require database_path('migrations/2020_01_01_000235_merge_and_compress_pdf.php'))->up();
+
+        foreach ([ScreenPermissions::MERGE_PDF, ScreenPermissions::COMPRESS_PDF] as $permission) {
+            $this->assertTrue($clerk->fresh()->hasPermissionTo($permission));
+            $this->assertFalse($viewer->fresh()->hasPermissionTo($permission));
+            $this->assertContains($permission, config('filament-shield.custom_permissions'));
+        }
     }
 
     public function test_the_migration_grants_the_page_to_those_who_add_files_to_matters_and_the_admin_role(): void
