@@ -24,9 +24,15 @@ const INHERITED = ['Resources', 'MediaBox', 'CropBox', 'Rotate'].map((name) => P
 // Gives the browser a moment — to draw the progress, take a click on Cancel — every so often, not every step.
 let lastPause = 0;
 
+// Through a message, not a timer: a browser holds a timer back for a second or more while the tab is out of sight,
+// which would leave a long job all but stopped whenever the user looks at another tab.
 export async function pause(signal) {
     if (performance.now() - lastPause > 30) {
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise((resolve) => {
+            const channel = new MessageChannel();
+            channel.port1.onmessage = () => resolve();
+            channel.port2.postMessage(null);
+        });
         lastPause = performance.now();
     }
 

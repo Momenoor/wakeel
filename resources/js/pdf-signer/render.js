@@ -32,15 +32,15 @@ function factory(files) {
 const WasmFactory = factory(wasmFiles);
 const StandardFontDataFactory = factory(fontFiles);
 
+// A PDF opened by pdf.js with the build's decoders and fonts; `options` adds to getDocument's (a worker to reuse …).
+export function loadDocument(bytes, options = {}) {
+    return getDocument({ data: bytes, WasmFactory, StandardFontDataFactory, isEvalSupported: false, ...options }).promise;
+}
+
 // The document, each page, and each page's viewport at scale 1 — its display space in PDF points.
 export async function openPdf(bytes) {
-    const doc = await getDocument({
-        // pdf.js hands the buffer to its worker: a copy, so the original stays ours for writing.
-        data: bytes.slice(),
-        WasmFactory,
-        StandardFontDataFactory,
-        isEvalSupported: false,
-    }).promise;
+    // pdf.js hands the buffer to its worker: a copy, so the original stays ours for writing.
+    const doc = await loadDocument(bytes.slice());
 
     const pages = [];
 

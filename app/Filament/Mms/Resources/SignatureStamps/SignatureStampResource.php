@@ -43,7 +43,7 @@ class SignatureStampResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedFingerPrint;
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 100;
 
     /** The form's helper fields: how the image is given — not columns of the record. */
     public const IMAGE_FIELDS = ['image_source', 'upload', 'drawing'];

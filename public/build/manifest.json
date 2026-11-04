@@ -1,4 +1,8 @@
 {
+  "_browser-DED7DMPW.js": {
+    "file": "assets/browser-DED7DMPW.js",
+    "name": "browser"
+  },
   "_drawing-hXHplTkP.js": {
     "file": "assets/drawing-hXHplTkP.js",
     "name": "drawing"
@@ -7,15 +11,39 @@
     "file": "assets/is-pdf-rCPWVA7f.js",
     "name": "is-pdf"
   },
-  "_pdf-lib-BW4opCcU.js": {
-    "file": "assets/pdf-lib-BW4opCcU.js",
+  "_pdf-lib-BZCeS23Y.js": {
+    "file": "assets/pdf-lib-BZCeS23Y.js",
     "name": "pdf-lib"
   },
-  "_split-C5MW3pd3.js": {
-    "file": "assets/split-C5MW3pd3.js",
+  "_render-D2M0ANcJ.js": {
+    "file": "assets/render-D2M0ANcJ.js",
+    "name": "render",
+    "assets": [
+      "assets/jbig2-CgUnd2ou.wasm",
+      "assets/openjpeg-CS7joWBh.wasm",
+      "assets/qcms_bg-CUfpE_h9.wasm",
+      "assets/FoxitDingbats-BaQLufoW.pfb",
+      "assets/FoxitFixed-Dyd5Nipw.pfb",
+      "assets/FoxitFixedBold-D5TuYRwj.pfb",
+      "assets/FoxitFixedBoldItalic-BqlXQ_Yv.pfb",
+      "assets/FoxitFixedItalic-DqjQkmbS.pfb",
+      "assets/FoxitSerif-qbgiDIe-.pfb",
+      "assets/FoxitSerifBold-DZZ4CclT.pfb",
+      "assets/FoxitSerifBoldItalic-DSQtwd_X.pfb",
+      "assets/FoxitSerifItalic-CQs5lx9Y.pfb",
+      "assets/FoxitSymbol-BVtbc20u.pfb",
+      "assets/LiberationSans-Bold-BPt4bU5Z.ttf",
+      "assets/LiberationSans-BoldItalic-Bj53-jFw.ttf",
+      "assets/LiberationSans-Italic-5QhGB3P9.ttf",
+      "assets/LiberationSans-Regular-cbskN6YR.ttf",
+      "assets/pdf.worker.min-wgc6bjNh.mjs"
+    ]
+  },
+  "_split-CAd6MqFT.js": {
+    "file": "assets/split-CAd6MqFT.js",
     "name": "split",
     "imports": [
-      "_pdf-lib-BW4opCcU.js"
+      "_pdf-lib-BZCeS23Y.js"
     ]
   },
   "node_modules/pdfjs-dist/build/pdf.worker.min.mjs": {
@@ -91,7 +119,7 @@
     "src": "node_modules/pdfjs-dist/wasm/qcms_bg.wasm"
   },
   "resources/css/app.css": {
-    "file": "assets/app-DWtBCEwF.css",
+    "file": "assets/app-CyATdnGc.css",
     "src": "resources/css/app.css",
     "isEntry": true,
     "name": "app",
@@ -118,76 +146,72 @@
     ]
   },
   "resources/js/app.js": {
-    "file": "assets/app-CMFZDbiQ.js",
+    "file": "assets/app-DjPZQO9f.js",
     "name": "app",
     "src": "resources/js/app.js",
     "isEntry": true,
     "imports": [
-      "_pdf-lib-BW4opCcU.js"
+      "_pdf-lib-BZCeS23Y.js"
     ]
   },
   "resources/js/pdf-compressor.js": {
-    "file": "assets/pdf-compressor-BaKM29qo.js",
+    "file": "assets/pdf-compressor-BHUGoIhV.js",
     "name": "pdf-compressor",
     "src": "resources/js/pdf-compressor.js",
     "isEntry": true,
     "imports": [
-      "_split-C5MW3pd3.js",
+      "_split-CAd6MqFT.js",
       "_is-pdf-rCPWVA7f.js",
-      "_pdf-lib-BW4opCcU.js"
+      "_browser-DED7DMPW.js",
+      "_pdf-lib-BZCeS23Y.js"
+    ],
+    "dynamicImports": [
+      "resources/js/pdf-compressor/draw-image.js"
+    ]
+  },
+  "resources/js/pdf-compressor/draw-image.js": {
+    "file": "assets/draw-image-CGqvDS45.js",
+    "name": "draw-image",
+    "src": "resources/js/pdf-compressor/draw-image.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "_pdf-lib-BZCeS23Y.js",
+      "_render-D2M0ANcJ.js"
     ]
   },
   "resources/js/pdf-merger.js": {
-    "file": "assets/pdf-merger-lQCWoVoi.js",
+    "file": "assets/pdf-merger-BewS-eRC.js",
     "name": "pdf-merger",
     "src": "resources/js/pdf-merger.js",
     "isEntry": true,
     "imports": [
-      "_split-C5MW3pd3.js",
+      "_split-CAd6MqFT.js",
       "_is-pdf-rCPWVA7f.js",
-      "_pdf-lib-BW4opCcU.js"
+      "_pdf-lib-BZCeS23Y.js"
     ]
   },
   "resources/js/pdf-signer.js": {
-    "file": "assets/pdf-signer--zUdM7jZ.js",
+    "file": "assets/pdf-signer-DQTP6vQF.js",
     "name": "pdf-signer",
     "src": "resources/js/pdf-signer.js",
     "isEntry": true,
     "imports": [
       "_drawing-hXHplTkP.js",
-      "_pdf-lib-BW4opCcU.js",
+      "_pdf-lib-BZCeS23Y.js",
+      "_render-D2M0ANcJ.js",
       "_is-pdf-rCPWVA7f.js"
-    ],
-    "assets": [
-      "assets/jbig2-CgUnd2ou.wasm",
-      "assets/openjpeg-CS7joWBh.wasm",
-      "assets/qcms_bg-CUfpE_h9.wasm",
-      "assets/FoxitDingbats-BaQLufoW.pfb",
-      "assets/FoxitFixed-Dyd5Nipw.pfb",
-      "assets/FoxitFixedBold-D5TuYRwj.pfb",
-      "assets/FoxitFixedBoldItalic-BqlXQ_Yv.pfb",
-      "assets/FoxitFixedItalic-DqjQkmbS.pfb",
-      "assets/FoxitSerif-qbgiDIe-.pfb",
-      "assets/FoxitSerifBold-DZZ4CclT.pfb",
-      "assets/FoxitSerifBoldItalic-DSQtwd_X.pfb",
-      "assets/FoxitSerifItalic-CQs5lx9Y.pfb",
-      "assets/FoxitSymbol-BVtbc20u.pfb",
-      "assets/LiberationSans-Bold-BPt4bU5Z.ttf",
-      "assets/LiberationSans-BoldItalic-Bj53-jFw.ttf",
-      "assets/LiberationSans-Italic-5QhGB3P9.ttf",
-      "assets/LiberationSans-Regular-cbskN6YR.ttf",
-      "assets/pdf.worker.min-wgc6bjNh.mjs"
     ]
   },
   "resources/js/pdf-splitter.js": {
-    "file": "assets/pdf-splitter-BOzKQUda.js",
+    "file": "assets/pdf-splitter-DgIk056h.js",
     "name": "pdf-splitter",
     "src": "resources/js/pdf-splitter.js",
     "isEntry": true,
     "imports": [
-      "_split-C5MW3pd3.js",
+      "_split-CAd6MqFT.js",
       "_is-pdf-rCPWVA7f.js",
-      "_pdf-lib-BW4opCcU.js"
+      "_browser-DED7DMPW.js",
+      "_pdf-lib-BZCeS23Y.js"
     ]
   },
   "resources/js/rich-text-field.js": {
