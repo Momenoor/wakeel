@@ -232,13 +232,95 @@ class ReportReviewWhatsApp
             return true;
         }
 
-        match ($action) {
-            'approve', 'reject', 'changes' => $this->ask($delivery, $action),
-            'done' => $this->finish($delivery),
-            'cancel' => $this->cancel($delivery),
+        // One press decides: Approve and Reject at once, with whatever was sent before it (held()); Needs changes
+        // at once too when something was, else it asks what to change.
+        $held = in_array($action, ['approve', 'reject', 'changes'], true) && $this->takeHeld($delivery);
+
+        match (true) {
+            $action === 'approve' => $this->decide($delivery, 'approved'),
+            $action === 'reject' => $this->decide($delivery, 'rejected'),
+            $action === 'changes' && $held => $this->decide($delivery, 'needs_changes'),
+            $action === 'changes' => $this->ask($delivery, $action),
+            $action === 'done' => $this->finish($delivery),
+            default => $this->cancel($delivery),
         };
 
         return true;
+    }
+
+    /**
+     * A text, picture or file a reviewer sends before pressing a decision — not one being asked for (receive()),
+     * nor a signed copy of minutes (MinutesSignedCopies, asked first): held for the next decision they press on a
+     * report still waiting for them, and said once. False when they have none waiting.
+     *
+     * @param  array<string, mixed>  $message
+     */
+    public function hold(array $message): bool
+    {
+        $from = (string) ($message['from'] ?? '');
+
+        if (! in_array($message['type'] ?? null, ['text', 'image', 'document'], true) || $from === '') {
+            return false;
+        }
+
+        return DB::transaction(function () use ($from, $message): bool {
+            $delivery = ReportReviewDelivery::query()
+                ->where('phone', $from)
+                ->where('status', ReportReviewDelivery::SENT)
+                ->whereNull('awaiting')
+                ->whereHas('request', fn ($q) => $q->whereIn('status', [RequestStatus::PENDING, RequestStatus::DISPUTED]))
+                ->with('request.matter')
+                ->latest('id')
+                ->lockForUpdate()
+                ->first();
+
+            if (! $delivery) {
+                return false;
+            }
+
+            if ($this->seen($delivery, $message)) {
+                return true;
+            }
+
+            $first = blank($delivery->pending_texts) && blank($delivery->pending_files);
+            $this->keep($delivery, $message);
+
+            if ($first) {
+                $this->reply($delivery, __('Received. It goes with the next decision you press on a report: Approve, Reject or Needs changes.'));
+            }
+
+            return true;
+        }, self::ATTEMPTS);
+    }
+
+    /**
+     * What the reviewer sent before pressing (held()), on any report of theirs, moved onto this one — whether
+     * anything was.
+     */
+    private function takeHeld(ReportReviewDelivery $delivery): bool
+    {
+        $texts = [];
+        $files = [];
+
+        ReportReviewDelivery::query()
+            ->where('phone', $delivery->phone)
+            ->where('status', ReportReviewDelivery::SENT)
+            ->whereNull('awaiting')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get()
+            ->each(function (ReportReviewDelivery $held) use (&$texts, &$files, $delivery): void {
+                $texts = [...$texts, ...(array) $held->pending_texts];
+                $files = [...$files, ...(array) $held->pending_files];
+
+                if (! $held->is($delivery) && (filled($held->pending_texts) || filled($held->pending_files))) {
+                    $held->update(['pending_texts' => [], 'pending_files' => []]);
+                }
+            });
+
+        $delivery->forceFill(['pending_texts' => $texts, 'pending_files' => $files]);
+
+        return $texts !== [] || $files !== [];
     }
 
     /** The text or file of a decision's comment being sent. */
@@ -259,6 +341,19 @@ class ReportReviewWhatsApp
             return (bool) $delivery;
         }
 
+        $this->keep($delivery, $message);
+
+        return true;
+    }
+
+    /**
+     * A text, picture or file added to what a delivery holds for its decision — a picture's or file's caption with
+     * the texts, the file kept in a folder of its own under the name it was sent with.
+     *
+     * @param  array<string, mixed>  $message
+     */
+    private function keep(ReportReviewDelivery $delivery, array $message): void
+    {
         $texts = (array) $delivery->pending_texts;
         $files = (array) $delivery->pending_files;
         $type = $message['type'];
@@ -269,7 +364,7 @@ class ReportReviewWhatsApp
             $media = (array) ($message[$type] ?? []);
 
             if (blank($media['id'] ?? null)) {
-                return true;
+                return;
             }
 
             $file = $this->whatsapp->download((string) $media['id']);
@@ -287,11 +382,9 @@ class ReportReviewWhatsApp
         }
 
         $delivery->update(['pending_texts' => array_values(array_filter($texts)), 'pending_files' => $files]);
-
-        return true;
     }
 
-    /** A decision pressed: its comment — text, pictures or files (what is wrong; to approve, if they like) — then its button. */
+    /** Needs changes pressed with nothing sent before it: what has to change — text, pictures or files — then its button. */
     private function ask(ReportReviewDelivery $delivery, string $action): void
     {
         // What they send next is for this request: one begun before is cancelled (and said), never mixed in.
@@ -303,9 +396,7 @@ class ReportReviewWhatsApp
 
         $delivery->update(['awaiting' => $action, 'pending_texts' => [], 'pending_files' => []]);
 
-        $this->buttons($delivery, $this->about($delivery).($action === 'approve'
-            ? __('Press "Approve" to approve it as it is — or first send a comment (text, pictures or files, in as many messages as you like), then press "Approve".')
-            : __('Send what has to change — text, pictures or files, in as many messages as you like — then press "Send decision".')));
+        $this->buttons($delivery, $this->about($delivery).__('Send what has to change — text, pictures or files, in as many messages as you like — then press "Send decision".'));
     }
 
     /** "Request #12 — matter 123/2026" first, so a reviewer with several to decide knows which one a message is about. */
@@ -352,7 +443,11 @@ class ReportReviewWhatsApp
         $request = $delivery->request;
         $service = RequestServiceFactory::make($request);
         $data = [
-            'approved_comment' => trim(implode("\n", (array) $delivery->pending_texts)) ?: ($decision === 'approved' ? null : __('See the attached files.')),
+            'approved_comment' => trim(implode("\n", (array) $delivery->pending_texts)) ?: match (true) {
+                $decision === 'approved' => null,
+                filled($delivery->pending_files) => __('See the attached files.'),
+                default => __('Rejected on WhatsApp.'),
+            },
             'attachments' => array_map(fn (string $path): array => ['path' => $path, 'source' => 'whatsapp'], (array) $delivery->pending_files),
         ];
 

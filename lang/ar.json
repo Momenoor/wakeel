@@ -3453,6 +3453,8 @@
     "The reply is sent": "أُرسل الرد",
     "Whom the reply goes to is missing.": "لم يُحدَّد إلى من يذهب الرد.",
     "Also to": "إلى أيضاً",
+    "Received. It goes with the next decision you press on a report: Approve, Reject or Needs changes.": "وصل. يذهب مع القرار التالي الذي تضغطه على تقرير: اعتماد أو رفض أو يحتاج تعديلات.",
+    "Rejected on WhatsApp.": "رُفض عبر واتساب.",
     "Permissions of their own": "صلاحياته الخاصة",
     "Beside their roles': each ticked here is theirs whatever their roles say, and stays theirs if their role changes. Grouped by what it is on.": "إلى جانب صلاحيات أدواره: كل ما يُعلَّم هنا له مهما قالت أدواره، ويبقى له إن تغيّر دوره. مجمَّعة بحسب ما هي عليه.",
     "Merge into one party": "دمج في طرف واحد",

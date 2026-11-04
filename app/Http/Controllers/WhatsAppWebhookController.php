@@ -48,7 +48,9 @@ class WhatsAppWebhookController extends Controller
                 foreach ($messages as $message) {
                     try {
                         // A report being reviewed (a button, or the text of a rejection) first; anything else may be a signed copy.
-                        $reviews->receive($message) || $copies->receive($message);
+                        // A review's button or the comment it asked for; a signed copy of minutes; else, from a reviewer
+                        // with a report waiting, held for the next decision they press.
+                        $reviews->receive($message) || $copies->receive($message) || $reviews->hold($message);
                     } catch (\Throwable $e) {
                         Log::error('WhatsApp message not taken in', ['id' => $message['id'] ?? null, 'error' => $e->getMessage()]);
                     }
