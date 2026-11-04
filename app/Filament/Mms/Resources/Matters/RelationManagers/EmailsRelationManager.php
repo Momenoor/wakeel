@@ -198,6 +198,15 @@ class EmailsRelationManager extends RelationManager
                     ->query(fn (Builder $query): Builder => MatterCreditors::withoutCreditor($query)),
             ])
             ->recordActions([
+                // The email's PDF, as kept — on the row, with Reply and Details.
+                Action::make('open')
+                    ->label(__('Open the email'))
+                    ->icon('heroicon-o-document-text')
+                    ->color('gray')
+                    ->visible(fn (MatterEmail $record): bool => self::pdfUrl($record) !== null)
+                    // Opened: read by whoever opened it.
+                    ->extraAttributes(fn (MatterEmail $record): array => ['wire:click' => 'markEmailRead('.$record->getKey().')'])
+                    ->url(fn (MatterEmail $record): ?string => self::pdfUrl($record), shouldOpenInNewTab: true),
                 // An answer to an email that came in: to whoever wrote it (and their party's own address when they wrote
                 // from another of theirs), copied to the others it reached, under the same thread — kept beside it.
                 Action::make('reply')
@@ -294,17 +303,8 @@ class EmailsRelationManager extends RelationManager
                     ->schema(fn (MatterEmail $record): array => self::details($record))
                     ->modalSubmitAction(false)
                     ->modalCancelActionLabel(__('Close')),
-                // Reply and Details on the row; everything else in its "…" menu.
+                // Open, Reply and Details on the row; everything else in its "…" menu.
                 ActionGroup::make([
-                    // The email's PDF, as kept.
-                    Action::make('open')
-                        ->label(__('Open the email'))
-                        ->icon('heroicon-o-document-text')
-                        ->color('gray')
-                        ->visible(fn (MatterEmail $record): bool => self::pdfUrl($record) !== null)
-                        // Opened: read by whoever opened it.
-                        ->extraAttributes(fn (MatterEmail $record): array => ['wire:click' => 'markEmailRead('.$record->getKey().')'])
-                        ->url(fn (MatterEmail $record): ?string => self::pdfUrl($record), shouldOpenInNewTab: true),
                     // Filed on the wrong matter: to another, with its files and its step in the progress.
                     Action::make('move')
                         ->label(__('Move to another matter'))
