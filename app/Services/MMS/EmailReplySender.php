@@ -10,7 +10,7 @@ use App\Models\Party;
 use App\Services\MMS\Letters\LetterMailer;
 use App\Services\MMS\Letters\SharedAttachments;
 use App\Support\Addresses;
-use App\Support\Documents;
+use App\Support\Dates;
 use Illuminate\Support\Facades\Mail;
 use RuntimeException;
 use Throwable;
@@ -77,9 +77,66 @@ final class EmailReplySender
     }
 
     /**
+     * What the reply starts from: room to write, then the email replied to quoted under a line — whom it was from,
+     * when, to whom, its subject, and its text as kept (an email from before the text was kept: its header alone,
+     * the text brought in with Quote its text — withText()).
+     */
+    public static function startingBody(MatterEmail $email): string
+    {
+        return '<p></p>'.self::quote($email, $email->body);
+    }
+
+    /**
+     * The reply as written so far, its quote made again with the email's text now read: what was written above
+     * the line stays.
+     */
+    public static function withText(string $written, MatterEmail $email, string $text): string
+    {
+        $above = (string) (preg_match('~^(.*?)<hr\b~is', $written, $m) ? $m[1] : $written);
+
+        return ($above !== '' ? $above : '<p></p>').self::quote($email, $text);
+    }
+
+    /**
+     * The email replied to, quoted: its header lines in the language of its subject, then its text — cleaned of
+     * what an email's HTML carries that the editor cannot (its document, styles, scripts, embedded pictures).
+     */
+    public static function quote(MatterEmail $email, ?string $bodyHtml): string
+    {
+        $arabic = preg_match('/\p{Arabic}/u', (string) $email->subject) === 1;
+        $labels = $arabic
+            ? ['from' => 'من', 'at' => 'التاريخ', 'to' => 'إلى', 'cc' => 'نسخة', 'subject' => 'الموضوع']
+            : ['from' => 'From', 'at' => 'Sent', 'to' => 'To', 'cc' => 'Cc', 'subject' => 'Subject'];
+        $lines = [
+            [$labels['from'], (string) $email->from],
+            [$labels['at'], $email->at ? Dates::dateTime($email->at) : ''],
+            [$labels['to'], implode('; ', (array) $email->to)],
+            [$labels['cc'], implode('; ', (array) $email->cc)],
+            [$labels['subject'], (string) $email->subject],
+        ];
+        $header = implode('<br>', array_map(
+            fn (array $line): string => '<strong>'.e($line[0]).':</strong> '.e($line[1]),
+            array_values(array_filter($lines, fn (array $line): bool => $line[1] !== '')),
+        ));
+
+        return '<hr><p>'.$header.'</p>'.self::cleanHtml((string) $bodyHtml);
+    }
+
+    /** An email's HTML as the editor takes it: the body alone, without styles, scripts, comments or embedded pictures. */
+    private static function cleanHtml(string $html): string
+    {
+        if (preg_match('~<body[^>]*>(.*)</body>~is', $html, $m)) {
+            $html = $m[1];
+        }
+        $html = (string) preg_replace(['~<(style|script|head|title)\b[^>]*>.*?</\1>~is', '~<!--.*?-->~s', '~<img\b[^>]*src=["\']cid:[^>]*>~i', '~<\?xml[^>]*>~i'], '', $html);
+
+        return trim($html);
+    }
+
+    /**
      * The reply sent, kept with the matter beside the email it answers, and what went wrong if anything did.
      *
-     * @param  array<string, mixed>  $data  the screen's: sender, to, cc, contacts_cc, subject, body, attachments, onedrive_files, attach_original
+     * @param  array<string, mixed>  $data  the screen's: sender, to, cc, contacts_cc, subject, body, attachments, onedrive_files
      * @return array{sent: bool, errors: list<string>}
      */
     public function send(MatterEmail $email, array $data, ?int $userId): array
@@ -100,15 +157,13 @@ final class EmailReplySender
         $subject = trim((string) ($data['subject'] ?? '')) ?: self::subject($email);
         $body = (string) ($data['body'] ?? '');
         $arabic = preg_match('/\p{Arabic}/u', $subject.strip_tags($body)) === 1;
-        $files = [
-            ...(! empty($data['attach_original']) ? self::originalPdf($email) : []),
-            ...LetterMailer::attachedFiles(EmailSendFields::uploaded($data, $matter)),
-        ];
+        $files = LetterMailer::attachedFiles(EmailSendFields::uploaded($data, $matter));
         $errors = [];
 
         try {
-            // Over what an email takes: the files go by a link, in a folder named after the reply.
-            ['files' => $files, 'shared' => $shared] = $this->shared->offload($matter, $files, 0, $subject, $to);
+            // Over what an email takes: the files go by a link, in a folder named after the reply — the one made
+            // with Get the link now, when it was.
+            ['files' => $files, 'shared' => $shared] = $this->shared->offload($matter, $files, 0, $subject, $to, $email->shared_files);
 
             if ($shared !== null && ! $shared['anyone']) {
                 $errors[] = __('Microsoft 365 allows no links for anyone here: the link to the files opens for the office\'s own accounts only.');
@@ -133,7 +188,11 @@ final class EmailReplySender
 
         // Remembered beside the email it answers, for its own replies to be found.
         $record = MatterEmail::recordSent($email->matter_id, $email, $senderKey, $sent?->getMessageId(), $subject, [...$to, ...$cc], $userId);
-        $record?->update(['parent_id' => $email->getKey(), 'matched_by' => MatterEmail::BY_REPLY]);
+        $record?->update(['parent_id' => $email->getKey(), 'matched_by' => MatterEmail::BY_REPLY, 'shared_files' => $shared]);
+        // The link was this reply's: the next one starts afresh.
+        if ($email->shared_files !== null) {
+            $email->forceFill(['shared_files' => null])->save();
+        }
 
         if ($notCopied = SentFolder::copyQuietly($senderKey, $sent?->toString())) {
             $errors[] = $notCopied;
@@ -148,28 +207,6 @@ final class EmailReplySender
         EmailSendFields::forget($data);
 
         return ['sent' => true, 'errors' => $errors];
-    }
-
-    /** The email replied to, as its PDF kept in the system — nothing when none was kept. */
-    public static function hasOriginalPdf(MatterEmail $email): bool
-    {
-        return self::originalPdf($email) !== [];
-    }
-
-    /**
-     * @return list<array{name: string, data: string, mime: string}>
-     */
-    private static function originalPdf(MatterEmail $email): array
-    {
-        $pdf = ((array) $email->files)[0] ?? null;
-        $path = is_array($pdf) ? (string) ($pdf['path'] ?? '') : '';
-        $storage = $path !== '' ? Documents::storage($path) : null;
-
-        if ($storage === null || ! str_ends_with(mb_strtolower($path), '.pdf') || ! $storage->exists($path)) {
-            return [];
-        }
-
-        return [['name' => (string) ($pdf['name'] ?: basename($path)), 'data' => (string) $storage->get($path), 'mime' => 'application/pdf']];
     }
 
     /** The party whose other email on the matter the email came from, if it is one's. */

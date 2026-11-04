@@ -7,6 +7,7 @@ use App\Models\MatterOneDriveFolder;
 use App\Services\MMS\MatterOneDriveExplorer;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Support\RequestMemo;
+use Closure;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Support\Exceptions\Halt;
@@ -27,29 +28,38 @@ final class OneDriveFilePicker
     {
         $folders = fn (): Collection => self::folders($matter);
         // The listing (OneDrive, the explorer's own cache apart) once a request however many times the field is drawn.
-        $options = fn (string $words = ''): array => RequestMemo::remember('onedrive-picker.'.($matter?->getKey() ?? 0).'.'.md5($words), fn (): array => $folders()
-            ->flatMap(function (MatterOneDriveFolder $folder) use ($words, $folders): array {
+        // The files of the folders, each an option — read from OneDrive (the kept list, when there is one), or as
+        // kept alone, without reading (the screen drawn, before the list is opened).
+        $list = fn (Closure $files): array => $folders()
+            ->flatMap(function (MatterOneDriveFolder $folder) use ($files, $folders): array {
                 try {
-                    $files = app(MatterOneDriveExplorer::class)->files($folder, $words);
+                    $found = $files($folder);
                 } catch (Throwable) {
                     return [];
                 }
 
                 $whose = $folders()->count() > 1 ? $folder->party?->name : null;
 
-                return collect($files)->mapWithKeys(fn (array $file): array => [
+                return collect($found)->mapWithKeys(fn (array $file): array => [
                     MatterOneDriveFolders::fileKey($folder, $file['id']) => self::label([$file['name'], $file['where'], $whose]),
                 ])->all();
             })
-            ->all());
+            ->all();
+        // Once a request however many times the field is drawn or asked.
+        $options = fn (string $words = ''): array => RequestMemo::remember('onedrive-picker.'.($matter?->getKey() ?? 0).'.'.md5($words),
+            fn (): array => $list(fn (MatterOneDriveFolder $folder): array => app(MatterOneDriveExplorer::class)->files($folder, $words)));
+        $kept = fn (): array => RequestMemo::remember('onedrive-picker-kept.'.($matter?->getKey() ?? 0),
+            fn (): array => $list(fn (MatterOneDriveFolder $folder): array => app(MatterOneDriveExplorer::class)->filesKept($folder)));
 
-        return Select::make($name)
+        return OneDriveFileSelect::make($name)
             ->label(__('From OneDrive'))
             ->multiple()
             ->searchable()
             // The labels carry their parts' directions (label()).
             ->allowHtml()
-            ->options(fn (): array => $options())
+            // Drawn with the list as kept — the screen never waits for OneDrive; opened, the list read (listing()).
+            ->options(fn (): array => $kept())
+            ->listing(fn (): array => $options())
             ->getSearchResultsUsing(fn (string $search): array => $options($search))
             ->getOptionLabelsUsing(fn (array $values): array => collect($values)
                 ->mapWithKeys(fn (string $value): array => [$value => self::label([self::names($matter, [$value])[0] ?? $value])])

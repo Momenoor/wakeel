@@ -249,7 +249,11 @@ class MatterOneDriveFilesTest extends TestCase
         // At once: those at the top and one folder down; by search, any in the folder.
         $field = EmailSendFields::oneDriveFiles($this->matter);
         // Each part in its own direction: an Arabic folder beside a Latin name.
-        $this->assertSame(['<bdi>report.pdf</bdi>', '<bdi>letter.docx</bdi> — <bdi>01 المراسلات</bdi>'], array_values($field->getOptions()));
+        // Drawn: nothing read yet; opened: the files read, and kept for the next draw.
+        $this->assertSame([], $field->getOptions());
+        $this->assertSame(['<bdi>report.pdf</bdi>', '<bdi>letter.docx</bdi> — <bdi>01 المراسلات</bdi>'], array_column($field->getOptionsForJs(), 'label'));
+        RequestMemo::flush();
+        $this->assertSame(['<bdi>report.pdf</bdi>', '<bdi>letter.docx</bdi> — <bdi>01 المراسلات</bdi>'], array_values(EmailSendFields::oneDriveFiles($this->matter)->getOptions()));
         $this->assertSame([$this->folder->id.'|inner-id'], array_keys($field->getSearchResults('letter')));
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
@@ -295,7 +299,7 @@ class MatterOneDriveFilesTest extends TestCase
     public function test_the_send_screens_list_of_files_is_kept_and_kept_up_with_what_the_system_adds(): void
     {
         $explorer = app(MatterOneDriveExplorer::class);
-        $labels = fn (): array => array_map('strip_tags', array_values(EmailSendFields::oneDriveFiles($this->matter)->getOptions()));
+        $labels = fn (): array => array_map('strip_tags', array_column(EmailSendFields::oneDriveFiles($this->matter)->getOptionsForJs(), 'label'));
 
         $this->assertSame(['report.pdf', 'letter.docx — 01 المراسلات'], $labels());
         $read = $this->listings;

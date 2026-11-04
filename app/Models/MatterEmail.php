@@ -70,7 +70,7 @@ class MatterEmail extends Model
     /** Written from Outlook in reply to an email that came in on the matter (MatterReplyCollector::handleOwn()): kept beside it. */
     public const BY_REPLY = 'reply';
 
-    protected $fillable = ['matter_id', 'direction', 'status', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'cc', 'content_hash', 'files', 'links', 'onedrive', 'candidates', 'matched_by', 'at', 'user_id', 'was_unread'];
+    protected $fillable = ['matter_id', 'direction', 'status', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'cc', 'content_hash', 'files', 'links', 'onedrive', 'candidates', 'matched_by', 'at', 'user_id', 'was_unread', 'body', 'shared_files'];
 
     protected function casts(): array
     {
@@ -83,6 +83,7 @@ class MatterEmail extends Model
             'candidates' => 'array',
             'at' => 'datetime',
             'was_unread' => 'boolean',
+            'shared_files' => 'array',
         ];
     }
 

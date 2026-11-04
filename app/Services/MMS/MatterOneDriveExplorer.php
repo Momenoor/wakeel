@@ -144,6 +144,16 @@ class MatterOneDriveExplorer
     }
 
     /**
+     * The send screens' list of the folder's files as kept (files()) — nothing read: none until the list is opened once.
+     *
+     * @return list<array{id: string, name: string, where: string}>
+     */
+    public function filesKept(MatterOneDriveFolder $folder): array
+    {
+        return (array) Cache::get($this->pickerKey($folder), []);
+    }
+
+    /**
      * The files at the top of the folder and in the folders in it, read from OneDrive — each with the folder it is in.
      *
      * @return list<array{id: string, name: string, where: string, in: string}>

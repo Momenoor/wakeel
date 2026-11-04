@@ -3453,6 +3453,8 @@
     "The reply is sent": "أُرسل الرد",
     "Whom the reply goes to is missing.": "لم يُحدَّد إلى من يذهب الرد.",
     "Also to": "إلى أيضاً",
+    "Quote its text": "اقتباس نصها",
+    "Its text is no longer in the mailbox it came to.": "لم يعد نصها في الصندوق الذي وصلت إليه.",
     "The addresses they wrote from. More of theirs, to copy in, under \"Other emails\".": "العناوين التي كتبوا منها. وعناوينهم الأخرى، لتُنسَخ، تحت «عناوين أخرى».",
     "The matter's other contacts: each ticked gets the email too — with everyone when sent to all at once, else an email of their own.": "جهات اتصال القضية الأخرى: كل من يُعلَّم تصله الرسالة أيضاً — مع الجميع حين تُرسل للكل معاً، وإلا في رسالة خاصة به.",
     "You": "أنت",

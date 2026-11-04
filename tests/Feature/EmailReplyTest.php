@@ -11,6 +11,7 @@ use App\Models\MatterParty;
 use App\Models\Party;
 use App\Models\User;
 use App\Services\MMS\EmailReplySender;
+use App\Services\MMS\MatterReplyCollector;
 use App\Services\MMS\SentFolder;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -72,6 +73,7 @@ class EmailReplyTest extends TestCase
             'message_id' => 'in-1@x.ae', 'subject' => 'استفسار عن القضية', 'from' => 'سالم <other@x.ae>',
             'to' => ['iflas@jpaemirates.com', 'colleague@x.ae'], 'cc' => ['cc@x.ae'], 'at' => now()->subHour(),
             'files' => [['name' => 'استفسار.pdf', 'path' => 'emails/in-1.pdf']],
+            'body' => '<html><head><style>p{color:red}</style></head><body><p>ما موعد الجلسة؟</p><img src="cid:logo"></body></html>',
         ]);
     }
 
@@ -84,7 +86,13 @@ class EmailReplyTest extends TestCase
         $this->assertSame([$this->salem->id], EmailReplySender::partyIds($this->email));
         $this->assertSame('RE: استفسار عن القضية', EmailReplySender::subject($this->email));
         $this->assertSame('Re: x', EmailReplySender::subject(new MatterEmail(['subject' => 'Re: x'])));
-        $this->assertTrue(EmailReplySender::hasOriginalPdf($this->email));
+
+        // Quoted under room to write: its header lines in its language, its text without the document around it.
+        $body = EmailReplySender::startingBody($this->email);
+        $this->assertStringStartsWith('<p></p><hr><p><strong>من:</strong> سالم &lt;other@x.ae&gt;<br><strong>التاريخ:</strong> ', $body);
+        $this->assertStringContainsString('<strong>الموضوع:</strong> استفسار عن القضية</p><p>ما موعد الجلسة؟</p>', $body);
+        $this->assertStringNotContainsString('style', $body);
+        $this->assertStringNotContainsString('cid:', $body);
 
         // One of those it reached is among the addresses he brought in: offered to copy in, not put in CC as well.
         MatterContact::create(['matter_id' => $this->matter->id, 'party_id' => $this->salem->id, 'owner_email' => 'main@x.ae', 'owner_name' => 'سالم', 'email' => 'colleague@x.ae']);
@@ -104,8 +112,7 @@ class EmailReplyTest extends TestCase
             ->assertSet('mountedActions.0.data.cc', ['colleague@x.ae', 'cc@x.ae'])
             ->assertSet('mountedActions.0.data.contacts_cc', ['other@x.ae', 'assistant@x.ae'])
             ->assertSet('mountedActions.0.data.subject', 'RE: استفسار عن القضية')
-            ->assertSet('mountedActions.0.data.attach_original', true)
-            ->setTableActionData(['body' => '<p>مرفق ما طلبتم.</p>'])
+            ->setTableActionData(['body' => '<p>مرفق ما طلبتم.</p>'.EmailReplySender::quote($this->email, $this->email->body)])
             ->callMountedTableAction()
             ->assertHasNoTableActionErrors()
             ->assertNotified(__('The reply is sent'));
@@ -117,11 +124,12 @@ class EmailReplyTest extends TestCase
         $this->assertSame(['colleague@x.ae', 'cc@x.ae', 'assistant@x.ae'], array_map(fn ($a) => $a->getAddress(), $reply->getCc()));
         $this->assertSame('RE: استفسار عن القضية', $reply->getSubject());
         $this->assertStringContainsString('مرفق ما طلبتم.', $reply->getHtmlBody());
+        // The email replied to, quoted in the text — not attached.
+        $this->assertStringContainsString('ما موعد الجلسة؟', $reply->getHtmlBody());
+        $this->assertCount(0, $reply->getAttachments());
         // Under the email it answers, in their mailbox.
         $this->assertSame('<in-1@x.ae>', $reply->getHeaders()->get('In-Reply-To')?->getBodyAsString());
         $this->assertSame('<in-1@x.ae>', $reply->getHeaders()->get('References')?->getBodyAsString());
-        // The email replied to, as its PDF.
-        $this->assertSame(['استفسار.pdf'], array_map(fn ($part) => $part->getFilename(), $reply->getAttachments()));
 
         // Kept on the matter beside the email it answers, as sent, with its PDF.
         $record = MatterEmail::query()->where('direction', MatterEmail::SENT)->sole();
@@ -130,19 +138,26 @@ class EmailReplyTest extends TestCase
         $this->assertCount(1, $this->matter->attachments);
     }
 
-    public function test_the_email_replied_to_may_be_left_out_and_its_absence_is_no_trouble(): void
+    public function test_an_email_whose_text_is_not_kept_is_quoted_by_its_header_alone_and_a_sent_email_has_no_reply(): void
     {
+        // Its text not kept (an email from before): the header lines quoted, nothing more — and the screen opens
+        // without asking the mailbox; Quote its text brings the text in under what was written.
+        $this->email->update(['body' => null, 'sender_key' => 'gone']);
+        $body = EmailReplySender::startingBody($this->email->fresh());
+        $this->assertStringContainsString('<strong>الموضوع:</strong> استفسار عن القضية</p>', $body);
+        $this->assertStringEndsWith('</p>', $body);
+        $this->assertNull(app(MatterReplyCollector::class)->bodyOf($this->email->fresh()));
+        $with = EmailReplySender::withText('<p>شكراً.</p>'.$body, $this->email->fresh(), '<p>نص</p>');
+        $this->assertStringStartsWith('<p>شكراً.</p><p></p><hr><p><strong>من:</strong> سالم &lt;other@x.ae&gt;', $with);
+        $this->assertStringEndsWith('<p>نص</p>', $with);
+
         Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
             ->mountTableAction('reply', $this->email)
-            ->setTableActionData(['body' => '<p>شكراً.</p>', 'attach_original' => false, 'cc' => []])
+            ->setTableActionData(['body' => '<p>شكراً.</p>', 'cc' => []])
             ->callMountedTableAction()
             ->assertHasNoTableActionErrors();
         $this->assertCount(0, $this->sent[0]->getAttachments());
         $this->assertSame(['assistant@x.ae'], array_map(fn ($a) => $a->getAddress(), $this->sent[0]->getCc()));
-
-        // No PDF kept for it: nothing to attach, and not offered.
-        $this->email->update(['files' => []]);
-        $this->assertFalse(EmailReplySender::hasOriginalPdf($this->email->fresh()));
 
         // A sent email has no Reply.
         $sent = MatterEmail::query()->where('direction', MatterEmail::SENT)->sole();

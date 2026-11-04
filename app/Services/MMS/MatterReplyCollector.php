@@ -947,8 +947,8 @@ class MatterReplyCollector
             ?? throw new RuntimeException(__('This email is no longer in the mailbox it came to, so it cannot be made again.'));
 
         [$pdf, $files, $name, $source, $links, $side, $from, $party] = $this->rendered($message, (string) $email->sender_key, $email->parent_id !== null, $email->matter);
-        // Its links read again — one of before read for them for the first time.
-        $email->update(['links' => $links]);
+        // Its links read again — one of before read for them for the first time; its text kept, for a reply to quote.
+        $email->update(['links' => $links, 'body' => $message['body'] instanceof Closure ? (string) ($message['body'])() : (string) ($message['body'] ?? '')]);
 
         $old = (array) ($email->files ?? []);
         $replace = function (?string $path, string $contents): bool {
@@ -1043,6 +1043,32 @@ class MatterReplyCollector
      *
      * @return array<string, mixed>|null
      */
+    /**
+     * The text (HTML) of an email that came in, for a reply to quote: as kept, else read from the mailbox it came to
+     * and kept — null when it is no longer there, or the mailbox cannot be read.
+     */
+    public function bodyOf(MatterEmail $email): ?string
+    {
+        if ($email->body !== null) {
+            return $email->body;
+        }
+
+        try {
+            $message = $this->findMessage($email);
+            $body = $message === null ? null : ($message['body'] instanceof Closure ? ($message['body'])() : (string) ($message['body'] ?? ''));
+        } catch (Throwable $e) {
+            Log::warning('An email\'s text could not be read for a reply: '.$e->getMessage(), ['email' => $email->getKey()]);
+
+            return null;
+        }
+
+        if ($body !== null) {
+            $email->forceFill(['body' => $body])->save();
+        }
+
+        return $body;
+    }
+
     private function findMessage(MatterEmail $email): ?array
     {
         $id = trim((string) $email->message_id, '<> ');
@@ -1361,6 +1387,8 @@ class MatterReplyCollector
         $fromName = trim((string) ($message['from_name'] ?? '')) ?: $from;
         $body = $message['body'] ?? '';
         $files = $message['attachments'] ?? [];
+        // Its text, kept — for a reply to quote.
+        $text = $body instanceof Closure ? (string) $body() : (string) $body;
 
         return MatterEmail::create([
             'direction' => MatterEmail::RECEIVED,
@@ -1371,7 +1399,8 @@ class MatterReplyCollector
             'to' => array_values(array_filter((array) ($message['to'] ?? []))),
             'cc' => array_values(array_filter((array) ($message['cc'] ?? []))),
             // Its words and files, to tell a copy of it that came to another of our mailboxes (MatterEmail::copiesOf()).
-            'content_hash' => MatterEmail::fingerprint($body instanceof Closure ? (string) $body() : (string) $body, (array) ($files instanceof Closure ? $files() : $files)),
+            'body' => $text,
+            'content_hash' => MatterEmail::fingerprint($text, (array) ($files instanceof Closure ? $files() : $files)),
             'at' => self::arrivedAt($message),
             // Unread in the mailbox before it was collected (null: not known).
             'was_unread' => isset($message['was_read']) ? ! $message['was_read'] : null,

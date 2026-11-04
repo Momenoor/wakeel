@@ -25,6 +25,7 @@ use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterReplyCollector;
 use App\Services\MMS\ReceivedEmailFiling;
 use App\Services\MMS\SenderMailer;
+use App\Support\Addresses;
 use App\Support\Dates;
 use App\Support\Documents;
 use App\Support\ScreenPermissions;
@@ -33,12 +34,13 @@ use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Text;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
@@ -93,6 +95,8 @@ class EmailsRelationManager extends RelationManager
             // not those waiting for a matter, or set aside.
             ->modifyQueryUsing(fn (Builder $query) => self::listed($query)->with(['reads.user', 'user']))
             ->defaultSort('at', 'desc')
+            // Columns of fixed widths, the text wrapped in them: the table as wide as the page, never scrolled sideways.
+            ->extraAttributes(['class' => '[&_table]:table-fixed [&_table]:w-full [&_.fi-ta-content]:overflow-x-hidden [&_td]:align-top'])
             ->columns([
                 // Each user's own: unread until they open it (or mark it read).
                 IconColumn::make('unread')
@@ -100,23 +104,29 @@ class EmailsRelationManager extends RelationManager
                     ->state(fn (MatterEmail $record): bool => ! $record->isReadBy(auth()->user()))
                     ->icon(fn (bool $state): string => $state ? 'heroicon-s-envelope' : 'heroicon-o-envelope-open')
                     ->color(fn (bool $state): string => $state ? 'warning' : 'gray')
-                    ->tooltip(fn (bool $state): string => $state ? __('Unread by you') : __('Read by you')),
+                    ->tooltip(fn (bool $state): string => $state ? __('Unread by you') : __('Read by you'))
+                    ->width('4%'),
+                // The date, the time under it.
                 TextColumn::make('at')
                     ->label(__('Date'))
-                    ->dateTime()
-                    ->sortable(),
+                    ->date()
+                    ->description(fn (MatterEmail $record): ?string => $record->at ? Dates::time($record->at) : null)
+                    ->sortable()
+                    ->width('10%'),
                 TextColumn::make('direction')
                     ->label(__('Direction'))
                     ->badge()
                     ->formatStateUsing(fn (string $state): string => $state === MatterEmail::SENT ? __('Sent') : __('Received'))
-                    ->color(fn (string $state): string => $state === MatterEmail::SENT ? 'info' : 'success'),
+                    ->color(fn (string $state): string => $state === MatterEmail::SENT ? 'info' : 'success')
+                    ->width('8%'),
                 TextColumn::make('party')
                     ->label(__('From / To'))
                     ->state(fn (MatterEmail $record): string => $record->direction === MatterEmail::SENT
                         ? implode('، ', (array) $record->to)
                         : (string) $record->from)
                     ->wrap()
-                    ->limit(80),
+                    ->extraAttributes(['style' => 'word-break: break-word;'])
+                    ->width('20%'),
                 TextColumn::make('subject')
                     ->label(__('Subject'))
                     ->weight('bold')
@@ -131,19 +141,26 @@ class EmailsRelationManager extends RelationManager
                     ->limitList(3)
                     ->expandableLimitedList()
                     ->placeholder(__('No one yet'))
+                    ->wrap()
+                    ->width('12%')
+                    ->visibleFrom('lg')
                     ->toggleable(),
                 // What of an email that came in is in the matter's OneDrive.
                 TextColumn::make('pdf_saved')
                     ->label(__('PDF in OneDrive'))
                     ->badge()
                     ->state(fn (MatterEmail $record): ?string => $record->oneDriveLabel('pdf'))
-                    ->color(fn (?string $state): string => self::color($state)),
+                    ->color(fn (?string $state): string => self::color($state))
+                    ->width('7%')
+                    ->visibleFrom('xl'),
                 TextColumn::make('eml_saved')
                     ->label(__('EML in OneDrive'))
                     ->tooltip(__('The original email, saved in the matter\'s OneDrive'))
                     ->badge()
                     ->state(fn (MatterEmail $record): ?string => $record->oneDriveLabel('eml'))
-                    ->color(fn (?string $state): string => self::color($state)),
+                    ->color(fn (?string $state): string => self::color($state))
+                    ->width('7%')
+                    ->visibleFrom('xl'),
                 TextColumn::make('attachments_saved')
                     ->label(__('Attachments in OneDrive'))
                     ->badge()
@@ -156,7 +173,9 @@ class EmailsRelationManager extends RelationManager
                         ! self::hasLinks($record) => null,
                         $record->attachmentsState() === 'none' => __('Its documents came as links to download, not attached — see Details.'),
                         default => __('Besides its attachments, it has links to documents to download, never saved by themselves — see Details.'),
-                    }),
+                    })
+                    ->width('7%')
+                    ->visibleFrom('xl'),
                 TextColumn::make('matched_by')
                     ->label(__('Matter known by'))
                     ->formatStateUsing(fn (?string $state): string => MatterEmail::matchedByLabel($state))
@@ -179,77 +198,6 @@ class EmailsRelationManager extends RelationManager
                     ->query(fn (Builder $query): Builder => MatterCreditors::withoutCreditor($query)),
             ])
             ->recordActions([
-                // The email's PDF, as kept.
-                Action::make('open')
-                    ->label(__('Open the email'))
-                    ->icon('heroicon-o-document-text')
-                    ->color('gray')
-                    ->visible(fn (MatterEmail $record): bool => self::pdfUrl($record) !== null)
-                    // Opened: read by whoever opened it.
-                    ->extraAttributes(fn (MatterEmail $record): array => ['wire:click' => 'markEmailRead('.$record->getKey().')'])
-                    ->url(fn (MatterEmail $record): ?string => self::pdfUrl($record), shouldOpenInNewTab: true),
-                // Filed on the wrong matter: to another, with its files and its step in the progress.
-                Action::make('move')
-                    ->label(__('Move to another matter'))
-                    ->icon('heroicon-o-arrows-right-left')
-                    ->color('warning')
-                    ->visible(fn (MatterEmail $record): bool => $record->direction === MatterEmail::RECEIVED && (auth()->user()?->can('update', $this->getOwnerRecord()) ?? false))
-                    ->modalWidth('lg')
-                    ->modalDescription(__('Its PDF, original and attachments go to the other matter (in the system and its OneDrive), and its step in the progress with them.'))
-                    ->schema([
-                        Select::make('matter_id')
-                            ->label(__('Matter'))
-                            ->searchable()
-                            ->getSearchResultsUsing(fn (string $search): array => array_diff_key(UnfiledEmails::searchMatters($search), [$this->getOwnerRecord()->getKey() => true]))
-                            ->getOptionLabelUsing(fn ($value): ?string => UnfiledEmails::matterLabels([(int) $value])[(int) $value] ?? null)
-                            ->helperText(__('Search by its number: 986, 986/2026 or 2026/986.'))
-                            ->required(),
-                    ])
-                    ->action(function (MatterEmail $record, array $data): void {
-                        $matter = Matter::findOrFail($data['matter_id']);
-                        abort_unless(auth()->user()?->can('update', $matter), 403);
-
-                        try {
-                            $oneDrive = app(MatterReplyCollector::class)->move($record, $matter, auth()->id());
-                        } catch (\Throwable $e) {
-                            Notification::make()->danger()->title(__('The email could not be moved'))->body($e->getMessage())->send();
-
-                            return;
-                        }
-
-                        Notification::make()
-                            ->success()
-                            ->title(__('Moved to matter :matter.', ['matter' => $matter->year.'/'.$matter->number]))
-                            ->body($oneDrive['moved'] ? null : __('Nothing of it was found in this matter\'s OneDrive to move.'))
-                            ->actions([Action::make('open')->label(__('View'))->url(MatterResource::getUrl('view', ['record' => $matter]))])
-                            ->send();
-                    }),
-                // A matter with creditors (a bankruptcy's): its sender one of them, or their agent — the emails from
-                // them moved to the creditor's folder, as those from them go from now on.
-                Action::make('creditor')
-                    ->label(__('Sender is a creditor or their agent'))
-                    ->icon('heroicon-o-banknotes')
-                    ->color('gray')
-                    ->visible(fn (MatterEmail $record): bool => $record->direction === MatterEmail::RECEIVED
-                        && MatterCreditors::kept($this->getOwnerRecord())
-                        && (auth()->user()?->can('update', $this->getOwnerRecord()) ?? false))
-                    ->modalWidth('lg')
-                    ->modalDescription(fn (MatterEmail $record): string => __('Its emails that came in on this matter, and those that come from :address from now on, are saved in the creditor\'s folder.', ['address' => MatterEmail::addressOf((string) $record->from)]))
-                    ->schema(fn (MatterEmail $record): array => CreditorFields::schema($this->getOwnerRecord(), MatterContact::split((string) $record->from)[0] ?: MatterEmail::addressOf((string) $record->from), MatterEmail::addressOf((string) $record->from)))
-                    ->action(function (MatterEmail $record, array $data): void {
-                        try {
-                            [$creditor, $moved] = CreditorFields::save($this->getOwnerRecord(), $data, [MatterEmail::addressOf((string) $record->from)]);
-                        } catch (\Throwable $e) {
-                            Notification::make()->danger()->title(__('The emails could not be moved'))->body($e->getMessage())->send();
-
-                            return;
-                        }
-
-                        Notification::make()->success()
-                            ->title(__('Saved as :creditor\'s', ['creditor' => $creditor->name]))
-                            ->body(__(':count emails moved to the creditor\'s folder.', ['count' => $moved]))
-                            ->send();
-                    }),
                 // An answer to an email that came in: to whoever wrote it (and their party's own address when they wrote
                 // from another of theirs), copied to the others it reached, under the same thread — kept beside it.
                 Action::make('reply')
@@ -267,35 +215,57 @@ class EmailsRelationManager extends RelationManager
                         'cc' => EmailReplySender::cc($record),
                         'contacts_cc' => EmailSendFields::startingContactsCc($this->getOwnerRecord(), EmailReplySender::to($record), EmailReplySender::partyIds($record)),
                         'subject' => EmailReplySender::subject($record),
-                        'attach_original' => EmailReplySender::hasOriginalPdf($record),
+                        // The email replied to, quoted under what is written.
+                        'body' => EmailReplySender::startingBody($record),
                     ])
-                    ->schema(fn (MatterEmail $record): array => [
-                        EmailSendFields::sender(),
-                        TagsInput::make('to')
-                            ->label(__('To'))
-                            ->helperText(__('Whoever wrote — and, when they wrote from another address of a party\'s, the party\'s own.'))
-                            ->placeholder('name@example.com')
-                            ->splitKeys(['Tab', ' ', ',', 'Enter'])
-                            ->nestedRecursiveRules(['email'])
-                            ->required(),
-                        EmailSendFields::cc(),
-                        // The other addresses they brought in, to copy in or not.
-                        EmailSendFields::contactsCc($this->getOwnerRecord(), EmailReplySender::to($record), EmailReplySender::partyIds($record)),
-                        TextInput::make('subject')
-                            ->label(__('Subject'))
-                            ->required()
-                            ->maxLength(255),
-                        RichText::make('body')
-                            ->label(__('Email'))
-                            ->email()
-                            ->contentDirection(preg_match('/\p{Arabic}/u', (string) $record->subject) ? 'rtl' : 'ltr')
-                            ->required(),
-                        Toggle::make('attach_original')
-                            ->label(__('Attach the email replied to, as its PDF'))
-                            ->visible(EmailReplySender::hasOriginalPdf($record)),
-                        EmailSendFields::attachments('reply-attachments', __('Sent with the reply, for this email only.')),
-                        EmailSendFields::oneDriveFiles($this->getOwnerRecord()),
-                    ])
+                    ->schema(function (MatterEmail $record): array {
+                        // Whom the reply goes to, for the folder of the files shared by link.
+                        $to = fn (Get $get): array => Addresses::emails((array) ($get('to') ?? []));
+                        $shareWhenOver = EmailSendFields::shareWhenOver($this->getOwnerRecord(), $record, EmailReplySender::subject($record), $to);
+
+                        return [
+                            EmailSendFields::sender(),
+                            TagsInput::make('to')
+                                ->label(__('To'))
+                                ->helperText(__('Whoever wrote — and, when they wrote from another address of a party\'s, the party\'s own.'))
+                                ->placeholder('name@example.com')
+                                ->splitKeys(['Tab', ' ', ',', 'Enter'])
+                                ->nestedRecursiveRules(['email'])
+                                ->required(),
+                            EmailSendFields::cc(),
+                            // The other addresses they brought in, to copy in or not.
+                            EmailSendFields::contactsCc($this->getOwnerRecord(), EmailReplySender::to($record), EmailReplySender::partyIds($record)),
+                            TextInput::make('subject')
+                                ->label(__('Subject'))
+                                ->required()
+                                ->maxLength(255),
+                            RichText::make('body')
+                                ->label(__('Email'))
+                                ->email()
+                                ->contentDirection(preg_match('/\p{Arabic}/u', (string) $record->subject) ? 'rtl' : 'ltr')
+                                ->required()
+                                // An email kept before its text was: the text read from the mailbox now, quoted under what is written.
+                                ->hintAction(Action::make('quoteText')
+                                    ->label(__('Quote its text'))
+                                    ->icon('heroicon-o-chat-bubble-bottom-center-text')
+                                    ->visible($record->body === null)
+                                    ->action(function (Get $get, Set $set) use ($record): void {
+                                        $text = app(MatterReplyCollector::class)->bodyOf($record);
+
+                                        if ($text === null) {
+                                            Notification::make()->warning()->title(__('Its text is no longer in the mailbox it came to.'))->send();
+
+                                            return;
+                                        }
+
+                                        $set('body', EmailReplySender::withText((string) $get('body'), $record, $text));
+                                    })),
+                            EmailSendFields::attachments('reply-attachments', __('Sent with the reply, for this email only.'), $shareWhenOver),
+                            EmailSendFields::oneDriveFiles($this->getOwnerRecord(), $shareWhenOver),
+                            // The files shared by link now, to copy the link into the reply by hand.
+                            ...EmailSendFields::sharedLink($this->getOwnerRecord(), $record, EmailReplySender::subject($record), $to),
+                        ];
+                    })
                     ->action(function (MatterEmail $record, array $data): void {
                         try {
                             $result = app(EmailReplySender::class)->send($record, $data, auth()->id());
@@ -315,12 +285,6 @@ class EmailsRelationManager extends RelationManager
                         };
                         $notification->send();
                     }),
-                Action::make('markRead')
-                    ->label(__('Mark as read'))
-                    ->icon('heroicon-o-envelope-open')
-                    ->color('gray')
-                    ->visible(fn (MatterEmail $record): bool => ! $record->isReadBy(auth()->user()))
-                    ->action(fn (MatterEmail $record) => $record->markReadBy(auth()->user())),
                 Action::make('view')
                     ->label(__('Details'))
                     ->icon('heroicon-o-eye')
@@ -330,8 +294,85 @@ class EmailsRelationManager extends RelationManager
                     ->schema(fn (MatterEmail $record): array => self::details($record))
                     ->modalSubmitAction(false)
                     ->modalCancelActionLabel(__('Close')),
-                // The less used, last, in the row's "…" menu.
+                // Reply and Details on the row; everything else in its "…" menu.
                 ActionGroup::make([
+                    // The email's PDF, as kept.
+                    Action::make('open')
+                        ->label(__('Open the email'))
+                        ->icon('heroicon-o-document-text')
+                        ->color('gray')
+                        ->visible(fn (MatterEmail $record): bool => self::pdfUrl($record) !== null)
+                        // Opened: read by whoever opened it.
+                        ->extraAttributes(fn (MatterEmail $record): array => ['wire:click' => 'markEmailRead('.$record->getKey().')'])
+                        ->url(fn (MatterEmail $record): ?string => self::pdfUrl($record), shouldOpenInNewTab: true),
+                    // Filed on the wrong matter: to another, with its files and its step in the progress.
+                    Action::make('move')
+                        ->label(__('Move to another matter'))
+                        ->icon('heroicon-o-arrows-right-left')
+                        ->color('warning')
+                        ->visible(fn (MatterEmail $record): bool => $record->direction === MatterEmail::RECEIVED && (auth()->user()?->can('update', $this->getOwnerRecord()) ?? false))
+                        ->modalWidth('lg')
+                        ->modalDescription(__('Its PDF, original and attachments go to the other matter (in the system and its OneDrive), and its step in the progress with them.'))
+                        ->schema([
+                            Select::make('matter_id')
+                                ->label(__('Matter'))
+                                ->searchable()
+                                ->getSearchResultsUsing(fn (string $search): array => array_diff_key(UnfiledEmails::searchMatters($search), [$this->getOwnerRecord()->getKey() => true]))
+                                ->getOptionLabelUsing(fn ($value): ?string => UnfiledEmails::matterLabels([(int) $value])[(int) $value] ?? null)
+                                ->helperText(__('Search by its number: 986, 986/2026 or 2026/986.'))
+                                ->required(),
+                        ])
+                        ->action(function (MatterEmail $record, array $data): void {
+                            $matter = Matter::findOrFail($data['matter_id']);
+                            abort_unless(auth()->user()?->can('update', $matter), 403);
+
+                            try {
+                                $oneDrive = app(MatterReplyCollector::class)->move($record, $matter, auth()->id());
+                            } catch (\Throwable $e) {
+                                Notification::make()->danger()->title(__('The email could not be moved'))->body($e->getMessage())->send();
+
+                                return;
+                            }
+
+                            Notification::make()
+                                ->success()
+                                ->title(__('Moved to matter :matter.', ['matter' => $matter->year.'/'.$matter->number]))
+                                ->body($oneDrive['moved'] ? null : __('Nothing of it was found in this matter\'s OneDrive to move.'))
+                                ->actions([Action::make('open')->label(__('View'))->url(MatterResource::getUrl('view', ['record' => $matter]))])
+                                ->send();
+                        }),
+                    // A matter with creditors (a bankruptcy's): its sender one of them, or their agent — the emails from
+                    // them moved to the creditor's folder, as those from them go from now on.
+                    Action::make('creditor')
+                        ->label(__('Sender is a creditor or their agent'))
+                        ->icon('heroicon-o-banknotes')
+                        ->color('gray')
+                        ->visible(fn (MatterEmail $record): bool => $record->direction === MatterEmail::RECEIVED
+                            && MatterCreditors::kept($this->getOwnerRecord())
+                            && (auth()->user()?->can('update', $this->getOwnerRecord()) ?? false))
+                        ->modalWidth('lg')
+                        ->modalDescription(fn (MatterEmail $record): string => __('Its emails that came in on this matter, and those that come from :address from now on, are saved in the creditor\'s folder.', ['address' => MatterEmail::addressOf((string) $record->from)]))
+                        ->schema(fn (MatterEmail $record): array => CreditorFields::schema($this->getOwnerRecord(), MatterContact::split((string) $record->from)[0] ?: MatterEmail::addressOf((string) $record->from), MatterEmail::addressOf((string) $record->from)))
+                        ->action(function (MatterEmail $record, array $data): void {
+                            try {
+                                [$creditor, $moved] = CreditorFields::save($this->getOwnerRecord(), $data, [MatterEmail::addressOf((string) $record->from)]);
+                            } catch (\Throwable $e) {
+                                Notification::make()->danger()->title(__('The emails could not be moved'))->body($e->getMessage())->send();
+
+                                return;
+                            }
+
+                            Notification::make()->success()
+                                ->title(__('Saved as :creditor\'s', ['creditor' => $creditor->name]))
+                                ->body(__(':count emails moved to the creditor\'s folder.', ['count' => $moved]))
+                                ->send();
+                        }),
+                    Action::make('markRead')
+                        ->label(__('Mark as read'))
+                        ->icon('heroicon-o-envelope-open')
+                        ->color('gray')
+                        ->visible(fn (MatterEmail $record): bool => ! $record->isReadBy(auth()->user()))
+                        ->action(fn (MatterEmail $record) => $record->markReadBy(auth()->user())),
                     // Read from OneDrive itself what is there.
                     Action::make('checkOneDrive')
                         ->label(__('Check OneDrive'))
