@@ -21,6 +21,7 @@ class PayrollRun extends Model
 
     protected $fillable = [
         'period',
+        'company_id',
         'name',
         'status',
         'hr_approved_by',
@@ -74,6 +75,47 @@ class PayrollRun extends Model
     public function financeApprover(): BelongsTo
     {
         return $this->belongsTo(User::class, 'finance_approved_by');
+    }
+
+    /**
+     * The company it pays the employees of (those it sponsors) — none: the employees with no company.
+     *
+     * @return BelongsTo<Company, $this>
+     */
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
+
+    /** The exchange house a Salary Authorization Form names when its company names none. */
+    public const DEFAULT_EXCHANGE_HOUSE = 'AL FARDAN EXCHANGE - UAE';
+
+    /**
+     * Who pays, as the Salary Authorization Form and the journal voucher print it: the run's company and its own
+     * details — or, with no company, the office's (Settings and Financial Settings → Payroll). The transfer fee is
+     * the company's when it has one of its own, else the office's.
+     *
+     * @return array{company_name: string, employer_id: ?string, trade_license: ?string, gl_number: ?string, exchange_house: string, bank_fee: float}
+     */
+    public function payer(): array
+    {
+        $company = $this->company;
+        $fee = $company?->payroll_bank_fee_amount ?? Setting::get('payroll_bank_fee_amount', 0.0);
+
+        return [
+            'company_name' => $company?->name ?: (Setting::get('company_name') ?: (string) config('app.name')),
+            'employer_id' => $company ? $company->wps_employer_id : Setting::get('payroll_wps_employer_id'),
+            'trade_license' => $company ? $company->trade_license_no : Setting::get('payroll_wps_trade_license'),
+            'gl_number' => $company ? $company->wps_gl_number : Setting::get('payroll_wps_gl_number'),
+            'exchange_house' => $company?->wps_exchange_house ?: self::DEFAULT_EXCHANGE_HOUSE,
+            'bank_fee' => round((float) $fee, 2),
+        ];
+    }
+
+    /** Its title in a list: its period, and its company's name when it has one. */
+    public function label(): string
+    {
+        return $this->getAttribute('period').($this->company ? ' — '.$this->company->displayName() : '');
     }
 
     /**

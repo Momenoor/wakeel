@@ -5367,5 +5367,18 @@
     "Its scanned pages and pictures are saved again at a lower resolution; its text stays sharp and searchable.": "تُحفظ صفحاته الممسوحة وصوره من جديد بدقة أقل، ويبقى نصه واضحاً وقابلاً للبحث.",
     "How much to compress": "درجة الضغط",
     "Compress": "ضغط",
-    "Add every PDF in this folder": "أضف كل ملفات PDF في هذا المجلد"
+    "Add every PDF in this folder": "أضف كل ملفات PDF في هذا المجلد",
+    "Sponsored employees": "الموظفون على كفالتها",
+    "Add employees": "إضافة موظفين",
+    "Not sponsored by this company": "ليس على كفالة هذه الشركة",
+    "No employees sponsored by this company yet": "لا يوجد موظفون على كفالة هذه الشركة بعد",
+    "Not one of the office's companies": "ليس من شركات المكتب",
+    "Sponsor's name": "اسم الكفيل",
+    "Printed on the Salary Authorization Form of its payroll runs, with its name and trade licence number; its transfer fee goes on their journal voucher.": "تُطبع في نموذج تفويض الرواتب لدورات رواتبها مع اسمها ورقم رخصتها التجارية، ورسوم التحويل الخاصة بها تُقيَّد في قيد اليومية لها.",
+    "The company's own account number at the exchange house.": "رقم حساب الشركة لدى شركة الصرافة.",
+    "Exchange house": "شركة الصرافة",
+    "Including VAT. Empty: the one in Financial Settings → Payroll.": "شاملة الضريبة. فارغ: الرسوم في الإعدادات المالية ← الرواتب.",
+    "Employees with no company": "الموظفون بلا شركة",
+    "Its employees are those the company sponsors (the employee's \"Sponsor\"), and its forms carry the company's own details.": "موظفوها هم من على كفالة الشركة («الكفيل» في ملف الموظف)، ونماذجها تحمل بيانات الشركة نفسها.",
+    "The employee is not paid in this payroll run: choose the run of the company that sponsors them.": "الموظف لا يُصرف راتبه في دورة الرواتب هذه: اختر دورة رواتب الشركة الكفيلة له."
 }

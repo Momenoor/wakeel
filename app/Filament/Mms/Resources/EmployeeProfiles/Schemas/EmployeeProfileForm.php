@@ -2,7 +2,10 @@
 
 namespace App\Filament\Mms\Resources\EmployeeProfiles\Schemas;
 
+use App\Filament\Mms\Resources\Companies\Schemas\CompanyForm;
 use App\Filament\Mms\Resources\HrListItems\Schemas\HrListItemForm;
+use App\Models\Company;
+use Filament\Actions\Action;
 use App\Filament\Support\EnglishNameField;
 use App\Filament\Support\IbanField;
 use App\Models\HrListItem;
@@ -102,9 +105,23 @@ class EmployeeProfileForm
                             ->maxLength(255),
                         DatePicker::make('residency_expiry')
                             ->label(__('Residency Expiry')),
-                        TextInput::make('sponsor_name')
+                        // The office's company sponsoring them (Human Resources → Companies), its establishment card
+                        // the one their visa is under; a new one can be added from here.
+                        Select::make('company_id')
                             ->label(__('Sponsor'))
-                            ->maxLength(255),
+                            ->relationship('company', 'name')
+                            ->getOptionLabelFromRecordUsing(fn (Company $record): string => $record->displayName())
+                            ->searchable(['name', 'name_ar'])
+                            ->preload()
+                            ->live()
+                            ->placeholder(__('Not one of the office\'s companies'))
+                            ->createOptionForm(CompanyForm::nameFields())
+                            ->createOptionAction(fn (Action $action) => $action->visible(fn (): bool => auth()->user()?->can('create', Company::class) ?? false)),
+                        // A sponsor who is none of the office's companies.
+                        TextInput::make('sponsor_name')
+                            ->label(__('Sponsor\'s name'))
+                            ->maxLength(255)
+                            ->visible(fn (Get $get): bool => blank($get('company_id'))),
                     ])->columns(3),
 
                 Section::make(__('Banking & WPS'))

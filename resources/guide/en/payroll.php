@@ -24,7 +24,7 @@ return [
                 ['text' => 'Click "New Payroll Run".', 'shot' => 'create-1'],
                 ['text' => 'Set the "Period" (the month), and enter a "Name" and "Notes" if you like, then save. The run is created, and its payslips are generated if you have permission to generate them.', 'shot' => 'create-2-filled'],
             ],
-            'tips' => ['Two runs cannot have the same period. If something changes (leave, a loan), return the run to "Draft" and generate it again.'],
+            'tips' => ['Once there are companies (Human Resources → Companies), choose the run\'s "Company": it pays only the employees that company sponsors, and its Salary Authorization Form and journal voucher carry the company\'s name, trade licence, WPS employer ID, GL number, exchange house and transfer fee. Left empty, the run pays the employees with no company, with the office\'s details from Financial Settings → Payroll.', 'Each company has one run per month (and one for the employees with no company). An employee already paid this month in one company\'s run is not paid again in another\'s. If something changes (leave, a loan), return the run to "Draft" and generate it again.', 'A flight ticket paid with salary goes into the run of the company sponsoring its employee.'],
         ],
         [
             'id' => 'review',

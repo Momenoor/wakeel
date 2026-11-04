@@ -4,11 +4,13 @@ namespace Tests\Feature;
 
 use App\Enums\PayrollRunStatus;
 use App\Enums\SalaryComponent;
+use App\Models\Company;
 use App\Models\EmployeeProfile;
 use App\Models\EmployeeSalaryComponent;
 use App\Models\Party;
 use App\Models\PayrollRun;
 use App\Models\Setting;
+use App\Services\MMS\PayrollJournalVoucherService;
 use App\Services\MMS\PayrollService;
 use App\Services\MMS\SalaryAuthorizationFormService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -151,5 +153,50 @@ class SalaryAuthorizationFormServiceTest extends TestCase
 
         $this->assertSame('Emirates Islamic Bank', $form['lines'][0]['bank_name']);
         $this->assertSame('AE280340003578203010002', $form['lines'][0]['iban']);
+    }
+
+    public function test_each_company_has_its_own_run_of_its_own_employees_with_its_own_details(): void
+    {
+        Setting::set('payroll_wps_employer_id', 'OFFICE-ID');
+        Setting::set('payroll_wps_gl_number', 'OFFICE-GL');
+        Setting::set('payroll_bank_fee_amount', 21);
+        Setting::set('company_name', 'The Office');
+
+        $legal = Company::create(['name' => 'JPA Legal', 'trade_license_no' => 'CN-1', 'wps_employer_id' => '0000123', 'wps_gl_number' => 'GL-77', 'wps_exchange_house' => 'LULU EXCHANGE', 'payroll_bank_fee_amount' => 31.5]);
+        $accounting = Company::create(['name' => 'JPA Accounting', 'trade_license_no' => 'CN-2']);
+
+        $maha = $this->employee(['company_id' => $legal->getKey()]);
+        $omar = $this->employee(['company_id' => $accounting->getKey(), 'mohre_personal_no' => '2']);
+        $none = $this->employee(['mohre_personal_no' => '3']);
+
+        $legalRun = PayrollRun::create(['period' => '2026-08', 'company_id' => $legal->getKey(), 'status' => PayrollRunStatus::DRAFT]);
+        $officeRun = $this->payrollRun();
+        $this->payroll->generate($legalRun);
+        $this->payroll->generate($officeRun);
+
+        // Each run its own employees: the company's, and those with none.
+        $this->assertSame([$maha->getKey()], $legalRun->payslips()->pluck('party_id')->all());
+        $this->assertSame([$none->getKey()], $officeRun->payslips()->pluck('party_id')->all());
+
+        $form = $this->service->forRun($legalRun->fresh());
+        $this->assertSame('JPA Legal', $form['company_name']);
+        $this->assertSame(['0000123', 'CN-1', 'GL-77', 'LULU EXCHANGE'], [$form['employer_id'], $form['trade_license'], $form['gl_number'], $form['exchange_house']]);
+        $this->assertEqualsWithDelta(31.5, $form['service_charge'] + $form['vat'], 0.001);
+
+        // The office's own, with no company.
+        $office = $this->service->forRun($officeRun->fresh());
+        $this->assertSame(['The Office', 'OFFICE-ID', 'OFFICE-GL', PayrollRun::DEFAULT_EXCHANGE_HOUSE], [$office['company_name'], $office['employer_id'], $office['gl_number'], $office['exchange_house']]);
+
+        // A company with no fee of its own: the office's, in its journal voucher.
+        $accountingRun = PayrollRun::create(['period' => '2026-08', 'company_id' => $accounting->getKey(), 'status' => PayrollRunStatus::DRAFT]);
+        $this->payroll->generate($accountingRun);
+        $voucher = app(PayrollJournalVoucherService::class)->forRun($accountingRun->fresh());
+        $this->assertContains(['account' => PayrollJournalVoucherService::GL_BANK_FEES_EXPENSE, 'detail' => null, 'amount' => 21.0], $voucher['debits']);
+        $this->assertSame([$omar->getKey()], $accountingRun->payslips()->pluck('party_id')->all());
+
+        // Moved to another company after being paid this month: not paid again by its run.
+        $maha->employeeProfile->update(['company_id' => $accounting->getKey()]);
+        $this->payroll->generate($accountingRun);
+        $this->assertSame([$omar->getKey()], $accountingRun->payslips()->pluck('party_id')->all());
     }
 }

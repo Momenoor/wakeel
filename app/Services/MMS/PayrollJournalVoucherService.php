@@ -6,7 +6,6 @@ use App\Enums\LoanKind;
 use App\Enums\PayslipLineKind;
 use App\Models\PayrollRun;
 use App\Models\PayslipLine;
-use App\Models\Setting;
 
 /**
  * The monthly Salaries journal voucher a payroll run posts to QuickBooks.
@@ -33,7 +32,7 @@ use App\Models\Setting;
  * expense line matches the payroll register, and every deduction can be traced
  * to the account it landed in.
  *
- * The bank fee is a fixed office-wide charge from Payroll Settings, not derived
+ * The bank fee is a fixed charge — the run's company's, else the office's from Payroll Settings — not derived
  * from any payslip — it posts once per run regardless of headcount, because the
  * bank charges the same transfer fee whether the batch holds five salaries or
  * fifty. It debits its own expense account so the cost stays visible on the
@@ -58,17 +57,6 @@ class PayrollJournalVoucherService
 
     /** What rounding each net pay up to the whole dirham added (PayrollService::roundedUp()). */
     public const GL_ROUNDING = 'Salary Fraction Differences';
-
-    private const DEFAULT_BANK_FEE_AMOUNT = 0.0;
-
-    /**
-     * The fixed transfer fee from Payroll Settings — office policy, not a
-     * statutory figure, so it has no legal citation to mirror.
-     */
-    public function bankFeeAmount(): float
-    {
-        return (float) Setting::get('payroll_bank_fee_amount', self::DEFAULT_BANK_FEE_AMOUNT);
-    }
 
     /**
      * Build the voucher for a run.
@@ -143,7 +131,8 @@ class PayrollJournalVoucherService
         if ($rounding > 0) {
             $debits[] = ['account' => self::GL_ROUNDING, 'detail' => null, 'amount' => $rounding];
         }
-        $bankFee = round($this->bankFeeAmount(), 2);
+        // The run's company's own fee when it has one, else the office's (PayrollRun::payer()).
+        $bankFee = $run->payer()['bank_fee'];
 
         if ($bankFee > 0) {
             $debits[] = ['account' => self::GL_BANK_FEES_EXPENSE, 'detail' => null, 'amount' => $bankFee];

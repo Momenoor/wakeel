@@ -30,7 +30,7 @@ return [
                 ['text' => 'Fill in the "Identity Documents" (passport, Emirates ID, labour card and MOHRE personal number) with their expiry dates, the "Residency & Visa", and the "Banking & WPS" section (bank, account number, IBAN and routing code, and whether the employee is included in the salary authorization form).'],
                 ['text' => 'In the "Gratuity & Leave" section, set whether gratuity applies, the opening leave and gratuity balances, and the gratuity amount already paid and when. Under "Flight Ticket", set whether the employee is entitled to a yearly ticket and its amount. Then click "Create".'],
             ],
-            'tips' => ['The expiry dates of the passport, Emirates ID, residency and labour card are watched, so you are alerted before they expire.', 'A letter or certificate writes the employee\'s name, designation and nationality in the letter\'s language ({{employee.name}} …). To ask for one language, add _ar or _en.'],
+            'tips' => ['The expiry dates of the passport, Emirates ID, residency and labour card are watched, so you are alerted before they expire.', 'Under "Residency & Visa", the "Sponsor" is chosen from the office\'s companies (Human Resources → Companies; "+" adds a new one). For a sponsor who is not one of them, leave it empty and type the "Sponsor\'s name". Several employees get a sponsor at once with the "Sponsor" bulk action in the employees table, which also has a "Sponsor" column and filter.', 'A letter or certificate writes the employee\'s name, designation and nationality in the letter\'s language ({{employee.name}} …). To ask for one language, add _ar or _en.'],
         ],
         [
             'id' => 'edit-salary',

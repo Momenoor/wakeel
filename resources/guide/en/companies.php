@@ -32,5 +32,27 @@ return [
             ],
             'tips' => ['When a licence or card is renewed, change its dates on the company and attach the new copy: the alarm goes quiet once the new expiry is more than 60 days away.'],
         ],
+        [
+            'id' => 'employees',
+            'title' => 'The employees a company sponsors',
+            'description' => 'The "Sponsored employees" table on the company\'s page lists the employees whose visas are under its establishment card, with their visa number, residency expiry and documents expiring. The companies table counts them.',
+            'roles' => [$admin, $withPermission],
+            'permissions' => ['ViewAny:EmployeeProfile', 'Update:EmployeeProfile'],
+            'steps' => [
+                ['text' => 'Click "Edit" on the company\'s row and scroll down to "Sponsored employees". The employee\'s name opens their page.'],
+                ['text' => 'Click "Add employees" and choose them (one sponsored by another company moves to this one), or click the remove icon on a row to take an employee off this company.'],
+            ],
+        ],
+        [
+            'id' => 'payroll',
+            'title' => 'A company\'s payroll runs',
+            'description' => 'Each company has its own monthly payroll run for the employees it sponsors. Its "Payroll" section holds what its Salary Authorization Form and journal voucher carry besides its name and trade licence number: the "WPS Employer ID", the "GL Number" (its account at the exchange house), the "Exchange house" and its "Bank Transfer Fee" (empty: the one in Financial Settings → Payroll).',
+            'roles' => [$admin, $withPermission],
+            'permissions' => ['Update:Company', 'ViewAny:PayrollRun', 'Create:PayrollRun'],
+            'steps' => [
+                ['text' => 'On the company\'s page, fill in the "Payroll" section and click "Save changes".'],
+                ['text' => 'Scroll down to "Payroll Runs": the company\'s runs, with their totals, journal voucher and Salary Authorization Form. Click "New Payroll Run" to start this month\'s with the company already chosen.'],
+            ],
+        ],
     ],
 ];

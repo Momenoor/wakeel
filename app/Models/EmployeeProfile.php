@@ -53,6 +53,7 @@ class EmployeeProfile extends Model implements AttachmentOwner
         'visa_file_no',
         'residency_expiry',
         'sponsor_name',
+        'company_id',
         'bank_name',
         'bank_account_no',
         'iban',
@@ -105,6 +106,14 @@ class EmployeeProfile extends Model implements AttachmentOwner
                     ['name_ar' => trim($profile->designation)],
                 )->getKey();
             }
+
+            // The sponsor kept as text too (the company's name), for what reads it so (an import, the WPS forms); one
+            // typed that is one of the office's companies becomes that company.
+            if ($profile->isDirty('company_id') && $profile->company_id) {
+                $profile->sponsor_name = Company::query()->whereKey($profile->company_id)->value('name') ?? $profile->sponsor_name;
+            } elseif ($profile->isDirty('sponsor_name') && filled($profile->sponsor_name) && ! $profile->company_id) {
+                $profile->company_id = Company::named((string) $profile->sponsor_name)?->getKey();
+            }
         });
         // The opening leave balance is the first entry of the running
         // balance; changing it on the profile changes that entry.
@@ -113,6 +122,16 @@ class EmployeeProfile extends Model implements AttachmentOwner
                 app(LeaveBalanceService::class)->syncOpening($profile);
             }
         });
+    }
+
+    /**
+     * The company sponsoring them: the one whose establishment card their visa is under.
+     *
+     * @return BelongsTo<Company, $this>
+     */
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
     }
 
     /** @return BelongsTo<HrListItem, $this> */

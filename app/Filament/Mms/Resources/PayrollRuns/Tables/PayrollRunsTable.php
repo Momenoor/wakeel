@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Resources\PayrollRuns\Tables;
 
 use App\Enums\PayrollRunStatus;
 use App\Filament\Support\JournalVoucherEntries;
+use App\Models\Company;
 use App\Models\PayrollRun;
 use App\Services\MMS\PayrollJournalVoucherService;
 use App\Support\Currency;
@@ -14,43 +15,22 @@ use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class PayrollRunsTable
 {
     public static function configure(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn ($query) => $query
-                ->withCount('payslips')
-                ->withSum('payslips', 'gross')
-                ->withSum('payslips', 'net_pay'))
+            ->modifyQueryUsing(fn (Builder $query): Builder => self::withTotals($query)->with('company'))
             ->columns([
-                TextColumn::make('period')
-                    ->label(__('Period'))
-                    ->sortable(),
-                TextColumn::make('name')
-                    ->label(__('Name'))
-                    ->searchable()
-                    ->placeholder('—'),
-                TextColumn::make('status')
-                    ->label(__('Status'))
-                    ->badge(),
-                TextColumn::make('payslips_count')
-                    ->label(__('Employees')),
-                TextColumn::make('payslips_sum_gross')
-                    ->label(Currency::label(__('Gross (AED)')))
-                    ->numeric(decimalPlaces: 2)
-                    ->placeholder('—'),
-                TextColumn::make('payslips_sum_net_pay')
-                    ->label(Currency::label(__('Net Payable (AED)')))
-                    ->numeric(decimalPlaces: 2)
-                    ->weight('bold')
-                    ->placeholder('—'),
-                TextColumn::make('disbursed_at')
-                    ->label(__('Disbursed'))
-                    ->dateTime()
+                ...self::columns(),
+                // Whose employees it pays (those the company sponsors); none: the employees with no company.
+                TextColumn::make('company.name')
+                    ->label(__('Company'))
+                    ->state(fn (PayrollRun $record): ?string => $record->company?->displayName())
                     ->placeholder('—')
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->visible(fn (): bool => Company::query()->exists()),
             ])
             ->defaultSort('period', 'desc')
             ->filters([
@@ -58,49 +38,14 @@ class PayrollRunsTable
                     ->label(__('Status'))
                     ->options(PayrollRunStatus::class)
                     ->multiple(),
+                SelectFilter::make('company_id')
+                    ->label(__('Company'))
+                    ->options(fn (): array => Company::options())
+                    ->visible(fn (): bool => Company::query()->exists()),
             ])
             ->recordActions([
                 ViewAction::make()->iconButton(),
-                // Reachable with `ViewJournalVoucher:PayrollRun` alone — a
-                // Finance user who should only ever see the salary total, not
-                // any employee's payslip detail, never needs `View:PayrollRun`
-                // (which the row's own View button above requires) to get here.
-                Action::make('journal_voucher')
-                    ->label(__('Journal Voucher'))
-                    ->icon('heroicon-o-document-text')
-                    ->iconButton()
-                    ->color('gray')
-                    ->authorize('viewJournalVoucher')
-                    ->visible(fn (PayrollRun $record): bool => $record->payslips_count > 0)
-                    ->modalHeading(fn (PayrollRun $record): string => __('Journal Voucher — :period', ['period' => $record->period]))
-                    ->schema(fn (PayrollRun $record): array => JournalVoucherEntries::voucher(app(PayrollJournalVoucherService::class)->forRun($record)))
-                    ->modalSubmitAction(false)
-                    ->modalCancelActionLabel(__('Close'))
-                    ->modalWidth('6xl'),
-                // Same permission, same reasoning as the action above: a
-                // JV-only user needs the printable sheet too, not just the
-                // on-screen modal, without ever touching `View:PayrollRun`.
-                Action::make('print_journal_voucher')
-                    ->label(__('Print Voucher'))
-                    ->icon('heroicon-o-printer')
-                    ->iconButton()
-                    ->color('gray')
-                    ->authorize('viewJournalVoucher')
-                    ->visible(fn (PayrollRun $record): bool => $record->payslips_count > 0)
-                    ->url(fn (PayrollRun $record): string => route('payroll.run.journal-voucher.print', $record))
-                    ->openUrlInNewTab(),
-                // The bank's own salary-upload form — a separate sheet, carrying
-                // IBANs per employee rather than GL accounts, for signing and
-                // sending straight to the exchange house.
-                Action::make('print_salary_authorization_form')
-                    ->label(__('Print Salary Form'))
-                    ->icon('heroicon-o-banknotes')
-                    ->iconButton()
-                    ->color('gray')
-                    ->authorize('viewJournalVoucher')
-                    ->visible(fn (PayrollRun $record): bool => $record->payslips_count > 0 && auth()->user()->can('View:PayrollRun'))
-                    ->url(fn (PayrollRun $record): string => route('payroll.run.salary-authorization-form.print', $record))
-                    ->openUrlInNewTab(),
+                ...self::documentActions(),
                 DeleteAction::make()
                     ->iconButton()
                     // Only an untouched draft may be removed. Anything HR has
@@ -111,5 +56,102 @@ class PayrollRunsTable
             ->emptyStateActions([
                 CreateAction::make()->label(__('New Payroll Run')),
             ]);
+    }
+
+    /** Each run's headcount and totals, read with the runs (columns()). */
+    public static function withTotals(Builder $query): Builder
+    {
+        return $query
+            ->withCount('payslips')
+            ->withSum('payslips', 'gross')
+            ->withSum('payslips', 'net_pay');
+    }
+
+    /**
+     * A run's period, name, status, headcount and totals — the payroll runs list's, and a company's runs'.
+     *
+     * @return list<TextColumn>
+     */
+    public static function columns(): array
+    {
+        return [
+            TextColumn::make('period')
+                ->label(__('Period'))
+                ->sortable(),
+            TextColumn::make('name')
+                ->label(__('Name'))
+                ->searchable()
+                ->placeholder('—'),
+            TextColumn::make('status')
+                ->label(__('Status'))
+                ->badge(),
+            TextColumn::make('payslips_count')
+                ->label(__('Employees')),
+            TextColumn::make('payslips_sum_gross')
+                ->label(Currency::label(__('Gross (AED)')))
+                ->numeric(decimalPlaces: 2)
+                ->placeholder('—'),
+            TextColumn::make('payslips_sum_net_pay')
+                ->label(Currency::label(__('Net Payable (AED)')))
+                ->numeric(decimalPlaces: 2)
+                ->weight('bold')
+                ->placeholder('—'),
+            TextColumn::make('disbursed_at')
+                ->label(__('Disbursed'))
+                ->dateTime()
+                ->placeholder('—')
+                ->toggleable(isToggledHiddenByDefault: true),
+        ];
+    }
+
+    /**
+     * A run's journal voucher (on screen and printed) and its Salary Authorization Form — wherever runs are listed.
+     *
+     * @return list<Action>
+     */
+    public static function documentActions(): array
+    {
+        return [
+            // Reachable with `ViewJournalVoucher:PayrollRun` alone — a
+            // Finance user who should only ever see the salary total, not
+            // any employee's payslip detail, never needs `View:PayrollRun`
+            // (which the row's own View button requires) to get here.
+            Action::make('journal_voucher')
+                ->label(__('Journal Voucher'))
+                ->icon('heroicon-o-document-text')
+                ->iconButton()
+                ->color('gray')
+                ->authorize('viewJournalVoucher')
+                ->visible(fn (PayrollRun $record): bool => $record->payslips_count > 0)
+                ->modalHeading(fn (PayrollRun $record): string => __('Journal Voucher — :period', ['period' => $record->label()]))
+                ->schema(fn (PayrollRun $record): array => JournalVoucherEntries::voucher(app(PayrollJournalVoucherService::class)->forRun($record)))
+                ->modalSubmitAction(false)
+                ->modalCancelActionLabel(__('Close'))
+                ->modalWidth('6xl'),
+            // Same permission, same reasoning as the action above: a
+            // JV-only user needs the printable sheet too, not just the
+            // on-screen modal, without ever touching `View:PayrollRun`.
+            Action::make('print_journal_voucher')
+                ->label(__('Print Voucher'))
+                ->icon('heroicon-o-printer')
+                ->iconButton()
+                ->color('gray')
+                ->authorize('viewJournalVoucher')
+                ->visible(fn (PayrollRun $record): bool => $record->payslips_count > 0)
+                ->url(fn (PayrollRun $record): string => route('payroll.run.journal-voucher.print', $record))
+                ->openUrlInNewTab(),
+            // The bank's own salary-upload form — a separate sheet, carrying
+            // IBANs per employee rather than GL accounts, for signing and
+            // sending straight to the exchange house.
+            Action::make('print_salary_authorization_form')
+                ->label(__('Print Salary Form'))
+                ->icon('heroicon-o-banknotes')
+                ->iconButton()
+                ->color('gray')
+                ->authorize('viewJournalVoucher')
+                ->visible(fn (PayrollRun $record): bool => $record->payslips_count > 0 && auth()->user()->can('View:PayrollRun'))
+                ->url(fn (PayrollRun $record): string => route('payroll.run.salary-authorization-form.print', $record))
+                ->openUrlInNewTab(),
+        ];
     }
 }

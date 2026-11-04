@@ -170,7 +170,7 @@
         panel itself is running in, so routing it through translation would
         be wrong even if `ar.json` covered every key.
     --}}
-    <div class="company">AL FARDAN EXCHANGE - UAE</div>
+    <div class="company">{{ $form['exchange_house'] }}</div>
     <h1>Salary Authorization and Upload Form - EMONEY LITE</h1>
 
     <table class="meta">
@@ -193,7 +193,7 @@
         <tr>
             {{-- Receipt No is left blank for the exchange house to fill in on
                  receipt — nothing this system assigns. GL is the office's own
-                 fixed account number at the exchange (Financial Settings →
+                 fixed account number at the exchange (the run's company's, else Financial Settings →
                  Payroll → GL Number) — the same on every submission. --}}
             <td class="label">Receipt No</td>
             <td></td>

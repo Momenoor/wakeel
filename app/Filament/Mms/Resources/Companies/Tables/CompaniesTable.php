@@ -16,7 +16,9 @@ class CompaniesTable
     public static function configure(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->withCount('ownedAttachments'))
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query
+                ->withCount('ownedAttachments')
+                ->withCount(['employees as sponsored_count' => fn (Builder $employees) => $employees->whereNull('date_of_leaving')]))
             ->columns([
                 TextColumn::make('name')
                     ->label(__('Company'))
@@ -50,6 +52,13 @@ class CompaniesTable
                     ->placeholder('—'),
                 // The alarm: a badge for each document expired (red) or expiring soon (amber).
                 ExpiringDocuments::column(Company::EXPIRING),
+                // Those on staff whose visas are under its establishment card.
+                TextColumn::make('sponsored_count')
+                    ->label(__('Sponsored employees'))
+                    ->badge()
+                    ->color('info')
+                    ->icon('heroicon-o-users')
+                    ->sortable(),
                 TextColumn::make('owned_attachments_count')
                     ->label(__('Documents'))
                     ->badge()

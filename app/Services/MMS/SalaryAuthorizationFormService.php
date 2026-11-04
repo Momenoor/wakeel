@@ -4,7 +4,6 @@ namespace App\Services\MMS;
 
 use App\Models\PayrollRun;
 use App\Models\Payslip;
-use App\Models\Setting;
 use App\Support\Vat;
 use Illuminate\Support\Carbon;
 
@@ -22,6 +21,7 @@ class SalaryAuthorizationFormService
     /**
      * @return array{
      *     company_name: string,
+     *     exchange_house: string,
      *     employer_id: string|null,
      *     trade_license: string|null,
      *     gl_number: string|null,
@@ -63,15 +63,18 @@ class SalaryAuthorizationFormService
         // Quoted VAT-inclusive by the bank; split back out (at the VAT rate of
         // Settings → Financial Settings → VAT) so the form's own two rows
         // (charge, then VAT) add up to what it will actually charge.
-        $feeInclusiveOfVat = round((float) Setting::get('payroll_bank_fee_amount', 0.0), 2);
+        // Who pays: the run's company and its own WPS details, else the office's (PayrollRun::payer()).
+        $payer = $run->payer();
+        $feeInclusiveOfVat = $payer['bank_fee'];
         $serviceCharge = Vat::split($feeInclusiveOfVat, included: true)['basic'];
         $vat = round($feeInclusiveOfVat - $serviceCharge, 2);
 
         return [
-            'company_name' => Setting::get('company_name') ?: config('app.name'),
-            'employer_id' => Setting::get('payroll_wps_employer_id'),
-            'trade_license' => Setting::get('payroll_wps_trade_license'),
-            'gl_number' => Setting::get('payroll_wps_gl_number'),
+            'company_name' => $payer['company_name'],
+            'employer_id' => $payer['employer_id'],
+            'trade_license' => $payer['trade_license'],
+            'gl_number' => $payer['gl_number'],
+            'exchange_house' => $payer['exchange_house'],
             'period' => Carbon::createFromFormat('Y-m', $run->period)->format('F/Y'),
             'lines' => $lines,
             'employee_count' => count($lines),

@@ -2,7 +2,10 @@
 
 namespace App\Filament\Mms\Resources\PayrollRuns\Schemas;
 
+use App\Models\Company;
 use Filament\Forms\Components\Select;
+use Filament\Schemas\Components\Utilities\Get;
+use Illuminate\Validation\Rules\Unique;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
@@ -17,6 +20,17 @@ class PayrollRunForm
             ->components([
                 Section::make(__('Payroll Run'))
                     ->schema([
+                        // Whose employees it pays — those the company sponsors — and whose details its Salary
+                        // Authorization Form and journal voucher carry. None: the employees with no company.
+                        Select::make('company_id')
+                            ->label(__('Company'))
+                            ->options(fn (): array => Company::options())
+                            ->placeholder(__('Employees with no company'))
+                            ->default(fn (): ?int => request()->integer('company') ?: null)
+                            ->searchable()
+                            ->live()
+                            ->helperText(__('Its employees are those the company sponsors (the employee\'s "Sponsor"), and its forms carry the company\'s own details.'))
+                            ->visible(fn (): bool => Company::query()->exists()),
                         Select::make('period')
                             ->label(__('Period'))
                             // A closed list rather than a free-text month, because
@@ -24,7 +38,10 @@ class PayrollRunForm
                             // against loan instalment due periods.
                             ->options(fn () => self::periodOptions())
                             ->default(now()->subMonth()->format('Y-m'))
-                            ->unique(ignoreRecord: true)
+                            // One run a month for each company (and one for the employees with none).
+                            ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule, Get $get): Unique => filled($get('company_id'))
+                                ? $rule->where('company_id', (int) $get('company_id'))
+                                : $rule->whereNull('company_id'))
                             ->required()
                             ->validationMessages([
                                 'unique' => __('A payroll run already exists for this month.'),

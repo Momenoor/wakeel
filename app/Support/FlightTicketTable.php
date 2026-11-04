@@ -108,11 +108,18 @@ class FlightTicketTable
         $draftRuns = function () use (&$runs): array {
             return $runs ??= PayrollRun::query()
                 ->where('status', PayrollRunStatus::DRAFT)
+                ->with('company')
                 ->orderByDesc('period')
                 ->get()
-                ->mapWithKeys(fn (PayrollRun $run): array => [$run->getKey() => $run->period.(filled($run->name) ? ' — '.$run->name : '')])
+                ->mapWithKeys(fn (PayrollRun $run): array => [$run->getKey() => $run->label().(filled($run->name) ? ' — '.$run->name : '')])
                 ->all();
         };
+        // To begin with: the newest draft run of the company sponsoring the ticket's employee (none: of those with none).
+        $ownRun = fn (FlightTicket $ticket): ?int => PayrollRun::query()
+            ->where('status', PayrollRunStatus::DRAFT)
+            ->where('company_id', $ticket->party?->employeeProfile?->getAttribute('company_id'))
+            ->orderByDesc('period')
+            ->value('id');
 
         return Action::make('payWithSalary')
             ->label(__('Pay with salary'))
@@ -128,7 +135,7 @@ class FlightTicketTable
                 Select::make('payroll_run_id')
                     ->label(__('Payroll Run'))
                     ->options($draftRuns)
-                    ->default(fn (): ?int => array_key_first($draftRuns()))
+                    ->default(fn (FlightTicket $record): ?int => $ownRun($record) ?? array_key_first($draftRuns()))
                     ->required(),
             ])
             ->action(function (FlightTicket $record, array $data): void {

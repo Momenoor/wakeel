@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\PayrollRun;
-use App\Models\Setting;
 use App\Services\MMS\PayrollJournalVoucherService;
 use Illuminate\Contracts\View\View;
 
@@ -21,7 +20,8 @@ class PayrollJournalVoucherPrintController extends Controller
 
         return view('filament.payroll.journal-voucher-print', [
             'voucher' => app(PayrollJournalVoucherService::class)->forRun($run),
-            'companyName' => Setting::get('company_name') ?: config('app.name'),
+            // The run's company, else the office.
+            'companyName' => $run->payer()['company_name'],
         ]);
     }
 }

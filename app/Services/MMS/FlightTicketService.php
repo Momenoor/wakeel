@@ -92,6 +92,7 @@ class FlightTicketService
     {
         return FlightTicket::query()
             ->unpaid()
+            ->forEmployeesOf($run)
             ->where(fn ($query) => $query->whereNull('payroll_run_id')->orWhere('payroll_run_id', $run->getKey()))
             ->with('party')
             ->orderBy('year')
@@ -117,6 +118,7 @@ class FlightTicketService
 
             FlightTicket::query()
                 ->unpaid()
+                ->forEmployeesOf($run)
                 ->whereIn('id', $ticketIds)
                 ->whereNull('payroll_run_id')
                 ->update(['payroll_run_id' => $run->getKey()]);
@@ -135,6 +137,10 @@ class FlightTicketService
 
         if ($ticket->status() !== FlightTicketStatus::DUE) {
             throw new RuntimeException(__('This ticket is already paid or in a payroll run.'));
+        }
+
+        if (! FlightTicket::query()->whereKey($ticket->getKey())->forEmployeesOf($run)->exists()) {
+            throw new RuntimeException(__('The employee is not paid in this payroll run: choose the run of the company that sponsors them.'));
         }
 
         DB::transaction(function () use ($ticket, $run): void {

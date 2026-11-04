@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Resources\PayrollRuns\Schemas;
 
+use App\Models\Company;
 use App\Models\PayrollRun;
 use App\Services\MMS\PayrollRunService;
 use App\Support\Currency;
@@ -18,6 +19,11 @@ class PayrollRunInfolist
                 Section::make(__('Summary'))
                     ->schema([
                         TextEntry::make('period')->label(__('Period')),
+                        TextEntry::make('company')
+                            ->label(__('Company'))
+                            ->state(fn (PayrollRun $record): ?string => $record->company?->displayName())
+                            ->placeholder(__('Employees with no company'))
+                            ->visible(fn (PayrollRun $record): bool => $record->company_id !== null || Company::query()->exists()),
                         TextEntry::make('status')->label(__('Status'))->badge(),
                         TextEntry::make('employees')
                             ->label(__('Employees'))

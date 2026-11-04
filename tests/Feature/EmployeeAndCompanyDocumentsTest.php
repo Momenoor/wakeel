@@ -10,6 +10,11 @@ use App\Filament\Mms\Resources\Companies\CompanyResource;
 use App\Filament\Mms\Resources\Companies\Pages\CreateCompany;
 use App\Filament\Mms\Resources\Companies\Pages\EditCompany;
 use App\Filament\Mms\Resources\Companies\Pages\ListCompanies;
+use App\Filament\Mms\Resources\Companies\RelationManagers\EmployeesRelationManager;
+use App\Filament\Mms\Resources\Companies\RelationManagers\PayrollRunsRelationManager;
+use App\Filament\Mms\Resources\PayrollRuns\Pages\CreatePayrollRun;
+use App\Filament\Mms\Resources\PayrollRuns\PayrollRunResource;
+use App\Models\PayrollRun;
 use App\Filament\Mms\Resources\EmployeeProfiles\EmployeeProfileResource;
 use App\Filament\Mms\Resources\EmployeeProfiles\Pages\EditEmployeeProfile;
 use App\Filament\Mms\Resources\EmployeeProfiles\Pages\ListEmployeeProfiles;
@@ -167,6 +172,85 @@ class EmployeeAndCompanyDocumentsTest extends TestCase
         // On the menu: those on staff only.
         $this->assertSame('2', EmployeeProfileResource::getNavigationBadge());
         $this->assertNotNull($left);
+    }
+
+    public function test_an_employee_is_sponsored_by_one_of_the_companies(): void
+    {
+        Gate::before(fn () => true);
+        $this->actingAs(User::factory()->create());
+
+        $jpa = Company::create(['name' => 'JPA Legal Consultancy', 'name_ar' => 'جي بي إيه للاستشارات القانونية']);
+        $other = Company::create(['name' => 'JPA Accounting']);
+
+        // Chosen: the sponsor's name follows the company's.
+        $chosen = $this->profile(['company_id' => $jpa->getKey()]);
+        $this->assertSame('JPA Legal Consultancy', $chosen->sponsor_name);
+        // Typed (an import), in either language: linked to that company; a sponsor that is no company stays as typed.
+        $typed = $this->profile(['sponsor_name' => ' جي بي إيه للاستشارات القانونية']);
+        $this->assertSame($jpa->getKey(), $typed->company_id);
+        $person = $this->profile(['sponsor_name' => 'Ahmed Saeed']);
+        $this->assertNull($person->company_id);
+
+        Livewire::test(EditEmployeeProfile::class, ['record' => $person->getKey()])
+            ->fillForm(['company_id' => $other->getKey()])
+            ->call('save')
+            ->assertHasNoFormErrors();
+        $this->assertSame('JPA Accounting', $person->fresh()->sponsor_name);
+
+        // Several at once from the list, and the list filtered by its sponsor.
+        Livewire::test(ListEmployeeProfiles::class)
+            ->callTableBulkAction('sponsor', [$chosen, $person], ['company_id' => $other->getKey()])
+            ->assertHasNoTableBulkActionErrors()
+            ->filterTable('company_id', $other->getKey())
+            ->assertCanSeeTableRecords([$chosen, $person])
+            ->assertCanNotSeeTableRecords([$typed]);
+
+        // On the company's page: its employees, added and taken off.
+        $page = Livewire::test(EmployeesRelationManager::class, ['ownerRecord' => $jpa, 'pageClass' => EditCompany::class])
+            ->assertCanSeeTableRecords([$typed])
+            ->assertCanNotSeeTableRecords([$chosen]);
+        $page->callAction(TestAction::make('addEmployees')->table(), data: ['employees' => [$chosen->getKey()]])->assertHasNoErrors();
+        $this->assertSame($jpa->getKey(), $chosen->fresh()->company_id);
+        $page->callAction(TestAction::make('removeSponsor')->table($typed));
+        $this->assertNull($typed->fresh()->company_id);
+        $this->assertNull($typed->fresh()->sponsor_name);
+
+        Livewire::test(ListCompanies::class)->assertTableColumnStateSet('sponsored_count', 1, $jpa);
+    }
+
+    public function test_a_payroll_run_a_month_for_each_company_made_from_its_page(): void
+    {
+        Gate::before(fn () => true);
+        $this->actingAs(User::factory()->create());
+
+        $jpa = Company::create(['name' => 'JPA Legal']);
+        $other = Company::create(['name' => 'JPA Accounting']);
+
+        foreach ([$jpa->getKey(), $other->getKey(), null] as $company) {
+            Livewire::test(CreatePayrollRun::class)
+                ->fillForm(['company_id' => $company, 'period' => '2026-10'])
+                ->call('create')
+                ->assertHasNoFormErrors();
+        }
+
+        // A second run of the same month for the same company is refused.
+        Livewire::test(CreatePayrollRun::class)
+            ->fillForm(['company_id' => $jpa->getKey(), 'period' => '2026-10'])
+            ->call('create')
+            ->assertHasFormErrors(['period' => 'unique']);
+        Livewire::test(CreatePayrollRun::class)
+            ->fillForm(['company_id' => null, 'period' => '2026-10'])
+            ->call('create')
+            ->assertHasFormErrors(['period' => 'unique']);
+
+        $run = PayrollRun::query()->where('company_id', $jpa->getKey())->sole();
+        $this->assertSame('2026-10 — JPA Legal', $run->label());
+
+        // On the company's page: its runs only, and a new one starts with it chosen.
+        Livewire::test(PayrollRunsRelationManager::class, ['ownerRecord' => $jpa, 'pageClass' => EditCompany::class])
+            ->assertCanSeeTableRecords([$run])
+            ->assertCanNotSeeTableRecords(PayrollRun::query()->whereKeyNot($run->getKey())->get())
+            ->assertActionHasUrl(TestAction::make('newRun')->table(), PayrollRunResource::getUrl('create', ['company' => $jpa->getKey()]));
     }
 
     public function test_the_bell_rings_for_a_document_60_30_and_7_days_before_and_on_the_day(): void

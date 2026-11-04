@@ -7,6 +7,8 @@ use App\Filament\Mms\RelationManagers\DocumentsRelationManager;
 use App\Filament\Mms\Resources\Companies\Pages\CreateCompany;
 use App\Filament\Mms\Resources\Companies\Pages\EditCompany;
 use App\Filament\Mms\Resources\Companies\Pages\ListCompanies;
+use App\Filament\Mms\Resources\Companies\RelationManagers\EmployeesRelationManager;
+use App\Filament\Mms\Resources\Companies\RelationManagers\PayrollRunsRelationManager;
 use App\Filament\Mms\Resources\Companies\Schemas\CompanyForm;
 use App\Filament\Mms\Resources\Companies\Tables\CompaniesTable;
 use App\Filament\Support\ExpiringDocuments;
@@ -86,7 +88,7 @@ class CompanyResource extends Resource
 
     public static function getRelations(): array
     {
-        return [DocumentsRelationManager::class];
+        return [DocumentsRelationManager::class, EmployeesRelationManager::class, PayrollRunsRelationManager::class];
     }
 
     public static function getPages(): array

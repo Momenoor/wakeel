@@ -105,4 +105,19 @@ class FlightTicket extends Model
     {
         $query->whereNull('paid_at');
     }
+
+    /**
+     * Only the tickets of the run's employees — those its company sponsors; with no company, those with none — so a
+     * ticket is paid in the run its employee's payslip is in.
+     *
+     * @param  Builder<FlightTicket>  $query
+     */
+    public function scopeForEmployeesOf(Builder $query, PayrollRun $run): void
+    {
+        $companyId = $run->getAttribute('company_id');
+
+        $companyId
+            ? $query->whereHas('party.employeeProfile', fn (Builder $profile) => $profile->where('company_id', $companyId))
+            : $query->whereDoesntHave('party.employeeProfile', fn (Builder $profile) => $profile->whereNotNull('company_id'));
+    }
 }

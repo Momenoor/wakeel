@@ -15,6 +15,8 @@ use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Table;
+use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Database\Eloquent\Model;
 
 class PayrollRunResource extends Resource
 {
@@ -52,6 +54,12 @@ class PayrollRunResource extends Resource
     protected static ?int $navigationSort = 2;
 
     protected static ?string $recordTitleAttribute = 'period';
+
+    /** Its period, and its company's name when it has one (two runs a month are told apart). */
+    public static function getRecordTitle(?Model $record): string|Htmlable|null
+    {
+        return $record instanceof PayrollRun ? $record->label() : parent::getRecordTitle($record);
+    }
 
     public static function form(Schema $schema): Schema
     {

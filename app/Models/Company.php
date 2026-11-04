@@ -6,6 +6,7 @@ use App\Enums\AttachmentCategory;
 use App\Models\Concerns\HasAttachments;
 use App\Models\Contracts\AttachmentOwner;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
@@ -36,6 +37,10 @@ class Company extends Model implements AttachmentOwner
         'establishment_card_no',
         'establishment_card_issue',
         'establishment_card_expiry',
+        'wps_employer_id',
+        'wps_gl_number',
+        'wps_exchange_house',
+        'payroll_bank_fee_amount',
         'notes',
     ];
 
@@ -46,12 +51,56 @@ class Company extends Model implements AttachmentOwner
             'trade_license_expiry' => 'date',
             'establishment_card_issue' => 'date',
             'establishment_card_expiry' => 'date',
+            'payroll_bank_fee_amount' => 'decimal:2',
         ];
     }
 
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()->logAll();
+    }
+
+    /**
+     * The employees it sponsors (their visas under its establishment card).
+     *
+     * @return HasMany<EmployeeProfile, $this>
+     */
+    public function employees(): HasMany
+    {
+        return $this->hasMany(EmployeeProfile::class);
+    }
+
+    /**
+     * Its payroll runs, one a month.
+     *
+     * @return HasMany<PayrollRun, $this>
+     */
+    public function payrollRuns(): HasMany
+    {
+        return $this->hasMany(PayrollRun::class);
+    }
+
+    /** The company of this name, in English or Arabic, whatever its letters' case. */
+    public static function named(string $name): ?self
+    {
+        $name = mb_strtolower(trim($name));
+
+        return $name === '' ? null : self::query()
+            ->where(fn ($query) => $query->whereRaw('LOWER(TRIM(name)) = ?', [$name])->orWhereRaw('LOWER(TRIM(name_ar)) = ?', [$name]))
+            ->oldest('id')
+            ->first();
+    }
+
+    /**
+     * The companies to choose from, by name in the user's language: id => name.
+     *
+     * @return array<int, string>
+     */
+    public static function options(): array
+    {
+        return self::query()->orderBy('name')->get(['id', 'name', 'name_ar'])
+            ->mapWithKeys(fn (self $company): array => [$company->getKey() => $company->displayName()])
+            ->all();
     }
 
     /** Its name in the user's language. */

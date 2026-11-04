@@ -88,10 +88,20 @@ class PayrollService
 
             $this->clear($run);
 
+            // The run's company's employees (those it sponsors) — with no company, those with none — and never one
+            // already paid this month by another company's run (sponsored by it until they moved).
+            $companyId = $run->getAttribute('company_id');
+            $paidElsewhere = Payslip::query()
+                ->whereHas('payrollRun', fn ($query) => $query->where('period', $run->getAttribute('period'))->whereKeyNot($run->getKey()))
+                ->pluck('party_id')
+                ->flip();
+
             $parties = Party::withRole('employee')
                 ->with('employeeProfile')
                 ->get()
-                ->filter(fn (Party $party): bool => $this->isOnPayroll($party, $periodEnd))
+                ->filter(fn (Party $party): bool => $this->isOnPayroll($party, $periodEnd)
+                    && $party->employeeProfile?->getAttribute('company_id') == $companyId
+                    && ! $paidElsewhere->has($party->getKey()))
                 ->values();
 
             $this->forRun = $this->readForRun($run, $parties->modelKeys(), $periodStart, $periodEnd);

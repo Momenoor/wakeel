@@ -2,7 +2,9 @@
 
 namespace App\Filament\Mms\Resources\EmployeeProfiles\Tables;
 
+use App\Filament\Mms\Resources\Companies\CompanyResource;
 use App\Filament\Support\ExpiringDocuments;
+use App\Models\Company;
 use App\Models\EmployeeProfile;
 use App\Support\Currency;
 use Filament\Actions\BulkAction;
@@ -12,12 +14,14 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -29,7 +33,7 @@ class EmployeeProfilesTable
     {
         return $table
             ->modifyQueryUsing(fn (Builder $query) => $query
-                ->with('photo')
+                ->with(['photo', 'company'])
                 ->withSum('leaveBalanceEntries as leave_balance', 'days'))
             ->columns([
                 // Their latest personal picture (Documents), opened through the permission check.
@@ -58,6 +62,16 @@ class EmployeeProfilesTable
                     ->label(__('Date of Joining'))
                     ->date()
                     ->sortable(),
+                // The company sponsoring them, else the sponsor typed.
+                TextColumn::make('sponsor')
+                    ->label(__('Sponsor'))
+                    ->state(fn (EmployeeProfile $record): ?string => $record->company?->displayName() ?? $record->sponsor_name)
+                    ->icon(fn (EmployeeProfile $record): ?string => $record->company ? 'heroicon-o-building-office-2' : null)
+                    ->url(fn (EmployeeProfile $record): ?string => $record->company && (auth()->user()?->can('update', $record->company) ?? false)
+                        ? CompanyResource::getUrl('edit', ['record' => $record->company])
+                        : null)
+                    ->placeholder('—')
+                    ->toggleable(),
                 // One column for the four expiry dates: a badge each for one expired (red) or due soon (amber).
                 ExpiringDocuments::column(EmployeeProfile::EXPIRING),
                 TextColumn::make('date_of_leaving')
@@ -87,6 +101,9 @@ class EmployeeProfilesTable
                     )
                     ->default(true),
                 ExpiringDocuments::filter(EmployeeProfile::EXPIRING),
+                SelectFilter::make('company_id')
+                    ->label(__('Sponsor'))
+                    ->options(fn (): array => Company::options()),
             ])
             ->recordActions([
                 EditAction::make()->iconButton(),
@@ -95,6 +112,20 @@ class EmployeeProfilesTable
             ->toolbarActions([
                 BulkActionGroup::make([
                     self::flightTicketBulkAction(),
+                    // The company sponsoring the employees chosen.
+                    BulkAction::make('sponsor')
+                        ->label(__('Sponsor'))
+                        ->icon('heroicon-o-building-office-2')
+                        ->visible(fn (): bool => self::canUpdate())
+                        ->schema([
+                            Select::make('company_id')
+                                ->label(__('Sponsor'))
+                                ->options(fn (): array => Company::options())
+                                ->searchable()
+                                ->required(),
+                        ])
+                        ->action(fn (Collection $records, array $data) => self::updateEach($records, ['company_id' => (int) $data['company_id']]))
+                        ->deselectRecordsAfterCompletion(),
                     self::toggleBulkAction(
                         'salary_form',
                         'include_in_salary_authorization_form',
