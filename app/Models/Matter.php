@@ -123,10 +123,17 @@ class Matter extends Model implements AttachmentOwner
         $query->ofParties($user->ownMatterPartyIds());
     }
 
-    /** The matters of the assistants someone administers (User::administeredPartyIds()) — not their own. */
+    /**
+     * The matters of the assistants someone administers (User::administeredPartyIds()) — not their own — and any
+     * matter with no assistant yet, which is every administrator's to see.
+     */
     public function scopeAdministeredBy(Builder $query, User $user): void
     {
-        $query->ofParties($user->administeredPartyIds());
+        $parties = $user->administeredPartyIds();
+
+        $query->where(fn (Builder $q) => $q
+            ->whereDoesntHave('assistantsOnly')
+            ->when($parties !== [], fn (Builder $q) => $q->orWhereHas('matterParties', fn (Builder $p) => $p->whereIn('party_id', $parties))));
     }
 
     /**
@@ -153,9 +160,15 @@ class Matter extends Model implements AttachmentOwner
             return;
         }
 
-        if ($user->can('ViewOwn:Matter')) {
+        $own = $user->can('ViewOwn:Matter');
+        $administered = $user->can('ViewAdministered:Matter');
+
+        if ($own && $administered) {
+            // Both: as the policy opens them — their own, and their administered assistants' with those of no assistant yet.
+            $query->where(fn (Builder $q) => $q->ownedBy($user)->orWhere(fn (Builder $q) => $q->administeredBy($user)));
+        } elseif ($own) {
             $query->ownedBy($user);
-        } elseif ($user->can('ViewAdministered:Matter')) {
+        } elseif ($administered) {
             $query->administeredBy($user);
         }
     }
@@ -181,10 +194,16 @@ class Matter extends Model implements AttachmentOwner
         return $this->isOfParties($user->ownMatterPartyIds());
     }
 
-    /** Whether it is a matter of an assistant someone administers (scopeAdministeredBy()). */
+    /** Whether it is a matter of an assistant someone administers, or one with no assistant yet (scopeAdministeredBy()). */
     public function isAdministeredBy(User $user): bool
     {
-        return $this->isOfParties($user->administeredPartyIds());
+        return $this->isOfParties($user->administeredPartyIds()) || $this->hasNoAssistant();
+    }
+
+    /** Whether no assistant is on it yet — asked once a request, forgotten when a party row changes (MatterParty). */
+    private function hasNoAssistant(): bool
+    {
+        return RequestMemo::remember('matter-parties.'.$this->getKey().'.no-assistant', fn (): bool => ! $this->assistantsOnly()->exists());
     }
 
     /** @param  list<int>  $parties */

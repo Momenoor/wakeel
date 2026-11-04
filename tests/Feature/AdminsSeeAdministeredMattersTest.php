@@ -41,28 +41,37 @@ class AdminsSeeAdministeredMattersTest extends TestCase
         $assistant = Party::factory()->assistant()->create();
         $assistant->administrators()->attach($admin);
         $theirs = Matter::factory()->create(['number' => '801', 'year' => 2026]);
+        // Of another assistant, not theirs; and one with no assistant yet.
         $other = Matter::factory()->create(['number' => '802', 'year' => 2026]);
+        $unassigned = Matter::factory()->create(['number' => '803', 'year' => 2026]);
         MatterParty::create(['matter_id' => $theirs->id, 'party_id' => $assistant->id, 'role' => 'expert', 'type' => 'assistant']);
-        $this->assertSame([$theirs->id, $other->id], Matter::query()->visibleTo($admin->fresh())->pluck('id')->all());
+        MatterParty::create(['matter_id' => $other->id, 'party_id' => Party::factory()->assistant()->create()->id, 'role' => 'expert', 'type' => 'assistant']);
+        $this->assertSame([$theirs->id, $other->id, $unassigned->id], Matter::query()->visibleTo($admin->fresh())->pluck('id')->all());
 
         Artisan::call('migrate:rollback', ['--path' => self::MIGRATION]);
         Artisan::call('migrate', ['--path' => self::MIGRATION]);
 
-        // The administered assistant's matters, and no others; the rest of the role as it was.
+        // The administered assistant's matters and those with no assistant yet, no others; the rest of the role as it was.
         $names = $role->fresh()->permissions->pluck('name')->sort()->values()->all();
         $this->assertSame(['Update:Matter', 'ViewAdministered:Matter'], $names);
         $admin = $admin->fresh();
-        $this->assertSame([$theirs->id], Matter::query()->visibleTo($admin)->pluck('id')->all());
+        $this->assertSame([$theirs->id, $unassigned->id], Matter::query()->visibleTo($admin)->pluck('id')->all());
         $this->assertTrue($admin->can('view', $theirs));
+        $this->assertTrue($admin->can('view', $unassigned));
         $this->assertFalse($admin->can('view', $other));
 
-        // An admin with no assistant yet: none.
+        // An admin with no assistant yet: the matters with no assistant alone — and one given an assistant in the
+        // same request is theirs no more.
         $alone = User::factory()->create()->assignRole($role);
+        $this->assertSame([$unassigned->id], Matter::query()->visibleTo($alone->fresh())->pluck('id')->all());
+        $this->assertTrue($alone->fresh()->can('view', $unassigned));
+        MatterParty::create(['matter_id' => $unassigned->id, 'party_id' => $assistant->id, 'role' => 'expert', 'type' => 'assistant']);
+        $this->assertFalse($alone->fresh()->can('view', $unassigned));
         $this->assertSame([], Matter::query()->visibleTo($alone->fresh())->pluck('id')->all());
 
         // Rolled back: every matter again.
         Artisan::call('migrate:rollback', ['--path' => self::MIGRATION]);
-        $this->assertSame([$theirs->id, $other->id], Matter::query()->visibleTo($admin->fresh())->pluck('id')->all());
+        $this->assertSame([$theirs->id, $other->id, $unassigned->id], Matter::query()->visibleTo($admin->fresh())->pluck('id')->all());
         Artisan::call('migrate', ['--path' => self::MIGRATION]);
     }
 
@@ -87,6 +96,8 @@ class AdminsSeeAdministeredMattersTest extends TestCase
         $theirs = Matter::factory()->create(['number' => '811', 'year' => 2026, 'next_session_date' => now()->addDays(3)]);
         $other = Matter::factory()->create(['number' => '812', 'year' => 2026, 'next_session_date' => now()->addDays(4)]);
         MatterParty::create(['matter_id' => $theirs->id, 'party_id' => $amr->id, 'role' => 'expert', 'type' => 'assistant']);
+        // The other's assistant is not theirs.
+        MatterParty::create(['matter_id' => $other->id, 'party_id' => Party::factory()->assistant()->create()->id, 'role' => 'expert', 'type' => 'assistant']);
         $event = fn (string $title, ?Matter $matter) => CalendarEvent::create(['title' => $title, 'matter_id' => $matter?->id, 'start_datetime' => now()->addDay(), 'end_datetime' => now()->addDay()->addHour(), 'type' => 'single']);
         $theirEvent = $event('Session 811/2026', $theirs);
         $otherEvent = $event('Session 812/2026', $other);

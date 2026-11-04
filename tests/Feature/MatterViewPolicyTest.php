@@ -119,23 +119,25 @@ class MatterViewPolicyTest extends TestCase
         $theirs = Matter::factory()->create(['number' => '782', 'year' => 2026]);
         $nobodys = Matter::factory()->create(['number' => '783', 'year' => 2026]);
         MatterParty::create(['matter_id' => $mine->id, 'role' => 'expert', 'type' => 'expert', 'party_id' => $own->id]);
+        // Theirs has another assistant; nobody's none yet.
+        MatterParty::create(['matter_id' => $mine->id, 'role' => 'expert', 'type' => 'assistant', 'party_id' => Party::factory()->assistant()->create()->id]);
         MatterParty::create(['matter_id' => $theirs->id, 'role' => 'expert', 'type' => 'assistant', 'party_id' => $assistant->id]);
 
-        // The assistant's matter, and not the ones the user is on themselves.
+        // The assistant's matter and the one with no assistant yet, and not the ones the user is on themselves.
         $user = $user->fresh();
         $this->assertTrue($user->can('view', $theirs));
         $this->assertFalse($user->can('view', $mine));
-        $this->assertFalse($user->can('view', $nobodys));
+        $this->assertTrue($user->can('view', $nobodys));
 
         $this->actingAs($user);
         $this->assertTrue(MatterResource::canViewAny());
-        $this->assertSame([$theirs->id], Matter::query()->visibleTo($user)->pluck('id')->all());
-        $this->assertSame([$theirs->id], array_keys(MatterSearch::options('78')));
+        $this->assertSame([$theirs->id, $nobodys->id], Matter::query()->visibleTo($user)->pluck('id')->all());
+        $this->assertEqualsCanonicalizing([$theirs->id, $nobodys->id], array_keys(MatterSearch::options('78')));
 
         // With "View own matters" as well: their own too.
         $user->givePermissionTo(Permission::firstOrCreate(['name' => 'ViewOwn:Matter', 'guard_name' => 'web']));
         $user = $user->fresh();
         $this->assertTrue($user->can('view', $mine));
-        $this->assertEqualsCanonicalizing([$mine->id, $theirs->id], Matter::query()->visibleTo($user)->pluck('id')->all());
+        $this->assertEqualsCanonicalizing([$mine->id, $theirs->id, $nobodys->id], Matter::query()->visibleTo($user)->pluck('id')->all());
     }
 }

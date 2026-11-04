@@ -50,7 +50,7 @@ return [
             ],
             'tips' => [
                 'A user whose mailboxes are all still ticked sees every shared mailbox, including any added later.',
-                '"Administrators of their matters" offers users of the "admin" role only. That role sees the matters of the assistants its users administer and no others ("View administered assistants\' matters only" under Roles → Matters), so an admin with no assistant yet sees no matters until one is given to them. The dashboard, the calendar, the reports, the requests, the unfiled emails and the bulk mail campaigns are kept to those matters too (office-wide reports like Court workload and Type profitability need every matter in view), and the admin is told only of what happens on them — a request, a fee change, a folder to review; an administrator given "View own matters" instead sees the matters they are on and their assistants\'.',
+                '"Administrators of their matters" offers users of the "admin" role only. That role sees the matters of the assistants its users administer and no others ("View administered assistants\' matters only" under Roles → Matters), and any matter with no assistant yet, which every admin sees until an assistant is put on it. The dashboard, the calendar, the reports, the requests, the unfiled emails and the bulk mail campaigns are kept to those matters too (office-wide reports like Court workload and Type profitability need every matter in view), and the admin is told only of what happens on them — a request, a fee change, a folder to review; an administrator given "View own matters" instead sees the matters they are on and their assistants\'.',
             ],
         ],
         [
