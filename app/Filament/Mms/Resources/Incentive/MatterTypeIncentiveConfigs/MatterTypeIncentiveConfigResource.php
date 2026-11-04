@@ -2,7 +2,7 @@
 
 namespace App\Filament\Mms\Resources\Incentive\MatterTypeIncentiveConfigs;
 
-use App\Filament\Concerns\HasModuleGate;
+use App\Filament\Concerns\KeptToFinanceViewers;
 use App\Filament\Mms\Resources\Incentive\MatterTypeIncentiveConfigs\Pages\CreateMatterTypeIncentiveConfig;
 use App\Filament\Mms\Resources\Incentive\MatterTypeIncentiveConfigs\Pages\EditMatterTypeIncentiveConfig;
 use App\Filament\Mms\Resources\Incentive\MatterTypeIncentiveConfigs\Pages\ListMatterTypeIncentiveConfigs;
@@ -18,7 +18,7 @@ use Filament\Tables\Table;
 
 class MatterTypeIncentiveConfigResource extends Resource
 {
-    use HasModuleGate;
+    use KeptToFinanceViewers;
 
     protected static ?string $model = MatterTypeIncentiveConfig::class;
 

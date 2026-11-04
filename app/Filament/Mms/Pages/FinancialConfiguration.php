@@ -12,6 +12,7 @@ use App\Filament\Shared\Clusters\Settings;
 use App\Filament\Support\SettingsForm;
 use App\Models\Setting;
 use App\Services\MMS\MarketingCommissions;
+use App\Support\FinanceViewers;
 use App\Support\ScreenPermissions;
 use App\Support\Vat;
 use BackedEnum;
@@ -67,7 +68,8 @@ class FinancialConfiguration extends Page
     {
         $user = auth()->user();
 
-        return $user?->can('View:FinancialConfiguration') ?? false;
+        // Kept to the finance viewers, when some are chosen (Settings → General).
+        return FinanceViewers::allows($user) && ($user?->can('View:FinancialConfiguration') ?? false);
     }
 
     /**

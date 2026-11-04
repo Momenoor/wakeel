@@ -18,6 +18,7 @@ return [
                 ['text' => 'Enter the office\'s name and address in English and in Arabic, and the "Trade licence number". In letter templates, {{company.name}} writes the name in the letter\'s language. You can ask for a given language by adding _ar or _en (such as {{company.name_en}}).', 'shot' => 'general-office'],
                 ['text' => 'The "Date format" (such as 22/10/2026) and the "Time format" (such as 05:35 PM) are used everywhere: tables, pages, date pickers, emails, PDF files, notifications and letters. In Arabic text the time is written with صباحاً / مساءً. The time zone is set on the server.', 'shot' => 'general-dates'],
                 ['text' => 'The "Calendar" section: "\"Send an invitation email\" on when an event is made" sets what the invitation question starts as for each new event (off unless turned on here). "Court sessions\' titles start with" is text written before the matter numbers in the title of a combined court sessions event (empty: the numbers first).', 'shot' => 'general-calendar'],
+                ['text' => 'The "Salaries and incentives" section, "Seen by these users only": empty, the permissions decide as usual; with users chosen, only they see the incentive screens, Financial configuration, payroll runs, the end-of-service voucher and employees\' loans and salary components — whatever anyone\'s permissions say. Meant for a while: empty it to go back to the permissions.'],
             ],
         ],
         [

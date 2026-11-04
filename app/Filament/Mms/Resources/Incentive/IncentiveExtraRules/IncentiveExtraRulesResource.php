@@ -2,7 +2,7 @@
 
 namespace App\Filament\Mms\Resources\Incentive\IncentiveExtraRules;
 
-use App\Filament\Concerns\HasModuleGate;
+use App\Filament\Concerns\KeptToFinanceViewers;
 use App\Filament\Mms\Resources\Incentive\IncentiveExtraRules\Pages\CreateIncentiveExtraRules;
 use App\Filament\Mms\Resources\Incentive\IncentiveExtraRules\Pages\EditIncentiveExtraRules;
 use App\Filament\Mms\Resources\Incentive\IncentiveExtraRules\Pages\ListIncentiveExtraRules;
@@ -16,7 +16,7 @@ use Filament\Tables\Table;
 
 class IncentiveExtraRulesResource extends Resource
 {
-    use HasModuleGate;
+    use KeptToFinanceViewers;
 
     protected static ?string $model = IncentiveExtraRule::class;
 

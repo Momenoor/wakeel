@@ -2,7 +2,7 @@
 
 namespace App\Filament\Mms\Resources\Incentive\IncentiveCalculations;
 
-use App\Filament\Concerns\HasModuleGate;
+use App\Filament\Concerns\KeptToFinanceViewers;
 use App\Filament\Mms\Resources\Incentive\IncentiveCalculations\Pages\CreateIncentiveCalculation;
 use App\Filament\Mms\Resources\Incentive\IncentiveCalculations\Pages\EditIncentiveCalculation;
 use App\Filament\Mms\Resources\Incentive\IncentiveCalculations\Pages\ListIncentiveCalculations;
@@ -18,7 +18,7 @@ use Filament\Tables\Table;
 
 class IncentiveCalculationResource extends Resource
 {
-    use HasModuleGate;
+    use KeptToFinanceViewers;
 
     protected static ?string $model = IncentiveCalculation::class;
 

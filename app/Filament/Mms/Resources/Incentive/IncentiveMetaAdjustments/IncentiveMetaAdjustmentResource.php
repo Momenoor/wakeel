@@ -2,7 +2,7 @@
 
 namespace App\Filament\Mms\Resources\Incentive\IncentiveMetaAdjustments;
 
-use App\Filament\Concerns\HasModuleGate;
+use App\Filament\Concerns\KeptToFinanceViewers;
 use App\Filament\Mms\Resources\Incentive\IncentiveMetaAdjustments\Pages\CreateIncentiveMetaAdjustment;
 use App\Filament\Mms\Resources\Incentive\IncentiveMetaAdjustments\Pages\EditIncentiveMetaAdjustment;
 use App\Filament\Mms\Resources\Incentive\IncentiveMetaAdjustments\Pages\ListIncentiveMetaAdjustments;
@@ -16,7 +16,7 @@ use Filament\Tables\Table;
 
 class IncentiveMetaAdjustmentResource extends Resource
 {
-    use HasModuleGate;
+    use KeptToFinanceViewers;
 
     protected static ?string $model = IncentiveMetaAdjustment::class;
 

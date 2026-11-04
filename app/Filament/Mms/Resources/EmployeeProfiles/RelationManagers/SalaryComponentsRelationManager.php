@@ -8,6 +8,7 @@ use App\Filament\Mms\Concerns\RefreshesPayrollData;
 use App\Models\EmployeeProfile;
 use App\Models\EmployeeSalaryComponent;
 use App\Support\Currency;
+use App\Support\FinanceViewers;
 use App\Support\ScreenPermissions;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
@@ -38,8 +39,16 @@ use LogicException;
  */
 class SalaryComponentsRelationManager extends RelationManager
 {
-    use HasRelationManagerPermission;
+    use HasRelationManagerPermission {
+        HasRelationManagerPermission::canViewForRecord as permittedForRecord;
+    }
     use RefreshesPayrollData;
+
+    /** Kept to the finance viewers, when some are chosen (Settings → General). */
+    public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
+    {
+        return FinanceViewers::allows(auth()->user()) && static::permittedForRecord($ownerRecord, $pageClass);
+    }
 
     public static function viewPermission(): string
     {

@@ -7,6 +7,7 @@ use App\Filament\Support\JournalVoucherEntries;
 use App\Models\EosgClosingVoucher;
 use App\Services\MMS\EndOfServiceGratuityClosingVoucherService;
 use App\Support\Currency;
+use App\Support\FinanceViewers;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
@@ -47,8 +48,22 @@ use Livewire\Attributes\Computed;
  */
 class EndOfServiceGratuityClosingVoucher extends Page
 {
-    use HasPageShield;
+    use HasPageShield {
+        HasPageShield::canAccess as shieldCanAccess;
+        HasPageShield::shouldRegisterNavigation as shieldShouldRegisterNavigation;
+    }
     use RendersFreshContent;
+
+    /** Kept to the finance viewers, when some are chosen (Settings → General). */
+    public static function canAccess(): bool
+    {
+        return FinanceViewers::allows(auth()->user()) && static::shieldCanAccess();
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return FinanceViewers::allows(auth()->user()) && static::shieldShouldRegisterNavigation();
+    }
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-document-text';
 

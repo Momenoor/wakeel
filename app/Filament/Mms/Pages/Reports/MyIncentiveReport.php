@@ -12,6 +12,7 @@ use App\Models\IncentiveLine;
 use App\Models\Matter;
 use App\Services\MMS\IncentiveCalculatorService;
 use App\Support\Dates;
+use App\Support\FinanceViewers;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Infolists\Components\TextEntry;
@@ -96,7 +97,9 @@ class MyIncentiveReport extends Page implements HasTable
      */
     public static function canAccess(): bool
     {
-        return auth()->user()?->party !== null
+        // Kept to the finance viewers, when some are chosen (Settings → General).
+        return FinanceViewers::allows(auth()->user())
+            && auth()->user()?->party !== null
             && auth()->user()->can('View:MyIncentiveReport');
     }
 

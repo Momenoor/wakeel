@@ -2,7 +2,7 @@
 
 namespace App\Filament\Mms\Resources\PayrollRuns;
 
-use App\Filament\Concerns\HasModuleGate;
+use App\Filament\Concerns\KeptToFinanceViewers;
 use App\Filament\Mms\Resources\PayrollRuns\Pages\CreatePayrollRun;
 use App\Filament\Mms\Resources\PayrollRuns\Pages\ListPayrollRuns;
 use App\Filament\Mms\Resources\PayrollRuns\Pages\ViewPayrollRun;
@@ -18,7 +18,7 @@ use Filament\Tables\Table;
 
 class PayrollRunResource extends Resource
 {
-    use HasModuleGate;
+    use KeptToFinanceViewers;
 
     protected static ?string $model = PayrollRun::class;
 

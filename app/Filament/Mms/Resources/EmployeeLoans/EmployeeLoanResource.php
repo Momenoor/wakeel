@@ -2,7 +2,7 @@
 
 namespace App\Filament\Mms\Resources\EmployeeLoans;
 
-use App\Filament\Concerns\HasModuleGate;
+use App\Filament\Concerns\KeptToFinanceViewers;
 use App\Filament\Mms\Resources\EmployeeLoans\Pages\CreateEmployeeLoan;
 use App\Filament\Mms\Resources\EmployeeLoans\Pages\EditEmployeeLoan;
 use App\Filament\Mms\Resources\EmployeeLoans\Pages\ListEmployeeLoans;
@@ -19,7 +19,7 @@ use Filament\Tables\Table;
 
 class EmployeeLoanResource extends Resource
 {
-    use HasModuleGate;
+    use KeptToFinanceViewers;
 
     protected static ?string $model = EmployeeLoan::class;
 

@@ -5,11 +5,13 @@ namespace App\Filament\Shared\Pages;
 use App\Filament\Mms\Resources\CalendarEvents\Schemas\CalendarEventForm;
 use App\Filament\Schemas\BrandingSettingsSection;
 use App\Models\Setting;
+use App\Models\User;
 use App\Services\Installer\EnvironmentFileWriter;
 use App\Services\MMS\OutlookCalendarService;
 use App\Support\Branding;
 use App\Support\CompanyContact;
 use App\Support\Dates;
+use App\Support\FinanceViewers;
 use App\Support\ScreenPermissions;
 use BackedEnum;
 use Filament\Forms\Components\Select;
@@ -61,6 +63,7 @@ class GeneralSettings extends SettingsFormPage
             ...collect(Branding::KEYS)->mapWithKeys(fn (string $key): array => [$key => Setting::get($key)])->all(),
             OutlookCalendarService::INVITES => OutlookCalendarService::invitesPeople(),
             CalendarEventForm::SESSIONS_PREFIX => CalendarEventForm::sessionsPrefix(),
+            FinanceViewers::SETTING => FinanceViewers::ids(),
         ];
     }
 
@@ -194,6 +197,17 @@ class GeneralSettings extends SettingsFormPage
                         ->label(__('Court sessions\' titles start with'))
                         ->helperText(__('Before the matter numbers of a bulk (court sessions) event: "د.رضا 639/2025, 640/2025 (court) (type) (جلسات المحكمة)". Empty: the numbers first.'))
                         ->maxLength(60),
+                ]),
+            // For a while: salaries and incentives kept to a few, whatever the permissions say (FinanceViewers).
+            Section::make(__('Salaries and incentives'))
+                ->icon(Heroicon::LockClosed)
+                ->schema([
+                    Select::make(FinanceViewers::SETTING)
+                        ->label(__('Seen by these users only'))
+                        ->multiple()
+                        ->searchable()
+                        ->options(fn (): array => User::query()->orderBy('name')->pluck('name', 'id')->all())
+                        ->helperText(__('Empty: the permissions decide, as usual. With users chosen, only they see the incentive screens, Financial configuration, payroll runs, the end-of-service voucher, employees\' loans and salary components — whatever anyone\'s permissions say. Meant for a while; empty it to go back to the permissions.')),
                 ]),
         ];
     }
