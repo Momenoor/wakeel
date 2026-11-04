@@ -95,8 +95,9 @@ class EmailsRelationManager extends RelationManager
             // not those waiting for a matter, or set aside.
             ->modifyQueryUsing(fn (Builder $query) => self::listed($query)->with(['reads.user', 'user']))
             ->defaultSort('at', 'desc')
-            // Columns of fixed widths, the text wrapped in them: the table as wide as the page, never scrolled sideways.
-            ->extraAttributes(['class' => '[&_table]:table-fixed [&_table]:w-full [&_.fi-ta-content]:overflow-x-hidden [&_td]:align-top'])
+            // Columns of fixed widths, the text wrapped in them: the table as wide as the page, never scrolled sideways —
+            // the actions column wide enough for its three buttons and menu (Filament gives its empty header 4px).
+            ->extraAttributes(['class' => '[&_table]:table-fixed [&_table]:w-full [&_.fi-ta-content]:overflow-x-hidden [&_td]:align-top [&_.fi-ta-actions-header-cell]:w-52'])
             ->columns([
                 // Each user's own: unread until they open it (or mark it read).
                 IconColumn::make('unread')
