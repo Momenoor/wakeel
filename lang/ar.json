@@ -3453,6 +3453,8 @@
     "The reply is sent": "أُرسل الرد",
     "Whom the reply goes to is missing.": "لم يُحدَّد إلى من يذهب الرد.",
     "Also to": "إلى أيضاً",
+    "Permissions of their own": "صلاحياته الخاصة",
+    "Beside their roles': each ticked here is theirs whatever their roles say, and stays theirs if their role changes. Grouped by what it is on.": "إلى جانب صلاحيات أدواره: كل ما يُعلَّم هنا له مهما قالت أدواره، ويبقى له إن تغيّر دوره. مجمَّعة بحسب ما هي عليه.",
     "Merge into one party": "دمج في طرف واحد",
     "Merge the parties ticked into one": "دمج الأطراف المعلَّمة في طرف واحد",
     "Everything of the others — their matters and capacities on them, representatives, letters, minutes, emails, contacts, creditors, folders, payroll and the rest — moves to the party kept; its phones and emails take theirs where not there already; then they are deleted. It cannot be undone.": "كل ما للآخرين — قضاياهم وصفاتهم فيها وممثلوهم وخطاباتهم ومحاضرهم ورسائلهم وجهات اتصالهم ودائنوهم ومجلداتهم ورواتبهم وسائره — ينتقل إلى الطرف الذي يبقى؛ وهواتفه وبريده تأخذ ما ليس فيها من هواتفهم وبريدهم؛ ثم يُحذفون. ولا رجوع عنه.",

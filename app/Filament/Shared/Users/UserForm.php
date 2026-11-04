@@ -44,7 +44,7 @@ class UserForm extends PluginUserForm
                     ->visible(fn (?User $record): bool => (bool) $record?->party?->isAssistant())
                     ->schema(AssistantSettingsFields::make(withAccount: false)),
             ]),
-            Grid::make(1)->columnSpan(1)->schema([self::workAccount()]),
+            Grid::make(1)->columnSpan(1)->schema([self::workAccount(), OwnPermissions::section()]),
         ]);
     }
 

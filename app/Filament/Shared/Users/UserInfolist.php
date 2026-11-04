@@ -34,6 +34,13 @@ class UserInfolist extends PluginUserInfolist
                             ...static::$schema,
                             TextEntry::make('display_name')->label(__('Display name'))->placeholder('—'),
                             TextEntry::make('roles.name')->label(__('Roles'))->badge()->placeholder('—'),
+                            // Beside the roles': each as the form names it ("Matter: View").
+                            TextEntry::make('permissions.name')
+                                ->label(__('Permissions of their own'))
+                                ->badge()
+                                ->formatStateUsing(fn (string $state): string => OwnPermissions::describe($state))
+                                ->placeholder('—')
+                                ->columnSpanFull(),
                         ]),
                     Section::make(__('Assistant'))
                         ->icon(Heroicon::OutlinedCloud)
