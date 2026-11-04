@@ -429,6 +429,32 @@ class MatterEmail extends Model
     }
 
     /**
+     * A received email kept as new, linked by hand to the email of its matter it answers: a reply to it from now on.
+     */
+    public function linkAsReplyTo(self $sent): void
+    {
+        abort_unless($this->direction === self::RECEIVED && $sent->direction === self::SENT && (int) $sent->matter_id === (int) $this->matter_id, 422);
+
+        $this->update(['parent_id' => $sent->getKey()]);
+    }
+
+    /**
+     * The emails sent on its matter, before it came, that it may answer — newest first.
+     *
+     * @return Collection<int, self>
+     */
+    public function mayAnswer(): Collection
+    {
+        return self::query()
+            ->where('direction', self::SENT)
+            ->where('matter_id', $this->matter_id)
+            ->when($this->at, fn (Builder $q) => $q->where('at', '<=', $this->at))
+            ->orderByDesc('at')
+            ->limit(100)
+            ->get();
+    }
+
+    /**
      * @return BelongsTo<self, $this>
      */
     public function parent(): BelongsTo

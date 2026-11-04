@@ -11,6 +11,7 @@ use App\Models\MatterContact;
 use App\Models\MatterContactDetail;
 use App\Models\MatterCreditor;
 use App\Models\Party;
+use App\Services\MMS\ContactLinker;
 use App\Services\MMS\MatterContactsExport;
 use App\Services\MMS\MatterCreditors;
 use App\Support\Addresses;
@@ -24,9 +25,11 @@ use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Concerns\InteractsWithSchemas;
 use Filament\Schemas\Contracts\HasSchemas;
 use Filament\Support\Enums\FontWeight;
@@ -228,6 +231,8 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                                 ->body($linked > 0 ? self::agentsLinked($linked) : null)->send();
                         })
                         ->deselectRecordsAfterCompletion(),
+                    $this->linkAction(ContactLinker::MERGE),
+                    $this->linkAction(ContactLinker::AGENT),
                 ]),
             ])
             ->headerActions([
@@ -471,6 +476,69 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
             ])
             ->emptyStateHeading(__('No contacts yet'))
             ->emptyStateDescription(__('The matter\'s parties, and everyone its letters, minutes and emails reach, appear here.'));
+    }
+
+    /**
+     * Those ticked who came by email, found to be someone the matter knows: merged into them, or made their agent —
+     * a party (its representative, on the matter), a creditor, or a new creditor named here. Their emails that came
+     * in move to the folder of what they now are.
+     */
+    private function linkAction(string $how): BulkAction
+    {
+        $merge = $how === ContactLinker::MERGE;
+
+        return BulkAction::make($merge ? 'mergeInto' : 'agentOf')
+            ->label($merge ? __('Merge into someone on the matter') : __('An agent of someone on the matter'))
+            ->icon($merge ? 'heroicon-o-arrows-pointing-in' : 'heroicon-o-user-plus')
+            ->visible(fn (): bool => $this->canChange())
+            ->modalWidth('lg')
+            ->modalDescription($merge
+                ? __('The rows ticked that came by email (no party, no creditor) become the one chosen: their addresses and phones are theirs — on the party itself, wherever it appears. Their emails that came in move to where the chosen one\'s go.')
+                : __('Each row ticked that came by email (no party, no creditor) becomes an agent of the one chosen: a party\'s representative on this matter, or a creditor\'s agent. Their emails that came in move to where the chosen one\'s go.'))
+            ->schema([
+                Select::make('target')
+                    ->label($merge ? __('Merge into') : __('An agent of'))
+                    ->options(fn (): array => ContactLinker::targets($this->rows(), $how, $this->hasCreditors()))
+                    ->searchable()
+                    ->required()
+                    ->live(),
+                TextInput::make('creditor_name')
+                    ->label(__("Creditor's name"))
+                    ->helperText($merge ? __('Left empty: the first ticked one\'s name.') : null)
+                    ->maxLength(255)
+                    ->required(! $merge)
+                    ->visible(fn (Get $get): bool => $get('target') === ContactLinker::NEW_CREDITOR),
+            ])
+            ->action(function (\Illuminate\Support\Collection $records, array $data) use ($how): void {
+                $target = $data['target'] === ContactLinker::NEW_CREDITOR ? null : ($this->rows()[$data['target']] ?? abort(404));
+
+                if ($target !== null && $target['party_id'] !== null && $how === ContactLinker::MERGE && ! (auth()->user()?->can('update', $this->party($target)) ?? false)) {
+                    Notification::make()->danger()->title(__('You may not edit this party.'))->send();
+
+                    return;
+                }
+
+                $skipped = $records->reject(fn (array $row): bool => ContactLinker::linkable($row))->count();
+
+                try {
+                    ['linked' => $linked, 'moved' => $moved] = app(ContactLinker::class)->link($this->matter(), $records, $how, $target, $data['creditor_name'] ?? null);
+                } catch (\Throwable $e) {
+                    $this->rowsRead = $this->partiesRead = null;
+                    Notification::make()->danger()->title(__('Not saved'))->body($e->getMessage())->send();
+
+                    return;
+                }
+                $this->rowsRead = $this->partiesRead = null;
+
+                Notification::make()->success()
+                    ->title(trans_choice('No one linked.|:count linked.|:count linked.', $linked, ['count' => $linked]))
+                    ->body(implode(' ', array_filter([
+                        __(':count emails moved to their new folder.', ['count' => $moved]),
+                        $skipped > 0 ? trans_choice(':count left as it is: a party or a creditor already, or with no address.|:count left as they are: parties or creditors already, or with no address.', $skipped, ['count' => $skipped]) : null,
+                    ])))
+                    ->send();
+            })
+            ->deselectRecordsAfterCompletion();
     }
 
     /** A line's creditor (its own, or its agent's). */

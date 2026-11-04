@@ -342,6 +342,37 @@ class EmailsRelationManager extends RelationManager
                                 ->actions([Action::make('open')->label(__('View'))->url(MatterResource::getUrl('view', ['record' => $matter]))])
                                 ->send();
                         }),
+                    // A reply kept as a new email (it named no email the system knew): linked by hand to the one it answers.
+                    Action::make('linkReply')
+                        ->label(__('Is a reply to an email sent'))
+                        ->icon('heroicon-o-link')
+                        ->color('gray')
+                        ->visible(fn (MatterEmail $record): bool => $record->direction === MatterEmail::RECEIVED
+                            && $record->parent_id === null
+                            && (auth()->user()?->can('update', $this->getOwnerRecord()) ?? false))
+                        ->modalWidth('2xl')
+                        ->modalDescription(__('Kept as a new email: choose the email sent from the system it answers, and it is shown as its reply.'))
+                        ->schema(function (MatterEmail $record): array {
+                            $sent = $record->mayAnswer();
+
+                            return [
+                                Select::make('sent_id')
+                                    ->label(__('The email it answers'))
+                                    ->options($sent->mapWithKeys(fn (MatterEmail $email): array => [$email->getKey() => implode(' — ', array_filter([
+                                        $email->subject ?: __('(no subject)'),
+                                        $email->at ? Dates::dateTime($email->at) : null,
+                                        implode('، ', (array) $email->to),
+                                    ]))])->all())
+                                    // The one it most likely answers: from one it went to, of the same subject.
+                                    ->default(MatterReplyCollector::answers(['from' => MatterEmail::addressOf((string) $record->from), 'subject' => (string) $record->subject, 'at' => $record->at?->toDateTimeString()], $sent)?->getKey())
+                                    ->searchable()
+                                    ->required(),
+                            ];
+                        })
+                        ->action(function (MatterEmail $record, array $data): void {
+                            $record->linkAsReplyTo(MatterEmail::query()->findOrFail($data['sent_id']));
+                            Notification::make()->success()->title(__('Linked as a reply.'))->send();
+                        }),
                     // A matter with creditors (a bankruptcy's): its sender one of them, or their agent — the emails from
                     // them moved to the creditor's folder, as those from them go from now on.
                     Action::make('creditor')

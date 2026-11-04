@@ -1476,4 +1476,34 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertSame(['folders' => 0, 'emails' => 2, 'files' => 0, 'reports' => 0, 'links' => 0], app(MatterOneDriveFolders::class)->renameWithin($this->second, 'وارد المدعي', 'بريد المدعي'));
         $this->assertSame('بريد المدعي/1', $email->fresh()->onedrive['copies'][0]['folder']);
     }
+
+    public function test_a_reply_that_comes_to_another_of_our_mailboxes_is_kept_as_the_reply_and_one_kept_as_new_is_linked_by_hand(): void
+    {
+        // Sent from the assistant's mailbox; the reply read first from the shared one it was copied to.
+        $sent = MatterEmail::recordSent($this->second->id, null, 'assistant', '<sent-1@jpa.ae>', 'طلب مستندات', ['office@albanna.ae', 'iflas@jpa.ae'], $this->user->id);
+        $reply = $this->email(['message_id' => '<reply-x@albanna.ae>', 'references' => ['<sent-1@jpa.ae>'], 'subject' => 'RE: طلب مستندات', 'to' => ['amr@jpa.ae'], 'cc' => ['iflas@jpa.ae']]);
+
+        $this->assertSame(1, $this->collect($reply));
+        $this->assertSame($sent->id, MatterEmail::query()->where('message_id', 'reply-x@albanna.ae')->sole()->parent_id);
+
+        // One kept as a new email (it named nothing the system knew): linked by hand to the one it answers,
+        // the likeliest chosen to begin with.
+        $loose = $this->email(['message_id' => '<loose@albanna.ae>', 'subject' => 'RE: طلب مستندات — القضية 987/2026', 'references' => ['<exchange-own@jpa.ae>']]);
+        MatterEmail::query()->whereKey($sent->id)->update(['sender_key' => 'gone']);
+        app(MatterReplyCollector::class)->handle([$loose], collect(), 'iflas');
+        $new = MatterEmail::query()->where('message_id', 'loose@albanna.ae')->sole();
+        // Linked across mailboxes by its subject too.
+        $this->assertSame($sent->id, $new->parent_id);
+
+        $new->update(['parent_id' => null]);
+        $this->assertSame([$sent->id], $new->fresh()->mayAnswer()->modelKeys());
+        Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->second, 'pageClass' => ViewMatter::class])
+            ->mountTableAction('linkReply', $new)
+            ->assertTableActionDataSet(['sent_id' => $sent->id])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+        $this->assertSame($sent->id, $new->fresh()->parent_id);
+        Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->second, 'pageClass' => ViewMatter::class])
+            ->assertTableActionHidden('linkReply', $new);
+    }
 }

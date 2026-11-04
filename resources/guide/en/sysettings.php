@@ -76,7 +76,7 @@ return [
         [
             'id' => 'themes',
             'title' => 'Themes (the interface\'s colours and fonts)',
-            'description' => '"General → Themes": interface themes with their colours (primary, secondary, gray and so on, from the Filament palettes or your own colour, for light and dark mode), the navigation (side or top menu), what the side menu does when it is taller than the screen (scrolls on its own with a bar beside it or without one, or scrolls with the page, so the only bar is the page's on the far side from the menu), corners, spacing and fonts, with a live preview and a warning if text becomes hard to read. "Add starter themes" adds a ready-made set. "Use for the office" on a theme\'s row makes it the office theme, and "Keep everyone to the office theme" stops users choosing another theme in their profile.',
+            'description' => '"General → Themes": interface themes with their colours (primary, secondary, gray and so on, from the Filament palettes or your own colour, for light and dark mode), the navigation (side or top menu), what the side menu does when it is taller than the screen (scrolls on its own with a bar beside it or without one, or scrolls with the page, so the only bar is the page\'s on the far side from the menu), corners, spacing and fonts, with a live preview and a warning if text becomes hard to read. "Add starter themes" adds a ready-made set. "Use for the office" on a theme\'s row makes it the office theme, and "Keep everyone to the office theme" stops users choosing another theme in their profile.',
             'roles' => [$admin, $withPermission],
             'permissions' => ['ViewAny:Theme', 'Create:Theme', 'Update:Theme', 'Delete:Theme'],
             'steps' => [

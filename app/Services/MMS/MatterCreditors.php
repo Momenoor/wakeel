@@ -40,7 +40,8 @@ final class MatterCreditors
 
     /**
      * The emails that came in on the matter from these addresses — those not in a periodic report — moved to the
-     * folder of their creditor, where those from them go now. How many moved.
+     * folder of what each is now, where those from them go now: their creditor's (a creditor, or one's agent), their
+     * side's (a party, or one's representative), else the general one. How many moved.
      *
      * @param  list<string>  $addresses
      */
@@ -55,14 +56,18 @@ final class MatterCreditors
                 && $email->matched_by !== MatterEmail::BY_ONEDRIVE
                 && (((array) $email->onedrive)['report'] ?? null) === null);
 
+        // Each address's side, asked once.
+        $sides = [];
+
         foreach ($emails as $email) {
             $from = MatterEmail::addressOf((string) $email->from);
-            // Where the creditor's go — without the day's number ({{serial}}): one already under it stays where it is.
-            $under = MatterOneDriveFolders::receivedEmailsFolderFor($matter, $email->at, ReceivedEmailFiling::CREDITOR, $from, nextSerial: false);
+            $side = $sides[$from] ??= ReceivedEmailFiling::side($matter, $from);
+            // Where theirs go — without the day's number ({{serial}}): one already under it stays where it is.
+            $under = MatterOneDriveFolders::receivedEmailsFolderFor($matter, $email->at, $side, $from, nextSerial: false);
             $where = MatterOneDriveFolders::emailFolder($email, $matter);
 
             if ($under !== '' && $where !== $under && ! str_starts_with(mb_strtolower($where).'/', mb_strtolower($under).'/')) {
-                $moved += $this->folders->moveEmailWithin($email, $matter, MatterOneDriveFolders::receivedEmailsFolderFor($matter, $email->at, ReceivedEmailFiling::CREDITOR, $from)) ? 1 : 0;
+                $moved += $this->folders->moveEmailWithin($email, $matter, MatterOneDriveFolders::receivedEmailsFolderFor($matter, $email->at, $side, $from)) ? 1 : 0;
             }
         }
 

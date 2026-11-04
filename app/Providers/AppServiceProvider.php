@@ -7,6 +7,7 @@ use App\Events\NotificationsUpdated;
 use App\Filament\Shared\Users\ImpersonateUserAction;
 use App\Http\Controllers\LogoutController;
 use App\Http\Middleware\TrackPerformance;
+use App\Mail\Transport\GraphMimeTransport;
 use App\Models\CalendarEvent;
 use App\Models\Matter;
 use App\Models\PushSubscription;
@@ -17,10 +18,10 @@ use App\Services\MMS\MatterHistory;
 use App\Services\Notifications\NotificationPreferences;
 use App\Services\Push\WebPushSender;
 use App\Support\CachedAuditSchema;
+use App\Support\Currency;
 use App\Support\Database\MariaDbGrammar;
 use App\Support\Database\MySqlGrammar;
 use App\Support\Database\SQLiteGrammar;
-use App\Support\Currency;
 use App\Support\Dates;
 use App\Support\Integrations;
 use App\Support\InterfaceFont;
@@ -50,6 +51,7 @@ use Illuminate\Foundation\Events\LocaleUpdated;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Notifications\Events\NotificationSent;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use Spatie\Activitylog\Actions\LogActivityAction;
@@ -100,6 +102,12 @@ class AppServiceProvider extends ServiceProvider
         // (System Settings → Integrations), over .env — first, before
         // anything sends, broadcasts or queues.
         Integrations::apply();
+
+        // A Microsoft 365 mailbox's emails sent whole, their Message-ID kept: the replies to them known as replies.
+        Mail::extend('microsoft-graph', fn (): GraphMimeTransport => new GraphMimeTransport(
+            (string) config('mail.from.address'),
+            $this->app->make('mail.microsoft-graph.token-provider'),
+        ));
 
         // Dates and times shown as set for the whole system (Settings → General): tables, pages, date pickers.
         Dates::configureFilament();

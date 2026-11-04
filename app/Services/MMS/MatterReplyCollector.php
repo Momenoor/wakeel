@@ -344,6 +344,17 @@ class MatterReplyCollector
         $keepAll = self::keepsAll($senderKey);
         $filing = self::isFilingInbox($senderKey);
         $ignored = self::ignoredSenders();
+        // The emails sent from our other mailboxes, read once — only when one is not answered from this one's.
+        $read = null;
+        $elsewhere = function () use ($sent, $senderKey, $matterId, &$read): Collection {
+            return $read ??= MatterEmail::query()
+                ->where('direction', MatterEmail::SENT)
+                ->where('at', '>=', now()->subDays(self::WATCH_DAYS))
+                ->when($senderKey !== null, fn ($q) => $q->where('sender_key', '!=', $senderKey))
+                ->when($matterId, fn ($q) => $q->where('matter_id', $matterId))
+                ->whereNotIn('id', $sent->map(fn (MatterEmail $email): int => (int) $email->getKey())->all())
+                ->get();
+        };
 
         foreach ($messages as $message) {
             // Out of time: what is left is read next time, from the last message handled — but only once
@@ -438,7 +449,9 @@ class MatterReplyCollector
                     continue;
                 }
 
-                if ($answers = self::answers($message, $sent)) {
+                // Sent from this mailbox, else from another of ours: a reply can come to a mailbox other than the
+                // one it answers (one copied in, read first).
+                if ($answers = self::answers($message, $sent) ?? self::answers($message, $elsewhere())) {
                     if ($matterId === null || (int) $answers->matter_id === $matterId) {
                         $this->keep($answers, $message, $id);
                         $this->markRead($message, $senderKey);

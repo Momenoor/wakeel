@@ -20,6 +20,7 @@ use App\Models\Party;
 use App\Models\Setting;
 use App\Models\Type;
 use App\Models\User;
+use App\Services\MMS\ContactLinker;
 use App\Services\MMS\MatterContactsExport;
 use App\Services\MMS\MatterCreditors;
 use App\Services\MMS\MatterOneDriveFolders;
@@ -438,5 +439,51 @@ class MatterCreditorsTest extends TestCase
         Artisan::call('migrate', ['--path' => $migration]);
         $this->assertSame(7, (int) $mashreq->fresh()->number);
         $this->assertSame([1, 2], [(int) $a->fresh()->number, (int) $b->fresh()->number]);
+    }
+
+    public function test_someone_who_came_by_email_is_merged_into_or_made_an_agent_of_someone_on_the_matter_and_their_emails_follow(): void
+    {
+        Setting::set(ReceivedEmailFiling::FOLDER_SETTINGS[ReceivedEmailFiling::PLAINTIFF], '05 المدعي', 'onedrive');
+        Setting::clearCache();
+        $mashreq = MatterCreditor::assign($this->matter, null, 'بنك المشرق', 'info@mashreq.ae');
+        $plaintiffId = (int) MatterParty::query()->where('matter_id', $this->matter->id)->where('type', 'plaintiff')->value('party_id');
+        foreach (['claims@mashreq.ae', 'lawyer@hashmi.ae', 'manager@mahad.ae', 'advocate@law.ae'] as $i => $address) {
+            $this->received($address, 'وارد '.$i);
+        }
+        $tab = fn () => Livewire::test(MatterContacts::class, ['matter' => $this->matter]);
+
+        // Whom to choose: the matter's parties and creditors, and a new creditor.
+        $targets = ContactLinker::targets(collect((new MatterContactsExport($this->matter))->rows())->keyBy('key')->all(), ContactLinker::AGENT, true);
+        $this->assertSame(['new', 'c:'.$mashreq->id], array_keys($targets[__('Creditors')]));
+        $this->assertArrayHasKey('p:'.$plaintiffId, $targets[__('Parties')]);
+
+        // Merged into the creditor: its own address, its email in its folder — the party ticked along left as it is.
+        $tab()->callTableBulkAction('mergeInto', ['e:claims@mashreq.ae', 'p:'.$plaintiffId], ['target' => 'c:'.$mashreq->id])
+            ->assertHasNoTableBulkActionErrors();
+        $this->assertSame(['claims@mashreq.ae', 'info@mashreq.ae'], $mashreq->addresses()->where('agent', false)->orderBy('email')->pluck('email')->all());
+        $this->assertContains('07 مطالبات الدائنين/بنك المشرق/وارد 0.pdf', $this->oneDrive->files());
+
+        // The agent of a new creditor, named here: by their own name, their email in the new creditor's folder.
+        $tab()->callTableBulkAction('agentOf', ['e:lawyer@hashmi.ae'], ['target' => 'new', 'creditor_name' => 'بنك دبي'])
+            ->assertHasNoTableBulkActionErrors();
+        $dubai = $this->matter->creditors()->where('name', 'بنك دبي')->sole();
+        $this->assertTrue((bool) $dubai->addresses()->where('email', 'lawyer@hashmi.ae')->sole()->agent);
+        $this->assertContains('07 مطالبات الدائنين/بنك دبي/وارد 1.pdf', $this->oneDrive->files());
+
+        // Merged into the plaintiff: the party's own address now, its email in the plaintiff's folder.
+        $tab()->callTableBulkAction('mergeInto', ['e:manager@mahad.ae'], ['target' => 'p:'.$plaintiffId])
+            ->assertHasNoTableBulkActionErrors();
+        $this->assertSame(['info@mahad.ae', 'manager@mahad.ae'], Party::find($plaintiffId)->email);
+        $this->assertContains('05 المدعي/وارد 2.pdf', $this->oneDrive->files());
+
+        // The plaintiff's agent: its representative on the matter, of a party of their own; their email on its side.
+        $tab()->callTableBulkAction('agentOf', ['e:advocate@law.ae'], ['target' => 'p:'.$plaintiffId])
+            ->assertHasNoTableBulkActionErrors();
+        $advocate = Party::query()->where('email', 'like', '%advocate@law.ae%')->sole();
+        $row = MatterParty::query()->where('matter_id', $this->matter->id)->where('party_id', $advocate->id)->sole();
+        $this->assertSame(['representative', MatterParty::query()->where('matter_id', $this->matter->id)->where('party_id', $plaintiffId)->value('id')], [$row->role, $row->parent_id]);
+        $this->assertSame(ReceivedEmailFiling::PLAINTIFF, ReceivedEmailFiling::side($this->matter, 'advocate@law.ae'));
+        $this->assertContains('05 المدعي/وارد 3.pdf', $this->oneDrive->files());
+        $this->assertNotContains('04 المراسلات/وارد 3.pdf', $this->oneDrive->files());
     }
 }
