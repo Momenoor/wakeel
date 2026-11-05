@@ -193,7 +193,7 @@ class RecipientsRelationManager extends RelationManager
                         && MatterCreditors::kept($matter)
                         && (auth()->user()?->can('update', $livewire->getOwnerRecord()) ?? false))
                     ->requiresConfirmation()
-                    ->modalDescription(__('Each creditor of the matter with an email is added — to it and its agents alike, its agent, phone and claim as {{agent}}, {{phone}} and {{claim_amount}} — but those already on the list.'))
+                    ->modalDescription(__('Each creditor of the matter with an email is added — to it and its agents alike, its agent, phone, claim, IBAN and bank as {{agent}}, {{phone}}, {{claim_amount}}, {{iban}} and {{bank_name}} — but those already on the list.'))
                     ->action(function ($livewire): void {
                         $campaign = $livewire->getOwnerRecord();
                         $added = MatterCreditors::addToCampaign($campaign, $campaign->matter);

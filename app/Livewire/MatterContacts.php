@@ -6,6 +6,7 @@ use App\Filament\Concerns\RefreshesMatterPage;
 use App\Filament\Mms\Resources\Parties\Schemas\PartyForm;
 use App\Filament\Support\ContactFields;
 use App\Filament\Support\CreditorFields;
+use App\Filament\Support\IbanField;
 use App\Models\Matter;
 use App\Models\MatterContact;
 use App\Models\MatterContactDetail;
@@ -17,6 +18,7 @@ use App\Services\MMS\MatterCreditors;
 use App\Services\MMS\MatterEmailDeletion;
 use App\Support\Addresses;
 use App\Support\Dates;
+use App\Support\UaeBanks;
 use Carbon\CarbonInterface;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -178,6 +180,13 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                     ->placeholder('—')
                     ->copyable()
                     ->visible(fn (): bool => $this->hasCreditors()),
+                TextColumn::make('iban')
+                    ->label(__('IBAN'))
+                    ->description(fn (array $record): ?string => $record['bank_name'] ?? null)
+                    ->placeholder('—')
+                    ->copyable()
+                    ->toggleable()
+                    ->visible(fn (): bool => $this->hasCreditors()),
                 TextColumn::make('claim')
                     ->label(__('Claim amount'))
                     ->numeric(2)
@@ -186,6 +195,13 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                 TextColumn::make('first_email')
                     ->label(__('First email'))
                     ->tooltip(__('When the first email came in from the creditor or its agents'))
+                    ->date()
+                    ->placeholder('—')
+                    ->visible(fn (): bool => $this->hasCreditors()),
+                // Each its own day: one written to later than the others has its own.
+                TextColumn::make('first_sent')
+                    ->label(__('First email sent'))
+                    ->tooltip(__('When the first email went to the creditor or its agents — an email sent on the matter, or its bulk mail'))
                     ->date()
                     ->placeholder('—')
                     ->visible(fn (): bool => $this->hasCreditors()),
@@ -250,11 +266,11 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                     ->color('gray')
                     ->visible(fn (): bool => $this->hasCreditors())
                     ->action(fn () => MatterCreditors::bulkMailDownload($this->matter())),
-                // A list of creditors (El Baz's sheet): name, email, agent, phone, claim_amount, id_number and the
+                // A list of creditors (El Baz's sheet): name, email, agent, phone, claim_amount, id_number, iban, bank_name and the
                 // type's own columns, by their headings — each merged into the matter's list.
                 Action::make('importCreditors')
                     ->label(__('Import creditors'))
-                    ->tooltip(__('An Excel or CSV sheet with the headings name, email, agent, phone, claim_amount, id_number (in English or Arabic) and the type\'s own columns: each line a creditor, merged into the list by its address, licence or name.'))
+                    ->tooltip(__('An Excel or CSV sheet with the headings name, email, agent, phone, claim_amount, id_number, iban, bank_name (in English or Arabic) and the type\'s own columns: each line a creditor, merged into the list by its address, licence or name.'))
                     ->icon('heroicon-o-arrow-up-tray')
                     ->color('gray')
                     ->visible(fn (): bool => $this->hasCreditors() && $this->canChange())
@@ -308,12 +324,14 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                         'name' => $creditor->name,
                         'number' => $creditor->number,
                         'id_number' => $creditor->id_number,
+                        'iban' => $creditor->iban,
+                        'bank_name' => $creditor->bank_name,
                         'emails' => $creditor->addresses()->where('agent', false)->pluck('email')->all(),
                         'phone' => (array) $creditor->phones,
                         'claim_amount' => $creditor->claim_amount,
                         'custom' => (array) $creditor->custom,
                     ] : [])
-                    ->schema(fn (array $record): array => $this->creditorSchema($record['creditor_id'], $record['first_email'] ?? null))
+                    ->schema(fn (array $record): array => $this->creditorSchema($record['creditor_id'], $record['first_email'] ?? null, $record['first_sent'] ?? null))
                     ->action(function (array $record, array $data): void {
                         $this->saveCreditor($this->creditor($record) ?? abort(404), $data);
                         Notification::make()->success()->title(__('Saved'))->send();
@@ -580,9 +598,10 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
      *
      * @param  ?int  $ignore  the creditor being edited: its own licence or ID is not a second one
      * @param  ?CarbonInterface  $firstEmail  when its first email came in, shown when editing
+     * @param  ?CarbonInterface  $firstSent  when the first email went to it, shown when editing
      * @return list<\Filament\Schemas\Components\Component>
      */
-    private function creditorSchema(?int $ignore = null, ?CarbonInterface $firstEmail = null): array
+    private function creditorSchema(?int $ignore = null, ?CarbonInterface $firstEmail = null, ?CarbonInterface $firstSent = null): array
     {
         return [
             TextInput::make('name')
@@ -602,6 +621,10 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                 ->label(__('First email'))
                 ->content(fn (): string => $firstEmail?->format(Dates::dateFormat()) ?? '—')
                 ->visible($ignore !== null),
+            Placeholder::make('first_sent')
+                ->label(__('First email sent'))
+                ->content(fn (): string => $firstSent?->format(Dates::dateFormat()) ?? '—')
+                ->visible($ignore !== null),
             TextInput::make('id_number')
                 ->label(__('Trade licence or ID number'))
                 ->helperText(__('The same number twice in a matter is one creditor twice: a claim with it already is said.'))
@@ -612,6 +635,9 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                 ->label(__('Claim amount'))
                 ->numeric()
                 ->minValue(0),
+            // Where its share is paid: its bank may be abroad.
+            IbanField::make(uaeOnly: false),
+            UaeBanks::select(),
             ...array_map(fn (string $column): TextInput => TextInput::make('custom.'.$column)->label($column)->maxLength(500), MatterCreditors::ownColumns($this->matter())),
             TagsInput::make('emails')
                 ->label(__("The creditor's own emails"))
@@ -652,6 +678,8 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                 'name' => trim((string) $data['name']),
                 'number' => filled($data['number'] ?? null) ? (int) $data['number'] : $creditor->number,
                 'id_number' => trim((string) ($data['id_number'] ?? '')) ?: null,
+                'iban' => $data['iban'] ?? null,
+                'bank_name' => $data['bank_name'] ?? null,
                 'phones' => array_values((array) ($data['phone'] ?? [])),
                 'claim_amount' => filled($data['claim_amount'] ?? null) ? $data['claim_amount'] : null,
                 'custom' => array_filter(array_map(fn ($value): string => trim((string) $value), (array) ($data['custom'] ?? [])), fn (string $value): bool => $value !== '') ?: null,

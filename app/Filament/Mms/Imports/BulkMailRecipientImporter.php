@@ -77,6 +77,10 @@ class BulkMailRecipientImporter extends Importer
                 (array) $this->record->email,
                 $placeholders['claim_amount'] ?? $placeholders[BulkMailPlaceholders::normalize(__('Claim amount', [], 'ar'))] ?? null,
                 array_map('trim', explode(',', (string) ($placeholders['phone'] ?? ''))),
+                null,
+                [],
+                $placeholders['iban'] ?? null,
+                $placeholders['bank_name'] ?? null,
             );
         } catch (Throwable $e) {
             Log::warning('Imported creditor not merged into the matter', ['campaign' => $this->options['campaign_id'], 'error' => $e->getMessage()]);

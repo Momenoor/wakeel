@@ -2,19 +2,21 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 
 /**
- * A creditor of a matter — no party of it (a bankruptcy's): its claim, its phones, and the addresses it writes from,
+ * A creditor of a matter — no party of it (a bankruptcy's): its claim, its phones, its bank account (IBAN and bank),
+ * and the addresses it writes from,
  * its own or its lawyer's or agent's (MatterCreditorAddress). Their emails are filed in a folder of their own
  * (ReceivedEmailFiling::CREDITOR); they are on the matter's Contacts tab, and exported from there for bulk mail.
  */
 class MatterCreditor extends Model
 {
-    protected $fillable = ['matter_id', 'number', 'name', 'id_number', 'phones', 'claim_amount', 'custom'];
+    protected $fillable = ['matter_id', 'number', 'name', 'id_number', 'iban', 'bank_name', 'phones', 'claim_amount', 'custom'];
 
     protected function casts(): array
     {
@@ -58,6 +60,22 @@ class MatterCreditor extends Model
         }
 
         return $next;
+    }
+
+    /** An IBAN as kept: in capitals, without the spaces it is often written with; null when empty. */
+    public static function normalizeIban(?string $iban): ?string
+    {
+        return mb_strtoupper((string) preg_replace('/\s+/u', '', (string) $iban)) ?: null;
+    }
+
+    protected function iban(): Attribute
+    {
+        return Attribute::make(set: fn (?string $value): ?string => self::normalizeIban($value));
+    }
+
+    protected function bankName(): Attribute
+    {
+        return Attribute::make(set: fn (?string $value): ?string => trim((string) $value) ?: null);
     }
 
     /** Its number as a folder writes it: three digits (001), so the folders sort in order. */

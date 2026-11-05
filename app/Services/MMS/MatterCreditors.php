@@ -4,6 +4,7 @@ namespace App\Services\MMS;
 
 use App\Enums\BulkMailRecipientStatus;
 use App\Models\BulkMailCampaign;
+use App\Models\BulkMailRecipient;
 use App\Models\Matter;
 use App\Models\MatterContact;
 use App\Models\MatterCreditor;
@@ -88,8 +89,9 @@ final class MatterCreditors
      * @param  list<string>  $phones
      * @param  ?string  $idNumber  its trade licence or ID number — known by it when it has it already
      * @param  array<string, string>  $custom  the values of its own columns (Type::creditorColumns()), those given
+     * @param  ?string  $iban  its IBAN, and $bank its bank — updated when the list gives others
      */
-    public function merge(Matter $matter, string $name, array $emails, ?string $claim = null, array $phones = [], ?string $idNumber = null, array $custom = []): ?MatterCreditor
+    public function merge(Matter $matter, string $name, array $emails, ?string $claim = null, array $phones = [], ?string $idNumber = null, array $custom = [], ?string $iban = null, ?string $bank = null): ?MatterCreditor
     {
         $name = trim((string) preg_replace('/\s+/u', ' ', $name));
         $emails = array_values(array_unique(array_map('mb_strtolower', Addresses::emails($emails))));
@@ -103,7 +105,7 @@ final class MatterCreditors
         $creditor = $known->isNotEmpty()
             ? $matter->creditors()->find($known->first()->matter_creditor_id)
             : ($idNumber !== null ? $matter->creditors()->where('id_number', $idNumber)->first() : null)
-                ?? $matter->creditors()->get(['id', 'name', 'phones', 'claim_amount'])->first(fn (MatterCreditor $creditor): bool => self::sameName($creditor->name, $name));
+                ?? $matter->creditors()->get()->first(fn (MatterCreditor $creditor): bool => self::sameName($creditor->name, $name));
         $creditor ??= $matter->creditors()->create(['name' => $name !== '' ? $name : ($emails[0] ?? $idNumber)]);
 
         $amount = self::amount($claim);
@@ -111,6 +113,8 @@ final class MatterCreditors
             'claim_amount' => $amount ?? $creditor->claim_amount,
             'phones' => $creditor->phones ?: (array_values(array_filter(array_map('trim', $phones))) ?: null),
             'id_number' => $creditor->id_number ?: $idNumber,
+            'iban' => MatterCreditor::normalizeIban($iban) ?? $creditor->iban,
+            'bank_name' => (trim((string) $bank) ?: null) ?? $creditor->bank_name,
             'custom' => array_filter([...(array) $creditor->custom, ...array_map(fn ($value): string => trim((string) $value), $custom)], fn (string $value): bool => $value !== '') ?: null,
         ])->save();
 
@@ -305,13 +309,13 @@ final class MatterCreditors
 
     /**
      * The columns of the creditors' sheet (bulkMailDownload()): the usual, then the creditor's number, its licence
-     * or ID, and the type's own columns — each a placeholder in a bulk mail to them.
+     * or ID, its IBAN and bank, and the type's own columns — each a placeholder in a bulk mail to them.
      *
      * @return list<string>
      */
     public static function bulkMailHeadings(Matter $matter): array
     {
-        return [...self::BULK_MAIL_HEADINGS, 'number', 'id_number', ...self::ownColumns($matter)];
+        return [...self::BULK_MAIL_HEADINGS, 'number', 'id_number', 'iban', 'bank_name', ...self::ownColumns($matter)];
     }
 
     /**
@@ -345,6 +349,8 @@ final class MatterCreditors
                 'claim_amount' => (string) ($creditor->claim_amount ?? ''),
                 'number' => (string) ($creditor->number ?? ''),
                 'id_number' => (string) ($creditor->id_number ?? ''),
+                'iban' => (string) ($creditor->iban ?? ''),
+                'bank_name' => (string) ($creditor->bank_name ?? ''),
                 ...array_combine($columns, array_map(fn (string $column): string => (string) $creditor->customValue($column), $columns)),
             ])
             ->values()
@@ -400,6 +406,8 @@ final class MatterCreditors
             $creditor = $matter->creditors()->create([
                 'name' => $source->name,
                 'id_number' => $source->id_number,
+                'iban' => $source->iban,
+                'bank_name' => $source->bank_name,
                 'phones' => $source->phones,
                 'claim_amount' => null,
                 'custom' => $source->custom,
@@ -477,7 +485,7 @@ final class MatterCreditors
      */
     public static function firstEmailsAt(Matter $matter): array
     {
-        $creditorOf = $matter->creditorAddresses()->get(['email', 'matter_creditor_id'])->mapWithKeys(fn (MatterCreditorAddress $address): array => [mb_strtolower((string) $address->email) => (int) $address->matter_creditor_id])->all();
+        $creditorOf = self::creditorOf($matter);
 
         if ($creditorOf === []) {
             return [];
@@ -496,6 +504,58 @@ final class MatterCreditors
         return $firsts;
     }
 
+    /**
+     * When the first email went to each creditor (to its own address or its agents', or copying them in) — each its
+     * own: one written to later than the others has its own day. From the emails sent on the matter and its bulk
+     * mail sent. Creditor id => when.
+     *
+     * @return array<int, Carbon>
+     */
+    public static function firstSentAt(Matter $matter): array
+    {
+        $creditorOf = self::creditorOf($matter);
+
+        if ($creditorOf === []) {
+            return [];
+        }
+
+        $firsts = [];
+        $note = function (array $addresses, mixed $at) use ($creditorOf, &$firsts): void {
+            if (! $at instanceof Carbon) {
+                return;
+            }
+
+            foreach (array_map('mb_strtolower', Addresses::emails($addresses)) as $address) {
+                $creditor = $creditorOf[$address] ?? null;
+
+                if ($creditor !== null && (! isset($firsts[$creditor]) || $at->lt($firsts[$creditor]))) {
+                    $firsts[$creditor] = $at;
+                }
+            }
+        };
+
+        foreach ($matter->emails()->where('direction', MatterEmail::SENT)->whereNotNull('at')->get(['to', 'cc', 'at']) as $email) {
+            $note([...(array) $email->to, ...(array) $email->cc], $email->at);
+        }
+
+        BulkMailRecipient::query()->whereNotNull('sent_at')
+            ->whereIn('campaign_id', BulkMailCampaign::query()->where('matter_id', $matter->getKey())->select('id'))
+            ->get(['email', 'cc_emails', 'sent_at'])
+            ->each(fn (BulkMailRecipient $recipient) => $note([...(array) $recipient->email, ...(array) $recipient->cc_emails], $recipient->sent_at));
+
+        return $firsts;
+    }
+
+    /**
+     * Whose each address of the matter's creditors is: address => creditor id.
+     *
+     * @return array<string, int>
+     */
+    private static function creditorOf(Matter $matter): array
+    {
+        return $matter->creditorAddresses()->get(['email', 'matter_creditor_id'])->mapWithKeys(fn (MatterCreditorAddress $address): array => [mb_strtolower((string) $address->email) => (int) $address->matter_creditor_id])->all();
+    }
+
     /** The headings a creditors' sheet may use for each of the usual columns — in English or Arabic, as a list writes them. */
     private const SHEET_HEADINGS = [
         'name' => ['name', 'creditor', 'الاسم', 'اسم الدائن', 'الدائن'],
@@ -504,11 +564,13 @@ final class MatterCreditors
         'phone' => ['phone', 'phones', 'mobile', 'الهاتف', 'الجوال', 'رقم الهاتف'],
         'claim_amount' => ['claim_amount', 'claim', 'amount', 'المطالبة', 'قيمة المطالبة', 'المبلغ'],
         'id_number' => ['id_number', 'id', 'licence', 'license', 'trade licence', 'trade license', 'الرخصة', 'رقم الرخصة', 'الهوية', 'رقم الهوية'],
+        'iban' => ['iban', 'الآيبان', 'الايبان', 'رقم الآيبان', 'رقم الايبان', 'رقم الحساب الدولي'],
+        'bank_name' => ['bank_name', 'bank', 'bank name', 'البنك', 'اسم البنك'],
     ];
 
     /**
      * A creditors' sheet (Excel or CSV) read into the matter's list: the first row its headings — name, email,
-     * agent, phone, claim_amount, id_number, in English or Arabic — and any other heading that is one of the type's
+     * agent, phone, claim_amount, id_number, iban, bank_name, in English or Arabic — and any other heading that is one of the type's
      * own columns; the rest ignored. Each line merged (merge()): known by its address, its licence or ID, or its
      * name. How many lines were taken.
      */
@@ -547,6 +609,8 @@ final class MatterCreditors
                         preg_split('/[\s,;،]+/u', (string) $value('phone')) ?: [],
                         $value('id_number'),
                         $custom,
+                        $value('iban'),
+                        $value('bank_name'),
                     );
 
                     if ($creditor !== null) {

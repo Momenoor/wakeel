@@ -41,17 +41,17 @@ class MatterContactsExport
 
     public static function download(Matter $matter): BinaryFileResponse
     {
-        // Their claims, on a matter that has creditors: each creditor's number, licence or ID, claim, first email
-        // and own columns.
+        // Their claims, on a matter that has creditors: each creditor's number, licence or ID, IBAN and bank, claim,
+        // the first email from it and the first to it, and its own columns.
         $claims = $matter->creditors()->exists();
         $columns = $claims ? MatterCreditors::ownColumns($matter) : [];
 
         return self::sheet(
             __('Contacts').' '.$matter->number.'-'.$matter->year.'.xlsx',
-            [...self::headings(), ...($claims ? [__('No.'), __('Licence / ID'), __('Claim amount'), __('First email'), ...$columns] : [])],
+            [...self::headings(), ...($claims ? [__('No.'), __('Licence / ID'), __('IBAN'), __('Bank Name'), __('Claim amount'), __('First email'), __('First email sent'), ...$columns] : [])],
             array_map(fn (array $row): array => [
                 $row['name'], $row['capacity'], $row['for'], $row['source'], $row['phones'], $row['emails'], $row['theirs'],
-                ...($claims ? [$row['number'], $row['id_number'], $row['claim'], $row['first_email']?->format('Y-m-d'), ...array_map(fn (string $column): ?string => $row['custom'][$column] ?? null, $columns)] : []),
+                ...($claims ? [$row['number'], $row['id_number'], $row['iban'], $row['bank_name'], $row['claim'], $row['first_email']?->format('Y-m-d'), $row['first_sent']?->format('Y-m-d'), ...array_map(fn (string $column): ?string => $row['custom'][$column] ?? null, $columns)] : []),
             ], (new self($matter))->rows()),
         );
     }
@@ -133,6 +133,9 @@ class MatterContactsExport
             'id_number' => $row['id_number'] ?? null,
             'custom' => $row['custom'] ?? [],
             'first_email' => $row['first_email'] ?? null,
+            'first_sent' => $row['first_sent'] ?? null,
+            'iban' => $row['iban'] ?? null,
+            'bank_name' => $row['bank_name'] ?? null,
         ], array_keys($this->rows), $this->rows));
     }
 
@@ -140,6 +143,7 @@ class MatterContactsExport
     private function creditors(): void
     {
         $firsts = MatterCreditors::firstEmailsAt($this->matter);
+        $sent = MatterCreditors::firstSentAt($this->matter);
 
         foreach ($this->matter->creditors()->with('addresses')->orderBy('number')->orderBy('name')->get() as $creditor) {
             /** @var MatterCreditor $creditor */
@@ -150,6 +154,9 @@ class MatterContactsExport
             $this->rows[$key]['id_number'] = $creditor->id_number;
             $this->rows[$key]['custom'] = (array) $creditor->custom;
             $this->rows[$key]['first_email'] = $firsts[(int) $creditor->getKey()] ?? null;
+            $this->rows[$key]['first_sent'] = $sent[(int) $creditor->getKey()] ?? null;
+            $this->rows[$key]['iban'] = $creditor->iban;
+            $this->rows[$key]['bank_name'] = $creditor->bank_name;
 
             $agents = $creditor->addresses->where('agent', true)->groupBy(fn (MatterCreditorAddress $address): string => mb_strtolower(trim((string) $address->agent_name)) ?: $address->email);
 

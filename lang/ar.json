@@ -5104,7 +5104,6 @@
     "Also merge them into the matter's creditors": "دمجهم أيضاً في دائني القضية",
     "For a matter whose type has creditors: a creditor not on its list is added, its new emails added to it, and its claim updated from the \"claim_amount\" column. Turn off for a list that is not of creditors.": "لقضية نوعها له دائنون: يُضاف الدائن غير الموجود في قائمتها، وتُضاف عناوينه الجديدة إليه، ويُحدَّث مبلغ مطالبته من عمود \"claim_amount\". أوقفه إن لم تكن القائمة قائمة دائنين.",
     "Add the matter's creditors": "إضافة دائني القضية",
-    "Each creditor of the matter with an email is added — to it and its agents alike, its agent, phone and claim as {{agent}}, {{phone}} and {{claim_amount}} — but those already on the list.": "يُضاف كل دائن للقضية له بريد — إليه وإلى وكلائه معاً، ووكيله وهاتفه ومطالبته في {{agent}} و{{phone}} و{{claim_amount}} — عدا من هم في القائمة أصلاً.",
     ":count creditors added to the recipients.": "أُضيف :count دائن إلى المستلمين.",
     "Phases from a custom field": "تحويل حقل مخصص إلى مراحل",
     "Its options become the phases of every type it is on, in the order and with the names below; each matter's value its phase; {{matter.custom.…}} of it in the folders and letters becomes {{matter.phase}}; and it is taken off those types. The values stay in the matters as they were.": "تصبح خيارات الحقل مراحلَ كل نوع مرتبط به، بالترتيب والأسماء أدناه؛ وقيمة كل قضية مرحلتَها؛ ويصبح {{matter.custom.…}} الخاص به في المجلدات والخطابات {{matter.phase}}؛ ويُفصل الحقل عن تلك الأنواع. وتبقى القيم في القضايا كما كانت.",
@@ -5169,7 +5168,6 @@
     "A folder is no longer in the structure: :folders|:count folders are no longer in the structure: :folders": "{1} مجلد لم يعد في الهيكل: :folders|[2,*] :count مجلدات لم تعد في الهيكل: :folders",
     "Add a column name": "أضف اسم عمود",
     "Also the finished matters": "القضايا المنتهية أيضاً",
-    "An Excel or CSV sheet with the headings name, email, agent, phone, claim_amount, id_number (in English or Arabic) and the type's own columns: each line a creditor, merged into the list by its address, licence or name.": "ورقة Excel أو CSV عناوين أعمدتها name وemail وagent وphone وclaim_amount وid_number (بالإنجليزية أو العربية) وأعمدة النوع الخاصة: كل سطر دائن يُدمج في القائمة ببريده أو رخصته أو اسمه.",
     "Another folder": "مجلد آخر",
     "Apply to the assistants": "تطبيقه على المساعدين",
     "Besides a creditor's name, number, licence or ID, claim amount, phones and addresses: any other column its matters' creditors keep (execution file no., …). Each is a field on the creditor, a column in the creditors' sheet, and a placeholder in a bulk mail to them.": "إلى جانب اسم الدائن ورقمه ورخصته أو هويته وقيمة مطالبته وهواتفه وعناوينه: أي عمود آخر يحتفظ به دائنو قضاياه (رقم ملف التنفيذ، …). كل عمود حقل على الدائن، وعمود في ورقة الدائنين، ومتغيّر في البريد الجماعي إليهم.",
@@ -5397,5 +5395,10 @@
     "Every email that came in on this matter from :addresses is deleted for good with its PDF, original and attachments — in the system and in the matter's OneDrive (to its recycle bin) — and so are their details here and the addresses they brought in. The emails sent to them, and letters, minutes or bulk mail that went to them, stay: for those they may still be listed.": "كل بريد ورد على هذه القضية من :addresses يُحذف نهائياً مع ملف PDF والأصل والمرفقات — في النظام وفي OneDrive القضية (إلى سلة المحذوفات) — وكذلك بياناته هنا والعناوين التي أدخلها. أما البريد المرسل إليه، والكتب والمحاضر والبريد الجماعي التي وصلته، فتبقى: وقد يبقى في القائمة بسببها.",
     "The contact could not be deleted": "تعذّر حذف جهة الاتصال",
     "The contact is deleted": "حُذفت جهة الاتصال",
-    "{0} No email of theirs deleted.|{1} One email of theirs deleted.|[2,*] :count emails of theirs deleted.": "{0} لم يُحذف أي بريد منه.|{1} حُذف بريد واحد منه.|[2,*] حُذفت :count رسائل منه."
+    "{0} No email of theirs deleted.|{1} One email of theirs deleted.|[2,*] :count emails of theirs deleted.": "{0} لم يُحذف أي بريد منه.|{1} حُذف بريد واحد منه.|[2,*] حُذفت :count رسائل منه.",
+    "Each creditor of the matter with an email is added — to it and its agents alike, its agent, phone, claim, IBAN and bank as {{agent}}, {{phone}}, {{claim_amount}}, {{iban}} and {{bank_name}} — but those already on the list.": "يُضاف كل دائن للقضية له بريد — إليه وإلى وكلائه معاً، ووكيله وهاتفه ومطالبته والآيبان والبنك في {{agent}} و{{phone}} و{{claim_amount}} و{{iban}} و{{bank_name}} — عدا من هم في القائمة أصلاً.",
+    "An Excel or CSV sheet with the headings name, email, agent, phone, claim_amount, id_number, iban, bank_name (in English or Arabic) and the type's own columns: each line a creditor, merged into the list by its address, licence or name.": "ورقة Excel أو CSV عناوين أعمدتها name وemail وagent وphone وclaim_amount وid_number وiban وbank_name (بالإنجليزية أو العربية) وأعمدة النوع الخاصة: كل سطر دائن يُدمج في القائمة ببريده أو رخصته أو اسمه.",
+    "First email sent": "أول رسالة مُرسلة",
+    "When the first email went to the creditor or its agents — an email sent on the matter, or its bulk mail": "متى أُرسلت أول رسالة إلى الدائن أو وكلائه — رسالة مرسلة في القضية أو بريدها الجماعي",
+    "An IBAN is two letters, two digits, then up to 30 letters or digits.": "الآيبان حرفان ثم رقمان ثم حتى 30 حرفاً أو رقماً."
 }

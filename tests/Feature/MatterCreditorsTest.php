@@ -207,7 +207,7 @@ class MatterCreditorsTest extends TestCase
 
         // For a bulk mail: to the creditor and its agent alike.
         $this->assertSame(['name', 'email', 'agent', 'phone', 'claim_amount'], MatterCreditors::BULK_MAIL_HEADINGS);
-        $this->assertSame([['بنك المشرق', 'claims@mashreq.ae, lawyer@hashmi.ae, hashmi@gmail.com', 'مكتب الهاشمي', '043334444', '250000.00', '1', '']], MatterCreditors::bulkMailRows($this->matter));
+        $this->assertSame([['بنك المشرق', 'claims@mashreq.ae, lawyer@hashmi.ae, hashmi@gmail.com', 'مكتب الهاشمي', '043334444', '250000.00', '1', '', '', '']], MatterCreditors::bulkMailRows($this->matter));
     }
 
     private function campaign(): BulkMailCampaign
@@ -355,12 +355,14 @@ class MatterCreditorsTest extends TestCase
         if (! is_dir(dirname($path))) {
             mkdir(dirname($path), 0755, true);
         }
-        file_put_contents($path, "الاسم,البريد,الوكيل,الهاتف,قيمة المطالبة,رقم الرخصة,ملف التنفيذ\nبنك المشرق,\"claims@mashreq.ae, lawyer@hashmi.ae\",مكتب الهاشمي,043334444,250000,CN-1001,55/2026\nمؤسسة الأمل,info@amal.ae,,,5000,,\n");
+        file_put_contents($path, "الاسم,البريد,الوكيل,الهاتف,قيمة المطالبة,رقم الرخصة,الآيبان,اسم البنك,ملف التنفيذ\nبنك المشرق,\"claims@mashreq.ae, lawyer@hashmi.ae\",مكتب الهاشمي,043334444,250000,CN-1001,ae07 0331 2345 6789 0123 456,Mashreq,55/2026\nمؤسسة الأمل,info@amal.ae,,,5000,,,,\n");
 
         $this->assertSame(2, app(MatterCreditors::class)->importSheet($this->matter->fresh(), $path));
 
         $mashreq = $this->matter->creditors()->where('name', 'بنك المشرق')->sole();
         $this->assertSame(['CN-1001', '250000.00', '55/2026', 1], [$mashreq->id_number, $mashreq->claim_amount, $mashreq->customValue('ملف التنفيذ'), (int) $mashreq->number]);
+        // Its IBAN kept without the spaces it was written with.
+        $this->assertSame(['AE070331234567890123456', 'Mashreq'], [$mashreq->iban, $mashreq->bank_name]);
         // The first address its own; the next the agent's, named as the sheet names it.
         $this->assertFalse($mashreq->addresses()->where('email', 'claims@mashreq.ae')->sole()->agent);
         $this->assertSame([true, 'مكتب الهاشمي'], [$mashreq->addresses()->where('email', 'lawyer@hashmi.ae')->sole()->agent, $mashreq->addresses()->where('email', 'lawyer@hashmi.ae')->sole()->agent_name]);
@@ -369,9 +371,9 @@ class MatterCreditorsTest extends TestCase
         app(MatterCreditors::class)->importSheet($this->matter->fresh(), $path);
         $this->assertSame(2, $this->matter->creditors()->count());
 
-        // The sheet for a bulk mail carries the number, the licence and the own columns — each a placeholder.
-        $this->assertSame([...MatterCreditors::BULK_MAIL_HEADINGS, 'number', 'id_number', 'ملف التنفيذ'], MatterCreditors::bulkMailHeadings($this->matter->fresh()));
-        $this->assertSame(['بنك المشرق', 'claims@mashreq.ae, lawyer@hashmi.ae', 'مكتب الهاشمي', '043334444', '250000.00', '1', 'CN-1001', '55/2026'], MatterCreditors::bulkMailRows($this->matter->fresh())[0]);
+        // The sheet for a bulk mail carries the number, the licence, the IBAN and bank and the own columns — each a placeholder.
+        $this->assertSame([...MatterCreditors::BULK_MAIL_HEADINGS, 'number', 'id_number', 'iban', 'bank_name', 'ملف التنفيذ'], MatterCreditors::bulkMailHeadings($this->matter->fresh()));
+        $this->assertSame(['بنك المشرق', 'claims@mashreq.ae, lawyer@hashmi.ae', 'مكتب الهاشمي', '043334444', '250000.00', '1', 'CN-1001', 'AE070331234567890123456', 'Mashreq', '55/2026'], MatterCreditors::bulkMailRows($this->matter->fresh())[0]);
         unlink($path);
     }
 
@@ -448,6 +450,41 @@ class MatterCreditorsTest extends TestCase
             ->callTableAction('editCreditor', $plaintiff, ['name' => 'شركة المهاد', 'number' => 9, 'id_number' => 'CN-9', 'claim_amount' => '1000', 'emails' => ['info@mahad.ae'], 'phone' => []])
             ->assertHasNoTableActionErrors();
         $this->assertSame([9, 'CN-9', '1000.00'], [(int) $mahad->fresh()->number, $mahad->fresh()->id_number, $mahad->fresh()->claim_amount]);
+    }
+
+    public function test_a_creditors_iban_and_bank_are_kept_and_the_first_email_sent_to_each_is_its_own(): void
+    {
+        $mashreq = MatterCreditor::assign($this->matter, null, 'بنك المشرق', 'claims@mashreq.ae');
+        MatterCreditor::assign($this->matter, (int) $mashreq->id, null, 'lawyer@hashmi.ae', true, 'مكتب الهاشمي');
+        $amal = MatterCreditor::assign($this->matter, null, 'مؤسسة الأمل', 'info@amal.ae');
+        $noor = MatterCreditor::assign($this->matter, null, 'شركة النور', 'noor@noor.ae');
+
+        // Its IBAN and bank on the Contacts tab: any country's, typed with spaces; a wrong one refused.
+        Livewire::test(MatterContacts::class, ['matter' => $this->matter])
+            ->callTableAction('editCreditor', 'c:'.$mashreq->id, ['name' => 'بنك المشرق', 'iban' => 'gb29 nwbk 6016 1331 9268 19', 'bank_name' => 'Barclays Bank', 'emails' => ['claims@mashreq.ae'], 'phone' => []])
+            ->assertHasNoTableActionErrors()
+            ->callTableAction('editCreditor', 'c:'.$amal->id, ['name' => 'مؤسسة الأمل', 'iban' => '12345', 'emails' => ['info@amal.ae'], 'phone' => []])
+            ->assertHasTableActionErrors(['iban' => 'regex']);
+        $this->assertSame(['GB29NWBK60161331926819', 'Barclays Bank'], [$mashreq->fresh()->iban, $mashreq->fresh()->bank_name]);
+
+        // Written to one by one: the bank's agent on the 3rd (copied in), the bank itself on the 5th; Amal by the
+        // bulk mail on the 4th; Noor not yet.
+        $sent = fn (array $to, array $cc, string $at) => MatterEmail::create(['matter_id' => $this->matter->id, 'direction' => MatterEmail::SENT, 'sender_key' => 'office', 'subject' => 'إخطار', 'to' => $to, 'cc' => $cc, 'at' => Carbon::parse($at)]);
+        $sent(['claims@mashreq.ae'], [], '2026-03-05 10:00');
+        $sent(['court@dubai.gov.ae'], ['lawyer@hashmi.ae'], '2026-03-03 09:00');
+        $campaign = $this->campaign();
+        $campaign->recipients()->create(['name' => 'مؤسسة الأمل', 'email' => ['info@amal.ae'], 'status' => 'sent', 'sent_at' => Carbon::parse('2026-03-04 08:00')]);
+        $campaign->recipients()->create(['name' => 'شركة النور', 'email' => ['noor@noor.ae'], 'status' => 'pending']);
+
+        $this->assertSame([$mashreq->id => '2026-03-03', $amal->id => '2026-03-04'], array_map(fn (Carbon $at): string => $at->toDateString(), MatterCreditors::firstSentAt($this->matter)));
+        $rows = collect((new MatterContactsExport($this->matter))->rows())->keyBy('name');
+        $this->assertSame(['2026-03-03', 'GB29NWBK60161331926819', 'Barclays Bank'], [$rows['بنك المشرق']['first_sent']->toDateString(), $rows['بنك المشرق']['iban'], $rows['بنك المشرق']['bank_name']]);
+        $this->assertNull($rows['شركة النور']['first_sent']);
+
+        // Copied to the same creditor on another matter with its bank account.
+        $other = Matter::factory()->create(['number' => '990', 'year' => '2026', 'type_id' => $this->matter->type_id]);
+        $copied = app(MatterCreditors::class)->copy($other, $mashreq->fresh());
+        $this->assertSame(['GB29NWBK60161331926819', 'Barclays Bank'], [$copied->iban, $copied->bank_name]);
     }
 
     public function test_a_creditor_saved_with_no_number_is_given_the_next_and_those_from_before_the_numbers_theirs_first(): void
