@@ -5388,5 +5388,14 @@
     "Zoom": "التكبير",
     "Fit width": "بعرض الإطار",
     "Before compressing": "قبل الضغط",
-    "After compressing": "بعد الضغط"
+    "After compressing": "بعد الضغط",
+    "Delete the email": "حذف البريد",
+    "Delete contact": "حذف جهة الاتصال",
+    "It is deleted for good with its PDF, original and attachments — in the system and in the matter's OneDrive (to its recycle bin), the copies in other folders too — and its step in the progress and the contacts learnt from it. Its replies stay.": "يُحذف نهائياً مع ملف PDF والأصل والمرفقات — في النظام وفي OneDrive القضية (إلى سلة المحذوفات)، ونسخه في المجلدات الأخرى أيضاً — ومع خطوته في سير القضية وجهات الاتصال التي عُرفت منه. أما الردود عليه فتبقى.",
+    "The email could not be deleted": "تعذّر حذف البريد",
+    "The email is deleted": "حُذف البريد",
+    "Every email that came in on this matter from :addresses is deleted for good with its PDF, original and attachments — in the system and in the matter's OneDrive (to its recycle bin) — and so are their details here and the addresses they brought in. The emails sent to them, and letters, minutes or bulk mail that went to them, stay: for those they may still be listed.": "كل بريد ورد على هذه القضية من :addresses يُحذف نهائياً مع ملف PDF والأصل والمرفقات — في النظام وفي OneDrive القضية (إلى سلة المحذوفات) — وكذلك بياناته هنا والعناوين التي أدخلها. أما البريد المرسل إليه، والكتب والمحاضر والبريد الجماعي التي وصلته، فتبقى: وقد يبقى في القائمة بسببها.",
+    "The contact could not be deleted": "تعذّر حذف جهة الاتصال",
+    "The contact is deleted": "حُذفت جهة الاتصال",
+    "{0} No email of theirs deleted.|{1} One email of theirs deleted.|[2,*] :count emails of theirs deleted.": "{0} لم يُحذف أي بريد منه.|{1} حُذف بريد واحد منه.|[2,*] حُذفت :count رسائل منه."
 }

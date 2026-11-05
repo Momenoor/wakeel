@@ -128,6 +128,16 @@ class MemoryOneDrive extends OneDriveClient
         return ['id' => $itemId, 'webUrl' => $this->url($itemId), 'name' => $this->items[$itemId]['name']];
     }
 
+    /** Removed, and all that is in it. */
+    public function delete(string $user, string $itemId): void
+    {
+        foreach (array_keys(array_filter($this->items, fn (array $item): bool => $item['parent'] === $itemId)) as $child) {
+            $this->delete($user, (string) $child);
+        }
+
+        unset($this->items[$itemId], $this->contents[$itemId]);
+    }
+
     private function add(string $name, string $parent, bool $folder): string
     {
         $id = 'item-'.++$this->next;

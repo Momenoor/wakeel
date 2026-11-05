@@ -62,6 +62,17 @@ return [
             ],
         ],
         [
+            'id' => 'delete',
+            'title' => 'Delete an email',
+            'description' => 'A super admin can delete an email from the matter\'s "Emails" tab, sent or received: "Delete" in the "…" menu on its row. It is deleted for good with everything of it: its PDF, original and attachments in the system and in the matter\'s OneDrive (to its owner\'s recycle bin) — attachments kept in an attachments folder, and the copies in its sender\'s other capacities\' folders, too — its step in the matter\'s progress, and the addresses learnt from it. Its replies stay, as emails of their own.',
+            'roles' => ['Super admin (super-admin) only'],
+            'permissions' => [],
+            'steps' => [
+                ['text' => 'On the email\'s row, open the "…" menu, click "Delete", then confirm.'],
+            ],
+            'tips' => ['Deleted for good: it cannot be brought back from the system. Its files can still be restored from the OneDrive recycle bin for a while.'],
+        ],
+        [
             'id' => 'unfiled',
             'title' => 'Unfiled emails',
             'description' => 'Emails whose matter is not certain wait here (from parties in more than one matter with nothing to say which, or any other email in a mailbox that keeps all its emails). Above the table are an "All" tab and a tab for each mailbox. Each user sees only the mailboxes they are allowed (Users → Edit → Work account). Each email shows "Received", "From", "Subject" and "May be about" (the possible matters in short: their number, parties, level, type, stage and status), with the buttons "Open", "Attachments (n)", "Download links (n)", "File to matter", "Ignore sender" and "About no matter".',

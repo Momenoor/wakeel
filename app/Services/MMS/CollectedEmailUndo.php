@@ -2,14 +2,9 @@
 
 namespace App\Services\MMS;
 
-use App\Models\Attachment;
-use App\Models\MatterContact;
 use App\Models\MatterEmail;
-use App\Models\MatterProgress;
 use App\Models\Setting;
-use App\Support\Documents;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -25,7 +20,7 @@ class CollectedEmailUndo
 {
     public function __construct(
         private readonly MatterReplyCollector $collector,
-        private readonly MatterOneDriveFolders $folders,
+        private readonly MatterEmailDeletion $deletion,
     ) {}
 
     /**
@@ -86,27 +81,12 @@ class CollectedEmailUndo
      */
     private function undoOne(MatterEmail $email, array &$result): void
     {
-        // Its files in the matter's OneDrive.
-        if ($email->matter) {
-            $this->folders->removeEmailFiles($email, $email->matter);
-        }
-
-        // Its files in the system, and the matter's attachments they are.
-        $paths = array_values(array_filter(array_map(fn ($file) => $file['path'] ?? null, (array) ($email->files ?? []))));
-        if ($paths !== []) {
-            Documents::delete($paths);
-            Attachment::query()->whereIn('path', $paths)->delete();
-        }
-
-        MatterProgress::query()->where('source_type', $email->getMorphClass())->where('source_id', $email->getKey())->delete();
-        MatterContact::query()->where('matter_email_id', $email->getKey())->delete();
-
         // Unread in the mailbox again — only one known to have been unread before.
         if ($email->was_unread === true && $this->collector->markUnread($email)) {
             $result['unread']++;
         }
 
-        Cache::forget('mail-keep-retries:'.$email->message_id);
-        $email->delete();
+        // Its files in the system and the matter's OneDrive, its step in the progress, its contacts, and itself.
+        $this->deletion->delete($email);
     }
 }

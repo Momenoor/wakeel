@@ -14,6 +14,7 @@ use App\Models\Party;
 use App\Services\MMS\ContactLinker;
 use App\Services\MMS\MatterContactsExport;
 use App\Services\MMS\MatterCreditors;
+use App\Services\MMS\MatterEmailDeletion;
 use App\Support\Addresses;
 use App\Support\Dates;
 use Carbon\CarbonInterface;
@@ -412,7 +413,7 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
 
                         Notification::make()->success()->title(__('Saved'))->send();
                     }),
-                // The creditors' less used, last, in the row's "…" menu.
+                // The creditors' less used, and Delete, last, in the row's "…" menu.
                 ActionGroup::make([
                     Action::make('addAgent')
                         ->label(__('Add an agent'))
@@ -471,6 +472,32 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                             $this->rowsRead = null;
 
                             Notification::make()->success()->title(__('Removed'))->send();
+                        }),
+                    // A super admin's: someone who came by email off the matter, with the emails from them and their files.
+                    Action::make('deleteContact')
+                        ->label(__('Delete'))
+                        ->icon('heroicon-o-trash')
+                        ->color('danger')
+                        ->visible(fn (array $record): bool => ! $record['party_id'] && $record['creditor_id'] === null && $record['own'] !== [] && MatterEmailDeletion::allowed())
+                        ->requiresConfirmation()
+                        ->modalHeading(fn (array $record): string => __('Delete contact').': '.$record['name'])
+                        ->modalDescription(fn (array $record): string => __('Every email that came in on this matter from :addresses is deleted for good with its PDF, original and attachments — in the system and in the matter\'s OneDrive (to its recycle bin) — and so are their details here and the addresses they brought in. The emails sent to them, and letters, minutes or bulk mail that went to them, stay: for those they may still be listed.', ['addresses' => implode(', ', $record['own'])]))
+                        ->action(function (array $record): void {
+                            abort_unless(MatterEmailDeletion::allowed(), 403);
+
+                            try {
+                                $deleted = app(MatterEmailDeletion::class)->deleteContact($this->matter(), $record['own']);
+                            } catch (\Throwable $e) {
+                                $this->rowsRead = null;
+                                Notification::make()->danger()->title(__('The contact could not be deleted'))->body($e->getMessage())->send();
+
+                                return;
+                            }
+                            $this->rowsRead = null;
+
+                            Notification::make()->success()->title(__('The contact is deleted'))
+                                ->body(trans_choice('{0} No email of theirs deleted.|{1} One email of theirs deleted.|[2,*] :count emails of theirs deleted.', $deleted, ['count' => $deleted]))
+                                ->send();
                         }),
                 ]),
             ])

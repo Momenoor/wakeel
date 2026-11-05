@@ -21,6 +21,7 @@ use App\Models\Type;
 use App\Models\User;
 use App\Services\MMS\EmailReplySender;
 use App\Services\MMS\MatterCreditors;
+use App\Services\MMS\MatterEmailDeletion;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterReplyCollector;
 use App\Services\MMS\ReceivedEmailFiling;
@@ -418,6 +419,28 @@ class EmailsRelationManager extends RelationManager
                         ->action(fn (MatterEmail $record) => $record->markUnreadBy(auth()->user())),
                     // Its PDF made wrongly (garbled letters): made again from the mailbox, its files in their places.
                     RegenerateEmailAction::make(fn (): bool => auth()->user()?->can('update', $this->getOwnerRecord()) ?? false),
+                    // A super admin's: deleted for good, with all its files.
+                    Action::make('delete')
+                        ->label(__('Delete'))
+                        ->icon('heroicon-o-trash')
+                        ->color('danger')
+                        ->visible(fn (): bool => MatterEmailDeletion::allowed())
+                        ->requiresConfirmation()
+                        ->modalHeading(fn (MatterEmail $record): string => __('Delete the email').': '.($record->subject ?: __('(no subject)')))
+                        ->modalDescription(__('It is deleted for good with its PDF, original and attachments — in the system and in the matter\'s OneDrive (to its recycle bin), the copies in other folders too — and its step in the progress and the contacts learnt from it. Its replies stay.'))
+                        ->action(function (MatterEmail $record): void {
+                            abort_unless(MatterEmailDeletion::allowed(), 403);
+
+                            try {
+                                app(MatterEmailDeletion::class)->delete($record);
+                            } catch (\Throwable $e) {
+                                Notification::make()->danger()->title(__('The email could not be deleted'))->body($e->getMessage())->send();
+
+                                return;
+                            }
+
+                            Notification::make()->success()->title(__('The email is deleted'))->send();
+                        }),
                 ]),
             ])
             ->headerActions([

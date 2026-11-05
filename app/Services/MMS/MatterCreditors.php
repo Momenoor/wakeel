@@ -56,8 +56,9 @@ final class MatterCreditors
                 && $email->matched_by !== MatterEmail::BY_ONEDRIVE
                 && (((array) $email->onedrive)['report'] ?? null) === null);
 
-        // Each address's side, asked once.
+        // Each address's side, and who it is, asked once.
         $sides = [];
+        $names = [];
 
         foreach ($emails as $email) {
             $from = MatterEmail::addressOf((string) $email->from);
@@ -67,7 +68,9 @@ final class MatterCreditors
             $where = MatterOneDriveFolders::emailFolder($email, $matter);
 
             if ($under !== '' && $where !== $under && ! str_starts_with(mb_strtolower($where).'/', mb_strtolower($under).'/')) {
-                $moved += $this->folders->moveEmailWithin($email, $matter, MatterOneDriveFolders::receivedEmailsFolderFor($matter, $email->at, $side, $from)) ? 1 : 0;
+                // The files it came with kept apart go to that side's attachments folder too.
+                $apart = MatterOneDriveFolders::attachmentsFolderFor($matter, $email->at, $side, $from, $names[$from] ??= MatterReplyCollector::partyName($from) ?? $from);
+                $moved += $this->folders->moveEmailWithin($email, $matter, MatterOneDriveFolders::receivedEmailsFolderFor($matter, $email->at, $side, $from), [], $apart) ? 1 : 0;
             }
         }
 

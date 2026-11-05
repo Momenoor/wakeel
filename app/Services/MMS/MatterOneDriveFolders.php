@@ -729,13 +729,21 @@ class MatterOneDriveFolders
     }
 
     /**
-     * A received email's files removed from the matter's OneDrive (to its owner's recycle bin): its
-     * PDF, its original and the folder of the files it came with. How many items were removed.
+     * An email's files removed from the matter's OneDrive (to its owner's recycle bin): its PDF, its
+     * original and the files it came with (in a folder of its name, or kept apart in an attachments
+     * folder), and so the copies of them kept in its sender's other capacities' folders
+     * (onedrive.copies). How many items were removed.
      */
     public function removeEmailFiles(MatterEmail $email, Matter $matter): int
     {
         $folder = self::folderFor($matter);
         $items = $this->emailItems($email, $matter);
+
+        foreach ((array) (((array) $email->onedrive)['copies'] ?? []) as $copy) {
+            if (filled(((array) $copy)['folder'] ?? null)) {
+                $items = $items->concat($this->emailItems($email, $matter, (array) $copy));
+            }
+        }
 
         $items->each(fn (array $item) => $this->client->delete($folder->driveUser(), $item['id']));
 
@@ -747,8 +755,10 @@ class MatterOneDriveFolders
      * report's — and that folder kept with it, as where it now is. False when none of it was found to move.
      *
      * @param  array<string, mixed>  $note  noted with it too
+     * @param  ?string  $apartPath  where the files kept apart (in an attachments folder) go too — empty: beside its
+     *                              PDF, in a folder of its name; null: they stay where they are
      */
-    public function moveEmailWithin(MatterEmail $email, Matter $matter, string $targetPath, array $note = []): bool
+    public function moveEmailWithin(MatterEmail $email, Matter $matter, string $targetPath, array $note = [], ?string $apartPath = null): bool
     {
         $folder = self::folderFor($matter);
         $items = $this->emailItems($email, $matter);
@@ -759,8 +769,17 @@ class MatterOneDriveFolders
 
         $user = $folder->driveUser();
         $targetId = $this->ensurePath($user, $folder, $targetPath);
-        // The files kept apart (an attachments folder: the party's documents) stay where they are.
-        $items->reject(fn (array $item): bool => $item['apart'] ?? false)->each(fn (array $item) => $this->client->move($user, $item['id'], $targetId));
+        [$apart, $own] = $items->partition(fn (array $item): bool => $item['apart'] ?? false);
+        $own->each(fn (array $item) => $this->client->move($user, $item['id'], $targetId));
+
+        if ($apartPath !== null && $apart->isNotEmpty()) {
+            $apartId = $apartPath !== ''
+                ? $this->ensurePath($user, $folder, $apartPath)
+                : (string) $this->client->ensureFolder($user, self::clean(pathinfo((string) $email->files[0]['name'], PATHINFO_FILENAME)), $targetId)['id'];
+            $apart->each(fn (array $item) => $this->client->move($user, $item['id'], $apartId));
+            // Beside its PDF: no attachments folder of its own any more.
+            $note['attachments_folder'] = $apartPath !== '' ? $apartPath : null;
+        }
 
         // With what else is to be noted of where it is (the report it went in) — a null taken off.
         $email->update(['onedrive' => array_filter([...(array) $email->onedrive, ...$note, 'folder' => $targetPath], fn ($value): bool => $value !== null)]);
@@ -800,11 +819,13 @@ class MatterOneDriveFolders
 
     /**
      * An email's items where it is in the matter's OneDrive folder (emailFolder()): its PDF, its original
-     * (.eml) and the folder of the files it came with — by the PDF's name. None when not found.
+     * (.eml) and the folder of the files it came with — by the PDF's name. None when not found. Or those
+     * of one of its copies (onedrive.copies: its folder and attachments folder).
      *
+     * @param  ?array<string, mixed>  $copy
      * @return \Illuminate\Support\Collection<int, array{id: string, name: string, folder: bool}>
      */
-    private function emailItems(MatterEmail $email, Matter $matter): \Illuminate\Support\Collection
+    private function emailItems(MatterEmail $email, Matter $matter, ?array $copy = null): \Illuminate\Support\Collection
     {
         $folder = self::folderFor($matter);
         $base = pathinfo((string) ($email->files[0]['name'] ?? ''), PATHINFO_FILENAME);
@@ -814,7 +835,7 @@ class MatterOneDriveFolders
         }
 
         $user = $folder->driveUser();
-        $folderId = $this->walk($user, (string) $folder->drive_item_id, self::emailFolder($email, $matter));
+        $folderId = $this->walk($user, (string) $folder->drive_item_id, $copy !== null ? (string) $copy['folder'] : self::emailFolder($email, $matter));
         $stem = mb_strtolower(self::clean($base));
 
         $items = $folderId === null ? collect() : collect($this->client->children($user, $folderId))
@@ -822,7 +843,7 @@ class MatterOneDriveFolders
             ->map(fn (array $item): array => [...$item, 'apart' => false]);
 
         // Its files kept apart, in an attachments folder: each by its name there.
-        $apart = (string) (((array) $email->onedrive)['attachments_folder'] ?? '');
+        $apart = (string) (($copy ?? (array) $email->onedrive)['attachments_folder'] ?? '');
         if ($apart !== '' && ($apartId = $this->walk($user, (string) $folder->drive_item_id, $apart)) !== null) {
             $names = collect($email->attachmentFiles())->map(fn (array $file): string => mb_strtolower(self::oneDriveName((string) $file['name'])))->flip();
             $items = $items->concat(collect($this->client->children($user, $apartId))

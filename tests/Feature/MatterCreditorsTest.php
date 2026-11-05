@@ -136,6 +136,50 @@ class MatterCreditorsTest extends TestCase
         $this->assertSame('04 المراسلات', $other->fresh()->onedrive['folder']);
     }
 
+    public function test_the_files_an_email_came_with_kept_in_an_attachments_folder_follow_it_to_the_creditors(): void
+    {
+        $creditor = MatterCreditor::assign($this->matter, null, 'بنك المشرق', 'claims@mashreq.ae');
+        $email = $this->received('lawyer@hashmi.ae', 'وارد 1');
+        $email->update([
+            'files' => [['name' => 'وارد 1.pdf', 'path' => null], ['name' => 'مطالبة.pdf', 'path' => null], ['name' => 'عقد.pdf', 'path' => null]],
+            'onedrive' => [...$email->onedrive, 'attachments_folder' => '02 المستندات'],
+        ]);
+        $this->oneDrive->put('02 المستندات/مطالبة.pdf');
+        $this->oneDrive->put('02 المستندات/عقد.pdf');
+        // Another's, in the same attachments folder: stays.
+        $this->oneDrive->put('02 المستندات/حكم.pdf');
+        Setting::set(ReceivedEmailFiling::ATTACHMENTS_SETTINGS[ReceivedEmailFiling::CREDITOR], '07 مطالبات الدائنين/{{creditor}}/المستندات', 'onedrive');
+        Setting::clearCache();
+
+        MatterCreditor::assign($this->matter, $creditor->id, null, 'lawyer@hashmi.ae', true, 'مكتب الهاشمي');
+        $this->assertSame(1, app(MatterCreditors::class)->refile($this->matter, ['lawyer@hashmi.ae']));
+
+        $this->assertSame([
+            '02 المستندات/حكم.pdf',
+            '07 مطالبات الدائنين/بنك المشرق/المستندات/عقد.pdf', '07 مطالبات الدائنين/بنك المشرق/المستندات/مطالبة.pdf',
+            '07 مطالبات الدائنين/بنك المشرق/وارد 1.eml', '07 مطالبات الدائنين/بنك المشرق/وارد 1.pdf',
+        ], $this->oneDrive->files());
+        $this->assertSame('07 مطالبات الدائنين/بنك المشرق/المستندات', $email->fresh()->onedrive['attachments_folder']);
+
+        // No attachments folder set for the creditors: beside its PDF, in a folder of its name.
+        $other = MatterCreditor::assign($this->matter, null, 'بنك دبي', 'claims@dib.ae');
+        $second = $this->received('agent@dib.ae', 'وارد 2');
+        $second->update([
+            'files' => [['name' => 'وارد 2.pdf', 'path' => null], ['name' => 'كشف.pdf', 'path' => null]],
+            'onedrive' => [...$second->onedrive, 'attachments_folder' => '02 المستندات'],
+        ]);
+        $this->oneDrive->put('02 المستندات/كشف.pdf');
+        Setting::set(ReceivedEmailFiling::ATTACHMENTS_SETTINGS[ReceivedEmailFiling::CREDITOR], '', 'onedrive');
+        Setting::clearCache();
+
+        MatterCreditor::assign($this->matter, $other->id, null, 'agent@dib.ae', true);
+        $this->assertSame(1, app(MatterCreditors::class)->refile($this->matter, ['agent@dib.ae']));
+
+        $this->assertContains('07 مطالبات الدائنين/بنك دبي/وارد 2/كشف.pdf', $this->oneDrive->files());
+        $this->assertNotContains('02 المستندات/كشف.pdf', $this->oneDrive->files());
+        $this->assertArrayNotHasKey('attachments_folder', $second->fresh()->onedrive);
+    }
+
     public function test_the_contacts_tab_lists_creditors_and_their_agents_and_exports_them_for_bulk_mail(): void
     {
         Livewire::test(MatterContacts::class, ['matter' => $this->matter])
