@@ -110,7 +110,7 @@
                     <x-filament::button size="sm" color="gray" icon="heroicon-o-arrow-path" :loading-indicator="false" x-on:click="rotateSelected(90)">
                         {{ __('Rotate') }}
                     </x-filament::button>
-                    <x-filament::button size="sm" color="gray" icon="heroicon-o-document-duplicate" :loading-indicator="false" x-on:click="everyPage()" x-bind:disabled="pages.length < 2 || selected?.cover">
+                    <x-filament::button size="sm" color="gray" icon="heroicon-o-document-duplicate" :loading-indicator="false" x-on:click="everyPage()" x-bind:disabled="pages.length < 2 || Boolean(selected?.cover)">
                         {{ __('Put on every page') }}
                     </x-filament::button>
                     <x-filament::button size="sm" color="danger" icon="heroicon-o-trash" :loading-indicator="false" x-on:click="remove()">
