@@ -23,8 +23,14 @@ class CheckSystemOffline
         if (! Setting::isOffline()) {
             return $next($request);
         }
+        // A page's own requests (Livewire): the sign-in page's, and the super admin's — not those of a page someone
+        // else had open when the system went offline.
         if ($request->is('livewire/*') || $request->hasHeader('X-Livewire')) {
-            return $next($request);
+            if (! $request->user() || self::mayWork($request->user())) {
+                return $next($request);
+            }
+
+            return response()->json(['message' => Setting::getOfflineMessage(), 'status' => 'offline'], 503);
         }
         // 2. Allow static assets, health checks, maintenance page & Livewire core assets
         if (
@@ -54,16 +60,9 @@ class CheckSystemOffline
 
         $user = $request->user();
 
-        // 4. If logged in, check if user is an authorized admin
-        if ($user) {
-            $allowAdmins = (bool) Setting::get('offline_allow_admins', true);
-
-            if ($allowAdmins && (
-                (method_exists($user, 'hasAnyRole') && $user->hasAnyRole([Utils::getSuperAdminName(), 'admin'])) ||
-                ($user->is_admin ?? false)
-            )) {
-                return $next($request);
-            }
+        // 4. Signed in: the super admin works on, when allowed; no one else — an admin neither.
+        if ($user && self::mayWork($user)) {
+            return $next($request);
         }
 
         // 5. If user is unauthenticated AND trying to access a Filament panel, send to login
@@ -88,5 +87,13 @@ class CheckSystemOffline
         }
 
         return response()->redirectToRoute('system-down')->with('maintenance_message', $message);
+    }
+
+    /** Who may use the system while it is offline: the super admin only, when "Allow the super admin" is on. */
+    private static function mayWork(mixed $user): bool
+    {
+        return (bool) Setting::get('offline_allow_admins', true)
+            && method_exists($user, 'hasRole')
+            && $user->hasRole(Utils::getSuperAdminName());
     }
 }

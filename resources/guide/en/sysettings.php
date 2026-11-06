@@ -87,10 +87,10 @@ return [
         [
             'id' => 'maintenance',
             'title' => 'Maintenance and offline mode',
-            'description' => '"Maintenance → Maintenance & Offline": when "Enable Offline / Maintenance Mode" is on, users see a notice that the system is stopped for a while. You can let only administrators sign in during that time to finish updates.',
+            'description' => '"Maintenance → Maintenance & Offline": when "Enable Offline / Maintenance Mode" is on, users see a notice that the system is stopped for a while. You can let only the super admin sign in during that time to finish updates; administrators see the notice like everyone else.',
             'roles' => [$admin, $withPermission],
             'permissions' => ['View:SystemSettings', 'View:SystemSettingsMaintenanceTab'],
-            'steps' => [['text' => 'Open "Settings → Maintenance → Maintenance & Offline": turn the mode on, choose "Allow Administrators to Access While Offline", then click "Save Settings". Turn it off the same way when you finish.', 'shot' => 'tab-maintenance']],
+            'steps' => [['text' => 'Open "Settings → Maintenance → Maintenance & Offline": turn the mode on, choose "Allow the super admin to access while offline", then click "Save Settings". Turn it off the same way when you finish.', 'shot' => 'tab-maintenance']],
             'tips' => ['Do not forget to turn the mode off when the work is done, or staff stay unable to sign in.'],
         ],
     ],

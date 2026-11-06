@@ -75,8 +75,8 @@ class OfflineSettings extends SettingsFormPage
                         ->visible(fn (Get $get): bool => (bool) $get('app_offline')),
 
                     Toggle::make('offline_allow_admins')
-                        ->label(__('Allow Administrators to Access While Offline'))
-                        ->helperText(__('Super administrators and administrators will retain full access to manage the system.'))
+                        ->label(__('Allow the super admin to access while offline'))
+                        ->helperText(__('Only the super admin can sign in and work while the system is offline; administrators and everyone else see the maintenance message.'))
                         ->default(true)
                         ->columnSpanFull(),
                 ]),

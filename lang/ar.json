@@ -138,7 +138,6 @@
     "Allocation deleted.": "تم حذف الدفعة.",
     "Allocation signs aligned": "تم تصحيح إشارات التحصيل",
     "Allocation updated successfully.": "تم تحديث التخصيص بنجاح.",
-    "Allow Administrators to Access While Offline": "السماح للمديرين بالدخول أثناء التعطيل",
     "Allow Current Status": "استيراد بالحالة الحالية",
     "Allow Current Status Import": "السماح بالاستيراد بالحالة الحالية",
     "Allowances": "البدلات",
@@ -1794,7 +1793,6 @@
     "Summary": "الملخص",
     "Super Administrator Roles": "أدوار المدير العام",
     "Super admin roles aligned": "تمت مواءمة أدوار المدير العام",
-    "Super administrators and administrators will retain full access to manage the system.": "يحتفظ المديرون العامون والمديرون بصلاحية الوصول الكاملة لإدارة النظام.",
     "Supplementary Matter": "قضية تكميلية",
     "Supplementary Matter Details": "تفاصيل إضافية للملف",
     "Supplementary Matter cloned successfully": "تم استنساخ القضية التكميلية بنجاح",
@@ -5430,5 +5428,7 @@
     "in a file name: when, incoming or reply, and what about": "في اسم الملف: متى، وارد أو رد، والموضوع",
     "in a first mail's name: whom it went to, and their address": "في اسم الرسالة الأولى: من أُرسلت إليه، وعنوانه",
     "in a periodic report's folder: the report's number": "في مجلد التقرير الدوري: رقم التقرير",
-    "Leave the creditors' ones empty to save them with the other sent emails.": "اترك حقول الدائنين فارغة لحفظها مع الرسائل المرسلة الأخرى."
+    "Leave the creditors' ones empty to save them with the other sent emails.": "اترك حقول الدائنين فارغة لحفظها مع الرسائل المرسلة الأخرى.",
+    "Allow the super admin to access while offline": "السماح للمدير العام بالدخول أثناء التعطيل",
+    "Only the super admin can sign in and work while the system is offline; administrators and everyone else see the maintenance message.": "المدير العام وحده يستطيع الدخول والعمل أثناء تعطيل النظام؛ ويرى المديرون وغيرهم رسالة الصيانة."
 }

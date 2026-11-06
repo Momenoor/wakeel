@@ -140,11 +140,10 @@ class SettingTest extends TestCase
         $this->assertSame('OK', $response->getContent());
     }
 
-    public function test_offline_middleware_allows_plain_admin_role_when_offline(): void
+    public function test_offline_middleware_keeps_out_an_admin_who_is_no_super_admin(): void
     {
-        // Regression test: the 'admin' role (as opposed to 'super_admin'/'super-admin')
-        // was previously not recognized by the offline check, so a logged-in user
-        // whose only role is 'admin' was bounced to the maintenance page after login.
+        // Only the super admin works during maintenance: an admin sees the notice like everyone else — and a page
+        // they had open when it began does nothing more (its Livewire requests refused).
         Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
 
         $admin = User::factory()->create();
@@ -157,12 +156,19 @@ class SettingTest extends TestCase
         $request = Request::create('/dashboard', 'GET');
         $request->setUserResolver(fn () => $admin);
 
-        $response = $middleware->handle($request, function () {
-            return new Response('OK', 200);
-        });
+        $response = $middleware->handle($request, fn () => new Response('OK', 200));
+        $this->assertTrue($response->isRedirect(route('system-down')));
 
-        $this->assertSame(200, $response->getStatusCode());
-        $this->assertSame('OK', $response->getContent());
+        $livewire = Request::create('/livewire/update', 'POST');
+        $livewire->setUserResolver(fn () => $admin);
+        $this->assertSame(503, $middleware->handle($livewire, fn () => new Response('OK', 200))->getStatusCode());
+
+        // Nor the super admin, when "Allow the super admin" is off.
+        Setting::set('offline_allow_admins', false);
+        $superAdmin = User::factory()->create()->assignRole(Role::firstOrCreate(['name' => 'super-admin', 'guard_name' => 'web']));
+        $request = Request::create('/dashboard', 'GET');
+        $request->setUserResolver(fn () => $superAdmin);
+        $this->assertTrue($middleware->handle($request, fn () => new Response('OK', 200))->isRedirect(route('system-down')));
     }
 
     public function test_offline_middleware_allows_all_requests_when_online(): void
