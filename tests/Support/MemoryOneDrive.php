@@ -128,6 +128,22 @@ class MemoryOneDrive extends OneDriveClient
         return ['id' => $itemId, 'webUrl' => $this->url($itemId), 'name' => $this->items[$itemId]['name']];
     }
 
+    /** Named anew — refused, as Graph does, when its folder has one of that name already. */
+    public function rename(string $user, string $itemId, string $name): array
+    {
+        $parent = $this->items[$itemId]['parent'];
+
+        foreach ($this->items as $id => $item) {
+            if ($id !== $itemId && $item['parent'] === $parent && mb_strtolower($item['name']) === mb_strtolower($name)) {
+                throw new \RuntimeException('nameAlreadyExists');
+            }
+        }
+
+        $this->items[$itemId]['name'] = $name;
+
+        return ['id' => $itemId, 'webUrl' => $this->url($itemId)];
+    }
+
     /** Removed, and all that is in it. */
     public function delete(string $user, string $itemId): void
     {

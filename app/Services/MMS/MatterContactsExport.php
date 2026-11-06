@@ -114,6 +114,7 @@ class MatterContactsExport
         $this->emailed();
         $this->theirs();
         $this->corrected();
+        $this->firstMails();
 
         return array_values(array_map(fn (string $key, array $row): array => [
             'key' => $key,
@@ -260,6 +261,23 @@ class MatterContactsExport
             $key ??= $this->add(null, (string) ($contact->owner_name ?: $contact->owner_email), [$contact->owner_email], [], __('Reply'), '');
 
             $this->rows[$key]['theirs'][] = $contact->email;
+        }
+    }
+
+    /** Anyone else a first mail to creditors went to (CreditorFirstMails): its day, as "First email sent". */
+    private function firstMails(): void
+    {
+        $dates = CreditorFirstMails::datesByAddress($this->matter);
+
+        foreach ($this->rows as $key => $row) {
+            if (isset($row['creditor']) || $dates === []) {
+                continue;
+            }
+
+            $days = array_values(array_filter(array_map(fn (string $address) => $dates[mb_strtolower($address)] ?? null, Addresses::emails($row['emails']))));
+            if ($days !== []) {
+                $this->rows[$key]['first_sent'] = collect($days)->min();
+            }
         }
     }
 

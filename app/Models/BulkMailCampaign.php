@@ -24,6 +24,7 @@ class BulkMailCampaign extends Model
         'body',
         'from_sender_key',
         'matter_id',
+        'first_mail',
         'cc_emails',
         'bcc_emails',
         'has_attachment',
@@ -45,6 +46,7 @@ class BulkMailCampaign extends Model
         'placeholders' => 'array',
         'attachment_path' => 'array',
         'has_attachment' => 'boolean',
+        'first_mail' => 'boolean',
         'scheduled_at' => 'datetime',
         'status' => BulkMailCampaignStatus::class,
     ];

@@ -121,6 +121,8 @@ class Type extends Model
         'onedrive_attachments_defendant',
         'onedrive_attachments_creditors',
         'onedrive_sent_creditors',
+        'onedrive_first_to_creditors',
+        'first_mail_name',
     ];
 
     /**
@@ -271,7 +273,7 @@ class Type extends Model
     }
 
     /** Its own OneDrive folders (Settings → OneDrive Folders): empty — the default one. */
-    public const FOLDER_FIELDS = ['onedrive_subfolders', 'phase_keep_folders', 'onedrive_received_emails', 'onedrive_received_plaintiff', 'onedrive_received_defendant', 'onedrive_received_creditors', 'received_name', 'received_name_plaintiff', 'received_name_defendant', 'received_name_creditor', 'onedrive_sent_emails', 'onedrive_signed_minutes', 'onedrive_periodic_reports', 'onedrive_attachments', 'onedrive_attachments_plaintiff', 'onedrive_attachments_defendant', 'onedrive_attachments_creditors', 'onedrive_sent_creditors'];
+    public const FOLDER_FIELDS = ['onedrive_subfolders', 'phase_keep_folders', 'onedrive_received_emails', 'onedrive_received_plaintiff', 'onedrive_received_defendant', 'onedrive_received_creditors', 'received_name', 'received_name_plaintiff', 'received_name_defendant', 'received_name_creditor', 'onedrive_sent_emails', 'onedrive_signed_minutes', 'onedrive_periodic_reports', 'onedrive_attachments', 'onedrive_attachments_plaintiff', 'onedrive_attachments_defendant', 'onedrive_attachments_creditors', 'onedrive_sent_creditors', 'onedrive_first_to_creditors', 'first_mail_name'];
 
     /**
      * Its OneDrive folders as one value, to compare: types alike in all of them are a group.

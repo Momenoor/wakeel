@@ -22,7 +22,7 @@ return [
                 'The files an email came with go to the "Files … — folder" set for the sender\'s side (Settings → OneDrive Folders, or the matter type), apart from the email\'s PDF and original; "Details" shows the "Attachments folder". Left empty, they go beside the PDF, in a folder of its name.',
                 'Someone with two capacities on the matter — a party made a creditor too — has their email filed as a creditor\'s, with their claim, and a copy of it (PDF, original and files) saved in the party\'s side folders as well, in OneDrive only; "Details" lists where under "Also saved as".',
                 'Links are read for emails that arrive after this update. For an older email, use "Make the PDF again" and its links are read too.',
-                'The "Check for emails" button above the table reads the mailboxes now, instead of waiting for the next round (every ten minutes): replies, and any other email from the matter\x27s parties. It runs in the background: a notification in the bell says how many were kept. It is shown once an email has been sent from the matter.',
+                'The "Check for emails" button above the table reads the mailboxes now, instead of waiting for the next round (every ten minutes): replies, and any other email from the matter\'s parties. It runs in the background: a notification in the bell says how many were kept. It is shown once an email has been sent from the matter.',
                 'The "Scan OneDrive" button above the table picks up from OneDrive any PDFs, originals and attachments of received emails that are there. It runs in the background: a notification in the bell tells you when it is done.',
                 '"Reply" on a received email\'s row answers it from one of the office\'s mailboxes (the one it came to, to start): to whoever wrote — and, when they wrote from another address of a party\'s on the matter, to the party\'s own address too — copied to the others it reached, with "Also copied in, from their replies" offering the other addresses they brought in, to copy in or not. The email replied to is quoted under what you write — its header lines and its text (an email kept before this update has its text brought in with "Quote its text" beside the box) — files can be added ("Get the link now" shares them by link before sending, as on a letter), and the reply is kept on the matter beside it, in the same thread in their mailbox. On the row, "Open the email", "Reply" and "Details" are the buttons; everything else is in its "…" menu.',
                 'A reply to an email sent from the system is kept under it, whichever of the office\'s mailboxes it comes to. One kept as a new email instead (it named no email the system knew) is linked by hand: "Is a reply to an email sent" in its row\'s "…" menu, the email it most likely answers chosen to begin with.',
@@ -71,6 +71,17 @@ return [
                 ['text' => 'On the email\'s row, open the "…" menu, click "Delete", then confirm.'],
             ],
             'tips' => ['Deleted for good: it cannot be brought back from the system. Its files can still be restored from the OneDrive recycle bin for a while.'],
+        ],
+        [
+            'id' => 'first-mail',
+            'title' => 'First mail to a creditor',
+            'description' => 'On a matter that has creditors, a sent email — a letter, or one sent from Outlook — can be marked as the first mail to a creditor-to-be: "First mail to a creditor" in the "…" menu on its row. It moves to the folder of the first mails (Settings → OneDrive Folders), named as set there, and its day is the "First email sent" of whom it went to on the Contacts tab. "Not a first mail to a creditor" puts it back with the other sent emails. A bulk mail ticked "First mail to creditors" marks all its emails so as they go.',
+            'roles' => [$admin, $withPermission],
+            'permissions' => ['Update:Matter'],
+            'steps' => [
+                ['text' => 'On the sent email\'s row, open the "…" menu, click "First mail to a creditor", then confirm.'],
+            ],
+            'tips' => ['Someone who answers it and is made a creditor has their emails from then on in the creditor\'s own folders, each email and its replies in a numbered folder (01, 02 …). The first mail stays with the others.'],
         ],
         [
             'id' => 'unfiled',

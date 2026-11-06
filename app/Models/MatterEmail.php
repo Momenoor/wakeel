@@ -70,7 +70,7 @@ class MatterEmail extends Model
     /** Written from Outlook in reply to an email that came in on the matter (MatterReplyCollector::handleOwn()): kept beside it. */
     public const BY_REPLY = 'reply';
 
-    protected $fillable = ['matter_id', 'direction', 'status', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'cc', 'content_hash', 'files', 'links', 'onedrive', 'candidates', 'matched_by', 'at', 'user_id', 'was_unread', 'body', 'shared_files'];
+    protected $fillable = ['matter_id', 'direction', 'first_mail', 'status', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'cc', 'content_hash', 'files', 'links', 'onedrive', 'candidates', 'matched_by', 'at', 'user_id', 'was_unread', 'body', 'shared_files'];
 
     protected function casts(): array
     {
@@ -84,6 +84,7 @@ class MatterEmail extends Model
             'at' => 'datetime',
             'was_unread' => 'boolean',
             'shared_files' => 'array',
+            'first_mail' => 'boolean',
         ];
     }
 
@@ -128,11 +129,18 @@ class MatterEmail extends Model
         try {
             $this->update([
                 'files' => filled($pdf['path'] ?? null) ? [['name' => $pdf['name'], 'path' => $pdf['path']]] : [],
-                'onedrive' => ['pdf' => (bool) ($pdf['inOneDrive'] ?? false), 'sent_attachments' => $attachmentsSent, 'folder' => $pdf['folder'] ?? null, 'checked_at' => now()->toDateTimeString()],
+                // Its PDF's name too — kept in OneDrive only (a bulk mail's), it is found there by it.
+                'onedrive' => ['pdf' => (bool) ($pdf['inOneDrive'] ?? false), 'name' => $pdf['name'] ?? null, 'sent_attachments' => $attachmentsSent, 'folder' => $pdf['folder'] ?? null, 'checked_at' => now()->toDateTimeString()],
             ]);
         } catch (Throwable $e) {
             Log::warning('What was kept of a sent email was not noted: '.$e->getMessage());
         }
+    }
+
+    /** Its PDF's name: the first of its files — else, kept in OneDrive only (a bulk mail's), as noted there (noteKept()). */
+    public function pdfName(): string
+    {
+        return (string) (((array) $this->files)[0]['name'] ?? ((array) $this->onedrive)['name'] ?? '');
     }
 
     /**

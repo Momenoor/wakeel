@@ -850,8 +850,9 @@ class MatterReplyCollector
         [$pdf, $files, , $source, $links] = $this->rendered($message, $key, false, $matter, received: false);
         $name = SentEmailArchive::emailName(true, self::partyName($outside[0]) ?? $outside[0], (string) ($message['subject'] ?? ''), $at, false);
 
-        // A reply: beside the email it answers, in its folder; else where the sent emails go (a creditor's, the sent folder).
-        $folder = $answered !== null && $answered->matter_id === $matter->getKey() ? MatterOneDriveFolders::emailFolder($answered, $matter) : '';
+        // A reply: beside the email it answers, in its folder — not beside a first mail to creditors, kept with the
+        // others; else where the sent emails go (a creditor's, the sent folder).
+        $folder = $answered !== null && $answered->matter_id === $matter->getKey() && ! $answered->first_mail ? MatterOneDriveFolders::emailFolder($answered, $matter) : '';
         $kept = $this->keepIn($matter, $folder !== '' ? $folder : MatterOneDriveFolders::sentEmailsFolderFor($matter, $at, $outside), $pdf, $files, $name, $userId, $source, $oneDrive);
         $email->update(['files' => $kept, 'links' => $links, 'onedrive' => $oneDrive]);
 
@@ -1137,7 +1138,7 @@ class MatterReplyCollector
         $oneDrive = null;
 
         if ($matter) {
-            $kept = $this->keepOnMatter($matter, $pdf, $files, $name, $answers->user_id, $source, $oneDrive, self::arrivedAt($message), $side, $from, $party);
+            $kept = $this->keepOnMatter($matter, $pdf, $files, $name, $answers->user_id, $source, $oneDrive, self::arrivedAt($message), $side, $from, $party, $answers);
         } else {
             // No matter: its PDF and the files it came with, in a folder of its own.
             $kept = $this->keepLoose('email-replies/'.$reply->getKey(), $pdf, $files, $name);
@@ -1465,14 +1466,21 @@ class MatterReplyCollector
      * @param  list<array{name: string, contents: string, mime?: string}>  $files
      * @param  ?string  $source  the original email (.eml), kept beside the PDF
      * @param  array<string, mixed>|null  $oneDrive  set to what reached the matter's OneDrive: {pdf, eml, attachments}
+     * @param  ?MatterEmail  $answers  the email it answers: beside it, in its numbered folder, when that is where its sender's go
      * @return list<array{name: string, path: string}>
      */
-    private function keepOnMatter(Matter $matter, string $pdf, array $files, string $name, ?int $userId, ?string $source = null, &$oneDrive = null, ?CarbonInterface $at = null, string $side = ReceivedEmailFiling::GENERAL, string $from = '', string $party = ''): array
+    private function keepOnMatter(Matter $matter, string $pdf, array $files, string $name, ?int $userId, ?string $source = null, &$oneDrive = null, ?CarbonInterface $at = null, string $side = ReceivedEmailFiling::GENERAL, string $from = '', string $party = '', ?MatterEmail $answers = null): array
     {
+        // An answer: in the folder of the email it answers (a creditor's 01 …), its files with it when they would have
+        // a numbered folder too.
+        $thread = MatterOneDriveFolders::threadFolder($answers, $matter, MatterOneDriveFolders::receivedEmailsFolderFor($matter, $at, $side, $from, nextSerial: false));
         // Its files apart, when the side has an attachments folder (a party's documents folder).
         $attachmentsFolder = $files !== [] ? MatterOneDriveFolders::attachmentsFolderFor($matter, $at, $side, $from, $party !== '' ? $party : $from) : '';
+        if ($thread !== null && str_contains(ReceivedEmailFiling::attachmentsTemplate($matter, $side), '{{serial')) {
+            $attachmentsFolder = $thread;
+        }
 
-        $kept = $this->keepIn($matter, MatterOneDriveFolders::receivedEmailsFolderFor($matter, $at, $side, $from), $pdf, $files, $name, $userId, $source, $oneDrive, $attachmentsFolder);
+        $kept = $this->keepIn($matter, $thread ?? MatterOneDriveFolders::receivedEmailsFolderFor($matter, $at, $side, $from), $pdf, $files, $name, $userId, $source, $oneDrive, $attachmentsFolder);
         $this->keepCopies($matter, $pdf, $files, $name, $source, $at, $from, $side, $party, $oneDrive);
 
         return $kept;

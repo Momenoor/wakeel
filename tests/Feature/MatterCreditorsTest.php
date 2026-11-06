@@ -21,11 +21,13 @@ use App\Models\Setting;
 use App\Models\Type;
 use App\Models\User;
 use App\Services\MMS\ContactLinker;
+use App\Services\MMS\CreditorFirstMails;
 use App\Services\MMS\MatterContactsExport;
 use App\Services\MMS\MatterCreditors;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\OneDriveClient;
 use App\Services\MMS\ReceivedEmailFiling;
+use App\Services\MMS\SentEmailArchive;
 use Filament\Actions\Imports\Models\Import;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
@@ -34,6 +36,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\Support\MemoryOneDrive;
 use Tests\TestCase;
@@ -398,6 +401,90 @@ class MatterCreditorsTest extends TestCase
         // The type's own wins over the setting.
         $this->matter->type->update(['onedrive_sent_creditors' => 'مطالبات/{{creditor}}']);
         $this->assertSame('مطالبات/بنك المشرق', MatterOneDriveFolders::sentEmailsFolderFor($this->matter->fresh(), now(), ['claims@mashreq.ae']));
+    }
+
+    public function test_first_mails_go_in_one_folder_and_a_creditor_once_made_has_each_email_and_its_answers_in_a_numbered_folder(): void
+    {
+        Storage::fake('public');
+        Setting::set(MatterOneDriveFolders::SENT_EMAILS, 'المراسلات/صادر', 'onedrive');
+        Setting::set(MatterOneDriveFolders::FIRST_TO_CREDITORS, 'مطالبات الدائنين/000 الإخطارات', 'onedrive');
+        Setting::set(ReceivedEmailFiling::FOLDER_SETTINGS[ReceivedEmailFiling::CREDITOR], 'مطالبات الدائنين/{{creditor.number}} {{creditor}}/{{serial.2}}', 'onedrive');
+        Setting::set(MatterOneDriveFolders::SENT_TO_CREDITORS, 'مطالبات الدائنين/{{creditor.number}} {{creditor}}/{{serial.2}}', 'onedrive');
+        Setting::clearCache();
+        $archive = app(SentEmailArchive::class);
+        $sent = fn (array $to, string $subject, ?int $parent = null, bool $first = false) => MatterEmail::create([
+            'matter_id' => $this->matter->id, 'direction' => MatterEmail::SENT, 'sender_key' => 'iflas', 'subject' => $subject,
+            'to' => $to, 'at' => now(), 'parent_id' => $parent, 'first_mail' => $first,
+        ]);
+
+        // The notice to whoever may be a creditor — no one on the list yet: in the first mails folder, by its name.
+        $notice = $sent(['claims@mashreq.ae'], 'إخطار', first: true);
+        $notice->noteKept($archive->keep($this->matter, '%PDF', 'بنك المشرق', 'إخطار', null, false, ['claims@mashreq.ae'], firstMail: true, record: $notice), 0);
+        $this->assertContains('مطالبات الدائنين/000 الإخطارات/بنك المشرق.pdf', $this->oneDrive->files());
+
+        // The bank answers (with the general emails until it is a creditor), I answer it, it answers again; then a new one.
+        $answer = $this->received('Mashreq <claims@mashreq.ae>', 'وارد 1');
+        $answer->update(['parent_id' => $notice->id]);
+        $mine = $sent(['claims@mashreq.ae'], 'رد', $answer->id);
+        $mine->update(['at' => now()->addSecond()]);
+        $mine->noteKept($archive->keep($this->matter, '%PDF', 'بنك المشرق', 'رد', null, false, ['claims@mashreq.ae'], record: $mine), 0);
+        $again = $this->received('claims@mashreq.ae', 'وارد 2');
+        $again->update(['parent_id' => $mine->id, 'at' => now()->addMinute()]);
+        $other = $this->received('claims@mashreq.ae', 'وارد 3');
+        $other->update(['at' => now()->addMinutes(2)]);
+
+        // Made a creditor: its emails and mine to it, each with what it answers — 01, 02; the notice stays.
+        CreditorFields::save($this->matter, ['name' => 'بنك المشرق'], ['claims@mashreq.ae']);
+        $files = $this->oneDrive->files();
+        $this->assertContains('مطالبات الدائنين/000 الإخطارات/بنك المشرق.pdf', $files);
+        $this->assertContains('مطالبات الدائنين/001 بنك المشرق/01/وارد 1.pdf', $files);
+        $this->assertContains('مطالبات الدائنين/001 بنك المشرق/01/وارد 1.eml', $files);
+        $this->assertContains('مطالبات الدائنين/001 بنك المشرق/01/وارد 2.pdf', $files);
+        $this->assertContains('مطالبات الدائنين/001 بنك المشرق/02/وارد 3.pdf', $files);
+        $this->assertSame('مطالبات الدائنين/001 بنك المشرق/01', MatterOneDriveFolders::emailFolder($mine->fresh(), $this->matter));
+        $this->assertSame('مطالبات الدائنين/000 الإخطارات', MatterOneDriveFolders::emailFolder($notice->fresh(), $this->matter));
+
+        // My answer to its last: beside it; a new email to it: the next number.
+        $reply = $sent(['claims@mashreq.ae'], 'رد', $other->id);
+        $this->assertSame('مطالبات الدائنين/001 بنك المشرق/02', $archive->keep($this->matter, '%PDF', 'بنك المشرق', 'رد', null, false, ['claims@mashreq.ae'], record: $reply)['folder']);
+        $this->assertSame('مطالبات الدائنين/001 بنك المشرق/03', MatterOneDriveFolders::sentEmailsFolderFor($this->matter, now(), ['claims@mashreq.ae']));
+
+        // Its "First email sent": the notice's day — and for someone a first mail went to who is no creditor.
+        $court = $sent(['court@dubai.gov.ae'], 'إخطار', first: true);
+        $court->update(['at' => now()->subDay()]);
+        $rows = collect((new MatterContactsExport($this->matter))->rows());
+        $this->assertSame($notice->at->toDateString(), $rows->firstWhere('name', 'بنك المشرق')['first_sent']->toDateString());
+        $this->assertSame(now()->subDay()->toDateString(), $rows->firstWhere('emails', 'court@dubai.gov.ae')['first_sent']->toDateString());
+    }
+
+    public function test_a_sent_email_is_marked_as_a_first_mail_on_the_emails_tab_and_back(): void
+    {
+        Storage::fake('public');
+        Setting::set(MatterOneDriveFolders::SENT_EMAILS, 'المراسلات/صادر', 'onedrive');
+        Setting::set(MatterOneDriveFolders::FIRST_TO_CREDITORS, 'مطالبات الدائنين/000 الإخطارات', 'onedrive');
+        Setting::set(CreditorFirstMails::NAME_SETTING, '{{name}} — {{date}}', 'onedrive');
+        Setting::clearCache();
+        Party::factory()->create(['name' => 'مؤسسة الأمل', 'email' => ['info@amal.ae']]);
+        $this->oneDrive->put('المراسلات/صادر/إخطار الأمل.pdf');
+        $email = MatterEmail::create([
+            'matter_id' => $this->matter->id, 'direction' => MatterEmail::SENT, 'sender_key' => 'iflas', 'subject' => 'إخطار', 'to' => ['info@amal.ae'], 'at' => now(),
+            'files' => [['name' => 'إخطار الأمل.pdf', 'path' => null]], 'onedrive' => ['pdf' => true, 'folder' => 'المراسلات/صادر'],
+        ]);
+
+        Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->callAction(TestAction::make('firstMail')->table($email))
+            ->assertHasNoErrors();
+
+        $name = 'مؤسسة الأمل — '.now()->format('Y-m-d');
+        $this->assertTrue($email->fresh()->first_mail);
+        $this->assertSame(['مطالبات الدائنين/000 الإخطارات/'.$name.'.pdf'], $this->oneDrive->files());
+        $this->assertSame($name.'.pdf', $email->fresh()->files[0]['name']);
+
+        // Not one after all: back with the other sent emails.
+        Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->callAction(TestAction::make('firstMail')->table($email->fresh()));
+        $this->assertFalse($email->fresh()->first_mail);
+        $this->assertStringStartsWith('المراسلات/صادر/', $this->oneDrive->files()[0]);
     }
 
     public function test_a_party_is_made_a_creditor_too_from_its_row_or_with_others_at_once(): void

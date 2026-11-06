@@ -2,9 +2,11 @@
 
 namespace App\Filament\Mms\Resources\Types\Schemas;
 
+use App\Filament\Support\FolderSettingsLayout;
 use App\Models\LetterTemplate;
 use App\Models\Setting;
 use App\Models\Type;
+use App\Services\MMS\CreditorFirstMails;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\PeriodicReports;
 use App\Services\MMS\ReceivedEmailFiling;
@@ -81,16 +83,13 @@ class TypeForm
                             self::oneDriveStructureField(),
                             self::phaseFoldersField(),
                             self::phaseKeepFoldersField(),
-                            self::receivedEmailsField(),
-                            // The emails from each side apart, each named as set.
-                            ...array_map(fn (string $side): TextInput => self::receivedSideFolderField($side), ReceivedEmailFiling::APART),
-                            // Where the files the emails come with go, apart from the emails: in general, and a side's.
-                            ...array_map(fn (string $side): TextInput => self::attachmentsFolderField($side), [ReceivedEmailFiling::GENERAL, ...ReceivedEmailFiling::APART]),
-                            ...array_map(fn (string $side): TextInput => self::receivedNameField($side), [ReceivedEmailFiling::GENERAL, ...ReceivedEmailFiling::APART]),
-                            self::sentEmailsField(),
-                            self::sentToCreditorsField(),
-                            self::signedMinutesField(),
-                            self::periodicReportsField(),
+                            // Its emails and files: grouped, each folder beside its file name (as on Settings → OneDrive Folders).
+                            ...array_map(fn (Section $section): Section => $section->collapsible()->collapsed(), FolderSettingsLayout::sections(
+                                true,
+                                self::receivedEmailsField(),
+                                self::sentEmailsField(),
+                                self::signedMinutesField(),
+                            )),
                             // Its group — the types with the same folders: changed with it, or left as they are (EditType).
                             Toggle::make(self::FOLDERS_TO_GROUP)
                                 ->label(fn (?Type $record): string => __('Also for the types with the same folders: :types', [
@@ -159,7 +158,7 @@ class TypeForm
             ->helperText(__('Where the emails that come in are saved inside the matter\'s folder, for this type\'s matters. Folders are separated by "/", and each may use the matter\'s placeholders, like the letters do, e.g. {{matter.custom.Phase}}/01 system. {{day}} is the day the email reached us, so the emails of one day go in the same folder; {{serial}} is the email\'s number under its folder (the emails of a day 1, 2, 3 — short names). Leave empty for the default one (Settings → OneDrive Folders).'))
             ->placeholder(fn (): string => MatterOneDriveFolders::receivedEmailsFolder())
             ->maxLength(500)
-            ->extraInputAttributes(['dir' => 'ltr']);
+            ->extraInputAttributes(['dir' => FolderSettingsLayout::dir()]);
     }
 
     /**
@@ -183,7 +182,7 @@ class TypeForm
             // A type's creditors' only for a type that has them.
             ->visible(fn (Get $get): bool => ! $forType || ! $creditor || (bool) $get('has_creditors'))
             ->maxLength(500)
-            ->extraInputAttributes(['dir' => 'ltr']);
+            ->extraInputAttributes(['dir' => FolderSettingsLayout::dir()]);
     }
 
     /**
@@ -209,7 +208,7 @@ class TypeForm
             ->placeholder(fn (): string => $forType ? ReceivedEmailFiling::attachmentsTemplate(null, $side) : ($general ? '' : trim((string) Setting::get(ReceivedEmailFiling::ATTACHMENTS_SETTINGS[ReceivedEmailFiling::GENERAL], ''))))
             ->visible(fn (Get $get): bool => ! $forType || ! $creditor || (bool) $get('has_creditors'))
             ->maxLength(500)
-            ->extraInputAttributes(['dir' => 'auto']);
+            ->extraInputAttributes(['dir' => FolderSettingsLayout::dir()]);
     }
 
     /**
@@ -223,7 +222,7 @@ class TypeForm
             ->helperText(__('Where the files of the progress steps put in a periodic report are moved, inside the matter\'s folder. {{number}} is the report\'s number; folders are separated by "/", and each may use the matter\'s placeholders, e.g. {{matter.custom.Phase}}/05 التقرير/تقرير دوري رقم {{number}}.').($forType ? ' '.__('Leave empty for the default one (Settings → OneDrive Folders).') : ''))
             ->placeholder(fn (): string => $forType ? PeriodicReports::template() : PeriodicReports::DEFAULT_FOLDER)
             ->maxLength(500)
-            ->extraInputAttributes(['dir' => 'auto']);
+            ->extraInputAttributes(['dir' => FolderSettingsLayout::dir()]);
     }
 
     /**
@@ -252,7 +251,7 @@ class TypeForm
                 default => ReceivedEmailFiling::nameTemplate(null, ReceivedEmailFiling::GENERAL) ?: ReceivedEmailFiling::DEFAULT_NAME,
             })
             ->maxLength(500)
-            ->extraInputAttributes(['dir' => 'auto']);
+            ->extraInputAttributes(['dir' => FolderSettingsLayout::dir()]);
     }
 
     /**
@@ -266,7 +265,7 @@ class TypeForm
             ->helperText(__('Where the emails sent from the matter are saved, for this type\'s matters. Folders are separated by "/", and each may use the matter\'s placeholders, like the letters do, e.g. {{matter.custom.Phase}}/Sent/{{day}}. {{day}} is the day it is sent. Leave empty for the default one (Settings → OneDrive Folders).'))
             ->placeholder(fn (): string => MatterOneDriveFolders::sentEmailsFolder())
             ->maxLength(500)
-            ->extraInputAttributes(['dir' => 'ltr']);
+            ->extraInputAttributes(['dir' => FolderSettingsLayout::dir()]);
     }
 
     /**
@@ -281,7 +280,34 @@ class TypeForm
             ->placeholder(fn (): string => $forType ? MatterOneDriveFolders::sentToCreditorsTemplate() : '')
             ->visible(fn (Get $get): bool => ! $forType || (bool) $get('has_creditors'))
             ->maxLength(500)
-            ->extraInputAttributes(['dir' => 'auto']);
+            ->extraInputAttributes(['dir' => FolderSettingsLayout::dir()]);
+    }
+
+    /**
+     * Where the first mails to creditors go (CreditorFirstMails) — all of them in one folder — for this type, or (not
+     * $forType) the setting. Empty: the setting's; empty too, with the other sent emails.
+     */
+    public static function firstToCreditorsField(bool $forType = true): TextInput
+    {
+        return TextInput::make($forType ? 'onedrive_first_to_creditors' : MatterOneDriveFolders::FIRST_TO_CREDITORS)
+            ->label(__('First mails to creditors — folder'))
+            ->helperText(__('The first mails to those who may be creditors — a bulk mail ticked "First mail to creditors", or a sent email marked so on the Emails tab — are saved here, all in one folder, each named as set below. Once one answers and is made a creditor, its emails and yours go to its own folders (above), e.g. مطالبات الدائنين/{{creditor.number}} {{creditor}}/{{serial.2}} — 01, 02 … an email and its replies each. Inside the matter\'s folder, e.g. مطالبات الدائنين/000 الإخطارات; the matter\'s placeholders may be used. Leave empty to save them with the other sent emails.').($forType ? ' '.__('Leave empty for the setting (Settings → OneDrive Folders).') : ''))
+            ->placeholder(fn (): string => $forType ? MatterOneDriveFolders::firstToCreditorsTemplate() : '')
+            ->visible(fn (Get $get): bool => ! $forType || (bool) $get('has_creditors'))
+            ->maxLength(500)
+            ->extraInputAttributes(['dir' => FolderSettingsLayout::dir()]);
+    }
+
+    /** The name of a first mail to a creditor (CreditorFirstMails) — for this type, or (not $forType) the setting. */
+    public static function firstMailNameField(bool $forType = true): TextInput
+    {
+        return TextInput::make($forType ? CreditorFirstMails::NAME_COLUMN : CreditorFirstMails::NAME_SETTING)
+            ->label(__('First mails to creditors — file name'))
+            ->helperText(__('The name of each first mail\'s PDF. Placeholders: {{name}} (whom it went to — a bulk mail\'s recipient), {{email}} (their address), {{date}}, {{time}}, {{subject}} and the matter\'s. A part with no value is left out with its " — ". Leave empty for whom it went to: {{name}}.').($forType ? ' '.__('Leave empty for the setting (Settings → OneDrive Folders).') : ''))
+            ->placeholder(fn (): string => $forType ? CreditorFirstMails::nameTemplate(null) : CreditorFirstMails::DEFAULT_NAME)
+            ->visible(fn (Get $get): bool => ! $forType || (bool) $get('has_creditors'))
+            ->maxLength(500)
+            ->extraInputAttributes(['dir' => FolderSettingsLayout::dir()]);
     }
 
     /**
@@ -295,7 +321,7 @@ class TypeForm
             ->helperText(__('Where the signed minutes are saved, for this type\'s matters. Folders are separated by "/", and each may use the matter\'s placeholders, like the letters do, e.g. {{matter.custom.Phase}}/06 signed minutes. Leave empty for the default one (Settings → OneDrive Folders).'))
             ->placeholder(fn (): string => MatterOneDriveFolders::signedMinutesFolder())
             ->maxLength(500)
-            ->extraInputAttributes(['dir' => 'ltr']);
+            ->extraInputAttributes(['dir' => FolderSettingsLayout::dir()]);
     }
 
     /**
@@ -309,7 +335,7 @@ class TypeForm
             ->helperText(__('One per line, in order. Use "/" for a folder inside another, e.g. "02 المستندات/من المدعي". Changes apply to folders made from now on.').' '.__('A folder may use the matter\'s placeholders, like the letters do, e.g. {{matter.custom.phase}}/01 المراسلات; one the matter has no value for is left out.'))
             ->placeholder(fn (): string => Setting::get(MatterOneDriveFolders::SUBFOLDERS, ''))
             ->rows(8)
-            ->extraInputAttributes(['dir' => 'auto']);
+            ->extraInputAttributes(['dir' => FolderSettingsLayout::dir()]);
     }
 
     /**
@@ -321,7 +347,7 @@ class TypeForm
             ->label(__('Folders kept for the next phase'))
             ->helperText(__('When a phase of a case is finished, its folder goes to the finished matters — except these folders of it, which stay with the matters in progress for the next phase to go on working in. One per line, by the folder\'s name as a phase\'s folders write it (e.g. 07 مطالبات الدائنين). Leave empty to move the whole phase folder.'))
             ->rows(3)
-            ->extraInputAttributes(['dir' => 'auto']);
+            ->extraInputAttributes(['dir' => FolderSettingsLayout::dir()]);
     }
 
     /**
@@ -343,7 +369,7 @@ class TypeForm
                     ->label(__('Subfolders'))
                     ->rows(5)
                     ->required()
-                    ->extraInputAttributes(['dir' => 'auto']),
+                    ->extraInputAttributes(['dir' => FolderSettingsLayout::dir()]),
             ])
             ->itemLabel(fn (array $state): ?string => filled($state['phase'] ?? null) ? (string) $state['phase'] : null)
             ->addActionLabel(__('Add a phase\'s folders'))

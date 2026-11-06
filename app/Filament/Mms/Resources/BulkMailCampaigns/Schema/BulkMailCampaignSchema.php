@@ -9,6 +9,7 @@ use App\Models\BulkMailCampaign;
 use App\Models\MailSender;
 use App\Models\Matter;
 use App\Services\MMS\BulkMailPlaceholders;
+use App\Services\MMS\MatterCreditors;
 use App\Services\MMS\SenderMailer;
 use App\Support\CompanyContact;
 use Filament\Forms\Components\DateTimePicker;
@@ -86,6 +87,12 @@ class BulkMailCampaignSchema
                         ->nullable()
                         ->live()
                         ->helperText(__('Leave empty for a general mail not related to a matter.')),
+
+                    // The notice to those who may be the matter's creditors: saved with its other first mails.
+                    Toggle::make('first_mail')
+                        ->label(__('First mail to creditors'))
+                        ->helperText(__('Each email of this campaign is saved with the matter\'s other first mails to creditors (Settings → OneDrive Folders), named as set there, and its day is the first email sent to whom it went to (the Contacts tab). Those who answer and are made creditors have their emails after it in their own folders.'))
+                        ->visible(fn ($get): bool => filled($get('matter_id')) && ($matter = Matter::find($get('matter_id'))) && MatterCreditors::kept($matter)),
 
                     TextEntry::make('available_placeholders')
                         ->label(__('Available placeholders'))

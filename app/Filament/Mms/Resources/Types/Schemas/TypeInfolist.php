@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Resources\Types\Schemas;
 
 use App\Enums\MatterDifficulty;
 use App\Filament\Mms\Resources\Incentive\MatterTypeIncentiveConfigs\MatterTypeIncentiveConfigResource;
+use App\Filament\Support\FolderSettingsLayout;
 use App\Models\LetterTemplate;
 use App\Models\Matter;
 use App\Models\MatterTypeIncentiveConfig;
@@ -94,7 +95,7 @@ class TypeInfolist
                                 ->label(__('Each phase\'s folders'))
                                 ->state(fn (Type $record): HtmlString => new HtmlString(collect($record->phaseNames())
                                     ->filter(fn (string $phase): bool => $record->phaseFolders($phase) !== [])
-                                    ->map(fn (string $phase): string => '<div class="font-semibold" dir="auto">'.e($phase).'</div>'.self::tree(array_map(
+                                    ->map(fn (string $phase): string => '<div class="font-semibold" dir="'.FolderSettingsLayout::dir().'">'.e($phase).'</div>'.self::tree(array_map(
                                         fn (string $line): string => str_replace(MatterOneDriveFolders::PHASE, $phase, $line),
                                         MatterOneDriveFolders::subfolders((new Matter(['phase' => $phase]))->setRelation('type', $record)),
                                     )))
@@ -118,7 +119,7 @@ class TypeInfolist
                                 ->label($folder[1])
                                 ->state(fn (Type $record): string => filled($record->{$folder[0]}) ? $record->{$folder[0]} : (string) $folder[2]())
                                 ->helperText(fn (Type $record): string => filled($record->{$folder[0]}) ? __('This type\'s own structure') : __('The default structure (Settings → OneDrive Folders)'))
-                                ->extraAttributes(['dir' => 'auto']))->all(),
+                                ->extraAttributes(['dir' => FolderSettingsLayout::dir()]))->all(),
                         ]),
                 ]),
                 Grid::make(1)->columnSpan(1)->schema([
@@ -236,7 +237,7 @@ class TypeInfolist
 
                 if (! isset($shown[$path])) {
                     $shown[$path] = true;
-                    $html .= '<div dir="auto" style="padding-inline-start: '.($depth * 1.5).'rem;">📁 '.e($segment).'</div>';
+                    $html .= '<div dir="'.FolderSettingsLayout::dir().'" style="padding-inline-start: '.($depth * 1.5).'rem;">📁 '.e($segment).'</div>';
                 }
             }
         }

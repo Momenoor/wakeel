@@ -6,6 +6,7 @@ use App\Filament\Mms\Pages\Concerns\ReviewsOneDriveFolders;
 use App\Filament\Mms\Resources\Types\Schemas\TypeForm;
 use App\Filament\Shared\Clusters\Settings;
 use App\Filament\Support\EntryTable;
+use App\Filament\Support\FolderSettingsLayout;
 use App\Filament\Support\SettingsForm;
 use App\Jobs\StandardiseAssistantFolders;
 use App\Models\Matter;
@@ -13,6 +14,7 @@ use App\Models\MatterFieldDefinition;
 use App\Models\Party;
 use App\Models\Setting;
 use App\Models\Type;
+use App\Services\MMS\CreditorFirstMails;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\OneDriveClient;
 use App\Services\MMS\PeriodicReports;
@@ -102,6 +104,8 @@ class OneDriveSettings extends Page implements HasTable
             'signed_minutes' => MatterOneDriveFolders::signedMinutesFolder(),
             'sent_emails' => MatterOneDriveFolders::sentEmailsFolder(),
             MatterOneDriveFolders::SENT_TO_CREDITORS => Setting::get(MatterOneDriveFolders::SENT_TO_CREDITORS, ''),
+            MatterOneDriveFolders::FIRST_TO_CREDITORS => Setting::get(MatterOneDriveFolders::FIRST_TO_CREDITORS, ''),
+            CreditorFirstMails::NAME_SETTING => Setting::get(CreditorFirstMails::NAME_SETTING, ''),
             'received_emails' => MatterOneDriveFolders::receivedEmailsFolder(),
             // Each side's folder and name, and the general name (ReceivedEmailFiling), and a periodic report's
             // folder: the settings by their keys.
@@ -145,6 +149,8 @@ class OneDriveSettings extends Page implements HasTable
             'received_name_creditor' => __('Emails from creditors — file name'),
             'onedrive_sent_emails' => __('Sent emails subfolder'),
             'onedrive_sent_creditors' => __('Emails sent to creditors — folder'),
+            'onedrive_first_to_creditors' => __('First mails to creditors — folder'),
+            'first_mail_name' => __('First mails to creditors — file name'),
             'onedrive_signed_minutes' => __('Signed minutes subfolder'),
             'onedrive_periodic_reports' => __('Periodic report folder'),
         ];
@@ -152,7 +158,7 @@ class OneDriveSettings extends Page implements HasTable
         return new HtmlString($groups->values()->map(function ($types, int $i) use ($labels): string {
             $first = $types->first();
             $folders = collect(Type::FOLDER_FIELDS)
-                ->map(fn (string $field): string => '<li>'.e($labels[$field]).': <span dir="auto">'.(filled($first->{$field})
+                ->map(fn (string $field): string => '<li>'.e($labels[$field]).': <span dir="'.FolderSettingsLayout::dir().'">'.(filled($first->{$field})
                     ? e(str_replace("\n", ' · ', trim((string) $first->{$field})))
                     : e(__('the default'))).'</span></li>')
                 ->implode('');
@@ -189,13 +195,13 @@ class OneDriveSettings extends Page implements HasTable
                             ->placeholder(MatterOneDriveFolders::standardFolders()['matters'])
                             ->helperText(__('The name of the folder at the top of each assistant\'s OneDrive that holds their matters\' folders — the same for everyone, so no one renames theirs. Set on each assistant\'s profile by "Apply to the assistants".'))
                             ->maxLength(255)
-                            ->extraInputAttributes(['dir' => 'auto']),
+                            ->extraInputAttributes(['dir' => FolderSettingsLayout::dir()]),
                         TextInput::make('finished_folder')
                             ->label(__('Standard folder for finished matters'))
                             ->placeholder(MatterOneDriveFolders::standardFolders()['finished'])
                             ->helperText(__('The folder a finished matter\'s folder is moved to, at the top of each assistant\'s OneDrive.'))
                             ->maxLength(255)
-                            ->extraInputAttributes(['dir' => 'auto']),
+                            ->extraInputAttributes(['dir' => FolderSettingsLayout::dir()]),
                         Actions::make([
                             Action::make('applyStandardFolders')
                                 ->label(__('Apply to the assistants'))
@@ -213,12 +219,13 @@ class OneDriveSettings extends Page implements HasTable
                 Grid::make(['default' => 1, 'lg' => 2])->schema([
                     Section::make(__('OneDrive folder structure'))
                         ->icon(Heroicon::OutlinedFolder)
+                        ->columnSpanFull()
                         ->schema([
                             Textarea::make('subfolders')
                                 ->label(__('Standard subfolders'))
                                 ->helperText(__('One per line, in order. Use "/" for a folder inside another, e.g. "02 المستندات/من المدعي". Changes apply to folders made from now on; existing folders stay as they are.').' '.__('The default — a matter type can have its own (below, or on the type).').' '.__('A folder may use the matter\'s placeholders, like the letters do, e.g. {{matter.custom.phase}}/01 المراسلات; one the matter has no value for is left out.'))
                                 ->rows(10)
-                                ->extraInputAttributes(['dir' => 'auto']),
+                                ->extraInputAttributes(['dir' => FolderSettingsLayout::dir()]),
                             // The types with folders of their own, in groups of those alike — one read: a group's are
                             // changed together from any of its types (Settings → Matter types → its folders).
                             Placeholder::make('type_structures')
@@ -271,45 +278,18 @@ class OneDriveSettings extends Page implements HasTable
                                         }),
                                 ),
                         ]),
-                    Section::make(__('Sent emails and signed minutes'))
-                        ->icon(Heroicon::OutlinedPaperAirplane)
-                        ->schema([
-                            TextInput::make('signed_minutes')
-                                ->label(__('Signed minutes subfolder'))
-                                ->helperText(__('Signed minutes sent back on WhatsApp are saved here, inside the matter\'s folder (made when missing). Use "/" for a folder inside another.').' '.__('A folder may use the matter\'s placeholders, like the letters do; {{day}} is the day it is saved.'))
-                                ->required()
-                                ->extraInputAttributes(['dir' => 'auto']),
-                            TextInput::make('sent_emails')
-                                ->label(__('Sent emails subfolder'))
-                                ->helperText(__('Every email sent from a matter — letters, minutes, bulk mail — is saved here as a PDF, inside the matter\'s folder (made when missing). Leave empty not to save them in OneDrive.').' '.__('A folder may use the matter\'s placeholders, like the letters do; {{day}} is the day it is sent.'))
-                                ->extraInputAttributes(['dir' => 'auto']),
-                            TypeForm::sentToCreditorsField(forType: false),
-                            TypeForm::periodicReportsField(PeriodicReports::SETTING, forType: false),
-                        ]),
-                    Section::make(__('Received emails — folders'))
-                        ->icon(Heroicon::OutlinedInboxArrowDown)
-                        ->schema([
-                            TextInput::make('received_emails')
-                                ->label(__('Received emails folder structure'))
-                                ->helperText(new HtmlString(
-                                    e(__('Where the emails that come in — replies and any other email from a matter\'s parties — are saved as a PDF with every file they came with, inside the matter\'s folder (made when missing). Folders are separated by "/", and each may use the matter\'s placeholders, like the letters do. Leave empty not to save them in OneDrive.'))
-                                    .'<br><code dir="ltr">{{matter.phase}}/01 system + 02/{{matter.plaintiff_capacity}}</code>'
-                                    .'<br>'.e(__('{{matter.phase}} is the matter\'s phase, for a type with phases; a custom field is written {{matter.custom.<its name>}} — pick from the list below.'))
-                                    .'<br>'.e(__('A part with no value for the matter (e.g. a custom field it has none of) is left out.'))
-                                    .'<br>'.e(__('{{day}} is the day the email reached us (2026-10-16), {{month}} the month and {{year}} the year: the emails of one day go in the same folder.'))
-                                ))
-                                ->live(debounce: 500)
-                                ->extraInputAttributes(['dir' => 'ltr']),
-                            // The emails from each side apart, each named as set; a matter type may have its own.
-                            ...array_map(fn (string $side): TextInput => TypeForm::receivedSideFolderField($side, forType: false), ReceivedEmailFiling::APART),
-                            // The files the emails come with, apart from the emails: in general, and a side's.
-                            ...array_map(fn (string $side): TextInput => TypeForm::attachmentsFolderField($side, forType: false), [ReceivedEmailFiling::GENERAL, ...ReceivedEmailFiling::APART]),
-                        ]),
-                    Section::make(__('Received emails — file names'))
-                        ->icon(Heroicon::OutlinedDocumentText)
-                        ->schema([
-                            ...array_map(fn (string $side): TextInput => TypeForm::receivedNameField($side, forType: false), [ReceivedEmailFiling::GENERAL, ...ReceivedEmailFiling::APART]),
-                        ]),
+                    // Where the emails and their files go, and their names: grouped, each folder beside its file name.
+                    ...FolderSettingsLayout::sections(
+                        false,
+                        TextInput::make('received_emails')
+                            ->label(__('Received emails folder structure'))
+                            ->live(debounce: 500),
+                        TextInput::make('sent_emails')
+                            ->label(__('Sent emails subfolder')),
+                        TextInput::make('signed_minutes')
+                            ->label(__('Signed minutes subfolder'))
+                            ->required(),
+                    ),
                     Section::make(__('Placeholders'))
                         ->icon(Heroicon::OutlinedVariable)
                         ->columnSpanFull()
@@ -345,7 +325,7 @@ class OneDriveSettings extends Page implements HasTable
                                         return new HtmlString('—');
                                     }
 
-                                    $path = '<code dir="auto">'.e(MatterOneDriveFolders::folderName($matter).'/'.MatterOneDriveFolders::resolvePath($template, $matter, now())).'</code>';
+                                    $path = '<code dir="'.FolderSettingsLayout::dir().'">'.e(MatterOneDriveFolders::folderName($matter).'/'.MatterOneDriveFolders::resolvePath($template, $matter, now())).'</code>';
 
                                     // A folder the matter has no value for is left out of the path: said, so it is not a surprise.
                                     $empty = MatterOneDriveFolders::emptyPlaceholders($template, $matter, now());
@@ -449,6 +429,8 @@ class OneDriveSettings extends Page implements HasTable
         Setting::set(MatterOneDriveFolders::SIGNED_MINUTES, trim((string) ($state['signed_minutes'] ?? '')), 'onedrive');
         Setting::set(MatterOneDriveFolders::SENT_EMAILS, trim((string) ($state['sent_emails'] ?? '')), 'onedrive');
         Setting::set(MatterOneDriveFolders::SENT_TO_CREDITORS, trim((string) ($state[MatterOneDriveFolders::SENT_TO_CREDITORS] ?? '')), 'onedrive');
+        Setting::set(MatterOneDriveFolders::FIRST_TO_CREDITORS, trim((string) ($state[MatterOneDriveFolders::FIRST_TO_CREDITORS] ?? '')), 'onedrive');
+        Setting::set(CreditorFirstMails::NAME_SETTING, trim((string) ($state[CreditorFirstMails::NAME_SETTING] ?? '')), 'onedrive');
         Setting::set(MatterOneDriveFolders::RECEIVED_EMAILS, trim((string) ($state['received_emails'] ?? '')), 'onedrive');
 
         foreach (self::keyedSettings() as $key) {

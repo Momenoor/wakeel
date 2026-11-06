@@ -19,6 +19,7 @@ use App\Models\MatterContact;
 use App\Models\MatterEmail;
 use App\Models\Type;
 use App\Models\User;
+use App\Services\MMS\CreditorFirstMails;
 use App\Services\MMS\EmailReplySender;
 use App\Services\MMS\MatterCreditors;
 use App\Services\MMS\MatterEmailDeletion;
@@ -419,6 +420,28 @@ class EmailsRelationManager extends RelationManager
                         ->action(fn (MatterEmail $record) => $record->markUnreadBy(auth()->user())),
                     // Its PDF made wrongly (garbled letters): made again from the mailbox, its files in their places.
                     RegenerateEmailAction::make(fn (): bool => auth()->user()?->can('update', $this->getOwnerRecord()) ?? false),
+                    // A sent email marked as the first mail to a creditor-to-be: with the others, its day theirs.
+                    Action::make('firstMail')
+                        ->label(fn (MatterEmail $record): string => $record->first_mail ? __('Not a first mail to a creditor') : __('First mail to a creditor'))
+                        ->icon(fn (MatterEmail $record): string => $record->first_mail ? 'heroicon-o-x-circle' : 'heroicon-o-flag')
+                        ->visible(fn (MatterEmail $record): bool => $record->direction === MatterEmail::SENT
+                            && MatterCreditors::kept($this->getOwnerRecord())
+                            && (auth()->user()?->can('update', $this->getOwnerRecord()) ?? false))
+                        ->requiresConfirmation()
+                        ->modalDescription(fn (MatterEmail $record): string => $record->first_mail
+                            ? __('It goes back to the other sent emails, and its day is no longer the first email sent to whom it went to.')
+                            : __('It is saved with the other first mails to creditors (Settings → OneDrive Folders), named as set there, and its day is the first email sent to whom it went to (the Contacts tab).'))
+                        ->action(function (MatterEmail $record): void {
+                            try {
+                                $record->first_mail ? app(CreditorFirstMails::class)->unmark($record) : app(CreditorFirstMails::class)->mark($record);
+                            } catch (\Throwable $e) {
+                                Notification::make()->danger()->title(__('The email could not be moved'))->body($e->getMessage())->send();
+
+                                return;
+                            }
+
+                            Notification::make()->success()->title(__('Saved'))->send();
+                        }),
                     // A super admin's: deleted for good, with all its files.
                     Action::make('delete')
                         ->label(__('Delete'))

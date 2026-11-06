@@ -40,9 +40,12 @@ final class MatterCreditors
     }
 
     /**
-     * The emails that came in on the matter from these addresses — those not in a periodic report — moved to the
-     * folder of what each is now, where those from them go now: their creditor's (a creditor, or one's agent), their
-     * side's (a party, or one's representative), else the general one. How many moved.
+     * The emails of the matter from these addresses, and those sent to them, moved to the folder of what each is now,
+     * where those from them go now: their creditor's (a creditor, or one's agent), their side's (a party, or one's
+     * representative), else the general one — the sent ones only when they are a creditor's (with the claim). In the
+     * order they came, each with the email it answers when that is where its kind go: an email and its answers in one
+     * numbered folder ({{serial.2}}: 01, 02 …). Not one in a periodic report, one put in OneDrive by hand, nor a
+     * first mail to creditors (kept with the others). How many moved.
      *
      * @param  list<string>  $addresses
      */
@@ -50,10 +53,13 @@ final class MatterCreditors
     {
         $addresses = array_map('mb_strtolower', Addresses::emails($addresses));
         $moved = 0;
+        $ours = fn (MatterEmail $email): bool => $email->direction === MatterEmail::RECEIVED
+            ? in_array(MatterEmail::addressOf((string) $email->from), $addresses, true)
+            : array_intersect(array_map('mb_strtolower', Addresses::emails([...(array) $email->to, ...(array) $email->cc])), $addresses) !== [];
 
-        $emails = $matter->emails()->where('direction', MatterEmail::RECEIVED)->get()
-            // Not one put in OneDrive by hand: it stays where it was put.
-            ->filter(fn (MatterEmail $email): bool => in_array(MatterEmail::addressOf((string) $email->from), $addresses, true)
+        $emails = $matter->emails()->orderBy('at')->orderBy('id')->get()
+            ->filter(fn (MatterEmail $email): bool => $ours($email)
+                && ! $email->first_mail
                 && $email->matched_by !== MatterEmail::BY_ONEDRIVE
                 && (((array) $email->onedrive)['report'] ?? null) === null);
 
@@ -62,17 +68,42 @@ final class MatterCreditors
         $names = [];
 
         foreach ($emails as $email) {
-            $from = MatterEmail::addressOf((string) $email->from);
-            $side = $sides[$from] ??= ReceivedEmailFiling::side($matter, $from);
-            // Where theirs go — without the day's number ({{serial}}): one already under it stays where it is.
-            $under = MatterOneDriveFolders::receivedEmailsFolderFor($matter, $email->at, $side, $from, nextSerial: false);
+            if ($email->direction === MatterEmail::RECEIVED) {
+                $from = MatterEmail::addressOf((string) $email->from);
+                $side = $sides[$from] ??= ReceivedEmailFiling::side($matter, $from);
+                $folderFor = fn (bool $next): string => MatterOneDriveFolders::receivedEmailsFolderFor($matter, $email->at, $side, $from, nextSerial: $next);
+            } else {
+                $to = Addresses::emails([...(array) $email->to, ...(array) $email->cc]);
+                // Moved only to a creditor's own folder: to anyone else, it stays with the sent emails.
+                $address = (string) (array_values(array_intersect(array_map('mb_strtolower', $to), $addresses))[0] ?? '');
+                if (! in_array(ReceivedEmailFiling::CREDITOR, $sides['sent:'.$address] ??= ReceivedEmailFiling::sidesOf($matter, $address), true)) {
+                    continue;
+                }
+                $folderFor = fn (bool $next): string => MatterOneDriveFolders::sentEmailsFolderFor($matter, $email->at, $to, nextSerial: $next);
+            }
+
+            // Where theirs go — without the number ({{serial}}): one already under it stays where it is.
+            $under = $folderFor(false);
             $where = MatterOneDriveFolders::emailFolder($email, $matter);
 
-            if ($under !== '' && $where !== $under && ! str_starts_with(mb_strtolower($where).'/', mb_strtolower($under).'/')) {
-                // The files it came with kept apart go to that side's attachments folder too.
-                $apart = MatterOneDriveFolders::attachmentsFolderFor($matter, $email->at, $side, $from, $names[$from] ??= MatterReplyCollector::partyName($from) ?? $from);
-                $moved += $this->folders->moveEmailWithin($email, $matter, MatterOneDriveFolders::receivedEmailsFolderFor($matter, $email->at, $side, $from), [], $apart) ? 1 : 0;
+            if ($under === '' || str_starts_with(mb_strtolower($where).'/', mb_strtolower($under).'/')) {
+                continue;
             }
+
+            // An answer: beside the email it answers, moved already.
+            $thread = MatterOneDriveFolders::threadFolder($email->parent, $matter, $under);
+            $target = $thread ?? $folderFor(true);
+
+            // The files it came with kept apart go to that side's attachments folder too — with it, when theirs are
+            // numbered as the emails.
+            $apart = null;
+            if ($email->direction === MatterEmail::RECEIVED) {
+                $apart = $thread !== null && str_contains(ReceivedEmailFiling::attachmentsTemplate($matter, $side), '{{serial')
+                    ? $thread
+                    : MatterOneDriveFolders::attachmentsFolderFor($matter, $email->at, $side, $from, $names[$from] ??= MatterReplyCollector::partyName($from) ?? $from);
+            }
+
+            $moved += $this->folders->moveEmailWithin($email, $matter, $target, [], $apart) ? 1 : 0;
         }
 
         return $moved;
@@ -506,8 +537,8 @@ final class MatterCreditors
 
     /**
      * When the first email went to each creditor (to its own address or its agents', or copying them in) — each its
-     * own: one written to later than the others has its own day. From the emails sent on the matter and its bulk
-     * mail sent. Creditor id => when.
+     * own: one written to later than the others has its own day. The first mail marked so (CreditorFirstMails) when it
+     * had one; else the first of the emails sent on the matter and its bulk mail sent. Creditor id => when.
      *
      * @return array<int, Carbon>
      */
@@ -543,7 +574,15 @@ final class MatterCreditors
             ->get(['email', 'cc_emails', 'sent_at'])
             ->each(fn (BulkMailRecipient $recipient) => $note([...(array) $recipient->email, ...(array) $recipient->cc_emails], $recipient->sent_at));
 
-        return $firsts;
+        // A first mail marked: its day, whatever went before it.
+        $marked = [];
+        foreach (CreditorFirstMails::datesByAddress($matter) as $address => $at) {
+            if (($creditor = $creditorOf[$address] ?? null) !== null && (! isset($marked[$creditor]) || $at->lt($marked[$creditor]))) {
+                $marked[$creditor] = $at;
+            }
+        }
+
+        return array_replace($firsts, $marked);
     }
 
     /**

@@ -73,11 +73,31 @@ class MatterOneDriveFolders
     /** Setting: the folder for the emails sent to a creditor (or its agent) — with {{creditor}} and {{creditor.number}}; empty: the sent emails folder. */
     public const SENT_TO_CREDITORS = 'onedrive_sent_creditors_folder';
 
+    /** Setting: the folder the first mails to creditors (CreditorFirstMails) are saved in, all in one. */
+    public const FIRST_TO_CREDITORS = 'onedrive_first_to_creditors_folder';
+
     /** In an emails' folder structure: {{serial}}, the email's number among those filed under the same folder — the emails of a day 1, 2, 3. */
     public const SERIAL = 'serial';
 
     /** What {{serial}} is resolved to until the number is known (a character no name has). */
     private const SERIAL_MARK = "\u{E000}serial\u{E000}";
+
+    /** {{serial.2}}: the same number in two digits at least — 01, 02, 03 (an email and its replies in a folder of their own, in order). */
+    public const SERIAL_PADDED = 'serial.2';
+
+    /** What {{serial.2}} is resolved to until the number is known. */
+    private const SERIAL_PADDED_MARK = "\u{E000}serial2\u{E000}";
+
+    /**
+     * {{serial}} and {{serial.2}} as a path is resolved: their marks, for withSerial() to number — or, $next false,
+     * nothing (where an email is, without its own folder).
+     *
+     * @return array<string, string>
+     */
+    private static function serialValues(bool $next = true): array
+    {
+        return [self::SERIAL => $next ? self::SERIAL_MARK : '', self::SERIAL_PADDED => $next ? self::SERIAL_PADDED_MARK : ''];
+    }
 
     public function __construct(private readonly OneDriveClient $client) {}
 
@@ -614,7 +634,7 @@ class MatterOneDriveFolders
             $folders = $listing->where('folder', true)->keyBy(fn (array $f): string => mb_strtolower($f['name']));
 
             foreach ($inFolder as $email) {
-                $base = pathinfo((string) ($email->files[0]['name'] ?? ''), PATHINFO_FILENAME);
+                $base = pathinfo($email->pdfName(), PATHINFO_FILENAME);
                 $stem = $base !== '' ? mb_strtolower(MatterOneDriveExplorer::cleanName($base)) : null;
 
                 // The files it came with, by the names they were put in OneDrive under.
@@ -634,7 +654,7 @@ class MatterOneDriveFolders
 
                 // Where it is (a report's, …) kept with it.
                 $email->update(['onedrive' => [
-                    ...array_intersect_key((array) $email->onedrive, array_flip(['folder', 'attachments_folder', 'report', 'before_report', 'added'])),
+                    ...array_intersect_key((array) $email->onedrive, array_flip(['folder', 'attachments_folder', 'report', 'before_report', 'added', 'name'])),
                     'pdf' => $stem !== null && $names->has($stem.'.pdf'),
                     'eml' => $stem !== null && $names->has($stem.'.eml'),
                     'attachments' => $expected->filter(fn (string $name): bool => $inside->has($name))->count(),
@@ -665,7 +685,7 @@ class MatterOneDriveFolders
         $apartId = null;
         $source = self::folderFor($from);
         $target = self::folderFor($to);
-        $base = pathinfo((string) ($email->files[0]['name'] ?? ''), PATHINFO_FILENAME);
+        $base = pathinfo($email->pdfName(), PATHINFO_FILENAME);
 
         if (! $source || ! $target || $base === '') {
             return $result;
@@ -758,7 +778,7 @@ class MatterOneDriveFolders
      * @param  ?string  $apartPath  where the files kept apart (in an attachments folder) go too — empty: beside its
      *                              PDF, in a folder of its name; null: they stay where they are
      */
-    public function moveEmailWithin(MatterEmail $email, Matter $matter, string $targetPath, array $note = [], ?string $apartPath = null): bool
+    public function moveEmailWithin(MatterEmail $email, Matter $matter, string $targetPath, array $note = [], ?string $apartPath = null, ?string $name = null): bool
     {
         $folder = self::folderFor($matter);
         $items = $this->emailItems($email, $matter);
@@ -771,11 +791,33 @@ class MatterOneDriveFolders
         $targetId = $this->ensurePath($user, $folder, $targetPath);
         [$apart, $own] = $items->partition(fn (array $item): bool => $item['apart'] ?? false);
         $own->each(fn (array $item) => $this->client->move($user, $item['id'], $targetId));
+        $base = pathinfo($email->pdfName(), PATHINFO_FILENAME);
+
+        // Named anew there ($name, without ".pdf"): its PDF, its original and the folder of its files alike — and so
+        // in the system. Its name kept when one of the new name is there already.
+        if ($name !== null && ($name = self::clean($name)) !== '' && mb_strtolower($name) !== mb_strtolower(self::clean($base))) {
+            try {
+                foreach ($own as $item) {
+                    $extension = $item['folder'] ? '' : '.'.mb_strtolower(pathinfo((string) $item['name'], PATHINFO_EXTENSION));
+                    $this->client->rename($user, $item['id'], $name.$extension);
+                }
+
+                $files = (array) $email->files;
+                if ($files !== []) {
+                    $files[0]['name'] = $name.'.pdf';
+                    $email->files = $files;
+                }
+                $note['name'] = $name.'.pdf';
+                $base = $name;
+            } catch (Throwable $e) {
+                Log::warning('An email moved was not named anew', ['email' => $email->getKey(), 'error' => $e->getMessage()]);
+            }
+        }
 
         if ($apartPath !== null && $apart->isNotEmpty()) {
             $apartId = $apartPath !== ''
                 ? $this->ensurePath($user, $folder, $apartPath)
-                : (string) $this->client->ensureFolder($user, self::clean(pathinfo((string) $email->files[0]['name'], PATHINFO_FILENAME)), $targetId)['id'];
+                : (string) $this->client->ensureFolder($user, self::clean($base), $targetId)['id'];
             $apart->each(fn (array $item) => $this->client->move($user, $item['id'], $apartId));
             // Beside its PDF: no attachments folder of its own any more.
             $note['attachments_folder'] = $apartPath !== '' ? $apartPath : null;
@@ -828,7 +870,7 @@ class MatterOneDriveFolders
     private function emailItems(MatterEmail $email, Matter $matter, ?array $copy = null): \Illuminate\Support\Collection
     {
         $folder = self::folderFor($matter);
-        $base = pathinfo((string) ($email->files[0]['name'] ?? ''), PATHINFO_FILENAME);
+        $base = pathinfo($email->pdfName(), PATHINFO_FILENAME);
 
         if (! $folder || $base === '') {
             return collect();
@@ -1205,7 +1247,7 @@ class MatterOneDriveFolders
 
         // A creditor's: {{creditor}}, its name, by the address it came from. {{serial}}: the next number under the
         // folder — or, to compare with where an email is, no folder for it at all.
-        $path = self::resolvePath($template, $matter, $at ?? now(), extra: [...ReceivedEmailFiling::creditorValues($matter, $side, $from), self::SERIAL => $nextSerial ? self::SERIAL_MARK : '']);
+        $path = self::resolvePath($template, $matter, $at ?? now(), extra: [...ReceivedEmailFiling::creditorValues($matter, $side, $from), ...self::serialValues($nextSerial)]);
 
         return self::withSerial($matter, $path);
     }
@@ -1246,6 +1288,36 @@ class MatterOneDriveFolders
     public static function sentToCreditorsTemplate(?Matter $matter = null): string
     {
         return self::templateOf($matter, 'onedrive_sent_creditors', trim((string) Setting::get(self::SENT_TO_CREDITORS, '')));
+    }
+
+    /** The folder for the first email sent to each creditor, as set for this matter: its type's own, else the setting; empty: none. */
+    public static function firstToCreditorsTemplate(?Matter $matter = null): string
+    {
+        return self::templateOf($matter, 'onedrive_first_to_creditors', trim((string) Setting::get(self::FIRST_TO_CREDITORS, '')));
+    }
+
+    /** Where the first mails to creditors go on this matter: the folder set for them, with the matter's placeholders; empty: none set. */
+    public static function firstToCreditorsFolderFor(Matter $matter, ?CarbonInterface $at = null): string
+    {
+        $template = self::firstToCreditorsTemplate($matter);
+
+        return $template === '' ? '' : self::resolvePath($template, $matter, $at ?? now(), self::DEFAULT_SENT_EMAILS);
+    }
+
+    /**
+     * Where an email answering $parent goes when it is to go where its own kind go ($folder: its sender's side's, a
+     * creditor's): beside $parent — in the same numbered folder ({{serial}}) — when $parent is under the same folder
+     * ($base, the structure without the number); else null. A first mail's answer is never kept beside it.
+     */
+    public static function threadFolder(?MatterEmail $parent, Matter $matter, string $base): ?string
+    {
+        if (! $parent || $parent->first_mail || $parent->matter_id !== $matter->getKey() || $base === '') {
+            return null;
+        }
+
+        $where = self::emailFolder($parent, $matter);
+
+        return $where !== '' && str_starts_with(mb_strtolower($where).'/', mb_strtolower(rtrim($base, '/')).'/') ? $where : null;
     }
 
     /** The folder for signed minutes as it is set for this matter: its type's own, else the default one. */
@@ -1395,7 +1467,7 @@ class MatterOneDriveFolders
             return '';
         }
 
-        $path = self::resolvePath($template, $matter, $at ?? now(), self::DEFAULT_SENT_EMAILS, [...$creditor, self::SERIAL => $nextSerial ? self::SERIAL_MARK : '']);
+        $path = self::resolvePath($template, $matter, $at ?? now(), self::DEFAULT_SENT_EMAILS, [...$creditor, ...self::serialValues($nextSerial)]);
 
         return self::withSerial($matter, $path);
     }
@@ -1426,14 +1498,17 @@ class MatterOneDriveFolders
      */
     private static function withSerial(Matter $matter, string $path): string
     {
-        if (! str_contains($path, self::SERIAL_MARK)) {
+        // {{serial.2}}: in two digits.
+        $mark = str_contains($path, self::SERIAL_PADDED_MARK) ? self::SERIAL_PADDED_MARK : self::SERIAL_MARK;
+
+        if (! str_contains($path, $mark)) {
             return $path;
         }
 
         $segments = OneDriveClient::segments($path);
-        $depth = (int) array_key_first(array_filter($segments, fn (string $segment): bool => str_contains($segment, self::SERIAL_MARK)));
+        $depth = (int) array_key_first(array_filter($segments, fn (string $segment): bool => str_contains($segment, $mark)));
         $prefix = implode('/', array_slice($segments, 0, $depth));
-        [$before, $after] = explode(self::SERIAL_MARK, $segments[$depth], 2);
+        [$before, $after] = explode($mark, $segments[$depth], 2);
         $pattern = '/^'.preg_quote($before, '/').'(\d+)'.preg_quote($after, '/').'$/u';
 
         // Where the matter's emails were filed — and the copies of those with more than one capacity (onedrive.copies).
@@ -1446,7 +1521,7 @@ class MatterOneDriveFolders
             ->map(fn (string $folder): int => preg_match($pattern, OneDriveClient::segments($folder)[$depth] ?? '', $m) ? (int) $m[1] : 0)
             ->max() ?? 0;
 
-        $segments[$depth] = $before.($used + 1).$after;
+        $segments[$depth] = $before.str_pad((string) ($used + 1), $mark === self::SERIAL_PADDED_MARK ? 2 : 1, '0', STR_PAD_LEFT).$after;
 
         return implode('/', $segments);
     }
@@ -1929,7 +2004,7 @@ class MatterOneDriveFolders
             'side' => $side === ReceivedEmailFiling::GENERAL ? '' : Type::sideLabel($matter->type, $side),
             'party' => Str::limit(trim((string) preg_replace('/\s+/u', ' ', $party)), SentEmailArchive::PARTY_LIMIT, '…'),
             ...ReceivedEmailFiling::creditorValues($matter, $side, $from),
-            self::SERIAL => self::SERIAL_MARK,
+            ...self::serialValues(),
         ]));
     }
 }

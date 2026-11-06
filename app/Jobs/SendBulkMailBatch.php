@@ -186,6 +186,11 @@ class SendBulkMailBatch implements ShouldQueue
             // An email of a matter: in its OneDrive too (kept with the
             // campaign already, not added to the matter's attachments).
             if ($campaign->matter) {
+                // A first mail to creditors: so marked, and saved with the others (CreditorFirstMails).
+                if ($campaign->first_mail) {
+                    $record?->update(['first_mail' => true]);
+                }
+
                 $kept = app(SentEmailArchive::class)->keep(
                     $campaign->matter,
                     (string) Storage::disk(BulkMailService::DISK)->get($pdfPath),
@@ -194,6 +199,8 @@ class SendBulkMailBatch implements ShouldQueue
                     $campaign->created_by,
                     asAttachment: false,
                     to: (array) $recipient->email,
+                    firstMail: (bool) $campaign->first_mail,
+                    record: $record,
                 );
                 // What was kept, and how many files it went with, for the matter's Emails tab.
                 $record?->noteKept($kept, count($campaign->attachmentsFor($recipient)));

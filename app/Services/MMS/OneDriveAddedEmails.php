@@ -180,7 +180,7 @@ class OneDriveAddedEmails
             ->whereNotNull('files')
             ->get(['id', 'matter_id', 'direction', 'files', 'onedrive'])
             ->each(function (MatterEmail $email) use ($byId, &$files, &$folders): void {
-                $base = pathinfo((string) ($email->files[0]['name'] ?? ''), PATHINFO_FILENAME);
+                $base = pathinfo($email->pdfName(), PATHINFO_FILENAME);
 
                 if ($base === '') {
                     return;
