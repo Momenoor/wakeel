@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Setting;
+use App\Services\Updater\Updater;
 use BezhanSalleh\FilamentShield\Support\Utils;
 use Closure;
 use Filament\Facades\Filament;
@@ -89,9 +90,17 @@ class CheckSystemOffline
         return response()->redirectToRoute('system-down')->with('maintenance_message', $message);
     }
 
-    /** Who may use the system while it is offline: the super admin only, when "Allow the super admin" is on. */
+    /**
+     * Who may use the system while it is offline: the super admin, when "Allow the super admin" is on — and, while an
+     * update is running (it is what took the system offline), whoever may run updates, so the page driving its steps
+     * is never shut out halfway.
+     */
     private static function mayWork(mixed $user): bool
     {
+        if (Setting::get(Updater::STATE_KEY) !== null && method_exists($user, 'can') && $user->can('View:SystemUpdates')) {
+            return true;
+        }
+
         return (bool) Setting::get('offline_allow_admins', true)
             && method_exists($user, 'hasRole')
             && $user->hasRole(Utils::getSuperAdminName());

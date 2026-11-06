@@ -6,12 +6,14 @@ use App\Filament\Mms\Pages\Auth\CustomLogin;
 use App\Http\Middleware\CheckSystemOffline;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\Updater\Updater;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\TestCase;
@@ -161,6 +163,13 @@ class SettingTest extends TestCase
 
         $livewire = Request::create('/livewire/update', 'POST');
         $livewire->setUserResolver(fn () => $admin);
+        $this->assertSame(503, $middleware->handle($livewire, fn () => new Response('OK', 200))->getStatusCode());
+
+        // While an update runs, whoever may run updates keeps the page driving it — an admin with the permission too.
+        $admin->givePermissionTo(Permission::firstOrCreate(['name' => 'View:SystemUpdates', 'guard_name' => 'web']));
+        Setting::set(Updater::STATE_KEY, ['version' => '3.16.8', 'completed' => ['preflight', 'maintenance', 'code'], 'failed' => false, 'log' => ''], 'system', 'json');
+        $this->assertSame(200, $middleware->handle($livewire, fn () => new Response('OK', 200))->getStatusCode());
+        Setting::forget(Updater::STATE_KEY);
         $this->assertSame(503, $middleware->handle($livewire, fn () => new Response('OK', 200))->getStatusCode());
 
         // Nor the super admin, when "Allow the super admin" is off.
