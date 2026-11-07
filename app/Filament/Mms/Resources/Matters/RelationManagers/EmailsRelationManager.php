@@ -98,10 +98,10 @@ class EmailsRelationManager extends RelationManager
             // not those waiting for a matter, or set aside.
             ->modifyQueryUsing(fn (Builder $query) => self::listed($query)->with(['reads.user', 'user']))
             ->defaultSort('at', 'desc')
-            // Columns of fixed widths, the text wrapped in them: the table as wide as the page, never scrolled sideways —
-            // the actions column wide enough for its three buttons and menu (Filament gives its empty header 4px) — and
-            // they wrap within it rather than run over the column beside it, should the labels be longer.
-            ->extraAttributes(['class' => '[&_table]:table-fixed [&_table]:w-full [&_.fi-ta-content]:overflow-x-hidden [&_td]:align-top [&_.fi-ta-actions-header-cell]:w-72 [&_.fi-ta-actions]:flex-wrap'])
+            // Each column as wide as what is in it — the subject and whom it is from or to the room left, the badges
+            // only theirs — the text wrapped, the table as wide as the page, never scrolled sideways; the actions wrap
+            // within their cell rather than run over the column beside it.
+            ->extraAttributes(['class' => '[&_table]:w-full [&_.fi-ta-content]:overflow-x-hidden [&_td]:align-top [&_.fi-ta-actions]:flex-wrap'])
             ->columns([
                 // Each user's own: unread until they open it (or mark it read).
                 IconColumn::make('unread')
@@ -109,29 +109,25 @@ class EmailsRelationManager extends RelationManager
                     ->state(fn (MatterEmail $record): bool => ! $record->isReadBy(auth()->user()))
                     ->icon(fn (bool $state): string => $state ? 'heroicon-s-envelope' : 'heroicon-o-envelope-open')
                     ->color(fn (bool $state): string => $state ? 'warning' : 'gray')
-                    ->tooltip(fn (bool $state): string => $state ? __('Unread by you') : __('Read by you'))
-                    ->width('4%'),
+                    ->tooltip(fn (bool $state): string => $state ? __('Unread by you') : __('Read by you')),
                 // The date, the time under it.
                 TextColumn::make('at')
                     ->label(__('Date'))
                     ->date()
                     ->description(fn (MatterEmail $record): ?string => $record->at ? Dates::time($record->at) : null)
-                    ->sortable()
-                    ->width('10%'),
+                    ->sortable(),
                 TextColumn::make('direction')
                     ->label(__('Direction'))
                     ->badge()
                     ->formatStateUsing(fn (string $state): string => $state === MatterEmail::SENT ? __('Sent') : __('Received'))
-                    ->color(fn (string $state): string => $state === MatterEmail::SENT ? 'info' : 'success')
-                    ->width('8%'),
+                    ->color(fn (string $state): string => $state === MatterEmail::SENT ? 'info' : 'success'),
                 TextColumn::make('party')
                     ->label(__('From / To'))
                     ->state(fn (MatterEmail $record): string => $record->direction === MatterEmail::SENT
                         ? implode('، ', (array) $record->to)
                         : (string) $record->from)
                     ->wrap()
-                    ->extraAttributes(['style' => 'word-break: break-word;'])
-                    ->width('20%'),
+                    ->extraAttributes(['style' => 'word-break: break-word;']),
                 TextColumn::make('subject')
                     ->label(__('Subject'))
                     ->weight('bold')
@@ -147,7 +143,6 @@ class EmailsRelationManager extends RelationManager
                     ->expandableLimitedList()
                     ->placeholder(__('No one yet'))
                     ->wrap()
-                    ->width('12%')
                     ->visibleFrom('lg')
                     ->toggleable(),
                 // What of an email that came in is in the matter's OneDrive: under one heading, each by a short name.
@@ -157,7 +152,6 @@ class EmailsRelationManager extends RelationManager
                         ->badge()
                         ->state(fn (MatterEmail $record): ?string => $record->oneDriveLabel('pdf'))
                         ->color(fn (?string $state): string => self::color($state))
-                        ->width('7%')
                         ->visibleFrom('xl'),
                     TextColumn::make('eml_saved')
                         ->label(__('EML'))
@@ -165,7 +159,6 @@ class EmailsRelationManager extends RelationManager
                         ->badge()
                         ->state(fn (MatterEmail $record): ?string => $record->oneDriveLabel('eml'))
                         ->color(fn (?string $state): string => self::color($state))
-                        ->width('7%')
                         ->visibleFrom('xl'),
                     TextColumn::make('attachments_saved')
                         ->label(__('Attachments'))
@@ -180,7 +173,6 @@ class EmailsRelationManager extends RelationManager
                             $record->attachmentsState() === 'none' => __('Its documents came as links to download, not attached — see Details.'),
                             default => __('Besides its attachments, it has links to documents to download, never saved by themselves — see Details.'),
                         })
-                        ->width('7%')
                         ->visibleFrom('xl'),
                 ])->alignCenter(),
                 TextColumn::make('matched_by')
