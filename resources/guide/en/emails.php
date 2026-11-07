@@ -9,7 +9,7 @@ return [
         [
             'id' => 'matter-tab',
             'title' => 'The Emails tab on a matter',
-            'description' => 'The table shows the "Date", the "Direction" (sent or received), "From / To", the "Subject", and whether the "PDF in OneDrive", "EML in OneDrive" and "Attachments in OneDrive" are saved. An email whose documents came as links to download rather than attachments (a file shared from Google Drive, Dropbox, OneDrive / SharePoint, WeTransfer and the like, or a direct link to a PDF, Word or zip file) shows "Without attachment, n download links" in orange in the attachments column. Signature links (the sender\'s website, social networks, maps, an app to install, privacy, an email address) and Wakeel\'s own links are not counted. Outlook Safe Links and Google redirects are read through to where they lead.',
+            'description' => 'The table shows the "Date", the "Direction" (sent or received), "From / To", the "Subject", and under "OneDrive" whether its "PDF", "EML" (the original email) and "Attachments" are saved there. An email whose documents came as links to download rather than attachments (a file shared from Google Drive, Dropbox, OneDrive / SharePoint, WeTransfer and the like, or a direct link to a PDF, Word or zip file) shows "Without attachment, n download links" in orange in the attachments column. Signature links (the sender\'s website, social networks, maps, an app to install, privacy, an email address) and Wakeel\'s own links are not counted. Outlook Safe Links and Google redirects are read through to where they lead.',
             'roles' => [$admin, $withPermission],
             'permissions' => ['View:MatterEmailsTab'],
             'steps' => [

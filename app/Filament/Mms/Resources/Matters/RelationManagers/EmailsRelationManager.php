@@ -43,6 +43,7 @@ use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
+use Filament\Tables\Columns\ColumnGroup;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
@@ -98,8 +99,9 @@ class EmailsRelationManager extends RelationManager
             ->modifyQueryUsing(fn (Builder $query) => self::listed($query)->with(['reads.user', 'user']))
             ->defaultSort('at', 'desc')
             // Columns of fixed widths, the text wrapped in them: the table as wide as the page, never scrolled sideways —
-            // the actions column wide enough for its three buttons and menu (Filament gives its empty header 4px).
-            ->extraAttributes(['class' => '[&_table]:table-fixed [&_table]:w-full [&_.fi-ta-content]:overflow-x-hidden [&_td]:align-top [&_.fi-ta-actions-header-cell]:w-52'])
+            // the actions column wide enough for its three buttons and menu (Filament gives its empty header 4px) — and
+            // they wrap within it rather than run over the column beside it, should the labels be longer.
+            ->extraAttributes(['class' => '[&_table]:table-fixed [&_table]:w-full [&_.fi-ta-content]:overflow-x-hidden [&_td]:align-top [&_.fi-ta-actions-header-cell]:w-72 [&_.fi-ta-actions]:flex-wrap'])
             ->columns([
                 // Each user's own: unread until they open it (or mark it read).
                 IconColumn::make('unread')
@@ -148,37 +150,39 @@ class EmailsRelationManager extends RelationManager
                     ->width('12%')
                     ->visibleFrom('lg')
                     ->toggleable(),
-                // What of an email that came in is in the matter's OneDrive.
-                TextColumn::make('pdf_saved')
-                    ->label(__('PDF in OneDrive'))
-                    ->badge()
-                    ->state(fn (MatterEmail $record): ?string => $record->oneDriveLabel('pdf'))
-                    ->color(fn (?string $state): string => self::color($state))
-                    ->width('7%')
-                    ->visibleFrom('xl'),
-                TextColumn::make('eml_saved')
-                    ->label(__('EML in OneDrive'))
-                    ->tooltip(__('The original email, saved in the matter\'s OneDrive'))
-                    ->badge()
-                    ->state(fn (MatterEmail $record): ?string => $record->oneDriveLabel('eml'))
-                    ->color(fn (?string $state): string => self::color($state))
-                    ->width('7%')
-                    ->visibleFrom('xl'),
-                TextColumn::make('attachments_saved')
-                    ->label(__('Attachments in OneDrive'))
-                    ->badge()
-                    ->state(fn (MatterEmail $record): ?string => $record->oneDriveLabel('attachments'))
-                    // Documents as links to download — instead of attached, or beside them: to be seen, and
-                    // fetched by hand.
-                    ->color(fn (?string $state, MatterEmail $record): string => self::hasLinks($record) ? 'warning' : self::color($state))
-                    ->icon(fn (MatterEmail $record): ?string => self::hasLinks($record) ? 'heroicon-o-link' : null)
-                    ->tooltip(fn (MatterEmail $record): ?string => match (true) {
-                        ! self::hasLinks($record) => null,
-                        $record->attachmentsState() === 'none' => __('Its documents came as links to download, not attached — see Details.'),
-                        default => __('Besides its attachments, it has links to documents to download, never saved by themselves — see Details.'),
-                    })
-                    ->width('7%')
-                    ->visibleFrom('xl'),
+                // What of an email that came in is in the matter's OneDrive: under one heading, each by a short name.
+                ColumnGroup::make(__('OneDrive'), [
+                    TextColumn::make('pdf_saved')
+                        ->label(__('PDF'))
+                        ->badge()
+                        ->state(fn (MatterEmail $record): ?string => $record->oneDriveLabel('pdf'))
+                        ->color(fn (?string $state): string => self::color($state))
+                        ->width('7%')
+                        ->visibleFrom('xl'),
+                    TextColumn::make('eml_saved')
+                        ->label(__('EML'))
+                        ->tooltip(__('The original email, saved in the matter\'s OneDrive'))
+                        ->badge()
+                        ->state(fn (MatterEmail $record): ?string => $record->oneDriveLabel('eml'))
+                        ->color(fn (?string $state): string => self::color($state))
+                        ->width('7%')
+                        ->visibleFrom('xl'),
+                    TextColumn::make('attachments_saved')
+                        ->label(__('Attachments'))
+                        ->badge()
+                        ->state(fn (MatterEmail $record): ?string => $record->oneDriveLabel('attachments'))
+                        // Documents as links to download — instead of attached, or beside them: to be seen, and
+                        // fetched by hand.
+                        ->color(fn (?string $state, MatterEmail $record): string => self::hasLinks($record) ? 'warning' : self::color($state))
+                        ->icon(fn (MatterEmail $record): ?string => self::hasLinks($record) ? 'heroicon-o-link' : null)
+                        ->tooltip(fn (MatterEmail $record): ?string => match (true) {
+                            ! self::hasLinks($record) => null,
+                            $record->attachmentsState() === 'none' => __('Its documents came as links to download, not attached — see Details.'),
+                            default => __('Besides its attachments, it has links to documents to download, never saved by themselves — see Details.'),
+                        })
+                        ->width('7%')
+                        ->visibleFrom('xl'),
+                ])->alignCenter(),
                 TextColumn::make('matched_by')
                     ->label(__('Matter known by'))
                     ->formatStateUsing(fn (?string $state): string => MatterEmail::matchedByLabel($state))

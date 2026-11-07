@@ -210,7 +210,7 @@ class MatterContacts extends Component implements HasActions, HasSchemas, HasTab
                     ->state(fn (array $record): ?string => $record['custom'][$column] ?? null)
                     ->placeholder('—')
                     ->wrap()
-                    ->toggleable(), $this->hasCreditors() ? MatterCreditors::ownColumns($this->matter()) : []),
+                    ->toggleable(isToggledHiddenByDefault: true), $this->hasCreditors() ? MatterCreditors::ownColumns($this->matter()) : []),
                 TextColumn::make('source')
                     ->label(__('Source'))
                     ->color('gray')
