@@ -557,19 +557,8 @@ class IncomingMatterEmailsTest extends TestCase
 
         // To the assistant, copied to the shared mailbox — and its Message-ID written another way in one of them.
         $this->assertSame(1, app(MatterReplyCollector::class)->handle([$email], collect(), 'assistant'));
-        $read = [];
-        $unread = function (string $box) use (&$read): array {
-            return ['was_read' => false, 'mark_read' => function () use (&$read, $box) {
-                $read[] = $box;
-            }];
-        };
-        $this->assertSame(0, app(MatterReplyCollector::class)->handle([[...$email, ...$unread('iflas'), 'message_id' => trim($email['message_id'], '<>')]], collect(), 'iflas'));
+        $this->assertSame(0, app(MatterReplyCollector::class)->handle([[...$email, 'message_id' => trim($email['message_id'], '<>')]], collect(), 'iflas'));
         $this->assertSame(1, MatterEmail::where('direction', MatterEmail::RECEIVED)->count());
-        // Read in the shared mailbox too.
-        $this->assertSame(['iflas'], $read);
-        // Where it was kept, made unread again on purpose: left so.
-        app(MatterReplyCollector::class)->handle([[...$email, ...$unread('assistant')]], collect(), 'assistant');
-        $this->assertSame(['iflas'], $read);
 
         // Another run keeping one at this moment: left to it, not kept twice.
         $other = $this->email(['subject' => 'مستندات القضية 987/2026']);
@@ -717,24 +706,16 @@ class IncomingMatterEmailsTest extends TestCase
             ->assertMountedActionModalSee(['رابط التحميل', 'https://we.tl/t-XyZ']);
     }
 
-    public function test_a_collected_email_is_marked_read_in_the_mailbox_and_its_original_is_kept_as_eml(): void
+    public function test_a_collected_email_has_its_original_kept_as_eml(): void
     {
-        $read = [];
-        $mark = function (string $which) use (&$read): \Closure {
-            return function () use (&$read, $which): void {
-                $read[] = $which;
-            };
-        };
         $eml = "From: office@albanna.ae\r\nSubject: =?UTF-8?B?2YXYs9iq2YbYr9in2Ko=?=\r\n\r\nbody";
 
         // Filed by itself, waiting for a person, and not about any matter: only the first two are collected.
         $this->collect(
-            $this->email(['subject' => 'مستندات 987/2026', 'raw' => fn () => $eml, 'mark_read' => $mark('filed')]),
-            $this->email(['message_id' => '<held@albanna.ae>', 'raw' => fn () => $eml, 'mark_read' => $mark('held')]),
-            $this->email(['message_id' => '<stranger@x.com>', 'from' => 'nobody@x.com', 'raw' => fn () => $eml, 'mark_read' => $mark('stranger')]),
+            $this->email(['subject' => 'مستندات 987/2026', 'raw' => fn () => $eml]),
+            $this->email(['message_id' => '<held@albanna.ae>', 'raw' => fn () => $eml]),
+            $this->email(['message_id' => '<stranger@x.com>', 'from' => 'nobody@x.com', 'raw' => fn () => $eml]),
         );
-
-        $this->assertEqualsCanonicalizing(['filed', 'held'], $read);
 
         // The original email goes to OneDrive only, beside its PDF — not into the system.
         $filed = MatterEmail::where('status', MatterEmail::FILED)->sole();
@@ -782,25 +763,10 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertFalse(collect($this->uploads)->contains(fn (string $url) => str_contains($url, '.:/content')));
     }
 
-    public function test_an_email_whose_mailbox_refuses_marking_read_is_still_kept(): void
-    {
-        $this->collect($this->email([
-            'subject' => 'مستندات 987/2026',
-            'mark_read' => fn () => throw new \RuntimeException('Microsoft 365 refused'),
-        ]));
-
-        $this->assertSame(MatterEmail::FILED, MatterEmail::sole()->status);
-    }
-
-    public function test_a_copy_of_what_the_office_sent_from_wakeel_is_read_in_the_other_mailbox_and_not_kept(): void
+    public function test_a_copy_of_what_the_office_sent_from_wakeel_is_not_kept_from_the_other_mailbox(): void
     {
         MailSenders::add('assistant', ['username' => 'amr@jpa.ae', 'address' => 'amr@jpa.ae', 'name' => 'Amr', 'password' => 'x', 'host' => 'mail.test', 'port' => 587, 'encryption' => 'tls']);
-        $read = 0;
-        $copy = function (array $attributes) use (&$read): array {
-            return $this->email(['from' => 'iflas@jpa.ae', 'from_name' => 'JPA', 'to' => ['office@albanna.ae'], 'cc' => ['amr@jpa.ae'], 'was_read' => false, 'mark_read' => function () use (&$read): void {
-                $read++;
-            }, ...$attributes]);
-        };
+        $copy = fn (array $attributes): array => $this->email(['from' => 'iflas@jpa.ae', 'from_name' => 'JPA', 'to' => ['office@albanna.ae'], 'cc' => ['amr@jpa.ae'], ...$attributes]);
 
         // A letter sent from Wakeel, copied to the assistant: known by its Message-ID.
         MatterEmail::create(['matter_id' => $this->second->id, 'direction' => MatterEmail::SENT, 'sender_key' => 'iflas', 'message_id' => 'letter-1@jpa.ae', 'subject' => 'خطاب — JPA/2026/987/1', 'to' => ['office@albanna.ae', 'amr@jpa.ae'], 'at' => now()]);
@@ -811,21 +777,17 @@ class IncomingMatterEmailsTest extends TestCase
         MatterEmail::create(['matter_id' => $this->second->id, 'direction' => MatterEmail::SENT, 'sender_key' => 'iflas', 'message_id' => 'AAMkGraphOwnId', 'subject' => 'محضر — JPA/2026/987/2', 'to' => ['office@albanna.ae'], 'at' => now()]);
         $this->assertSame(0, app(MatterReplyCollector::class)->handle([$copy(['message_id' => '<smtp-made@jpa.ae>', 'subject' => 'محضر — JPA/2026/987/2', 'at' => now()->addMinute()->toDateTimeString()])], collect(), 'assistant'));
 
-        // Nothing recorded: each is on its matter already. Read in the assistant's mailbox, as it is in the one it went from.
+        // Nothing recorded: each is on its matter already.
         $this->assertSame(0, MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->count());
         $this->assertSame(2, MatterEmail::query()->where('direction', MatterEmail::SENT)->count());
-        $this->assertSame(2, $read);
     }
 
     public function test_an_email_the_office_wrote_from_outlook_to_a_party_is_kept_on_its_matter_as_sent_and_its_reply_with_it(): void
     {
         $amr = User::factory()->create(['email' => 'amr@jpa.ae']);
-        $read = 0;
         $email = $this->email([
             'message_id' => '<outlook-1@jpa.ae>', 'from' => 'amr@jpa.ae', 'from_name' => 'عمرو', 'subject' => 'طلب مستندات — القضية 987/2026',
-            'to' => ['office@albanna.ae'], 'cc' => ['iflas@jpa.ae'], 'was_read' => false, 'mark_read' => function () use (&$read): void {
-                $read++;
-            },
+            'to' => ['office@albanna.ae'], 'cc' => ['iflas@jpa.ae'],
             'attachments' => [['name' => 'طلب.pdf', 'contents' => '%PDF-request', 'mime' => 'application/pdf']],
         ]);
 
@@ -839,7 +801,6 @@ class IncomingMatterEmailsTest extends TestCase
         // Amr has no mailbox of his own read: its replies looked for where it was read.
         $this->assertSame('iflas', $sent->sender_key);
         $this->assertSame(['office@albanna.ae'], $sent->to);
-        $this->assertSame(1, $read);
         // Its PDF in the sent-emails folder, named as an outgoing email, with the file it went with.
         $this->assertTrue(collect($this->uploads)->contains(fn (string $url) => str_contains($url, __('Outgoing')) && str_contains($url, '.pdf:/content')));
         $this->assertTrue(collect($this->uploads)->contains(fn (string $url) => str_contains($url, 'طلب.pdf')));
@@ -857,18 +818,12 @@ class IncomingMatterEmailsTest extends TestCase
 
     public function test_an_email_between_office_people_or_about_no_certain_matter_is_left_alone(): void
     {
-        $read = 0;
-        $unread = ['was_read' => false, 'mark_read' => function () use (&$read): void {
-            $read++;
-        }];
-
         // Between two of the office's addresses, though it names a matter.
-        $this->assertSame(0, $this->collect($this->email(['from' => 'amr@jpa.ae', 'subject' => 'بخصوص 987/2026', 'to' => ['iflas@jpa.ae'], ...$unread])));
+        $this->assertSame(0, $this->collect($this->email(['from' => 'amr@jpa.ae', 'subject' => 'بخصوص 987/2026', 'to' => ['iflas@jpa.ae']])));
         // To someone outside, about no certain matter (the lawyer is on two).
-        $this->assertSame(0, $this->collect($this->email(['from' => 'amr@jpa.ae', 'subject' => 'بخصوص القضيتين', 'to' => ['office@albanna.ae'], ...$unread])));
+        $this->assertSame(0, $this->collect($this->email(['from' => 'amr@jpa.ae', 'subject' => 'بخصوص القضيتين', 'to' => ['office@albanna.ae']])));
 
         $this->assertSame(0, MatterEmail::count());
-        $this->assertSame(0, $read);
     }
 
     public function test_onedrive_can_be_read_for_what_of_an_email_is_there(): void
@@ -1128,14 +1083,18 @@ class IncomingMatterEmailsTest extends TestCase
 
         // One that was unread in the mailbox, one already read, one collected long ago.
         $this->collect(
-            $this->email(['subject' => 'مستندات 986/2026', 'message_id' => '<unread@albanna.ae>', 'was_read' => false]),
-            $this->email(['subject' => 'ملاحظات 986/2026', 'message_id' => '<read@albanna.ae>', 'was_read' => true, 'at' => now()->subDays(3)->toDateTimeString()]),
+            $this->email(['subject' => 'مستندات 986/2026', 'message_id' => '<unread@albanna.ae>']),
+            $this->email(['subject' => 'ملاحظات 986/2026', 'message_id' => '<read@albanna.ae>', 'at' => now()->subDays(3)->toDateTimeString()]),
         );
         $this->collect($this->email(['subject' => 'قديم 986/2026', 'message_id' => '<old@albanna.ae>']));
         $old = MatterEmail::where('message_id', 'old@albanna.ae')->sole();
         $old->forceFill(['created_at' => now()->subHours(5)])->saveQuietly();
         $unread = MatterEmail::where('message_id', 'unread@albanna.ae')->sole();
-        $this->assertSame([true, false], [$unread->was_unread, MatterEmail::where('message_id', 'read@albanna.ae')->sole()->was_unread]);
+        // Kept now, the mailbox is not touched, so nothing is noted for an undo to put back.
+        $this->assertNull($unread->was_unread);
+        // Noted on those kept when the system still marked what it kept as read.
+        $unread->forceFill(['was_unread' => true])->saveQuietly();
+        MatterEmail::where('message_id', 'read@albanna.ae')->sole()->forceFill(['was_unread' => false])->saveQuietly();
         $this->assertNotEmpty($od->names('Work/2026-986/واردة'));
         Setting::set(MatterReplyCollector::checkedKey('iflas'), now()->toDateTimeString(), 'mail');
 
@@ -1275,10 +1234,6 @@ class IncomingMatterEmailsTest extends TestCase
     public function test_a_sender_on_the_ignore_list_is_never_read_again(): void
     {
         MailSender::query()->where('key', 'iflas')->first()->update(['keep_all_inbox' => true]);
-        $marked = 0;
-        $read = function () use (&$marked): void {
-            $marked++;
-        };
 
         // Two from a stranger wait on the Unfiled page; one from their colleague too.
         $this->collect(
@@ -1294,11 +1249,11 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertSame(['news@shop.com'], MatterReplyCollector::ignoredSenders());
         $this->assertSame(['sales@shop.com'], MatterEmail::pending()->pluck('from')->map(fn ($from) => MatterEmail::addressOf($from))->all());
 
-        // New ones from them are not read at all — not kept, not marked read — even a reply or a party's.
-        $this->assertSame(0, $this->collect($this->email(['from' => 'NEWS@shop.com', 'mark_read' => $read])));
+        // New ones from them are not read at all — not kept — even a reply or a party's.
+        $this->assertSame(0, $this->collect($this->email(['from' => 'NEWS@shop.com'])));
         $this->lawyer->update(['email' => ['news@shop.com']]);
-        $this->assertSame(0, $this->collect($this->email(['from' => 'news@shop.com', 'subject' => '986/2026', 'mark_read' => $read])));
-        $this->assertSame([0, 3], [$marked, MatterEmail::count()]);
+        $this->assertSame(0, $this->collect($this->email(['from' => 'news@shop.com', 'subject' => '986/2026'])));
+        $this->assertSame(3, MatterEmail::count());
 
         // A whole domain.
         Setting::set(MatterReplyCollector::IGNORED, ['@shop.com'], 'mail');

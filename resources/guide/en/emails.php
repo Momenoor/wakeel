@@ -4,7 +4,7 @@
 
 return [
     'title' => 'Matter emails',
-    'intro' => 'The system reads the office\'s mailboxes (and the own mailbox of anyone it is turned on for) and files every email about a matter on that matter for you: a PDF of the email, its original (.eml) and its attachments, in the system and in the matter\'s OneDrive. The same goes for what is sent from the matter. An email whose matter is not certain waits in "Unfiled emails" (side menu → "Communication"). An email the system cannot place, a member of staff forwards to the "Filing mailbox" with the matter number. The office\'s own emails are never filed as a party\'s: a copy of a letter or minutes sent from Wakeel that reaches another office mailbox is marked read there and left, and an email a member of staff writes from Outlook to someone outside the office, with an office mailbox copied in, is filed on its matter as sent when the matter is certain (its number in the subject or text, or the recipient\'s only matter), so its replies are filed too. A reply written in Outlook to an email that came in is kept beside that email, in its folder, on its matter. An email between office people only is never read.',
+    'intro' => 'The system reads the office\'s mailboxes (and the own mailbox of anyone it is turned on for) and files every email about a matter on that matter for you: a PDF of the email, its original (.eml) and its attachments, in the system and in the matter\'s OneDrive. The same goes for what is sent from the matter. An email whose matter is not certain waits in "Unfiled emails" (side menu → "Communication"). An email the system cannot place, a member of staff forwards to the "Filing mailbox" with the matter number. The office\'s own emails are never filed as a party\'s: a copy of a letter or minutes sent from Wakeel that reaches another office mailbox is left as it is there, and an email a member of staff writes from Outlook to someone outside the office, with an office mailbox copied in, is filed on its matter as sent when the matter is certain (its number in the subject or text, or the recipient\'s only matter), so its replies are filed too. A reply written in Outlook to an email that came in is kept beside that email, in its folder, on its matter. An email between office people only is never read.',
     'actions' => [
         [
             'id' => 'matter-tab',
@@ -28,7 +28,7 @@ return [
                 'A reply to an email sent from the system is kept under it, whichever of the office\'s mailboxes it comes to. One kept as a new email instead (it named no email the system knew) is linked by hand: "Is a reply to an email sent" in its row\'s "…" menu, the email it most likely answers chosen to begin with.',
                 'Every email on the matter has a step in the "Progress" tab and a line in the "History".',
                 'A Microsoft 365 mailbox is read in every folder, not only the Inbox: an email a rule or a person moved to another folder is still filed. Only Sent Items, Outbox, Drafts, Junk Email and Deleted Items are never read. A cPanel mailbox is read in its Inbox, or the folder chosen in "Mailbox folders".',
-                'When a mailbox does not let the system mark the emails it kept as read (a Microsoft 365 mailbox without the Mail.ReadWrite permission), the result of the check says so once for that mailbox: in the bell, and under "Settings → Collecting emails".',
+                'Reading a mailbox changes nothing in it: an email the system keeps stays read or unread in Outlook as it was.',
             ],
         ],
         [

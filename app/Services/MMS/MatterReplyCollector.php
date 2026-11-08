@@ -102,13 +102,10 @@ class MatterReplyCollector
     private const MAX_ORIGINAL_BYTES = 25 * 1024 * 1024;
 
     /** What is asked of Microsoft 365 for each message read. */
-    private const GRAPH_FIELDS = 'id,subject,from,toRecipients,ccRecipients,receivedDateTime,internetMessageId,internetMessageHeaders,body,hasAttachments,isRead';
+    private const GRAPH_FIELDS = 'id,subject,from,toRecipients,ccRecipients,receivedDateTime,internetMessageId,internetMessageHeaders,body,hasAttachments';
 
     /** The folders of a Microsoft 365 mailbox never read (their well-known names): what it sent or is writing, junk, and the bin. */
     private const GRAPH_FOLDERS_NOT_READ = ['sentitems', 'outbox', 'drafts', 'junkemail', 'deleteditems'];
-
-    /** @var array<string, string> mailboxes whose emails could not be marked as read this run, each with why — said once a mailbox */
-    private array $notMarkedRead = [];
 
     public function __construct(
         private readonly SentFolder $mailboxes,
@@ -132,7 +129,6 @@ class MatterReplyCollector
     public function collect(?int $matterId = null, ?int $maxSeconds = null): array
     {
         $this->unlinked = [];
-        $this->notMarkedRead = [];
         $result = ['replies' => 0, 'emails' => 0, 'sent' => 0, 'unfiled' => 0, 'errors' => [], 'stopped' => false, 'unlinked' => []];
         $deadline = $maxSeconds !== null ? microtime(true) + $maxSeconds : null;
         $automatic = $matterId === null;
@@ -185,11 +181,6 @@ class MatterReplyCollector
 
                 foreach ($this->handleAll($messages, $emails, $senderKey, $matterId, $deadline, $progress, $checked ? Carbon::parse($checked) : null) as $kind => $count) {
                     $result[$kind] += $count;
-                }
-
-                // Kept, but not marked as read in the mailbox (Microsoft 365 without Mail.ReadWrite): said once.
-                if (isset($this->notMarkedRead[$senderKey])) {
-                    $result['errors'][] = __('The emails kept from :mailbox could not be marked as read there: :error', ['mailbox' => $sender['name'] ?? $senderKey, 'error' => $this->notMarkedRead[$senderKey]]);
                 }
 
                 if ($automatic) {
@@ -326,6 +317,7 @@ class MatterReplyCollector
      * Each message: message_id, references (ids), subject, from, from_name,
      * to, cc, at, and — fetched only for one kept — body and attachments.
      * For one matter ($matterId): only what is that matter's, nothing held.
+     * Nothing is changed in the mailbox: an email stays read or unread there as it was.
      *
      * @param  iterable<array<string, mixed>>  $messages
      * @param  Collection<int, MatterEmail>  $sent
@@ -377,10 +369,10 @@ class MatterReplyCollector
             }
 
             // The filing mailbox: each email in it is an instruction to file another (ForwardedEmailFiler), never
-            // correspondence — read once, then marked read.
+            // correspondence.
             if ($filing) {
-                if ($id !== null && app(ForwardedEmailFiler::class)->handle($message, $id, (string) $senderKey, $this) !== null) {
-                    $this->markRead($message, $senderKey);
+                if ($id !== null) {
+                    app(ForwardedEmailFiler::class)->handle($message, $id, (string) $senderKey, $this);
                 }
 
                 continue;
@@ -401,8 +393,6 @@ class MatterReplyCollector
                 }
 
                 if (MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->where('message_id', $id)->exists()) {
-                    $this->readAsKept($message, $id, $senderKey);
-
                     continue;
                 }
             }
@@ -425,13 +415,11 @@ class MatterReplyCollector
 
             try {
                 if ($id !== null && MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->where('message_id', $id)->exists()) {
-                    $this->readAsKept($message, $id, $senderKey);
-
                     continue;
                 }
 
-                // From one of the office's own addresses: never a party's — a copy of what the office sent, read and
-                // left; one written from Outlook to someone outside, kept on its matter as sent.
+                // From one of the office's own addresses: never a party's — a copy of what the office sent, left; one
+                // written from Outlook to someone outside, kept on its matter as sent.
                 $from = mb_strtolower(trim((string) ($message['from'] ?? '')));
                 if ($from !== '' && $isOurs($from)) {
                     $this->handleOwn($message, $id, $senderKey, $from, $matterId, $isOurs, $kept);
@@ -440,12 +428,8 @@ class MatterReplyCollector
                 }
 
                 // Sent to two of our addresses, some senders' servers send each its own copy, each with its own
-                // Message-ID: the one kept from the other mailbox stands — this copy read here, not kept again.
+                // Message-ID: the one kept from the other mailbox stands — this copy not kept again.
                 if (self::twinKept($message, $senderKey)) {
-                    if (($message['was_read'] ?? null) === false) {
-                        $this->markRead($message, $senderKey);
-                    }
-
                     continue;
                 }
 
@@ -454,7 +438,6 @@ class MatterReplyCollector
                 if ($answers = self::answers($message, $sent) ?? self::answers($message, $elsewhere())) {
                     if ($matterId === null || (int) $answers->matter_id === $matterId) {
                         $this->keep($answers, $message, $id);
-                        $this->markRead($message, $senderKey);
                         $kept['replies']++;
                     }
 
@@ -471,13 +454,11 @@ class MatterReplyCollector
 
                 if ($match['matter'] !== null && ($matterId === null || $match['matter'] === $matterId)) {
                     $this->keepIncoming(Matter::findOrFail($match['matter']), $message, $id, $senderKey, $match['by']);
-                    $this->markRead($message, $senderKey);
                     $kept['emails']++;
                 } elseif ($match['matter'] === null && $matterId === null && ($match['candidates'] !== [] || $keepAll)) {
                     // Its matter not certain — or none at all (a stranger's email, kept when set to keep
                     // every one): a person files it, or sets it aside, on the Unfiled emails page.
                     $this->hold($message, $id, $senderKey, $match['candidates']);
-                    $this->markRead($message, $senderKey);
                     $kept['unfiled']++;
                 }
             } catch (Throwable $e) {
@@ -656,35 +637,8 @@ class MatterReplyCollector
     }
 
     /**
-     * A message that is kept in the system is read in the mailbox too, so the
-     * inbox shows what is still to be looked at. Never stops the collecting: a
-     * mailbox that does not allow it (Microsoft 365 needs Mail.ReadWrite) is
-     * only logged.
-     *
-     * @param  array<string, mixed>  $message
-     */
-    /**
-     * Kept already — from another of our mailboxes it came to as well (an assistant's, a shared one copied
-     * in): read in this one too, as it is where it was kept. Only while unread here: not again each run.
-     *
-     * @param  array<string, mixed>  $message
-     */
-    private function readAsKept(array $message, string $id, ?string $senderKey): void
-    {
-        if (($message['was_read'] ?? null) !== false || $senderKey === null) {
-            return;
-        }
-
-        // Not where it was kept: there, made unread again on purpose (undone), it stays so.
-        $keptFrom = MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->where('message_id', $id)->value('sender_key');
-        if ($keptFrom !== null && $keptFrom !== $senderKey) {
-            $this->markRead($message, $senderKey);
-        }
-    }
-
-    /**
      * An email from one of the office's own addresses, in one of our mailboxes. A copy of one the office sent from
-     * Wakeel (a letter, minutes, a bulk email — copied to another of our mailboxes): read there, nothing recorded,
+     * Wakeel (a letter, minutes, a bulk email — copied to another of our mailboxes): nothing recorded,
      * it is on its matter already. One written outside Wakeel (from Outlook) to someone outside the office: kept on
      * its matter as sent — its PDF and files in the sent-emails folder, a step in the progress, the matter's people
      * told, and its replies watched — when the matter is certain (IncomingEmailMatcher, by the outside addresses it
@@ -697,10 +651,6 @@ class MatterReplyCollector
     private function handleOwn(array $message, ?string $id, ?string $senderKey, string $from, ?int $matterId, Closure $isOurs, array &$kept): void
     {
         if (self::isOurSentCopy($message, $id, $from, $isOurs)) {
-            if (($message['was_read'] ?? null) === false) {
-                $this->markRead($message, $senderKey);
-            }
-
             return;
         }
 
@@ -724,7 +674,6 @@ class MatterReplyCollector
         }
 
         $this->keepSentByOffice(Matter::findOrFail($match['matter']), $message, $id, $senderKey, $from, $outside, $match['by'], $answered);
-        $this->markRead($message, $senderKey);
         $kept['sent']++;
     }
 
@@ -895,26 +844,9 @@ class MatterReplyCollector
                 && $addresses($kept->cc) === $cc);
     }
 
-    private function markRead(array $message, ?string $senderKey = null): void
-    {
-        if (! ($message['mark_read'] ?? null) instanceof Closure) {
-            return;
-        }
-
-        try {
-            ($message['mark_read'])();
-        } catch (Throwable $e) {
-            Log::info('Email not marked as read in the mailbox: '.$e->getMessage(), ['message' => $message['message_id'] ?? null]);
-            // Said once a mailbox in the run's result (collect()), not once an email.
-            if ($senderKey !== null) {
-                $this->notMarkedRead[$senderKey] ??= $e->getMessage();
-            }
-        }
-    }
-
     /**
-     * A collected email made unread again in the mailbox it came to — found there by its Message-ID.
-     * Whether it was found and changed.
+     * A collected email made unread again in the mailbox it came to — found there by its Message-ID: one kept when
+     * the system still marked what it kept as read (was_unread). Whether it was found and changed.
      */
     public function markUnread(MatterEmail $email): bool
     {
@@ -1093,13 +1025,12 @@ class MatterReplyCollector
         }
 
         if (SenderMailer::isMicrosoft($sender)) {
-            $mailbox = (string) $sender['address'];
-            $base = 'https://graph.microsoft.com/v1.0/users/'.rawurlencode($mailbox);
+            $base = 'https://graph.microsoft.com/v1.0/users/'.rawurlencode((string) $sender['address']);
             $item = Http::withToken($this->graph->getAccessToken())->timeout(30)
                 ->get($base.'/messages', ['$filter' => "internetMessageId eq '".str_replace("'", "''", '<'.$id.'>')."'", '$select' => self::GRAPH_FIELDS])
                 ->json('value.0');
 
-            return is_array($item) ? $this->graphMessage($base, $mailbox, $item) : null;
+            return is_array($item) ? $this->graphMessage($base, $item) : null;
         }
 
         $inbox = $this->mailboxes->inbox((string) $email->sender_key, $sender);
@@ -1107,7 +1038,7 @@ class MatterReplyCollector
         // every message's headers read by the server (a minute on a big cPanel inbox); then everywhere.
         $search = fn (bool $near) => $inbox->query()->whereMessageId('<'.$id.'>')
             ->when($near, fn ($query) => $query->since($email->at->copy()->subDays(2))->before($email->at->copy()->addDays(3)))
-            ->leaveUnread()->setFetchBody(false)->setFetchFlags(true)->get();
+            ->leaveUnread()->setFetchBody(false)->setFetchFlags(false)->get();
 
         foreach ($email->at ? [true, false] : [false] as $near) {
             foreach ($this->imapPage($inbox, $search($near), Carbon::create(1971)) as $message) {
@@ -1416,8 +1347,6 @@ class MatterReplyCollector
             'body' => $text,
             'content_hash' => MatterEmail::fingerprint($text, (array) ($files instanceof Closure ? $files() : $files)),
             'at' => self::arrivedAt($message),
-            // Unread in the mailbox before it was collected (null: not known).
-            'was_unread' => isset($message['was_read']) ? ! $message['was_read'] : null,
             ...$attributes,
         ]);
     }
@@ -1923,8 +1852,7 @@ class MatterReplyCollector
         // A page of headers at a time, oldest first: a long period is never loaded whole, and a run out of
         // time stops on the page it is on (the next goes on from the last message handled).
         for ($page = 1; ; $page++) {
-            // Flags too: whether each was read before it was collected (kept, so an undo puts it back).
-            $query = $inbox->query()->whereSince($since->copy()->subDay()->startOfDay())->leaveUnread()->setFetchBody(false)->setFetchFlags(true)
+            $query = $inbox->query()->whereSince($since->copy()->subDay()->startOfDay())->leaveUnread()->setFetchBody(false)->setFetchFlags(false)
                 ->setFetchOrderAsc()->limit(self::IMAP_PAGE, $page);
             $headers = $query->get();
 
@@ -1972,7 +1900,6 @@ class MatterReplyCollector
                 // The moment with its offset — "+0000" from Outlook is not the app's local time.
                 // (An unreadable Date header comes back as 1970: read as now instead.)
                 'at' => $date->year < 1971 ? now()->toIso8601String() : $date->toIso8601String(),
-                'was_read' => $header->hasFlag('seen'),
                 'headers' => fn (): array => self::headerLines((string) ($header->getHeader()?->raw ?? '')),
                 // The whole message, fetched once however many of these are asked for.
                 'body' => fn (): string => Tolerant::run(function () use ($whole): string {
@@ -2007,10 +1934,6 @@ class MatterReplyCollector
                     $message = $whole();
 
                     return rtrim((string) $message->getHeader()?->raw, "\r\n")."\r\n\r\n".$message->getRawBody();
-                },
-                // Seen in the mailbox, like one opened there.
-                'mark_read' => function () use ($inbox, $uid): void {
-                    $inbox->query()->leaveUnread()->setFetchBody(false)->setFetchFlags(false)->getMessageByUid($uid)->setFlag('Seen');
                 },
             ];
         }
@@ -2081,7 +2004,7 @@ class MatterReplyCollector
                     continue;
                 }
 
-                yield $this->graphMessage($base, $mailbox, $item);
+                yield $this->graphMessage($base, $item);
             }
 
             // The next link carries the query itself.
@@ -2126,13 +2049,13 @@ class MatterReplyCollector
     }
 
     /**
-     * A Microsoft 365 message as the collector reads one: its body now; its original, files and "read"
-     * only when asked for.
+     * A Microsoft 365 message as the collector reads one: its body now; its original and files only when
+     * asked for.
      *
      * @param  array<string, mixed>  $item
      * @return array<string, mixed>
      */
-    private function graphMessage(string $base, string $mailbox, array $item): array
+    private function graphMessage(string $base, array $item): array
     {
         // As headerLines(): a name given more than once, each value on a line of its own, the topmost first.
         $headers = collect($item['internetMessageHeaders'] ?? [])
@@ -2150,21 +2073,12 @@ class MatterReplyCollector
             'cc' => array_values(array_filter(array_map(fn ($r) => $r['emailAddress']['address'] ?? null, $item['ccRecipients'] ?? []))),
             'at' => (string) ($item['receivedDateTime'] ?? now()->toIso8601String()),
             'headers' => $headers->all(),
-            'was_read' => isset($item['isRead']) ? (bool) $item['isRead'] : null,
             'body' => ($item['body']['contentType'] ?? 'html') === 'html' ? (string) ($item['body']['content'] ?? '') : nl2br(e((string) ($item['body']['content'] ?? ''))),
             // The email as it came (MIME).
             'raw' => function () use ($base, $graphId): string {
                 $response = Http::withToken($this->graph->getAccessToken())->timeout(120)->get($base.'/messages/'.rawurlencode($graphId).'/$value');
 
                 return $response->successful() ? $response->body() : '';
-            },
-            // Read in the mailbox too — needs the Mail.ReadWrite application permission.
-            'mark_read' => function () use ($base, $graphId, $mailbox): void {
-                $response = Http::withToken($this->graph->getAccessToken())->timeout(20)->patch($base.'/messages/'.rawurlencode($graphId), ['isRead' => true]);
-
-                if ($response->status() === 403) {
-                    throw new RuntimeException(__('Microsoft 365 refused to mark emails as read in :mailbox: the app registration needs the Mail.ReadWrite application permission, with admin consent.', ['mailbox' => $mailbox]));
-                }
             },
             'attachments' => function () use ($base, $graphId, $item): array {
                 if (! ($item['hasAttachments'] ?? false)) {

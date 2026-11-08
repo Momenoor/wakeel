@@ -10,7 +10,6 @@ use App\Filament\Mms\Resources\BulkMailCampaigns\RelationManagers\RecipientsRela
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager;
 use App\Filament\Support\EmailSendFields;
-use App\Jobs\CollectMatterEmails;
 use App\Livewire\TabbedDatabaseNotifications;
 use App\Models\BulkMailCampaign;
 use App\Models\Letterhead;
@@ -73,9 +72,6 @@ class MatterRepliesTest extends TestCase
 
     private bool $mailReadAllowed = true;
 
-    /** Whether the mailbox lets emails be marked as read (Mail.ReadWrite). */
-    private bool $markReadAllowed = true;
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -133,10 +129,6 @@ class MatterRepliesTest extends TestCase
                 return $this->mailReadAllowed
                     ? Http::response(['value' => $this->inbox])
                     : Http::response(['error' => ['code' => 'ErrorAccessDenied', 'message' => 'Access is denied.']], 403);
-            }
-
-            if ($request->method() === 'PATCH' && ! $this->markReadAllowed) {
-                return Http::response(['error' => ['code' => 'ErrorAccessDenied', 'message' => 'Access is denied.']], 403);
             }
 
             if (str_contains($url, '/attachments')) {
@@ -498,8 +490,8 @@ class MatterRepliesTest extends TestCase
         MailSender::query()->where('key', 'info')->first()->update(['keep_all_inbox' => true]);
         app(MatterReplyCollector::class)->collect(null, 60);
         $this->assertSame('info', MatterEmail::pending()->sole()->sender_key);
-        // Unread in the mailbox before: kept, so an undo can put it back.
-        $this->assertTrue(MatterEmail::pending()->sole()->was_unread);
+        // The mailbox not touched: nothing noted for an undo to put back.
+        $this->assertNull(MatterEmail::pending()->sole()->was_unread);
         // Read for the last day only, never further back.
         $since = now()->subDay()->utc()->format('Y-m-d\TH');
         Http::assertSent(fn (Request $request) => str_contains(rawurldecode($request->url()), 'users/info@jpa.ae/messages')
@@ -534,7 +526,7 @@ class MatterRepliesTest extends TestCase
         $this->assertCount(1, Http::recorded(fn (Request $request) => str_contains(rawurldecode($request->url()), '/mailFolders/sentitems')));
     }
 
-    public function test_a_mailbox_that_will_not_mark_emails_read_is_said_once_in_the_result(): void
+    public function test_reading_a_mailbox_leaves_its_emails_unread_there(): void
     {
         MailSender::create(['driver' => MailSender::MICROSOFT, 'address' => 'no_reply@jpa.ae', 'name' => 'JPA', 'key' => 'noreply', 'is_active' => true]);
         $this->sentEmail(['sender_key' => 'noreply']);
@@ -545,17 +537,15 @@ class MatterRepliesTest extends TestCase
             'body' => ['contentType' => 'html', 'content' => '<p>تم.</p>'], 'internetMessageHeaders' => [], 'isRead' => false,
         ];
         $this->inbox = [$reply('r1'), $reply('r2')];
-        $this->markReadAllowed = false;
 
         $result = app(MatterReplyCollector::class)->collect(null, 60);
 
-        // Both kept; the mailbox named once, with what to grant — in the result, and so in the bell and the last run's line.
+        // Both kept, and nothing asked of Microsoft 365 that changes them; read again, not kept twice.
         $this->assertSame(2, $result['replies']);
-        $this->assertCount(1, $result['errors']);
-        $this->assertStringContainsString('JPA', $result['errors'][0]);
-        $this->assertStringContainsString('Mail.ReadWrite', $result['errors'][0]);
-        $this->assertStringContainsString('Mail.ReadWrite', MatterReplyCollector::lastRunSummary());
-        $this->assertSame('warning', CollectMatterEmails::notification($result)->getStatus());
+        $this->assertSame([], $result['errors']);
+        Http::assertNotSent(fn (Request $request) => $request->method() === 'PATCH');
+        $this->assertSame(0, app(MatterReplyCollector::class)->collect(null, 60)['replies']);
+        $this->assertSame(2, MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->count());
     }
 
     public function test_an_automatic_run_records_itself_and_goes_on_where_a_short_one_stopped(): void
