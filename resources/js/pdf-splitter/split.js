@@ -1,4 +1,4 @@
-// Splitting a PDF with pdf-lib, in the browser: so many pages a part, or as many pages as fit under a size.
+// Splitting a PDF with pdf-lib, in the browser: so many pages a part, the pages asked for part by part, or as many pages as fit under a size.
 //
 // By size, without saving the parts over and over: each page's cost is estimated once from the objects it
 // draws on (its contents, fonts, pictures — each counted once a part however many of its pages use it), the
@@ -150,14 +150,24 @@ async function savePart(doc, indexes, { signal, onPage }) {
 const range = (from, to) => Array.from({ length: to - from }, (_, offset) => from + offset);
 
 // Parts of so many pages each.
-export async function splitByPages(doc, perPart, { signal, onPart, onPage }) {
+export function splitByPages(doc, perPart, progress) {
     const count = doc.getPageCount();
-    const total = Math.ceil(count / perPart);
-    const parts = [];
+    const ranges = [];
 
     for (let start = 0; start < count; start += perPart) {
-        onPart(parts.length + 1, total);
-        const indexes = range(start, Math.min(start + perPart, count));
+        ranges.push({ from: start + 1, to: Math.min(start + perPart, count) });
+    }
+
+    return splitByRanges(doc, ranges, progress);
+}
+
+// Parts of the pages asked for: each { from, to }, counted from 1.
+export async function splitByRanges(doc, ranges, { signal, onPart, onPage }) {
+    const parts = [];
+
+    for (const { from, to } of ranges) {
+        onPart(parts.length + 1, ranges.length);
+        const indexes = range(from - 1, to);
         const bytes = await savePart(doc, indexes, { signal, onPage });
         parts.push(finished(indexes, bytes, Infinity));
     }

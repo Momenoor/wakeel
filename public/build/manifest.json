@@ -46,8 +46,8 @@
       "assets/pdf.worker.min-wgc6bjNh.mjs"
     ]
   },
-  "_split-CAd6MqFT.js": {
-    "file": "assets/split-CAd6MqFT.js",
+  "_split-DsvgNmEa.js": {
+    "file": "assets/split-DsvgNmEa.js",
     "name": "split",
     "imports": [
       "_pdf-lib-BZCeS23Y.js"
@@ -126,7 +126,7 @@
     "src": "node_modules/pdfjs-dist/wasm/qcms_bg.wasm"
   },
   "resources/css/app.css": {
-    "file": "assets/app-Cj9-OIx0.css",
+    "file": "assets/app-DcuFh-sD.css",
     "src": "resources/css/app.css",
     "isEntry": true,
     "name": "app",
@@ -135,7 +135,7 @@
     ]
   },
   "resources/css/filament/admin/theme.css": {
-    "file": "assets/theme-CK1d0QgH.css",
+    "file": "assets/theme-DWdhQvIj.css",
     "src": "resources/css/filament/admin/theme.css",
     "isEntry": true,
     "name": "theme",
@@ -144,7 +144,7 @@
     ]
   },
   "resources/css/print.css": {
-    "file": "assets/print-DwD5gb8J.css",
+    "file": "assets/print-kw-HKZkT.css",
     "src": "resources/css/print.css",
     "isEntry": true,
     "name": "print",
@@ -162,12 +162,12 @@
     ]
   },
   "resources/js/pdf-compressor.js": {
-    "file": "assets/pdf-compressor-DDcWzDPA.js",
+    "file": "assets/pdf-compressor-CpKXb8gG.js",
     "name": "pdf-compressor",
     "src": "resources/js/pdf-compressor.js",
     "isEntry": true,
     "imports": [
-      "_split-CAd6MqFT.js",
+      "_split-DsvgNmEa.js",
       "_is-pdf-rCPWVA7f.js",
       "_browser-BfEhbsZ6.js",
       "_pdf-lib-BZCeS23Y.js",
@@ -208,12 +208,12 @@
     ]
   },
   "resources/js/pdf-merger.js": {
-    "file": "assets/pdf-merger-BewS-eRC.js",
+    "file": "assets/pdf-merger-rh5ecb38.js",
     "name": "pdf-merger",
     "src": "resources/js/pdf-merger.js",
     "isEntry": true,
     "imports": [
-      "_split-CAd6MqFT.js",
+      "_split-DsvgNmEa.js",
       "_is-pdf-rCPWVA7f.js",
       "_pdf-lib-BZCeS23Y.js"
     ]
@@ -231,12 +231,12 @@
     ]
   },
   "resources/js/pdf-splitter.js": {
-    "file": "assets/pdf-splitter-UwVGr-5k.js",
+    "file": "assets/pdf-splitter-I3Xye2DU.js",
     "name": "pdf-splitter",
     "src": "resources/js/pdf-splitter.js",
     "isEntry": true,
     "imports": [
-      "_split-CAd6MqFT.js",
+      "_split-DsvgNmEa.js",
       "_is-pdf-rCPWVA7f.js",
       "_browser-BfEhbsZ6.js",
       "_pdf-lib-BZCeS23Y.js"

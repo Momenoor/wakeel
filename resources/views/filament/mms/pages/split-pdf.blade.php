@@ -64,7 +64,7 @@
 
             {{-- Each way is a box of its own, chosen by a tap anywhere on it. The number fields are not inside a
                  <label>: a phone sent a tap in one to the label's first field (the radio) and it could not be typed in. --}}
-            <div class="grid gap-4 sm:grid-cols-2" role="radiogroup" aria-label="{{ __('How to split') }}">
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" role="radiogroup" aria-label="{{ __('How to split') }}">
                 <div class="flex cursor-pointer flex-col gap-2 rounded-lg p-3 ring-1" x-on:click="busy || (mode = 'size')" x-bind:class="mode === 'size' ? 'ring-2 ring-primary-500' : 'ring-gray-200 dark:ring-white/10'">
                     <div class="flex items-center gap-2 text-sm font-medium text-gray-950 dark:text-white">
                         <x-filament::input.radio id="split-by-size" name="split-mode" value="size" x-model="mode" x-bind:disabled="busy" />
@@ -85,6 +85,43 @@
                         <x-filament::input type="text" inputmode="numeric" autocomplete="off" dir="ltr" :aria-label="__('pages per part')" x-model="perPart" x-on:focus="mode = 'pages'" x-bind:disabled="busy" />
                     </x-filament::input.wrapper>
                 </div>
+
+                <div class="flex cursor-pointer flex-col gap-2 rounded-lg p-3 ring-1" x-on:click="busy || (mode = 'ranges')" x-bind:class="mode === 'ranges' ? 'ring-2 ring-primary-500' : 'ring-gray-200 dark:ring-white/10'">
+                    <div class="flex items-center gap-2 text-sm font-medium text-gray-950 dark:text-white">
+                        <x-filament::input.radio id="split-by-ranges" name="split-mode" value="ranges" x-model="mode" x-bind:disabled="busy" />
+                        <label for="split-by-ranges" class="cursor-pointer">{{ __('Part by part') }}</label>
+                    </div>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">{{ __('You choose where each part starts and ends.') }}</p>
+                </div>
+            </div>
+
+            {{-- Part by part: each starts by itself on the page after the one before, and runs to the last page until told otherwise. --}}
+            <div x-show="mode === 'ranges'" x-cloak class="mt-4 flex flex-col gap-2">
+                <template x-for="(row, index) in ranges" :key="row.id">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="w-20 text-sm font-medium text-gray-950 dark:text-white">{{ __('Part') }} <span class="tabular-nums" x-text="index + 1"></span></span>
+                        <div class="w-40">
+                            <x-filament::input.wrapper :prefix="__('From page')" alpine-disabled="busy">
+                                <x-filament::input type="text" inputmode="numeric" autocomplete="off" dir="ltr" :aria-label="__('From page')" x-bind:value="row.from" x-on:input="setRangeFrom(row, $event.target.value)" x-bind:disabled="busy" />
+                            </x-filament::input.wrapper>
+                        </div>
+                        <div class="w-40">
+                            <x-filament::input.wrapper :prefix="__('To page')" alpine-disabled="busy">
+                                <x-filament::input type="text" inputmode="numeric" autocomplete="off" dir="ltr" :aria-label="__('To page')" x-bind:value="row.to" x-on:input="setRangeTo(row, $event.target.value)" x-bind:disabled="busy" />
+                            </x-filament::input.wrapper>
+                        </div>
+                        <span class="text-sm text-gray-600 dark:text-gray-400" x-text="pagesInRange(row)"></span>
+                        <x-filament::icon-button icon="heroicon-o-trash" color="danger" :label="__('Remove')" x-show="ranges.length > 1" x-on:click="removeRange(index)" x-bind:disabled="busy" />
+                    </div>
+                </template>
+
+                <div>
+                    <x-filament::button size="sm" color="gray" icon="heroicon-o-plus" :loading-indicator="false" x-on:click="addRange()" x-bind:disabled="busy || nextPage === null">
+                        {{ __('Add a part') }}
+                    </x-filament::button>
+                </div>
+
+                <p x-show="pagesLeftOut" class="text-sm text-warning-700 dark:text-warning-400">{{ __('Pages in no part:') }} <span dir="ltr" class="tabular-nums" x-text="pagesLeftOut"></span></p>
             </div>
 
             <div class="mt-4 flex flex-wrap items-center gap-2">

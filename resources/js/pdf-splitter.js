@@ -1,12 +1,12 @@
 // The Split PDF page (App\Filament\Mms\Pages\SplitPdf): a PDF from the computer, the user's own OneDrive, or handed
-// on from Merge PDF or Compress PDF (pdf/handoff.js), split in the browser — by size or by pages
+// on from Merge PDF or Compress PDF (pdf/handoff.js), split in the browser — by size, by pages, or part by part
 // (pdf-splitter/split.js) — and its parts downloaded in one zip (pdf-splitter/zip.js) or one by one. Loaded by
 // Alpine (x-load) on that page only.
 import { MB, fill, megabytes, numberFrom, save } from './pdf/common.js';
 import { takeHandoff } from './pdf/handoff.js';
 import { isPdf } from './pdf/is-pdf.js';
 import { withOneDrivePicker } from './pdf/onedrive-picker.js';
-import { Cancelled, Protected, analyse, loadPdf, splitByPages, splitBySize } from './pdf-splitter/split.js';
+import { Cancelled, Protected, analyse, loadPdf, splitByPages, splitByRanges, splitBySize } from './pdf-splitter/split.js';
 import { zipFiles } from './pdf-splitter/zip.js';
 
 export { numberFrom };
@@ -18,6 +18,7 @@ export default function pdfSplitter(config) {
     let signal = null;
     let zip = null;
     let blobs = [];
+    let nextRangeId = 1;
 
     return withOneDrivePicker({
         config,
@@ -27,6 +28,9 @@ export default function pdfSplitter(config) {
         mode: 'size',
         maxMb: 5,
         perPart: 10,
+        // Part by part: each its first and last page, as typed. `follows`: its first page is the page after the part
+        // before, until it is typed by hand.
+        ranges: [],
         busy: false,
         status: '',
         percent: null,
@@ -79,6 +83,7 @@ export default function pdfSplitter(config) {
                 doc = await loadPdf(bytes);
                 this.pageCount = doc.getPageCount();
                 this.file = { name, size: blob.size, source };
+                this.ranges = [this.newRange(1, false)];
             } catch (error) {
                 doc = null;
                 this.fail(error instanceof Protected ? this.labels.protected : this.labels.loadFailed);
@@ -96,6 +101,7 @@ export default function pdfSplitter(config) {
             blobs = [];
             this.file = null;
             this.pageCount = 0;
+            this.ranges = [];
             this.parts = [];
             this.warnings = [];
             this.summary = '';
@@ -106,11 +112,91 @@ export default function pdfSplitter(config) {
             return (this.file?.name ?? '').replace(/\.pdf$/i, '');
         },
 
+        // ── Part by part ────────────────────────────────────────────────────
+
+        // Up to the last page until told otherwise: the last part needs nothing typed.
+        newRange(from, follows) {
+            return { id: nextRangeId++, from: String(from), to: String(this.pageCount), follows };
+        },
+
+        // The page after the last part, when there is one left to start a new part on.
+        get nextPage() {
+            const to = numberFrom(this.ranges[this.ranges.length - 1]?.to);
+
+            return Number.isInteger(to) && to >= 1 && to < this.pageCount ? to + 1 : null;
+        },
+
+        addRange() {
+            if (this.nextPage !== null) {
+                this.ranges.push(this.newRange(this.nextPage, true));
+            }
+        },
+
+        removeRange(index) {
+            if (this.ranges.length > 1) {
+                this.ranges.splice(index, 1);
+                this.followRanges();
+            }
+        },
+
+        setRangeFrom(row, value) {
+            row.from = value;
+            row.follows = false;
+        },
+
+        setRangeTo(row, value) {
+            row.to = value;
+            this.followRanges();
+        },
+
+        // A part still starting after the one before it moves when that one's last page is changed.
+        followRanges() {
+            this.ranges.forEach((row, index) => {
+                const before = numberFrom(this.ranges[index - 1]?.to);
+
+                if (row.follows && Number.isInteger(before) && before >= 1) {
+                    row.from = String(before + 1);
+                }
+            });
+        },
+
+        // A part's pages as numbers; null when they are not pages of this PDF, or the first is after the last.
+        readRange(row) {
+            const from = numberFrom(row.from);
+            const to = numberFrom(row.to);
+
+            return Number.isInteger(from) && Number.isInteger(to) && from >= 1 && from <= to && to <= this.pageCount ? { from, to } : null;
+        },
+
+        pagesInRange(row) {
+            const range = this.readRange(row);
+
+            return range ? fill(this.labels.rangeCount, { count: range.to - range.from + 1 }) : '';
+        },
+
+        // The pages in no part, as "38–52, 60": left out on purpose or by a slip, it is said.
+        get pagesLeftOut() {
+            const ranges = this.ranges.map((row) => this.readRange(row)).filter(Boolean).sort((a, b) => a.from - b.from);
+            const left = [];
+            let next = 1;
+
+            for (const { from, to } of [...ranges, { from: this.pageCount + 1, to: this.pageCount + 1 }]) {
+                if (from > next) {
+                    left.push(from - 1 === next ? String(next) : `${next}–${from - 1}`);
+                }
+
+                next = Math.max(next, to + 1);
+            }
+
+            return left.join(', ');
+        },
+
         // ── Splitting ───────────────────────────────────────────────────────
 
         async split() {
             const limit = numberFrom(this.maxMb);
             const perPart = numberFrom(this.perPart);
+            const ranges = this.ranges.map((row) => this.readRange(row));
 
             if (this.mode === 'size' && ! (limit >= 0.5)) {
                 return this.fail(this.labels.badLimit);
@@ -118,6 +204,10 @@ export default function pdfSplitter(config) {
 
             if (this.mode === 'pages' && ! (Number.isInteger(perPart) && perPart >= 1)) {
                 return this.fail(this.labels.badPages);
+            }
+
+            if (this.mode === 'ranges' && ranges.includes(null)) {
+                return this.fail(fill(this.labels.badRange, { part: ranges.indexOf(null) + 1, pages: this.pageCount }));
             }
 
             this.busy = true;
@@ -157,7 +247,7 @@ export default function pdfSplitter(config) {
 
                 const made = this.mode === 'size'
                     ? await splitBySize(doc, analysis, limit * MB, progress)
-                    : await splitByPages(doc, perPart, progress);
+                    : (this.mode === 'pages' ? await splitByPages(doc, perPart, progress) : await splitByRanges(doc, ranges, progress));
 
                 this.status = this.labels.zipping;
                 this.percent = null;
@@ -185,7 +275,7 @@ export default function pdfSplitter(config) {
                 this.summary = this.describe(made, limit, perPart, Math.max(1, Math.round((performance.now() - startedAt) / 1000)));
 
                 // Only who split what, and how: the file never leaves the browser.
-                Promise.resolve(this.$wire.recordSplit(this.file.name, this.file.source, this.mode, this.mode === 'size' ? limit : perPart, this.parts.length, pages)).catch(() => {});
+                Promise.resolve(this.$wire.recordSplit(this.file.name, this.file.source, this.mode, this.mode === 'size' ? limit : (this.mode === 'pages' ? perPart : 0), this.parts.length, pages, this.mode === 'ranges' ? ranges.map(({ from, to }) => `${from}-${to}`).join(', ') : '')).catch(() => {});
             } catch (error) {
                 this.parts = [];
                 this.warnings = [];
@@ -222,7 +312,7 @@ export default function pdfSplitter(config) {
             const sizes = made.map((piece) => piece.size);
             const how = this.mode === 'size'
                 ? fill(this.labels.howSize, { limit })
-                : fill(this.labels.howPages, { count: perPart });
+                : (this.mode === 'pages' ? fill(this.labels.howPages, { count: perPart }) : this.labels.howRanges);
 
             return [
                 fill(made.length === 1 ? this.labels.summaryOne : this.labels.summary, {

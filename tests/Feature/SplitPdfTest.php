@@ -124,7 +124,7 @@ class SplitPdfTest extends TestCase
         $this->assertFalse(SplitPdf::canAccess());
 
         $this->actingAs($this->userWith());
-        $this->get(SplitPdf::getUrl())->assertOk()->assertSee('pdfSplitter', false)->assertSee(__('From OneDrive'));
+        $this->get(SplitPdf::getUrl())->assertOk()->assertSee('pdfSplitter', false)->assertSee(__('From OneDrive'))->assertSee(__('Part by part'))->assertSee('addRange()', false);
         $this->assertTrue(SplitPdf::canAccess());
     }
 
@@ -236,6 +236,10 @@ class SplitPdfTest extends TestCase
         $this->assertSame(['file' => 'Bundle.pdf', 'source' => 'onedrive', 'mode' => 'size', 'limit' => 5, 'parts' => 12, 'pages' => 480], $bySize->properties->all());
         $this->assertSame(['file' => 'Other.pdf', 'source' => 'upload', 'mode' => 'pages', 'limit' => 10, 'parts' => 3, 'pages' => 25], $byPages->properties->all());
         $this->assertNull($bySize->subject_id);
+
+        // Part by part: the pages of each part said, no limit.
+        Livewire::test(SplitPdf::class)->call('recordSplit', 'Parts.pdf', 'upload', 'ranges', 0, 3, 52, '1-10, 11-37, 38-52');
+        $this->assertSame(['file' => 'Parts.pdf', 'source' => 'upload', 'mode' => 'ranges', 'limit' => null, 'parts' => 3, 'pages' => 52, 'ranges' => '1-10, 11-37, 38-52'], Activity::query()->where('log_name', SplitPdf::LOG)->latest('id')->first()->properties->all());
         $this->assertSame([], Storage::disk('local')->allFiles());
     }
 

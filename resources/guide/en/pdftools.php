@@ -42,7 +42,7 @@ return [
         [
             'id' => 'split',
             'title' => 'Split a PDF',
-            'description' => 'A file from your computer or from your OneDrive ("From OneDrive", with search) is split in the browser "By size" (the most megabytes per part) or "By pages" (the number of pages per part). Download all the parts in one zip file, with a list of each part\'s pages and size, or each part on its own. Nothing downloads before you click the button. A page that is larger than the limit on its own is noted in a part of its own, and links to other pages are cut so the part does not grow. Both fields accept digits from any keyboard (Arabic and Persian, and any decimal separator).',
+            'description' => 'A file from your computer or from your OneDrive ("From OneDrive", with search) is split in the browser "By size" (the most megabytes per part) or "By pages" (the number of pages per part) or "Part by part" (you say where each part starts and ends: "Add a part" starts the next one on the page after the last, running to the last page until you change it). Download all the parts in one zip file, with a list of each part\'s pages and size, or each part on its own. Nothing downloads before you click the button. A page that is larger than the limit on its own is noted in a part of its own, and links to other pages are cut so the part does not grow. Both fields accept digits from any keyboard (Arabic and Persian, and any decimal separator).',
             'roles' => [$admin, $withPermission],
             'permissions' => ['Use:SplitPdf'],
             'steps' => [

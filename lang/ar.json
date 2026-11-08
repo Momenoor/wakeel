@@ -5430,5 +5430,15 @@
     "in a periodic report's folder: the report's number": "في مجلد التقرير الدوري: رقم التقرير",
     "Leave the creditors' ones empty to save them with the other sent emails.": "اترك حقول الدائنين فارغة لحفظها مع الرسائل المرسلة الأخرى.",
     "Allow the super admin to access while offline": "السماح للمدير العام بالدخول أثناء التعطيل",
-    "Only the super admin can sign in and work while the system is offline; administrators and everyone else see the maintenance message.": "المدير العام وحده يستطيع الدخول والعمل أثناء تعطيل النظام؛ ويرى المديرون وغيرهم رسالة الصيانة."
+    "Only the super admin can sign in and work while the system is offline; administrators and everyone else see the maintenance message.": "المدير العام وحده يستطيع الدخول والعمل أثناء تعطيل النظام؛ ويرى المديرون وغيرهم رسالة الصيانة.",
+    "Part by part": "جزءاً بجزء",
+    "You choose where each part starts and ends.": "تحدد بداية كل جزء ونهايته.",
+    "Part": "الجزء",
+    "From page": "من صفحة",
+    "To page": "إلى صفحة",
+    "Add a part": "إضافة جزء",
+    "Pages in no part:": "صفحات خارج الأجزاء:",
+    "Part :part: enter pages from 1 to :pages, the first not after the last.": "الجزء :part: أدخل صفحات من 1 إلى :pages، على ألا تكون الأولى بعد الأخيرة.",
+    "Pages: :count": "الصفحات: :count",
+    "part by part,": "جزءاً بجزء،"
 }

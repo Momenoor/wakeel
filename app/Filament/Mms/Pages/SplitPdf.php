@@ -12,7 +12,7 @@ use Livewire\Attributes\Renderless;
 
 /**
  * Splitting a PDF into parts in the browser (resources/js/pdf-splitter.js) — at most so many megabytes each,
- * for a portal's upload limit, or so many pages each — and downloading them all in one zip.
+ * for a portal's upload limit, so many pages each, or part by part from the pages asked for — and downloading them all in one zip.
  *
  * The PDF is chosen from the computer or from the user's own OneDrive (PicksPdfsFromOneDrive, fetched through
  * PdfToolsOneDriveController), or handed on from Merge PDF or Compress PDF. It is never kept on the server: only
@@ -66,6 +66,8 @@ class SplitPdf extends Page
                 'splitFailed' => __('The PDF could not be split. Please try again.'),
                 'badLimit' => __('Enter at least 0.5 MB per part.'),
                 'badPages' => __('Enter at least 1 page per part.'),
+                'badRange' => __('Part :part: enter pages from 1 to :pages, the first not after the last.'),
+                'rangeCount' => __('Pages: :count'),
                 'preparing' => __('Looking through page :page of :pages…'),
                 'progress' => __('Part :part — page :page of :pages'),
                 'progressOf' => __('Part :part of :parts — page :page of :pages'),
@@ -78,6 +80,7 @@ class SplitPdf extends Page
                 'summaryOne' => __('Done: ":name" (:pages pages, :size MB) was split :how — it all fits in one part — in :seconds s.'),
                 'howSize' => __('by size, at most :limit MB each,'),
                 'howPages' => __('by pages, :count pages each,'),
+                'howRanges' => __('part by part,'),
                 'summarySizes' => __('The parts are :smallest to :largest MB.'),
                 'summaryNext' => __('Nothing was uploaded. Download them all as a zip, or one by one below.'),
             ],
@@ -89,19 +92,26 @@ class SplitPdf extends Page
      * how many parts — never the document.
      */
     #[Renderless]
-    public function recordSplit(string $fileName, string $source, string $mode, float $limit, int $parts, int $pages): void
+    public function recordSplit(string $fileName, string $source, string $mode, float $limit, int $parts, int $pages, string $ranges = ''): void
     {
+        $mode = in_array($mode, ['pages', 'ranges'], true) ? $mode : 'size';
+
         activity(self::LOG)
             ->causedBy(auth()->user())
             ->event('split')
             ->withProperties([
                 'file' => Str::limit($fileName, 250, ''),
                 'source' => self::source($source),
-                'mode' => $mode === 'pages' ? 'pages' : 'size',
-                // Megabytes per part, or pages per part.
-                'limit' => $mode === 'pages' ? max(1, (int) $limit) : round(max(0, min($limit, 100000)), 2),
+                'mode' => $mode,
+                // Megabytes per part, or pages per part; none part by part (its pages are listed).
+                'limit' => match ($mode) {
+                    'pages' => max(1, (int) $limit),
+                    'ranges' => null,
+                    default => round(max(0, min($limit, 100000)), 2),
+                },
                 'parts' => max(0, min($parts, 100000)),
                 'pages' => max(0, min($pages, 100000)),
+                ...($mode === 'ranges' ? ['ranges' => Str::limit($ranges, 500, '')] : []),
             ])
             ->log('Split a PDF');
     }
