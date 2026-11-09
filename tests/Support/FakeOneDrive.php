@@ -35,10 +35,11 @@ class FakeOneDrive
         $this->items[self::ROOT] = ['name' => '', 'parent' => null, 'folder' => true];
     }
 
-    public function install(): self
+    /** @param  ?\Closure(Request): mixed  $first  asked first, for what is not OneDrive (a mailbox's messages); null: on to OneDrive */
+    public function install(?\Closure $first = null): self
     {
         Http::swap(new Factory);
-        Http::fake(fn (Request $request) => $this->answer($request));
+        Http::fake(fn (Request $request) => ($first ? $first($request) : null) ?? $this->answer($request));
 
         return $this;
     }
