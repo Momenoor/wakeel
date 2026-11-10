@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Services\MMS\SenderMailer;
 use App\Support\Addresses;
+use App\Support\RequestMemo;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Collection;
@@ -17,6 +18,9 @@ use Illuminate\Support\Collection;
 class MatterContact extends Model
 {
     /** Mail providers: a mailbox there doesn't make everyone there the office. */
+    /** RequestMemo's key for the users' addresses (userAddresses()). */
+    public const USER_ADDRESSES = 'users.addresses';
+
     public const SHARED_DOMAINS = ['@gmail.com', '@hotmail.com', '@outlook.com', '@live.com', '@yahoo.com', '@icloud.com'];
 
     protected $fillable = ['matter_id', 'party_id', 'owner_email', 'owner_name', 'email', 'matter_email_id'];
@@ -175,7 +179,19 @@ class MatterContact extends Model
 
         return in_array($address, $ours, true)
             || in_array(substr($address, (int) strrpos($address, '@')), $domains, true)
-            || User::query()->whereRaw('lower(email) = ?', [$address])->exists();
+            || isset(self::userAddresses()[$address]);
+    }
+
+    /**
+     * The users' addresses (lower case) as keys — read once a request, not once an address asked about (a send
+     * screen asks about every address of the matter); forgotten when a user's work account changes (User).
+     *
+     * @return array<string, int>
+     */
+    private static function userAddresses(): array
+    {
+        return RequestMemo::remember(self::USER_ADDRESSES, fn (): array => User::query()->whereNotNull('email')->pluck('email')
+            ->map(fn ($email): string => mb_strtolower(trim((string) $email)))->filter()->flip()->all());
     }
 
     private static function isParty(string $address): bool

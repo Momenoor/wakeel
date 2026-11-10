@@ -4,13 +4,13 @@ namespace App\Filament\Mms\Resources\PayrollRuns\Schemas;
 
 use App\Models\Company;
 use Filament\Forms\Components\Select;
-use Filament\Schemas\Components\Utilities\Get;
-use Illuminate\Validation\Rules\Unique;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Carbon;
+use Illuminate\Validation\Rules\Unique;
 
 class PayrollRunForm
 {
@@ -30,7 +30,7 @@ class PayrollRunForm
                             ->searchable()
                             ->live()
                             ->helperText(__('Its employees are those the company sponsors (the employee\'s "Sponsor"), and its forms carry the company\'s own details.'))
-                            ->visible(fn (): bool => Company::query()->exists()),
+                            ->visible(fn (): bool => Company::anyExists()),
                         Select::make('period')
                             ->label(__('Period'))
                             // A closed list rather than a free-text month, because

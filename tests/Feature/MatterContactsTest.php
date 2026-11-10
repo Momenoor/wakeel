@@ -22,6 +22,7 @@ use App\Support\MatterEvents;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -241,5 +242,22 @@ class MatterContactsTest extends TestCase
         $this->assertSame(['right@x.ae'], $wrong->refresh()->email);
         $this->assertModelMissing($gone);
         $this->assertSame(1, $campaign->refresh()->total_recipients);
+    }
+
+    public function test_whether_an_address_is_the_offices_reads_the_users_once(): void
+    {
+        User::factory()->create(['email' => 'Clerk@Office.test']);
+
+        DB::enableQueryLog();
+        $answers = array_map(fn (string $address): bool => MatterContact::isOurs($address), ['clerk@office.test', 'CLERK@office.test', 'someone@else.test', 'other@else.test']);
+        $users = array_filter(DB::getQueryLog(), fn (array $query): bool => str_contains($query['query'], 'users'));
+        DB::disableQueryLog();
+
+        $this->assertSame([true, true, false, false], $answers);
+        $this->assertCount(1, $users);
+
+        // A user added later in the same request is known at once.
+        User::factory()->create(['email' => 'other@else.test']);
+        $this->assertTrue(MatterContact::isOurs('other@else.test'));
     }
 }

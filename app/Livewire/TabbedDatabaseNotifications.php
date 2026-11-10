@@ -7,6 +7,8 @@ use Filament\Livewire\DatabaseNotifications;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Support\Str;
+use Livewire\Attributes\On;
 
 /**
  * The bell's list in two tabs: everything, and only what is about emails — replies to emails sent, emails kept
@@ -21,6 +23,37 @@ class TabbedDatabaseNotifications extends DatabaseNotifications
     public const EMAILS = 'emails';
 
     public string $tab = self::ALL;
+
+    /** @var list<string> the notifications closed in this request, deleted together (removeClosed()) */
+    private array $closed = [];
+
+    /**
+     * A notification closed: noted, and deleted with the others closed in the same request by one statement —
+     * a list cleared one by one sent fifty at once, each its own delete.
+     */
+    #[On('notificationClosed')]
+    public function removeNotification(string $id): void
+    {
+        if (Str::isUuid($id)) {
+            $this->closed[] = $id;
+        }
+    }
+
+    /** Before the list is drawn, and when the request ends should it not be drawn. */
+    private function removeClosed(): void
+    {
+        if ($this->closed === []) {
+            return;
+        }
+
+        parent::getNotificationsQuery()->whereIn('id', $this->closed)->delete();
+        $this->closed = [];
+    }
+
+    public function dehydrate(): void
+    {
+        $this->removeClosed();
+    }
 
     public function showTab(string $tab): void
     {
@@ -57,6 +90,8 @@ class TabbedDatabaseNotifications extends DatabaseNotifications
 
     public function render(): View
     {
+        $this->removeClosed();
+
         return view('livewire.tabbed-database-notifications');
     }
 }

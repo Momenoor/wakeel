@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Support\Branding;
 use App\Support\LiveRefresh;
+use App\Support\RequestMemo;
 use BezhanSalleh\FilamentShield\Support\Utils;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Models\Contracts\HasAvatar;
@@ -210,12 +211,15 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
 
     protected static function booted(): void
     {
+        static::deleted(fn () => RequestMemo::forget(MatterContact::USER_ADDRESSES));
+
         // Only when the work account changed: a user is saved often (last seen) — then nothing is read.
         static::saved(function (User $user): void {
             if (! $user->wasRecentlyCreated && ! $user->wasChanged(self::WORK_ACCOUNT)) {
                 return;
             }
 
+            RequestMemo::forget(MatterContact::USER_ADDRESSES);
             MailSender::syncFor($user);
 
             // An assistant's OneDrive is in the same account: set once, here. Read, not kept as the relation

@@ -9,6 +9,7 @@ use App\Models\User;
 use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -93,5 +94,32 @@ class NotificationTabsTest extends TestCase
 
         // With the bell itself to open it, in the top bar (Filament 5.10.2 gives the panel's component its button).
         Livewire::test(TabbedDatabaseNotifications::class)->assertSeeHtml('fi-topbar-database-notifications-btn');
+    }
+
+    public function test_notifications_closed_together_are_deleted_by_one_statement(): void
+    {
+        foreach (['One', 'Two', 'Three', 'Kept'] as $title) {
+            $this->bell($title);
+        }
+        $ids = $this->user->notifications()->get()->mapWithKeys(fn ($notification): array => [$notification->data['title'] => $notification->id]);
+
+        // One closed from the list: gone.
+        Livewire::test(TabbedDatabaseNotifications::class)->dispatch('notificationClosed', id: $ids['One'])->assertDontSee('One');
+        $this->assertSame(3, $this->user->notifications()->count());
+
+        // Several in one request: noted, then one delete for them all.
+        $bell = app(TabbedDatabaseNotifications::class);
+        $bell->removeNotification($ids['Two']);
+        $bell->removeNotification($ids['Three']);
+        $bell->removeNotification('not-an-id');
+        $this->assertSame(3, $this->user->notifications()->count());
+
+        DB::enableQueryLog();
+        $bell->dehydrate();
+        $deletes = array_filter(DB::getQueryLog(), fn (array $query): bool => str_starts_with($query['query'], 'delete'));
+        DB::disableQueryLog();
+
+        $this->assertCount(1, $deletes);
+        $this->assertSame(['Kept'], $this->user->notifications()->get()->map(fn ($notification): string => $notification->data['title'])->all());
     }
 }

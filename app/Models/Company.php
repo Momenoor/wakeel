@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\AttachmentCategory;
 use App\Models\Concerns\HasAttachments;
 use App\Models\Contracts\AttachmentOwner;
+use App\Support\RequestMemo;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -20,6 +21,21 @@ class Company extends Model implements AttachmentOwner
     use HasAttachments;
     use LogsActivity;
     use SoftDeletes;
+
+    /** RequestMemo's key for whether the office has any company (anyExists()). */
+    private const ANY = 'companies.any';
+
+    protected static function booted(): void
+    {
+        static::saved(fn () => RequestMemo::forget(self::ANY));
+        static::deleted(fn () => RequestMemo::forget(self::ANY));
+    }
+
+    /** Whether the office has any company — asked once a request, not once a column, filter and row of the payroll runs. */
+    public static function anyExists(): bool
+    {
+        return RequestMemo::remember(self::ANY, fn (): bool => self::query()->exists());
+    }
 
     /** The documents whose expiry is watched (ExpiringDocuments): column => label. */
     public const EXPIRING = [

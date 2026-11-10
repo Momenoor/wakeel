@@ -12,6 +12,7 @@ use App\Models\BulkMailRecipient;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
 use Tests\Support\MailSenders;
@@ -136,5 +137,19 @@ class BulkMailCampaignLiveTest extends TestCase
 
         $this->actingAs(User::factory()->create()); // no permissions
         $this->post('/broadcasting/auth', ['socket_id' => '1.2', 'channel_name' => $channel])->assertForbidden();
+    }
+
+    public function test_starting_a_campaign_sends_nothing_in_the_click_the_scheduler_does(): void
+    {
+        Mail::fake();
+        $this->campaign->update(['status' => BulkMailCampaignStatus::Draft]);
+
+        Livewire::test(ViewBulkMailCampaign::class, ['record' => $this->campaign->id])
+            ->callAction('start_campaign')
+            ->assertNotified();
+
+        $this->assertSame(BulkMailCampaignStatus::Active, $this->campaign->fresh()->status);
+        $this->assertSame(BulkMailRecipientStatus::Pending, $this->recipient->fresh()->status);
+        Mail::assertNothingSent();
     }
 }

@@ -62,7 +62,7 @@ final class RegenerateFromTemplate
             ->label(__('Undo regeneration'))
             ->icon('heroicon-o-arrow-uturn-left')
             ->color('gray')
-            ->visible(fn (MatterLetter|MatterMinutes $record): bool => DocumentRegenerator::allowed(auth()->user()) && DocumentRegenerator::last($record) !== null)
+            ->visible(fn (MatterLetter|MatterMinutes $record): bool => DocumentRegenerator::allowed(auth()->user()) && DocumentRegenerator::has($record))
             ->requiresConfirmation()
             ->modalDescription(__('It goes back to the wording and format it had before it was regenerated.'))
             ->action(function (MatterLetter|MatterMinutes $record): void {

@@ -58,7 +58,7 @@ return [
             'permissions' => ['Update:BulkMailCampaign'],
             'steps' => [
                 ['text' => 'Test the message first with the "Send Test Email" button, so you receive a copy yourself.', 'shot' => 'view-draft'],
-                ['text' => 'Click "Start Campaign" (shown for draft and paused campaigns). The status changes to "Active" and sending begins.', 'shot' => 'view-start'],
+                ['text' => 'Click "Start Campaign" (shown for draft and paused campaigns). The status changes to "Active" and the first emails go out within a minute, in the background — the page does not wait for them.', 'shot' => 'view-start'],
                 ['text' => 'While sending, a "Pause Campaign" button shows. When it is done, the status becomes "Completed", as in earlier campaigns, with the success rate.', 'shot' => 'view-completed'],
                 ['text' => 'To fix failures: select the failed rows and choose "Retry Failed", or use "Resend" for anyone you want.'],
             ],

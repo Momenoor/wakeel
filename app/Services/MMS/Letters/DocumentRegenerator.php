@@ -6,6 +6,7 @@ use App\Models\DocumentRegeneration;
 use App\Models\MatterLetter;
 use App\Models\MatterMinutes;
 use App\Models\User;
+use App\Support\RequestMemo;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -20,6 +21,9 @@ use RuntimeException;
  */
 class DocumentRegenerator
 {
+    /** RequestMemo's key for the documents with a regeneration not undone (has()). */
+    private const PENDING = 'document-regenerations.pending';
+
     /** Whether this user may do it: a super admin only. */
     public static function allowed(?User $user): bool
     {
@@ -70,6 +74,19 @@ class DocumentRegenerator
             ->first();
     }
 
+    /**
+     * Whether a document has a regeneration not undone — those that do read once a request, not once a row of the
+     * letters' and minutes' tables; forgotten when one is regenerated or put back.
+     */
+    public static function has(MatterLetter|MatterMinutes $document): bool
+    {
+        $pending = RequestMemo::remember(self::PENDING, fn (): array => DocumentRegeneration::query()->whereNull('undone_at')->toBase()
+            ->distinct()->get(['document_type', 'document_id'])
+            ->mapWithKeys(fn ($row): array => [$row->document_type.'#'.$row->document_id => true])->all());
+
+        return isset($pending[$document::class.'#'.$document->getKey()]);
+    }
+
     /** The document put back as it was before its last regeneration. */
     public function undo(MatterLetter|MatterMinutes $document, ?int $userId = null): MatterLetter|MatterMinutes
     {
@@ -78,6 +95,7 @@ class DocumentRegenerator
         return DB::transaction(function () use ($document, $regeneration, $userId): MatterLetter|MatterMinutes {
             $document->update($regeneration->previous);
             $regeneration->update(['undone_at' => now()]);
+            RequestMemo::forget(self::PENDING);
 
             return $document instanceof MatterLetter ? $document->fresh() : $this->renderMinutes($document, $userId);
         });
@@ -92,6 +110,7 @@ class DocumentRegenerator
             'user_id' => $userId,
             'previous' => $previous,
         ]);
+        RequestMemo::forget(self::PENDING);
     }
 
     /** A letter's text and subject as its new wording gives them, from its own data. */

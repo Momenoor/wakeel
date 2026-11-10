@@ -117,17 +117,14 @@ class ViewBulkMailCampaign extends ViewRecord
                 ->action(function () {
                     $this->record->update(['status' => BulkMailCampaignStatus::Active]);
 
-                    // A scheduled campaign waits for mail:send-bulk-campaigns
-                    // to pick it up once scheduled_at has passed.
-                    if ($this->record->scheduled_at === null || $this->record->scheduled_at->isPast()) {
-                        // Sent right here, not queued — nothing on cPanel
-                        // runs a queue worker (see mail:send-bulk-campaigns).
-                        SendBulkMailBatch::dispatchSync($this->record->id);
-                    }
+                    // Nothing sent in the click (a batch took most of a minute, the page waiting): mail:send-bulk-campaigns
+                    // runs every minute and sends an active campaign's next batch — a scheduled one's once its time has come.
+                    $due = $this->record->scheduled_at === null || $this->record->scheduled_at->isPast();
 
                     Notification::make()
                         ->success()
                         ->title(__('bulk_mail.status.active'))
+                        ->body($due ? __('bulk_mail.notifications.starting') : null)
                         ->send();
                 }),
 

@@ -11,6 +11,7 @@ use App\Services\MMS\Letters\LetterMailer;
 use App\Services\MMS\Letters\SharedAttachments;
 use App\Support\Addresses;
 use App\Support\Dates;
+use App\Support\RequestMemo;
 use Illuminate\Support\Facades\Mail;
 use RuntimeException;
 use Throwable;
@@ -71,9 +72,12 @@ final class EmailReplySender
      */
     public static function partyIds(MatterEmail $email): array
     {
-        $party = self::partyWritingFrom($email) ?? (($id = MatterContact::partyOf((int) $email->matter_id, self::from($email))) ? Party::find($id) : null);
+        // Once a request: the reply screen asks for each of its fields, every draw.
+        return RequestMemo::remember('email-reply.party-ids.'.$email->getKey(), function () use ($email): array {
+            $party = self::partyWritingFrom($email) ?? (($id = MatterContact::partyOf((int) $email->matter_id, self::from($email))) ? Party::find($id) : null);
 
-        return $party ? [(int) $party->getKey()] : [];
+            return $party ? [(int) $party->getKey()] : [];
+        });
     }
 
     /**

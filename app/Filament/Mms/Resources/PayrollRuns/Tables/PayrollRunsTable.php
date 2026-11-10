@@ -30,7 +30,7 @@ class PayrollRunsTable
                     ->label(__('Company'))
                     ->state(fn (PayrollRun $record): ?string => $record->company?->displayName())
                     ->placeholder('—')
-                    ->visible(fn (): bool => Company::query()->exists()),
+                    ->visible(fn (): bool => Company::anyExists()),
             ])
             ->defaultSort('period', 'desc')
             ->filters([
@@ -41,7 +41,7 @@ class PayrollRunsTable
                 SelectFilter::make('company_id')
                     ->label(__('Company'))
                     ->options(fn (): array => Company::options())
-                    ->visible(fn (): bool => Company::query()->exists()),
+                    ->visible(fn (): bool => Company::anyExists()),
             ])
             ->recordActions([
                 ViewAction::make()->iconButton(),

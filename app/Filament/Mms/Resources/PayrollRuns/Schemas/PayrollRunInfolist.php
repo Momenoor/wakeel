@@ -23,7 +23,7 @@ class PayrollRunInfolist
                             ->label(__('Company'))
                             ->state(fn (PayrollRun $record): ?string => $record->company?->displayName())
                             ->placeholder(__('Employees with no company'))
-                            ->visible(fn (PayrollRun $record): bool => $record->company_id !== null || Company::query()->exists()),
+                            ->visible(fn (PayrollRun $record): bool => $record->company_id !== null || Company::anyExists()),
                         TextEntry::make('status')->label(__('Status'))->badge(),
                         TextEntry::make('employees')
                             ->label(__('Employees'))
