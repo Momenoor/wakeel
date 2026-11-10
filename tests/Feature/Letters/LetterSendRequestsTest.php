@@ -262,4 +262,39 @@ class LetterSendRequestsTest extends TestCase
 
         $this->assertStringContainsString('خطاب رقم JPA/2026/986/1 — إشعار الدعوى رقم 986', LetterSendRequests::smsText($this->letter()));
     }
+
+    public function test_sending_the_letter_by_whatsapp_from_the_system_ticks_whatsapp_by_itself(): void
+    {
+        $letter = $this->letter();
+        $request = app(LetterSendRequests::class)->ask($letter, ['whatsapp', 'email'], $this->assistant);
+        $manager = fn () => Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class]);
+
+        // No template for letters yet: nothing to send with.
+        $manager()->assertTableActionHidden('whatsapp', $letter);
+
+        WhatsAppTemplate::create(['name' => 'Letter', 'purpose' => WhatsAppTemplate::LETTER, 'meta_name' => 'letter_pdf', 'language' => 'ar', 'header' => 'document',
+            'body' => '{{recipient}} {{reference}}', 'is_active' => true, 'is_default' => true,
+            'parameters' => [['name' => 'recipient', 'value' => '{{recipient}}'], ['name' => 'reference', 'value' => '{{reference}}'], ['name' => 'matter', 'value' => '{{matter.number}}/{{matter.year}}']]]);
+        RequestMemo::flush();
+        $this->whatsapp = [];
+
+        $this->actingAs($this->admin->assignRole(config('filament-shield.super_admin.name', 'super_admin')));
+        $manager()
+            ->assertTableActionVisible('whatsapp', $letter)
+            ->callTableAction('whatsapp', $letter)
+            ->assertHasNoTableActionErrors();
+
+        $sent = collect($this->whatsapp)->firstWhere('template.name', 'letter_pdf');
+        $this->assertSame('971507654321', $sent['to']);
+        $this->assertSame('document', $sent['template']['components'][0]['parameters'][0]['type']);
+        $this->assertSame(
+            ['recipient' => 'منى أحمد', 'reference' => $letter->reference, 'matter' => '986/2026'],
+            array_column($sent['template']['components'][1]['parameters'], 'text', 'parameter_name'),
+        );
+
+        // WhatsApp done by itself, Email still to do; the letter sent.
+        $request->refresh();
+        $this->assertSame([['whatsapp'], ['email'], true], [$request->doneChannels(), $request->pendingChannels(), $request->isOpen()]);
+        $this->assertTrue($letter->fresh()->wasSent());
+    }
 }

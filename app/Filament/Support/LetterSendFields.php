@@ -6,6 +6,7 @@ use App\Enums\LetterSendChannel;
 use App\Models\LetterSendRequest;
 use App\Models\MatterLetter;
 use App\Services\MMS\Letters\LetterSendRequests;
+use App\Services\MMS\Letters\LetterWhatsApp;
 use App\Support\Dates;
 use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
@@ -138,6 +139,45 @@ class LetterSendFields
             });
     }
 
+    /**
+     * Send by WhatsApp: the letter's PDF to the recipients' numbers ticked, by the approved template
+     * (LetterWhatsApp) — shown while WhatsApp and that template are set up and a recipient has a number. On a
+     * letter's row and on the dashboard; WhatsApp is ticked by itself on what was asked of the administrator.
+     */
+    public static function whatsappAction(): Action
+    {
+        $letter = fn (Model $record): ?MatterLetter => $record instanceof LetterSendRequest ? $record->letter : $record;
+
+        return Action::make('whatsapp')
+            ->label(__('Send by WhatsApp'))
+            ->icon('heroicon-o-chat-bubble-left-right')
+            ->color('success')
+            ->visible(fn (Model $record): bool => LetterWhatsApp::available() && ($of = $letter($record)) !== null && LetterWhatsApp::numbers($of) !== [])
+            ->modalHeading(fn (Model $record): string => __('Send letter :reference by WhatsApp', ['reference' => $letter($record)?->reference]))
+            ->modalDescription(__('Each number ticked gets the approved WhatsApp message with the letter\'s PDF. The letter is then marked as sent, and WhatsApp is ticked on what was asked of the administrator.'))
+            ->modalSubmitActionLabel(__('Send'))
+            ->fillForm(fn (Model $record): array => ['numbers' => array_map('strval', array_keys(LetterWhatsApp::numbers($letter($record))))])
+            ->schema(fn (Model $record): array => [
+                CheckboxList::make('numbers')
+                    ->label(__('Send to'))
+                    ->options(LetterWhatsApp::numbers($letter($record)))
+                    ->required(),
+                TextEntry::make('message')
+                    ->label(__('Message'))
+                    ->state(LetterWhatsApp::template()?->preview(LetterWhatsApp::template()->parameterValues(LetterWhatsApp::values($letter($record), (string) $letter($record)->recipients->first()?->name))))
+                    ->extraAttributes(['dir' => 'auto', 'class' => 'whitespace-pre-line']),
+            ])
+            ->action(function (Model $record, array $data) use ($letter): void {
+                $result = app(LetterWhatsApp::class)->send($letter($record), (array) ($data['numbers'] ?? []), auth()->user());
+
+                $notification = Notification::make()
+                    ->title(trans_choice('{0} Nothing was sent on WhatsApp|{1} Sent to one number on WhatsApp|[2,*] Sent to :count numbers on WhatsApp', $result['sent'], ['count' => $result['sent']]))
+                    ->body($result['errors'] !== [] ? implode("\n", $result['errors']) : null);
+
+                ($result['sent'] === 0 ? $notification->danger() : ($result['failed'] > 0 ? $notification->warning() : $notification->success()))->send();
+            });
+    }
+
     /** @return list<mixed> */
     private static function handleSchema(?LetterSendRequest $request): array
     {
@@ -188,7 +228,7 @@ class LetterSendFields
                 ]),
             CheckboxList::make('sent')
                 ->label(__('Sent by'))
-                ->helperText(__('Tick each way once the letter has gone by it. Sending it by email from the system ticks Email by itself.'))
+                ->helperText(__('Tick each way once the letter has gone by it. Sending it by email or by WhatsApp from the system ticks that way by itself.'))
                 ->options(array_intersect_key(LetterSendChannel::options(), array_flip((array) $request->channels)))
                 ->descriptions(collect($done)->map(fn (array $entry): string => Dates::dateTime($entry['at'] ?? null))->all())
                 // Done is done: not taken back from here.

@@ -91,6 +91,7 @@ class LettersToSendWidget extends TableWidget
             ])
             ->recordActions([
                 LetterSendFields::action(),
+                LetterSendFields::whatsappAction(),
                 Action::make('pdf')
                     ->label('PDF')
                     ->icon('heroicon-o-document-arrow-down')

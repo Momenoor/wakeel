@@ -61,7 +61,7 @@ return [
             'permissions' => [],
             'steps' => [
                 ['text' => 'Click "To send" on a row: it shows the recipients with their numbers and addresses and, when SMS is asked for, the SMS text and the mobile numbers to copy. "The letter (PDF)" opens the letter.'],
-                ['text' => 'Send the letter by each way asked for, tick it under "Sent by" and click "Save". The matter\'s number opens its Letters tab, where "Send by email" sends it from the system and ticks Email by itself.'],
+                ['text' => 'Send the letter by each way asked for, tick it under "Sent by" and click "Save". The matter\'s number opens its Letters tab, where "Send by email" sends it from the system and ticks Email by itself; "Send by WhatsApp", here on the row or there, sends its PDF to the recipients\' numbers and ticks WhatsApp by itself.'],
                 ['text' => 'Once every way is ticked the letter leaves the list and the assistant is told it was sent.'],
             ],
         ],

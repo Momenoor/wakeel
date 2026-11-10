@@ -138,6 +138,7 @@ class LettersRelationManager extends RelationManager
                     ->color('gray')
                     ->url(fn (MatterLetter $record) => route('letters.docx', $record)),
                 $this->emailAction(),
+                LetterSendFields::whatsappAction(),
                 LetterSendFields::action(),
                 ActionGroup::make([
                     $this->editAction(),
