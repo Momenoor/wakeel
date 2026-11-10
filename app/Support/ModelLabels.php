@@ -30,6 +30,8 @@ final class ModelLabels
         'Unit' => ['Unit', 'Units'],
         'Fee' => ['Fee', 'Fees'],
         'Activity' => ['Activity', 'Activities'],
+        'LetterSendRequest' => ['Letter to send', 'Letters to send'],
+        'MarketingCommission' => ['Marketing commission', 'Marketing commissions'],
     ];
 
     public static function singular(Model|string|null $model): ?string

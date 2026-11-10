@@ -27,6 +27,9 @@ class WhatsAppTemplate extends Model
     /** A notification with a file in its header (a decision's files to the assistant): {{user}}, {{title}}, {{body}}, {{link}}, {{file}}. */
     public const NOTIFICATION_FILE = 'notification_file';
 
+    /** The office's own number told of a letter an assistant issued, to send: {{matter}}, {{letter}}, {{subject}}, {{recipients}}, {{ways}}, {{assistant}}, {{link}}. */
+    public const LETTER_TO_SEND = 'letter_to_send';
+
     protected $table = 'whatsapp_templates';
 
     public function casts(): array
@@ -53,7 +56,7 @@ class WhatsAppTemplate extends Model
      */
     public static function purposes(): array
     {
-        return [self::MINUTES_SIGNATURE => __('Minutes for signature'), self::REPORT_REVIEW => __('Report for review'), self::NOTIFICATION => __('Notification'), self::NOTIFICATION_FILE => __('Notification with a file')];
+        return [self::MINUTES_SIGNATURE => __('Minutes for signature'), self::REPORT_REVIEW => __('Report for review'), self::NOTIFICATION => __('Notification'), self::NOTIFICATION_FILE => __('Notification with a file'), self::LETTER_TO_SEND => __('A letter to send (to the office\'s WhatsApp number)')];
     }
 
     public static function default(string $purpose): ?self

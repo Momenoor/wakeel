@@ -2,11 +2,13 @@
 
 namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 
+use App\Enums\LetterSendChannel;
 use App\Filament\Concerns\GuardsSentDeletion;
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Concerns\RefreshesMatterPage;
 use App\Filament\Forms\Components\RichText;
 use App\Filament\Support\EmailSendFields;
+use App\Filament\Support\LetterSendFields;
 use App\Filament\Support\OverlapConfirmation;
 use App\Filament\Support\RegenerateFromTemplate;
 use App\Filament\Support\SameDayMeetings;
@@ -24,6 +26,7 @@ use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterMailer;
 use App\Services\MMS\Letters\LetterMeeting;
+use App\Services\MMS\Letters\LetterSendRequests;
 use App\Support\Addresses;
 use App\Support\Dates;
 use App\Support\EmailGrouping;
@@ -54,6 +57,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
@@ -96,6 +100,8 @@ class LettersRelationManager extends RelationManager
     {
         return $table
             ->recordTitleAttribute('reference')
+            // Asked of the administrator to send: read with the letters, not once a row.
+            ->modifyQueryUsing(fn (Builder $query) => $query->with('sendRequest'))
             ->columns([
                 TextColumn::make('reference')->label(__('Reference'))->weight('bold')->searchable(),
                 TextColumn::make('letter_date')->label(__('Date'))->date()->sortable(),
@@ -105,6 +111,14 @@ class LettersRelationManager extends RelationManager
                     ->label(__('Status'))
                     ->badge()
                     ->description(fn (MatterLetter $record) => $record->sent_at?->format(Dates::dateTimeFormat())),
+                // Asked of the administrator to send, and not all done yet: the ways still to do.
+                TextColumn::make('to_send')
+                    ->label(__('To be sent by'))
+                    ->state(fn (MatterLetter $record): array => $record->sendRequest?->isOpen()
+                        ? array_map(fn (string $channel): string => LetterSendChannel::from($channel)->label(), $record->sendRequest->pendingChannels())
+                        : [])
+                    ->badge()
+                    ->color('warning'),
                 TextColumn::make('template.name')->label(__('Template'))->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('sentBy.name')->label(__('By'))->toggleable(isToggledHiddenByDefault: true),
             ])
@@ -124,6 +138,7 @@ class LettersRelationManager extends RelationManager
                     ->color('gray')
                     ->url(fn (MatterLetter $record) => route('letters.docx', $record)),
                 $this->emailAction(),
+                LetterSendFields::action(),
                 ActionGroup::make([
                     $this->editAction(),
                     // A super admin's: the template's current wording, the letter's data kept.
@@ -490,6 +505,7 @@ class LettersRelationManager extends RelationManager
                 ...self::recipientsState($record),
                 // The template's fields as filled in when it was issued.
                 ...self::inputsState($record),
+                ...LetterSendFields::editState($record),
             ])
             ->schema(fn (MatterLetter $record): array => [
                 Section::make()
@@ -517,6 +533,7 @@ class LettersRelationManager extends RelationManager
                             fn () => [$record->template?->letter_font_id, $record->template?->arabic_font_id],
                         ),
                     ]),
+                LetterSendFields::editSection($record),
             ])
             ->action(function (MatterLetter $record, array $data): void {
                 app(LetterIssuer::class)->revise(
@@ -529,6 +546,11 @@ class LettersRelationManager extends RelationManager
                     // The fields filled in again, over those the form has no place for (a meeting's link and time).
                     $record->template ? [...($record->inputs ?? []), ...self::inputsFrom($data)] : null,
                 );
+
+                // The ways it should be sent, asked of the administrator (again when they changed).
+                if (LetterSendFields::editable($record)) {
+                    LetterSendFields::save($record, $data);
+                }
 
                 Notification::make()->success()->title(__('Letter :reference updated', ['reference' => $record->reference]))->send();
             });
@@ -741,6 +763,7 @@ class LettersRelationManager extends RelationManager
                 'recipients' => [],
                 'body' => self::freeLetterBody(true),
                 ...self::meetingDefaults(),
+                LetterSendFields::CHANNELS => [LetterSendChannel::EMAIL->value],
             ])
             ->schema(fn (): array => [
                 Section::make()
@@ -779,6 +802,7 @@ class LettersRelationManager extends RelationManager
                         self::bodyEditor(fn () => LetterComposer::catalog(), fn (Get $get): bool => $get('locale') !== 'en'),
                     ]),
                 ...$this->meetingFields(null, ownDateAndTime: true),
+                LetterSendFields::askSection(),
             ])
             // …or issued and then sent: the Send by email screen for it.
             ->extraModalFooterActions(fn (Action $action): array => [self::issueAndSendButton($action)])
@@ -846,6 +870,13 @@ class LettersRelationManager extends RelationManager
         try {
             $letters = $this->issue($this->getOwnerRecord(), $data);
             $this->notifyIssued($letters);
+
+            // An assistant's, not sent by them now: their administrator's to send, by the ways ticked.
+            if (! $send && LetterSendRequests::mustAsk(auth()->user())) {
+                foreach ($letters as $letter) {
+                    LetterSendFields::save($letter, $data);
+                }
+            }
 
             // To be sent: on to its Send by email screen — the same one as
             // for any issued letter (how, CC, files, from OneDrive).
@@ -943,6 +974,8 @@ class LettersRelationManager extends RelationManager
                 ->visible(fn (Get $get) => filled($get('letter_template_id')))
                 ->schema(fn (Get $get) => $this->inputFields($matter, LetterTemplate::find($get('letter_template_id'))))
                 ->columns(2),
+
+            LetterSendFields::askSection(),
         ];
     }
 

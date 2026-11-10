@@ -27,6 +27,8 @@ enum NotificationType: string
     case MATTER_EMAIL_FORWARDED = 'matter.email_forwarded';
     case MINUTES_REPLY = 'minutes.reply_received';
     case ONEDRIVE_FOLDER_REVIEW = 'onedrive.folder_review';
+    case LETTER_TO_SEND = 'letter.to_send';
+    case LETTER_SENT_FOR_ME = 'letter.sent_for_me';
 
     // Leave
     case LEAVE_SUBMITTED = 'leave.submitted';
@@ -67,6 +69,8 @@ enum NotificationType: string
             self::MATTER_EMAIL_FORWARDED => __('An email I forwarded to the filing mailbox was not filed'),
             self::MINUTES_REPLY => __('A reply to minutes I sent for signature'),
             self::ONEDRIVE_FOLDER_REVIEW => __('A OneDrive folder to review'),
+            self::LETTER_TO_SEND => __('A letter an assistant I administer issued, for me to send'),
+            self::LETTER_SENT_FOR_ME => __('A letter I asked to be sent was sent'),
             self::LEAVE_SUBMITTED => __('A leave request to decide'),
             self::LEAVE_DECIDED => __('My leave request was decided'),
             self::EMPLOYEE_REQUEST_SUBMITTED => __('A loan, petty cash or certificate request to decide'),
@@ -89,7 +93,7 @@ enum NotificationType: string
         return match ($this) {
             self::REQUEST_CREATED, self::REQUEST_DECIDED, self::REQUEST_CHANGES => __('Requests'),
             self::MATTER_ASSIGNED, self::MATTER_REPLY_RECEIVED, self::MATTER_EMAIL_RECEIVED, self::MATTER_EMAIL_UNFILED, self::MATTER_EMAIL_SENT, self::MATTER_EMAIL_FORWARDED,
-            self::MINUTES_REPLY, self::ONEDRIVE_FOLDER_REVIEW => __('Matters'),
+            self::MINUTES_REPLY, self::ONEDRIVE_FOLDER_REVIEW, self::LETTER_TO_SEND, self::LETTER_SENT_FOR_ME => __('Matters'),
             self::LEAVE_SUBMITTED, self::LEAVE_DECIDED => __('Leave'),
             self::EMPLOYEE_REQUEST_SUBMITTED, self::EMPLOYEE_REQUEST_DECIDED, self::EMPLOYEE_REQUEST_TO_PAY => __('Employee requests'),
             self::DOCUMENTS_EXPIRING => __('Human Resources'),

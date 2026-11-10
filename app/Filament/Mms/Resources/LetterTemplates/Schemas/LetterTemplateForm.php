@@ -115,6 +115,13 @@ class LetterTemplateForm
                             ->placeholder(__('The default covering email'))
                             ->helperText(__('Chosen when a letter from this template is sent by email; can be changed when sending.'))
                             ->preload(),
+                        Textarea::make('sms_template')
+                            ->label(__('SMS text'))
+                            ->helperText(__('The SMS that goes with a letter of this template when an assistant asks for it to be sent by SMS: shown to whoever sends it, to copy. The letter\'s placeholders work here, e.g. {{company.name}}, {{reference}}, {{subject}}, {{matter.number}}, {{matter.year}}. Leave empty for a line naming the letter.'))
+                            ->rows(3)
+                            ->extraInputAttributes(['dir' => 'auto'])
+                            ->visible(fn (Get $get) => ($get('category') instanceof LetterTemplateCategories ? $get('category') : LetterTemplateCategories::tryFrom((string) $get('category'))) !== LetterTemplateCategories::MINUTES)
+                            ->columnSpanFull(),
                         Toggle::make('is_active')
                             ->label(__('Active'))
                             ->default(true)

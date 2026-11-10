@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Pages;
 use App\Filament\Mms\Widgets\AttentionNeededWidget;
 use App\Filament\Mms\Widgets\CalendarWidget;
 use App\Filament\Mms\Widgets\CollectionsAgingWidget;
+use App\Filament\Mms\Widgets\LettersToSendWidget;
 use App\Filament\Mms\Widgets\MattersPerYearWidget;
 use App\Filament\Mms\Widgets\MatterStatsWidget;
 use App\Filament\Mms\Widgets\UnmatchedEventReferencesWidget;
@@ -45,6 +46,7 @@ class AdminDashboard extends Dashboard
         // ones their permissions allow.
         return [
             UnmatchedEventReferencesWidget::class,
+            LettersToSendWidget::class,
             AttentionNeededWidget::class,
             MatterStatsWidget::class,
             UpcomingSessionsWidget::class,

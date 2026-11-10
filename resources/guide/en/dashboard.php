@@ -54,6 +54,18 @@ return [
             'steps' => [['text' => 'The employee\'s name shows on the days they are away. Use the arrows to move between months.', 'shot' => 'widget-6']],
         ],
         [
+            'id' => 'letters-to-send',
+            'title' => 'Letters to send',
+            'description' => 'The letters assistants issued for their administrator to send, still to send: each with its matter, letter, recipients, who asked and when, the ways still to do ("To be sent by") and those done ("Sent by"). An administrator sees those of the assistants they administer, an assistant their own, a super admin all. The table shows only while there is a letter to send.',
+            'roles' => ['Administrators of assistants, the assistants themselves, and the super admin'],
+            'permissions' => [],
+            'steps' => [
+                ['text' => 'Click "To send" on a row: it shows the recipients with their numbers and addresses and, when SMS is asked for, the SMS text and the mobile numbers to copy. "The letter (PDF)" opens the letter.'],
+                ['text' => 'Send the letter by each way asked for, tick it under "Sent by" and click "Save". The matter\'s number opens its Letters tab, where "Send by email" sends it from the system and ticks Email by itself.'],
+                ['text' => 'Once every way is ticked the letter leaves the list and the assistant is told it was sent.'],
+            ],
+        ],
+        [
             'id' => 'unmatched',
             'title' => 'Events with matters not in the system (for admins)',
             'description' => 'When a calendar event\'s title mentions a matter number that is not in the system, admins see a pop-up (once an hour) listing these events and the missing number. A widget on the dashboard lists them too, so you can add the matter or correct the title.',

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
@@ -64,6 +65,12 @@ class MatterLetter extends Model
     public function wasSent(): bool
     {
         return $this->sent_at !== null;
+    }
+
+    /** Asked of the administrator to send, if it was (LetterSendRequests). */
+    public function sendRequest(): HasOne
+    {
+        return $this->hasOne(LetterSendRequest::class);
     }
 
     public function recipients(): HasMany

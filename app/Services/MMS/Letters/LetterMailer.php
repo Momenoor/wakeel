@@ -2,6 +2,7 @@
 
 namespace App\Services\MMS\Letters;
 
+use App\Enums\LetterSendChannel;
 use App\Enums\LetterStatus;
 use App\Mail\LetterEmail;
 use App\Models\EmailTemplate;
@@ -205,6 +206,9 @@ class LetterMailer
             ]);
 
             MatterProgressRecorder::letterSent($letter, $names ?: $cc, auth()->id());
+
+            // Asked of the administrator to send by email: done.
+            app(LetterSendRequests::class)->done($letter, LetterSendChannel::EMAIL, auth()->user());
         }
 
         return $result;

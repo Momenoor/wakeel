@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * heading}] — type is text | textarea | date | time | url | number |
  * select | items (a numbered list ticked from the item library's group).
  */
-#[Fillable('name', 'slug', 'subject', 'body', 'placeholders', 'locale', 'is_active', 'is_default', 'category', 'letterhead_id', 'inputs', 'minutes_opening', 'minutes_closing', 'email_template_id', 'minutes_attendees', 'recipients_layout', 'recipients_format', 'letter_font_id', 'arabic_font_id')]
+#[Fillable('name', 'slug', 'subject', 'body', 'placeholders', 'locale', 'is_active', 'is_default', 'category', 'letterhead_id', 'inputs', 'minutes_opening', 'minutes_closing', 'email_template_id', 'sms_template', 'minutes_attendees', 'recipients_layout', 'recipients_format', 'letter_font_id', 'arabic_font_id')]
 class LetterTemplate extends Model
 {
     public const INPUT_TYPES = ['text', 'textarea', 'date', 'time', 'url', 'number', 'select', 'items'];
