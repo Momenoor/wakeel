@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Resources\Matters\Tables;
 use App\Enums\FeeStatus;
 use App\Enums\MatterCollectionStatus;
 use App\Filament\Mms\Concerns\HasMultiWordSearch;
+use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Models\Court;
 use App\Models\Fee;
 use App\Models\Matter;
@@ -509,6 +510,7 @@ class MattersTable
             ->recordActions([
                 ViewAction::make()->iconButton()->visible(fn ($record) => auth()->user()->can('View:Matter')),
                 EditAction::make()->iconButton()->visible(fn ($record) => auth()->user()->can('Update:Matter')),
+                MatterResource::duplicateAction()->iconButton(),
                 DeleteAction::make()->iconButton()->visible(fn ($record) => auth()->user()->can('Delete:Matter')),
                 RestoreAction::make()->iconButton()
                     ->visible(fn ($record) => $record->trashed() && auth()->user()->can('Restore:Matter')),

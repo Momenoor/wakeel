@@ -113,6 +113,7 @@ class ViewMatter extends ViewRecord
                 ->icon('heroicon-o-arrow-down-tray')
                 ->color('gray')
                 ->action(fn (Matter $record) => MatterContactsExport::download($record)),
+            MatterResource::duplicateAction(),
             Action::make('initial_report')
                 ->label(__('Initial Report'))
                 ->color(fn ($record) => $record->initial_report_at === null ? 'warning' : Color::Stone)

@@ -62,6 +62,7 @@ return [
                 'To add several matters one after another, click "Create & create another" instead of "Create".',
                 'If a party or expert is not in the list, add them from the + icon next to the field without leaving the form.',
                 'When the matter is added, the assistants assigned to it get a notification.',
+                'A matter much like one already there — the same case at another level, the same parties again: click "Duplicate" on its row in the list or at the top of its page. The new matter\'s form opens filled from it: the year, court, level, type with its phase and extra fields, difficulty, appointment decision, office work, the experts with their shares, the parties with their representatives and the marketers. The number, the dates, the next session and the fees are left for you. Nothing is added until you click "Create", and the matter copied is not changed.',
             ],
         ],
 

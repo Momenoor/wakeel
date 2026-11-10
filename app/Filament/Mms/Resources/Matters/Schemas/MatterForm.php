@@ -11,6 +11,7 @@ use App\Filament\Support\FeeVatFields;
 use App\Models\Fee;
 use App\Models\MarketingCommission;
 use App\Models\Matter;
+use App\Models\MatterParty;
 use App\Models\Party;
 use App\Models\Type;
 use App\Services\MMS\IncentiveReversals;
@@ -31,6 +32,8 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\Alignment;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
 
 class MatterForm
 {
@@ -252,9 +255,9 @@ class MatterForm
                                                     ->relationship('party', 'name', function ($query, Get $get) {
                                                         $type = $get('type');
                                                         if ($type) {
-                                                            $query->whereJsonContains('role', [['role' => 'expert', 'type' => $type]]);
+                                                            $query->withRole('expert', $type);
                                                         } else {
-                                                            $query->whereJsonContains('role', [['role' => 'expert']]);
+                                                            $query->withRole('expert');
                                                         }
                                                     })
                                                     ->disableOptionsWhenSelectedInSiblingRepeaterItems()
@@ -311,7 +314,7 @@ class MatterForm
                                                 self::addsParty(['role' => ['party']], Select::make('party_id')
                                                     ->label(__('Party Name'))
                                                     ->relationship('party', 'name', function ($query) {
-                                                        $query->whereJsonContains('role', [['role' => 'party']]);
+                                                        $query->withRole('party');
                                                     })
                                                     ->searchable()
                                                     // Not preloaded: found by typing. 50 names fetched for every row of
@@ -339,7 +342,7 @@ class MatterForm
                                                         self::addsParty(['role' => ['representative']], Select::make('party_id')
                                                             ->label(__('Representative'))
                                                             ->relationship('party', 'name', function ($query) {
-                                                                $query->whereJsonContains('role', [['role' => 'representative']]);
+                                                                $query->withRole('representative');
                                                             })
                                                             ->afterStateUpdated(function (Get $get, Set $set) {
                                                                 $party = Party::remembered($get('party_id'));
@@ -515,6 +518,60 @@ class MatterForm
                             ->columnSpan(2),
                     ])->columnSpanFull(),
             ]);
+    }
+
+    /** The lists of copyOf(): set on the form after it is filled — a fill reads them from the matter's (none yet). */
+    public const COPIED_LISTS = ['expertsOnly', 'mainPartiesOnly', 'marketers'];
+
+    /**
+     * A new matter's form as a copy of another (Duplicate): its year, court, level, type with its phase and custom
+     * fields, difficulty, commissioning, office work, and its experts, parties with their representatives and
+     * marketers — as new rows, each with every field of its row. Its own are not copied: the number, the dates,
+     * the next session and the fees.
+     *
+     * @return array<string, mixed>
+     */
+    public static function copyOf(Matter $source): array
+    {
+        $source->loadMissing(['expertsOnly', 'mainPartiesOnly.representatives.party', 'marketers']);
+
+        $rows = fn (iterable $rows, Closure $row): array => collect($rows)
+            ->mapWithKeys(fn (MatterParty $record): array => [(string) Str::uuid() => $row($record)])
+            ->all();
+
+        return [
+            ...Arr::only($source->attributesToArray(), ['year', 'court_id', 'level', 'type_id', 'phase', 'custom_fields', 'difficulty', 'is_committee', 'commissioning', 'is_office_work']),
+            'expertsOnly' => $rows($source->expertsOnly, fn (MatterParty $expert): array => [
+                'type' => $expert->type,
+                'party_id' => $expert->party_id,
+                'commission_percentage' => $expert->commission_percentage,
+                'matter_id' => null,
+                'role' => 'expert',
+                'id' => null,
+            ]),
+            'mainPartiesOnly' => $rows($source->mainPartiesOnly, fn (MatterParty $party): array => [
+                'type' => $party->type,
+                'party_id' => $party->party_id,
+                'matter_id' => null,
+                'role' => 'party',
+                'id' => null,
+                'representatives' => $rows($party->representatives, fn (MatterParty $representative): array => [
+                    'party_id' => $representative->party_id,
+                    'party_email' => $representative->party?->latestEmail(),
+                    'party_phone' => $representative->party?->latestPhone(),
+                    'role' => 'representative',
+                    'type' => $party->type,
+                    'parent_id' => null,
+                    'matter_id' => null,
+                ]),
+            ]),
+            'marketers' => $rows($source->marketers, fn (MatterParty $marketer): array => [
+                'party_id' => $marketer->party_id,
+                'marketing_rate' => $marketer->marketing_rate,
+                'marketing_fixed' => $marketer->marketing_fixed,
+                'role' => 'marketer',
+            ]),
+        ];
     }
 
     /**

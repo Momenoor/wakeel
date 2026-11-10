@@ -5466,5 +5466,7 @@
     "Issued by an assistant for their administrator to send. Open To send, send the letter by each way asked for, and tick it.": "أصدرها مساعد ليرسلها المسؤول الإداري عنه. افتح «للإرسال»، وأرسل الخطاب بكل طريقة مطلوبة، ثم حدّدها.",
     "The SMS that goes with a letter of this template when an assistant asks for it to be sent by SMS: shown to whoever sends it, to copy. The letter's placeholders work here, e.g. {{company.name}}, {{reference}}, {{subject}}, {{matter.number}}, {{matter.year}}. Leave empty for a line naming the letter.": "الرسالة النصية التي ترافق خطاباً من هذا القالب عندما يطلب المساعد إرساله برسالة نصية: تظهر لمن يرسله لينسخها. تعمل هنا متغيرات الخطاب، مثل {{company.name}} و{{reference}} و{{subject}} و{{matter.number}} و{{matter.year}}. اتركه فارغاً لسطر يذكر الخطاب.",
     "Letter to send": "خطاب مطلوب إرساله",
-    "Marketing commission": "عمولة تسويق"
+    "Marketing commission": "عمولة تسويق",
+    "Open a new matter filled from this one": "فتح قضية جديدة معبأة من هذه القضية",
+    "Copied from matter :matter: its number, dates, next session and fees are for you to fill in.": "منسوخة من القضية :matter: الرقم والتواريخ والجلسة القادمة والأتعاب متروكة لك لتعبئتها."
 }

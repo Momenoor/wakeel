@@ -13,6 +13,7 @@ use App\Models\Matter;
 use App\Support\ContactSearch;
 use App\Support\MatterSearch;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Table;
@@ -114,6 +115,21 @@ class MatterResource extends Resource
             __('Parties') => $record->mainPartiesOnly->pluck('party.name')->filter()->take(3)->implode('، '),
             ...MatterSearch::details($record),
         ]);
+    }
+
+    /**
+     * Duplicate: the create page opened filled from this matter (CreateMatter, MatterForm::copyOf()) — nothing
+     * is made until that form is saved. For whoever may add a matter.
+     */
+    public static function duplicateAction(): Action
+    {
+        return Action::make('duplicate')
+            ->label(__('Duplicate'))
+            ->tooltip(__('Open a new matter filled from this one'))
+            ->icon('heroicon-o-document-duplicate')
+            ->color('gray')
+            ->visible(fn (): bool => static::canCreate())
+            ->url(fn (Matter $record): string => static::getUrl('create', ['copy' => $record->getKey()]));
     }
 
     public static function form(Schema $schema): Schema
