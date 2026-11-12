@@ -112,20 +112,24 @@ class LeaveBalanceRelationManager extends RelationManager
                 TextColumn::make('note')
                     ->label(__('Note'))
                     ->placeholder('—')
-                    ->state(fn (LeaveBalanceEntry $record): ?string => $record->note
-                        ?? ($record->leaveRequestPeriod
-                            ? __(':from to :to', [
-                                'from' => $record->leaveRequestPeriod->start_date?->format(Dates::dateFormat()),
-                                'to' => $record->leaveRequestPeriod->end_date?->format(Dates::dateFormat()),
-                            ])
-                            : null))
+                    ->state(function (LeaveBalanceEntry $record): ?string {
+                        $span = $record->leaveRequestPeriod ?? $record->partyLeave;
+
+                        return $record->note
+                            ?? ($span
+                                ? __(':from to :to', [
+                                    'from' => $span->start_date?->format(Dates::dateFormat()),
+                                    'to' => $span->end_date?->format(Dates::dateFormat()),
+                                ])
+                                : null);
+                    })
                     ->wrap(),
                 TextColumn::make('creator.name')
                     ->label(__('By'))
                     ->placeholder('—')
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
-            ->modifyQueryUsing(fn ($query) => $query->with(['leaveRequestPeriod', 'creator']))
+            ->modifyQueryUsing(fn ($query) => $query->with(['leaveRequestPeriod', 'partyLeave', 'creator']))
             // Newest first, the opening balance last: the running balance read upwards.
             ->defaultSort(fn (Builder $query): Builder => $query->orderByRaw('kind = ?', [LeaveBalanceEntryKind::OPENING->value])->orderByDesc('entry_date')->orderByDesc('id'))
             ->headerActions([

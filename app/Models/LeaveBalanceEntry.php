@@ -23,6 +23,7 @@ class LeaveBalanceEntry extends Model
         'entry_date',
         'year',
         'leave_request_period_id',
+        'party_leave_id',
         'note',
         'created_by',
     ];
@@ -54,6 +55,16 @@ class LeaveBalanceEntry extends Model
     public function leaveRequestPeriod(): BelongsTo
     {
         return $this->belongsTo(LeaveRequestPeriod::class);
+    }
+
+    /**
+     * The vacation added by hand this entry took its days for.
+     *
+     * @return BelongsTo<PartyLeave, $this>
+     */
+    public function partyLeave(): BelongsTo
+    {
+        return $this->belongsTo(PartyLeave::class);
     }
 
     /**

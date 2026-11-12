@@ -8,6 +8,7 @@ use App\Models\EmployeeProfile;
 use App\Models\LeaveBalanceEntry;
 use App\Models\LeaveRequest;
 use App\Models\LeaveRequestPeriod;
+use App\Models\PartyLeave;
 use App\Models\Setting;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -157,6 +158,31 @@ class LeaveBalanceService
                 'kind' => LeaveBalanceEntryKind::TAKEN,
                 'days' => -1 * (float) $period->getAttribute('day_count'),
                 'entry_date' => $period->getAttribute('start_date'),
+            ],
+        );
+    }
+
+    /**
+     * A vacation added by hand (not from a request) takes its days off the balance when its type does
+     * (LeaveType::takesFromBalance()): one entry per vacation, written, moved with its dates and employee, or
+     * removed when the type no longer takes days off.
+     */
+    public function syncManualLeave(PartyLeave $leave): void
+    {
+        if (! LeaveType::fromBalance($leave->getAttribute('leave_type'))) {
+            LeaveBalanceEntry::where('party_leave_id', $leave->getKey())->delete();
+
+            return;
+        }
+
+        LeaveBalanceEntry::updateOrCreate(
+            ['party_leave_id' => $leave->getKey()],
+            [
+                'party_id' => $leave->getAttribute('party_id'),
+                'kind' => LeaveBalanceEntryKind::TAKEN,
+                'days' => -1 * $leave->days(),
+                'entry_date' => $leave->getAttribute('start_date'),
+                'created_by' => auth()->id(),
             ],
         );
     }

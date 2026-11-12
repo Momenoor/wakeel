@@ -5474,5 +5474,9 @@
     "Send letter :reference by WhatsApp": "إرسال الخطاب :reference بالواتساب",
     "Each number ticked gets the approved WhatsApp message with the letter's PDF. The letter is then marked as sent, and WhatsApp is ticked on what was asked of the administrator.": "كل رقم محدد تصله رسالة الواتساب المعتمدة مع ملف PDF للخطاب. ثم يُعلَّم الخطاب كمُرسل، ويُحدَّد «واتساب» في ما طُلب من المسؤول الإداري.",
     "Message": "الرسالة",
-    "{0} Nothing was sent on WhatsApp|{1} Sent to one number on WhatsApp|[2,*] Sent to :count numbers on WhatsApp": "{0} لم يُرسل شيء بالواتساب|{1} أُرسل إلى رقم واحد بالواتساب|[2,*] أُرسل إلى :count أرقام بالواتساب"
+    "{0} Nothing was sent on WhatsApp|{1} Sent to one number on WhatsApp|[2,*] Sent to :count numbers on WhatsApp": "{0} لم يُرسل شيء بالواتساب|{1} أُرسل إلى رقم واحد بالواتساب|[2,*] أُرسل إلى :count أرقام بالواتساب",
+    "Balance effect": "أثره على الرصيد",
+    "This type does not take days off the annual leave balance.": "هذا النوع لا يخصم أياماً من رصيد الإجازة السنوية.",
+    "Takes :days days off the annual leave balance.": "يخصم :days يوماً من رصيد الإجازة السنوية.",
+    "Takes its days off the annual leave balance.": "يخصم أيامه من رصيد الإجازة السنوية."
 }
