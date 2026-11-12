@@ -5,6 +5,7 @@ namespace App\Services\MMS;
 use App\Enums\LeaveType;
 use App\Models\LeaveEntitlement;
 use App\Models\Party;
+use App\Models\PartyLeave;
 use App\Models\Setting;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -158,6 +159,65 @@ class LeaveEntitlementService
                 'sick_unpaid_taken' => 0,
             ],
         );
+    }
+
+    /** Days given back to a counter, never below nothing taken. */
+    public function release(LeaveEntitlement $entitlement, string $column, float $days): void
+    {
+        $entitlement->decrement($column, min($days, (float) $entitlement->getAttribute($column)));
+    }
+
+    /**
+     * A vacation added by hand counted against the entitlement of the service year it starts in, as an approved
+     * request's periods are (annual taken days, or the sick band of its type): what it counted before is given
+     * back first, so changing its type, dates or employee moves the days instead of adding them. What was counted
+     * is kept on the vacation, so deleting it (releaseManualLeave()) gives back exactly that.
+     */
+    public function syncManualLeave(PartyLeave $leave): void
+    {
+        $this->releaseManualLeave($leave);
+
+        $type = $leave->getAttribute('leave_type');
+        $column = $type instanceof LeaveType ? $type->entitlementColumn() : null;
+
+        // Read fresh, not through the relation: an edit may have changed the employee.
+        $party = Party::find($leave->getAttribute('party_id'));
+
+        if ($column === null || $party === null) {
+            return;
+        }
+
+        $entitlement = $this->forDate($party, $leave->getAttribute('start_date'));
+        $days = $leave->days();
+        $entitlement->increment($column, $days);
+
+        $this->remember($leave, ['entitlement_id' => $entitlement->getKey(), 'entitlement_column' => $column, 'entitlement_days' => $days]);
+    }
+
+    /** Give back what a vacation counted, if anything. */
+    public function releaseManualLeave(PartyLeave $leave): void
+    {
+        $entitlement = $leave->getAttribute('entitlement_id') === null ? null : LeaveEntitlement::find($leave->getAttribute('entitlement_id'));
+
+        if ($entitlement !== null && $leave->getAttribute('entitlement_column') !== null) {
+            $this->release($entitlement, (string) $leave->getAttribute('entitlement_column'), (float) $leave->getAttribute('entitlement_days'));
+        }
+
+        if ($leave->exists && $leave->getAttribute('entitlement_id') !== null) {
+            $this->remember($leave, ['entitlement_id' => null, 'entitlement_column' => null, 'entitlement_days' => null]);
+        }
+    }
+
+    /**
+     * Written straight to the row and the model's original, not saved: this runs inside the vacation's own save,
+     * which must not fire its events again.
+     *
+     * @param  array<string, mixed>  $values
+     */
+    private function remember(PartyLeave $leave, array $values): void
+    {
+        $leave->newQuery()->whereKey($leave->getKey())->toBase()->update($values);
+        $leave->forceFill($values)->syncOriginalAttributes(array_keys($values));
     }
 
     /**

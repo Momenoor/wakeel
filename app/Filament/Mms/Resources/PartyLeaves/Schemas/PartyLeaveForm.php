@@ -23,7 +23,10 @@ class PartyLeaveForm
     public static function balanceEffect(mixed $type, mixed $start, mixed $end): string
     {
         if (! LeaveType::fromBalance($type)) {
-            return __('This type does not take days off the annual leave balance.');
+            // The sick bands count against the service year's allowance (LeaveEntitlementService), not the balance.
+            return ($type instanceof LeaveType ? $type : LeaveType::tryFrom((string) $type))?->entitlementColumn() !== null
+                ? __('Counts against the sick leave allowance of the service year; it does not take days off the annual leave balance.')
+                : __('This type does not take days off the annual leave balance.');
         }
 
         $days = PartyLeave::daysBetween($start, $end);

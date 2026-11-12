@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\LeaveType;
 use App\Services\MMS\LeaveBalanceService;
+use App\Services\MMS\LeaveEntitlementService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -59,6 +60,14 @@ class PartyLeave extends Model
         static::saved(function (PartyLeave $leave): void {
             if ($leave->getAttribute('leave_request_period_id') === null) {
                 app(LeaveBalanceService::class)->syncManualLeave($leave);
+                app(LeaveEntitlementService::class)->syncManualLeave($leave);
+            }
+        });
+
+        // Deleted: what it counted against the entitlement is given back (its balance entry goes with it).
+        static::deleted(function (PartyLeave $leave): void {
+            if ($leave->getAttribute('leave_request_period_id') === null) {
+                app(LeaveEntitlementService::class)->releaseManualLeave($leave);
             }
         });
     }

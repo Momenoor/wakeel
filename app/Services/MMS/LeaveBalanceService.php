@@ -147,16 +147,14 @@ class LeaveBalanceService
      */
     public function recordTaken(LeaveRequest $request, LeaveRequestPeriod $period): void
     {
-        if (! LeaveType::fromBalance($period->getAttribute('leave_type'))) {
-            return;
-        }
-
+        // Every period gets its entry so the employee's Leave Balance lists all their leave; one whose type does not
+        // come off the balance (sick, unpaid, casual when Settings → Payroll leaves it out) takes no days.
         LeaveBalanceEntry::updateOrCreate(
             ['leave_request_period_id' => $period->getKey()],
             [
                 'party_id' => $request->getAttribute('party_id'),
                 'kind' => LeaveBalanceEntryKind::TAKEN,
-                'days' => -1 * (float) $period->getAttribute('day_count'),
+                'days' => LeaveType::fromBalance($period->getAttribute('leave_type')) ? -1 * (float) $period->getAttribute('day_count') : 0,
                 'entry_date' => $period->getAttribute('start_date'),
             ],
         );
@@ -164,12 +162,13 @@ class LeaveBalanceService
 
     /**
      * A vacation added by hand (not from a request) takes its days off the balance when its type does
-     * (LeaveType::takesFromBalance()): one entry per vacation, written, moved with its dates and employee, or
-     * removed when the type no longer takes days off.
+     * (LeaveType::takesFromBalance()): one entry per vacation, written, moved with its dates and employee. One whose
+     * type does not take days off still has its entry, with no days, so the Leave Balance lists it; a vacation with
+     * no type (recorded before the type was asked for) has none.
      */
     public function syncManualLeave(PartyLeave $leave): void
     {
-        if (! LeaveType::fromBalance($leave->getAttribute('leave_type'))) {
+        if (! $leave->getAttribute('leave_type') instanceof LeaveType) {
             LeaveBalanceEntry::where('party_leave_id', $leave->getKey())->delete();
 
             return;
@@ -180,7 +179,7 @@ class LeaveBalanceService
             [
                 'party_id' => $leave->getAttribute('party_id'),
                 'kind' => LeaveBalanceEntryKind::TAKEN,
-                'days' => -1 * $leave->days(),
+                'days' => LeaveType::fromBalance($leave->getAttribute('leave_type')) ? -1 * $leave->days() : 0,
                 'entry_date' => $leave->getAttribute('start_date'),
                 'created_by' => auth()->id(),
             ],

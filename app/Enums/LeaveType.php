@@ -85,6 +85,22 @@ enum LeaveType: string implements HasColor, HasLabel
         return $this->payFactor() > 0.0;
     }
 
+    /**
+     * The counter on the employee's service-year entitlement (LeaveEntitlement) this type's days are counted in, or
+     * null for the types that count in none: casual leave is granted at the office's discretion, unpaid leave and
+     * unauthorised absence are already their own penalty.
+     */
+    public function entitlementColumn(): ?string
+    {
+        return match ($this) {
+            self::ANNUAL => 'annual_taken_days',
+            self::SICK_FULL => 'sick_full_taken',
+            self::SICK_HALF => 'sick_half_taken',
+            self::SICK_UNPAID => 'sick_unpaid_taken',
+            default => null,
+        };
+    }
+
     /** The setting naming the types besides annual leave taken off the balance. */
     public const FROM_BALANCE_SETTING = 'payroll_leave_types_from_balance';
 

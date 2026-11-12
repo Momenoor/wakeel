@@ -3169,7 +3169,7 @@
     "Leave balance entry": "حركة رصيد الإجازات",
     "Leave balance entries": "حركات رصيد الإجازات",
     "Annual leave balance: :days days": "رصيد الإجازة السنوية: :days يوم",
-    "30 days are added every 1 January; approved annual leave is taken off. Unused days carry over.": "تُضاف 30 يوماً في 1 يناير من كل عام، وتُخصم الإجازات السنوية المعتمدة، ويُرحَّل الرصيد غير المستخدم.",
+    "30 days are added every 1 January; approved annual leave is taken off. Unused days carry over. Leave of any other type is listed too, with no days.": "تُضاف 30 يوماً في 1 يناير من كل عام، وتُخصم الإجازات السنوية المعتمدة، ويُرحَّل الرصيد غير المستخدم. وتُدرج الإجازة من أي نوع آخر أيضاً بلا أيام.",
     ":from to :to": "من :from إلى :to",
     "Adjust balance": "تعديل الرصيد",
     "Positive adds days, negative takes them off.": "القيمة الموجبة تضيف أياماً، والسالبة تخصمها.",
@@ -5478,5 +5478,6 @@
     "Balance effect": "أثره على الرصيد",
     "This type does not take days off the annual leave balance.": "هذا النوع لا يخصم أياماً من رصيد الإجازة السنوية.",
     "Takes :days days off the annual leave balance.": "يخصم :days يوماً من رصيد الإجازة السنوية.",
-    "Takes its days off the annual leave balance.": "يخصم أيامه من رصيد الإجازة السنوية."
+    "Takes its days off the annual leave balance.": "يخصم أيامه من رصيد الإجازة السنوية.",
+    "Counts against the sick leave allowance of the service year; it does not take days off the annual leave balance.": "يُحتسب من مخصص الإجازة المرضية لسنة الخدمة، ولا يخصم أياماً من رصيد الإجازة السنوية."
 }

@@ -515,18 +515,9 @@ class LeaveRequestService
      */
     private function recordAgainstEntitlement(LeaveRequest $request, LeaveRequestPeriod $period, bool $release = false): void
     {
+        // Casual, unpaid and unauthorised absence draw on no balance (LeaveType::entitlementColumn()).
         $type = $period->getAttribute('leave_type');
-
-        $column = match ($type) {
-            LeaveType::ANNUAL => 'annual_taken_days',
-            LeaveType::SICK_FULL => 'sick_full_taken',
-            LeaveType::SICK_HALF => 'sick_half_taken',
-            LeaveType::SICK_UNPAID => 'sick_unpaid_taken',
-            // Casual, unpaid and unauthorised absence draw on no balance: the
-            // first is granted at the office's discretion, the other two are
-            // already their own penalty.
-            default => null,
-        };
+        $column = $type instanceof LeaveType ? $type->entitlementColumn() : null;
 
         if ($column === null) {
             return;
@@ -536,9 +527,10 @@ class LeaveRequestService
             $request->party,
             $period->getAttribute('start_date'),
         );
+        $days = (float) $period->getAttribute('day_count');
 
         $release
-            ? $entitlement->decrement($column, min((float) $period->getAttribute('day_count'), (float) $entitlement->getAttribute($column)))
-            : $entitlement->increment($column, (float) $period->getAttribute('day_count'));
+            ? $this->entitlements->release($entitlement, $column, $days)
+            : $entitlement->increment($column, $days);
     }
 }

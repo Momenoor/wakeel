@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\EmployeeProfiles\RelationManagers;
 
 use App\Enums\LeaveBalanceEntryKind;
+use App\Enums\LeaveType;
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Models\EmployeeProfile;
 use App\Models\LeaveBalanceEntry;
@@ -88,7 +89,7 @@ class LeaveBalanceRelationManager extends RelationManager
             ->heading(fn (): string => __('Annual leave balance: :days days', [
                 'days' => rtrim(rtrim(number_format(app(LeaveBalanceService::class)->balance((int) $this->profile()->party_id), 1), '0'), '.'),
             ]))
-            ->description(__('30 days are added every 1 January; approved annual leave is taken off. Unused days carry over.'))
+            ->description(__('30 days are added every 1 January; approved annual leave is taken off. Unused days carry over. Leave of any other type is listed too, with no days.'))
             ->columns([
                 TextColumn::make('entry_date')
                     ->label(__('Date'))
@@ -97,10 +98,20 @@ class LeaveBalanceRelationManager extends RelationManager
                 TextColumn::make('kind')
                     ->label(__('Type'))
                     ->badge(),
+                // The leave's own type, whether or not it takes days off the balance (those show no days).
+                TextColumn::make('leave_type')
+                    ->label(__('Leave Type'))
+                    ->badge()
+                    ->state(fn (LeaveBalanceEntry $record): ?LeaveType => ($record->leaveRequestPeriod ?? $record->partyLeave)?->leave_type)
+                    ->placeholder('—'),
                 TextColumn::make('days')
                     ->label(__('Days'))
                     ->numeric(decimalPlaces: 1)
-                    ->color(fn (LeaveBalanceEntry $record): string => (float) $record->days < 0 ? 'danger' : 'success')
+                    ->color(fn (LeaveBalanceEntry $record): string => match (true) {
+                        (float) $record->days < 0 => 'danger',
+                        (float) $record->days === 0.0 => 'gray',
+                        default => 'success',
+                    })
                     ->weight('bold'),
                 // The balance once this entry was made: in the order they count — the opening balance first, then
                 // by date.

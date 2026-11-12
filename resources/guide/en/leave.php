@@ -55,7 +55,7 @@ return [
             'permissions' => ['ViewAny:PartyLeave', 'Create:PartyLeave', 'Update:PartyLeave', 'Delete:PartyLeave'],
             'steps' => [
                 ['text' => 'Go to "Human Resources" → "Leave Ledger".', 'shot' => 'pleaves-list'],
-                ['text' => 'Click "New Leave / Vacation", enter the employee, the period, the leave type and the reason, then click "Create". The type sets the pay (an unpaid type withholds the days\' pay) and, for annual leave and the types Settings → Payroll takes off the balance, writes an entry on the employee\'s Leave Balance taking those days off it; the form says so under the type. Changing the type or the dates moves that entry, and deleting the vacation removes it.', 'shot' => 'pleaves-create'],
+                ['text' => 'Click "New Leave / Vacation", enter the employee, the period, the leave type and the reason, then click "Create". The type sets the pay (an unpaid type withholds the days\' pay) and, for annual leave and the types Settings → Payroll takes off the balance, writes an entry on the employee\'s Leave Balance taking those days off it; the form says so under the type. Every vacation, whatever its type, is also listed on the employee\'s Leave Balance (its type shown, no days for a type that does not come off it). Annual and sick types are also counted against the employee\'s entitlement for the service year the vacation starts in (annual days taken, or the full, half or unpaid sick band), as an approved request\'s are. Changing the type, the dates or the employee moves that entry and those counts, and deleting the vacation removes them.', 'shot' => 'pleaves-create'],
             ],
         ],
     ],

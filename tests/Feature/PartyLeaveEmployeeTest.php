@@ -8,6 +8,7 @@ use App\Filament\Mms\Resources\PartyLeaves\Pages\CreatePartyLeave;
 use App\Filament\Mms\Resources\PartyLeaves\Pages\EditPartyLeave;
 use App\Filament\Mms\Resources\PartyLeaves\Schemas\PartyLeaveForm;
 use App\Models\LeaveBalanceEntry;
+use App\Models\LeaveEntitlement;
 use App\Models\Party;
 use App\Models\PartyLeave;
 use App\Models\Setting;
@@ -84,6 +85,8 @@ class PartyLeaveEmployeeTest extends TestCase
             ->assertHasNoFormErrors();
         $this->assertSame(0.0, $balance->balance($employee->id));
         $this->assertEquals(0.0, (float) $leave->refresh()->pay_factor);
+        // Still listed on the Leave Balance, with no days.
+        $this->assertEquals(0.0, (float) LeaveBalanceEntry::where('party_leave_id', $leave->id)->sole()->days);
 
         // Back to annual, then deleted: nothing is left behind.
         $leave->update(['leave_type' => LeaveType::ANNUAL]);
@@ -98,11 +101,41 @@ class PartyLeaveEmployeeTest extends TestCase
         Setting::set(LeaveType::FROM_BALANCE_SETTING, []);
 
         PartyLeave::create(['party_id' => $employee->id, 'start_date' => '2026-10-05', 'end_date' => '2026-10-06', 'leave_type' => LeaveType::CASUAL]);
-        $this->assertSame(0, LeaveBalanceEntry::count());
+        $this->assertEquals(0.0, (float) LeaveBalanceEntry::sole()->days);
+        $this->assertSame(0.0, app(LeaveBalanceService::class)->balance($employee->id));
 
         Setting::set(LeaveType::FROM_BALANCE_SETTING, ['casual']);
         PartyLeave::create(['party_id' => $employee->id, 'start_date' => '2026-10-12', 'end_date' => '2026-10-13', 'leave_type' => LeaveType::CASUAL]);
         $this->assertSame(-2.0, app(LeaveBalanceService::class)->balance($employee->id));
+    }
+
+    public function test_a_manual_vacation_counts_against_the_service_year_entitlement_and_gives_it_back(): void
+    {
+        $employee = Party::factory()->employee()->create();
+        $count = fn (string $column): float => (float) (LeaveEntitlement::where('party_id', $employee->id)->first()?->{$column} ?? 0);
+
+        $leave = PartyLeave::create(['party_id' => $employee->id, 'start_date' => '2026-10-05', 'end_date' => '2026-10-07', 'leave_type' => LeaveType::SICK_FULL]);
+        $this->assertSame(3.0, $count('sick_full_taken'));
+        $this->assertSame(0.0, $count('annual_taken_days'));
+        // Sick leave is not on the annual balance.
+        $this->assertSame(0.0, app(LeaveBalanceService::class)->balance($employee->id));
+
+        // The days move to the band of the new type, and grow with the dates.
+        $leave->update(['leave_type' => LeaveType::SICK_HALF, 'end_date' => '2026-10-08']);
+        $this->assertSame(0.0, $count('sick_full_taken'));
+        $this->assertSame(4.0, $count('sick_half_taken'));
+
+        $leave->update(['leave_type' => LeaveType::ANNUAL]);
+        $this->assertSame(0.0, $count('sick_half_taken'));
+        $this->assertSame(4.0, $count('annual_taken_days'));
+
+        // A type counting in none gives everything back; deleting gives back too.
+        $leave->update(['leave_type' => LeaveType::UNPAID]);
+        $this->assertSame(0.0, $count('annual_taken_days'));
+        $leave->update(['leave_type' => LeaveType::SICK_UNPAID]);
+        $this->assertSame(4.0, $count('sick_unpaid_taken'));
+        $leave->delete();
+        $this->assertSame(0.0, $count('sick_unpaid_taken'));
     }
 
     public function test_the_form_says_what_the_type_does_to_the_balance(): void
