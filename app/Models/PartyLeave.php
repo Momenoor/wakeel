@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\LeaveType;
+use App\Models\Concerns\AnnouncesChanges;
 use App\Services\MMS\LeaveBalanceService;
 use App\Services\MMS\LeaveEntitlementService;
 use Carbon\CarbonImmutable;
@@ -23,6 +24,7 @@ use Spatie\Activitylog\Support\LogOptions;
  */
 class PartyLeave extends Model
 {
+    use AnnouncesChanges;
     use LogsActivity;
 
     protected $fillable = [

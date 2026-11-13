@@ -3,6 +3,7 @@
 namespace App\Filament\Pms\Widgets;
 
 use App\Enums\PMS\InstallmentPaymentStatus;
+use App\Filament\Concerns\RefreshesLive;
 use App\Filament\Pms\Resources\Leases\LeaseResource;
 use App\Filament\Pms\Support\PortfolioScope;
 use App\Models\Installment;
@@ -25,6 +26,7 @@ class UpcomingInstallmentsWidget extends TableWidget
 
     use HasWidgetShield;
     use InteractsWithPageFilters;
+    use RefreshesLive;
 
     public const DAYS_AHEAD = 7;
 

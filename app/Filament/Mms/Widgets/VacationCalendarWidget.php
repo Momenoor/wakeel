@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Widgets;
 
+use App\Filament\Concerns\RefreshesLive;
 use App\Filament\Mms\Resources\PartyLeaves\Schemas\PartyLeaveForm;
 use App\Models\PartyLeave;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
@@ -13,6 +14,13 @@ use Saade\FilamentFullCalendar\Widgets\FullCalendarWidget;
 class VacationCalendarWidget extends FullCalendarWidget
 {
     use HasWidgetShield;
+    use RefreshesLive;
+
+    /** Told of a change (RefreshesLive): the events fetched again, the calendar left where it is. */
+    protected function liveRefreshMethod(): string
+    {
+        return 'refreshRecords';
+    }
 
     public Model|string|null $model = PartyLeave::class;
 

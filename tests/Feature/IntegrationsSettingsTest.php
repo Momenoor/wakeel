@@ -121,4 +121,34 @@ class IntegrationsSettingsTest extends TestCase
         Setting::set('leave_request_recipients', ['manager@office.test', 'not-an-email']);
         $this->assertSame(['manager@office.test'], LeaveRequestObserver::recipients());
     }
+
+    public function test_a_server_with_its_own_reverb_cron_and_workers_leaves_pusher_and_the_cron_link_unused(): void
+    {
+        Integrations::save([
+            Integrations::PUSHER_APP => '1', Integrations::PUSHER_KEY => 'pk', Integrations::PUSHER_SECRET => 'ps',
+            Integrations::CRON_TOKEN => str_repeat('t', 40),
+        ]);
+        config([
+            'broadcasting.default' => 'reverb', 'broadcasting.connections.reverb.key' => 'rk',
+            'filament.broadcasting.echo' => ['broadcaster' => 'reverb', 'key' => 'rk'],
+            'services.cron.server' => true, 'queue.default' => 'database',
+        ]);
+
+        Integrations::apply();
+
+        // Reverb stays, the saved Pusher details unused.
+        $this->assertSame('reverb', config('broadcasting.default'));
+        $this->assertSame('reverb', config('filament.broadcasting.echo.broadcaster'));
+        // The workers run the queue; the link answers nobody.
+        $this->assertSame('database', config('queue.default'));
+        $this->assertTrue(Integrations::cronOn());
+        $this->assertNull(Integrations::cronUrl());
+        $this->get('/cron/run?token='.str_repeat('t', 40))->assertNotFound();
+
+        Livewire::test(IntegrationsSettings::class)
+            ->assertSee('Reverb on this server')
+            ->assertDontSee('cron-job.org')
+            ->assertFormFieldDoesNotExist(Integrations::PUSHER_KEY)
+            ->assertFormFieldDoesNotExist(Integrations::CRON_TOKEN);
+    }
 }

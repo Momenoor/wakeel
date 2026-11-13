@@ -28,7 +28,8 @@ use Throwable;
 
 /**
  * Settings → Integrations (the sections of that page): this office's own
- * Microsoft 365, Pusher, cron-job.org link, WhatsApp, Claude and Azure Blob Storage. Each is off until it
+ * Microsoft 365, Pusher, cron-job.org link, WhatsApp, Claude and Azure Blob Storage (Pusher and the link
+ * not on a server with its own Reverb, cron and workers: Integrations::ownReverb(), ownCron()). Each is off until it
  * is filled in. Only the super admin sees the page — it holds the office's
  * keys. Saved secrets never come back to the page; a blank secret field keeps
  * the saved one.
@@ -61,7 +62,33 @@ class IntegrationsSettingsForm
                         ->extraInputAttributes(['dir' => 'ltr']),
                 ]),
 
+            // The server's own Reverb, cron and workers: said here, with nothing to fill in.
+            Section::make(__('This server'))
+                ->description(__('Run by the server itself, with nothing to set here.'))
+                ->icon(Heroicon::ServerStack)
+                ->visible(fn (): bool => Integrations::ownReverb() || Integrations::ownCron())
+                ->columns(2)
+                ->schema([
+                    TextEntry::make('server_live_updates')
+                        ->label(__('Live updates'))
+                        ->state(fn (): string => __('Reverb on this server'))
+                        ->badge()
+                        ->color('success')
+                        ->visible(fn (): bool => Integrations::ownReverb()),
+                    TextEntry::make('server_scheduled_tasks')
+                        ->label(__('Scheduled tasks and the queue'))
+                        ->state(fn (): string => __('This server\'s cron and workers'))
+                        ->badge()
+                        ->color('success')
+                        ->visible(fn (): bool => Integrations::ownCron()),
+                    TextEntry::make('server_last_email_check')
+                        ->label(__('Last automatic email check'))
+                        ->state(fn (): string => MatterReplyCollector::lastRunSummary())
+                        ->visible(fn (): bool => Integrations::ownCron()),
+                ]),
+
             Section::make('Pusher')
+                ->visible(fn (): bool => ! Integrations::ownReverb())
                 ->description(__('Live updates — notifications, chat and counts as they happen. Without it pages check every few seconds instead.'))
                 ->icon(Heroicon::Bolt)
                 ->headerActions([self::turnOff('pusher', [Integrations::PUSHER_APP, Integrations::PUSHER_KEY, Integrations::PUSHER_SECRET, Integrations::PUSHER_CLUSTER])])
@@ -75,6 +102,7 @@ class IntegrationsSettingsForm
                 ]),
 
             Section::make(__('Scheduled tasks (cron-job.org)'))
+                ->visible(fn (): bool => ! Integrations::ownCron())
                 ->description(__('Sends queued emails and runs the daily tasks. Create a free cron-job.org job that opens the link below every minute. Without it emails are sent at once and scheduled tasks don\'t run.'))
                 ->icon(Heroicon::Clock)
                 ->headerActions([self::turnOff('cron', [Integrations::CRON_TOKEN])])

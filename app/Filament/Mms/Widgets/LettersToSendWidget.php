@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Widgets;
 
 use App\Enums\LetterSendChannel;
+use App\Filament\Concerns\RefreshesLive;
 use App\Filament\Support\LetterSendFields;
 use App\Models\LetterSendRequest;
 use App\Services\MMS\Letters\LetterSendRequests;
@@ -22,6 +23,8 @@ use Illuminate\Contracts\View\View;
  */
 class LettersToSendWidget extends TableWidget
 {
+    use RefreshesLive;
+
     // With the page, not as a request of its own after it (as the other dashboard tables).
     protected static bool $isLazy = false;
 

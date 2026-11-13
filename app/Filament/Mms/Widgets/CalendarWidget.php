@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Widgets;
 
+use App\Filament\Concerns\RefreshesLive;
 use App\Filament\Mms\Resources\CalendarEvents\Schemas\CalendarEventForm;
 use App\Models\CalendarEvent;
 use App\Support\Dates;
@@ -15,6 +16,13 @@ use Saade\FilamentFullCalendar\Widgets\FullCalendarWidget;
 class CalendarWidget extends FullCalendarWidget
 {
     use HasWidgetShield;
+    use RefreshesLive;
+
+    /** Told of a change (RefreshesLive): the events fetched again, the calendar left where it is. */
+    protected function liveRefreshMethod(): string
+    {
+        return 'refreshRecords';
+    }
 
     public Model|string|null $model = CalendarEvent::class;
 

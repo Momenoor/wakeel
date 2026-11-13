@@ -5479,5 +5479,10 @@
     "This type does not take days off the annual leave balance.": "هذا النوع لا يخصم أياماً من رصيد الإجازة السنوية.",
     "Takes :days days off the annual leave balance.": "يخصم :days يوماً من رصيد الإجازة السنوية.",
     "Takes its days off the annual leave balance.": "يخصم أيامه من رصيد الإجازة السنوية.",
-    "Counts against the sick leave allowance of the service year; it does not take days off the annual leave balance.": "يُحتسب من مخصص الإجازة المرضية لسنة الخدمة، ولا يخصم أياماً من رصيد الإجازة السنوية."
+    "Counts against the sick leave allowance of the service year; it does not take days off the annual leave balance.": "يُحتسب من مخصص الإجازة المرضية لسنة الخدمة، ولا يخصم أياماً من رصيد الإجازة السنوية.",
+    "Run by the server itself, with nothing to set here.": "يشغّلها الخادم نفسه، ولا شيء يُضبط هنا.",
+    "Live updates": "التحديثات الفورية",
+    "Reverb on this server": "Reverb على هذا الخادم",
+    "Scheduled tasks and the queue": "المهام المجدولة وقائمة الانتظار",
+    "This server's cron and workers": "cron هذا الخادم وعمّاله"
 }

@@ -17,6 +17,11 @@ use Throwable;
  * stays as the fallback for an installation set up before these settings).
  * A service with its settings incomplete is simply off: its buttons hide,
  * and live updates fall back to polling.
+ *
+ * On a server of the office's own, two of them are the server's and not asked for here: live updates
+ * by its Reverb (BROADCAST_CONNECTION=reverb in .env: ownReverb()) and the scheduled tasks and the
+ * queue by its cron and workers (SERVER_CRON=true: ownCron()) — Pusher details and a cron link saved
+ * before the move are then left unused.
  */
 class Integrations
 {
@@ -152,7 +157,7 @@ class Integrations
 
         $pusher = [self::get(self::PUSHER_APP), self::get(self::PUSHER_KEY), self::get(self::PUSHER_SECRET)];
 
-        if (! in_array('', $pusher, true)) {
+        if (! self::ownReverb() && ! in_array('', $pusher, true)) {
             [$app, $key, $secret] = $pusher;
             $cluster = self::get(self::PUSHER_CLUSTER) ?: 'mt1';
 
@@ -175,7 +180,10 @@ class Integrations
             ]);
         }
 
-        if (($token = self::get(self::CRON_TOKEN)) !== '') {
+        if (self::ownCron()) {
+            // The server's own cron runs the tasks: the link answers nobody.
+            config(['services.cron.token' => null]);
+        } elseif (($token = self::get(self::CRON_TOKEN)) !== '') {
             config(['services.cron.token' => $token]);
         }
 
@@ -252,9 +260,22 @@ class Integrations
         return in_array(config('broadcasting.default'), ['pusher', 'reverb'], true) && filled(config('filament.broadcasting.echo'));
     }
 
+    /** Whether something runs the scheduled tasks and the queue: the server itself, or the cron link. */
     public static function cronOn(): bool
     {
-        return strlen((string) config('services.cron.token')) >= 32;
+        return self::ownCron() || strlen((string) config('services.cron.token')) >= 32;
+    }
+
+    /** Live updates by the server's own Reverb (.env), not Pusher. */
+    public static function ownReverb(): bool
+    {
+        return config('broadcasting.default') === 'reverb' && filled(config('broadcasting.connections.reverb.key'));
+    }
+
+    /** The scheduled tasks and the queue run by the server's own cron and workers (SERVER_CRON in .env). */
+    public static function ownCron(): bool
+    {
+        return (bool) config('services.cron.server');
     }
 
     public static function whatsappOn(): bool
@@ -269,6 +290,6 @@ class Integrations
 
     public static function cronUrl(): ?string
     {
-        return self::cronOn() ? route('cron.run', ['token' => config('services.cron.token')]) : null;
+        return self::cronOn() && ! self::ownCron() ? route('cron.run', ['token' => config('services.cron.token')]) : null;
     }
 }

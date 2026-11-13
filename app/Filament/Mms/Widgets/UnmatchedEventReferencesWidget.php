@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Widgets;
 
+use App\Filament\Concerns\RefreshesLive;
 use App\Filament\Mms\Actions\Calendar\CalendarMatterActions;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Models\CalendarEvent;
@@ -28,6 +29,7 @@ class UnmatchedEventReferencesWidget extends TableWidget
     use HasWidgetShield {
         canView as shieldCanView;
     }
+    use RefreshesLive;
 
     protected static ?int $sort = 1;
 

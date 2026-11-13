@@ -98,6 +98,11 @@ trait SharesPanelConfiguration
                 PanelsRenderHook::CONTENT_START,
                 fn () => view('filament.shared.update-banner'),
             )
+            // Every resource's list, read again when a record of it changes (with Pusher).
+            ->renderHook(
+                PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE,
+                fn (array $scopes): string => Live::listMarker($scopes),
+            )
             // The new keyboard shortcuts, for their first two weeks.
             ->renderHook(
                 PanelsRenderHook::CONTENT_START,

@@ -47,6 +47,9 @@ return [
 
     'cron' => [
         'token' => env('CRON_TOKEN'),
+        // true on a server that runs the scheduler (cron) and the queue workers itself: the web
+        // cron link is then off, and queued work waits for the workers (App\Support\Integrations).
+        'server' => (bool) env('SERVER_CRON', false),
     ],
 
     'outlook' => [

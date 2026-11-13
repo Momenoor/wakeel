@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Widgets;
 
+use App\Filament\Concerns\RefreshesLive;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Models\Matter;
 use App\Support\Dates;
@@ -24,6 +25,7 @@ class UpcomingSessionsWidget extends TableWidget
     protected static bool $isLazy = false;
 
     use HasWidgetShield;
+    use RefreshesLive;
 
     protected static ?int $sort = 2;
 

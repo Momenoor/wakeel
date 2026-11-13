@@ -15,7 +15,8 @@ trait AnnouncesChanges
     {
         $announce = fn ($model) => DB::afterCommit(fn () => RecordsChanged::announce($model->getTable()));
 
-        static::saved($announce);
+        // Saved with nothing changed (a calendar sync writing the same event again): nothing to tell.
+        static::saved(fn ($model) => ($model->wasRecentlyCreated || $model->wasChanged()) ? $announce($model) : null);
         static::deleted($announce);
     }
 }

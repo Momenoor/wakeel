@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Widgets;
 
+use App\Filament\Concerns\RefreshesLive;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Models\Matter;
 use App\Models\MatterParty;
@@ -17,6 +18,7 @@ use Livewire\Attributes\On;
 class AssistantMatterCountTableWidget extends TableWidget
 {
     use HasWidgetShield;
+    use RefreshesLive;
 
     public ?int $selectedPartyId = null; // Store the ID
 

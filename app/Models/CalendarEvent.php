@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\CalendarEventSource;
+use App\Models\Concerns\AnnouncesChanges;
 use App\Observers\CalendarEventObserver;
 use App\Services\MMS\Calendar\MatterReferenceMatcher;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
@@ -18,6 +19,7 @@ use Spatie\Activitylog\Support\LogOptions;
 #[ObservedBy(CalendarEventObserver::class)]
 class CalendarEvent extends Model
 {
+    use AnnouncesChanges;
     use LogsActivity;
     use SoftDeletes;
 

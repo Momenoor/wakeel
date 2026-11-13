@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\LetterSendChannel;
+use App\Models\Concerns\AnnouncesChanges;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,6 +16,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Fillable('matter_letter_id', 'matter_id', 'requested_by', 'channels', 'done', 'sms_text', 'note', 'completed_at')]
 class LetterSendRequest extends Model
 {
+    use AnnouncesChanges;
+
     public function casts(): array
     {
         return [
