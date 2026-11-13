@@ -5,6 +5,7 @@ namespace App\Filament\Mms\Resources\MatterRequests\Tables;
 use App\Enums\RequestStatus;
 use App\Enums\RequestType;
 use App\Filament\Mms\Actions\Request\ApproveRequestAction;
+use App\Filament\Mms\Actions\Request\EditRequestAction;
 use App\Filament\Mms\Actions\Request\RejectRequestAction;
 use Filament\Actions\DeleteAction;
 use Filament\Tables\Columns\TextColumn;
@@ -78,6 +79,7 @@ class MatterRequestsTable
             ->recordActions([
                 ApproveRequestAction::make(),
                 RejectRequestAction::make(),
+                EditRequestAction::make(),
                 DeleteAction::make()->visible(fn ($record) => $record->status === RequestStatus::PENDING && auth()->user()->can('Delete:MatterRequest')),
             ])
             ->toolbarActions([

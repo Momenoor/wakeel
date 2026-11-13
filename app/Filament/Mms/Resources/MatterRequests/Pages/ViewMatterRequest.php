@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\MatterRequests\Pages;
 
 use App\Filament\Mms\Actions\Request\ApproveRequestAction;
+use App\Filament\Mms\Actions\Request\EditRequestAction;
 use App\Filament\Mms\Actions\Request\RejectRequestAction;
 use App\Filament\Mms\Actions\Request\RequestChangesAction;
 use App\Filament\Mms\Actions\Request\ResubmitRequestAction;
@@ -20,6 +21,8 @@ class ViewMatterRequest extends ViewRecord
             RequestChangesAction::make(),
             RejectRequestAction::make(),
             ResubmitRequestAction::make(),
+            // The super admin's: the request's record corrected.
+            EditRequestAction::make(),
             //            Action::make('sendWhatsApp')
             //                ->label('Send WhatsApp')
             //                ->icon('heroicon-o-phone')

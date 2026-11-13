@@ -8,6 +8,7 @@ use App\Enums\RequestStatus;
 use App\Filament\Mms\Actions\Fee\CollectFeeAction;
 use App\Filament\Mms\Actions\Request\ApproveRequestAction;
 use App\Filament\Mms\Actions\Request\CreateRequestAction;
+use App\Filament\Mms\Actions\Request\EditRequestAction;
 use App\Filament\Mms\Actions\Request\RejectRequestAction;
 use App\Filament\Mms\Actions\Request\RequestChangesAction;
 use App\Filament\Mms\Actions\Request\ResubmitRequestAction;
@@ -679,6 +680,7 @@ class MatterInfolist
                             RequestChangesAction::make(),
                             static::rejectRequestAction(),
                             ResubmitRequestAction::make(),
+                            EditRequestAction::make(),
                         ])
                             ->columnSpanFull()
                             ->alignEnd(),

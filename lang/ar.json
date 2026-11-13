@@ -5484,5 +5484,7 @@
     "Live updates": "التحديثات الفورية",
     "Reverb on this server": "Reverb على هذا الخادم",
     "Scheduled tasks and the queue": "المهام المجدولة وقائمة الانتظار",
-    "This server's cron and workers": "cron هذا الخادم وعمّاله"
+    "This server's cron and workers": "cron هذا الخادم وعمّاله",
+    "Edit request": "تعديل الطلب",
+    "Corrects what the request records. Changing the status here changes the record only: nothing is applied to the matter or undone on it, and nobody is notified. Use Approve or Reject for that.": "يصحّح ما يسجّله الطلب. تغيير الحالة هنا يغيّر السجل فقط: لا يُطبَّق شيء على القضية ولا يُتراجع عنه فيها، ولا يُبلَّغ أحد. استخدم «موافقة» أو «رفض» لذلك."
 }
