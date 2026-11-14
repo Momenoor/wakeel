@@ -5,6 +5,7 @@ namespace App\Providers\Filament;
 use AlizHarb\ActivityLog\ActivityLogPlugin;
 use App\Filament\Mms\Pages\Auth\CustomLogin;
 use App\Filament\Mms\Pages\Auth\CustomProfile;
+use App\Filament\Mms\Pages\Auth\CustomRequestPasswordReset;
 use App\Filament\Mms\Support\SystemSwitcher;
 use App\Filament\Shared\ActivityLog\AuditDashboard;
 use App\Filament\Shared\Pages\AnnouncementSettings;
@@ -19,6 +20,7 @@ use App\Filament\Shared\Pages\Performance;
 use App\Filament\Shared\Pages\SystemSettings;
 use App\Filament\Shared\Pages\SystemUpdates;
 use App\Filament\Shared\Pages\UserGuide;
+use App\Filament\Shared\Resources\ErrorReports\ErrorReportResource;
 use App\Filament\Shared\Resources\Themes\ThemeResource;
 use App\Filament\Shared\Users\TranslateUsersPluginLabels;
 use App\Http\Middleware\ApplyTheme;
@@ -67,6 +69,8 @@ trait SharesPanelConfiguration
         return $panel
             ->viteTheme('resources/css/filament/admin/theme.css')
             ->login(CustomLogin::class)
+            // "Forgot password?" on the sign-in page: a link to choose a new one, by email.
+            ->passwordReset(CustomRequestPasswordReset::class)
             ->sidebarWidth('17rem')
             ->colors([
                 'primary' => $primary,
@@ -186,6 +190,8 @@ trait SharesPanelConfiguration
         ])->resources([
             // Settings → Themes.
             ThemeResource::class,
+            // Settings → Error tracking.
+            ErrorReportResource::class,
         ]);
     }
 

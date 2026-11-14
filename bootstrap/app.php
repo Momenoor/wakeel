@@ -7,12 +7,15 @@ use App\Http\Middleware\EnsureLicenseIsValid;
 use App\Http\Middleware\RedirectIfInstalled;
 use App\Http\Middleware\RedirectToInstaller;
 use App\Http\Middleware\TrackPerformance;
+use App\Models\ErrorReport;
 use App\Models\PerformanceSample;
+use App\Support\ErrorTracker;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Support\Facades\Route;
+use Symfony\Component\HttpFoundation\Response;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -74,6 +77,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('license:verify')->daily()->withoutOverlapping();
         // The Performance page's records: the last 14 days kept.
         $schedule->call(fn () => PerformanceSample::prune())->daily()->name('performance:prune');
+        // Settings → Error tracking: the last 90 days kept.
+        $schedule->call(fn () => ErrorReport::prune())->daily()->name('errors:prune');
 
         // The shared Outlook calendar: every 5 minutes for yesterday to six
         // months ahead (one or two Graph calls), and nightly for the past
@@ -118,5 +123,18 @@ return Application::configure(basePath: dirname(__DIR__))
     })
 
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // Every error the system reports kept with a code (Settings → Error tracking); logged as before.
+        $exceptions->report(function (Throwable $e): void {
+            ErrorTracker::record($e);
+        });
+
+        // The code with the answer: the error page shows it (errors/500), and a failed action on a page
+        // reads it from this header to say it in a notice (filament.partials.client-errors-script).
+        $exceptions->respond(function (Response $response): Response {
+            if ($response->getStatusCode() >= 500 && ($code = ErrorTracker::takeCode()) !== null) {
+                $response->headers->set('X-Error-Code', $code);
+            }
+
+            return $response;
+        });
     })->create();

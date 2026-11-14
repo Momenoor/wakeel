@@ -93,5 +93,23 @@ return [
             'steps' => [['text' => 'Open "Settings → Maintenance → Maintenance & Offline": turn the mode on, choose "Allow the super admin to access while offline", then click "Save Settings". Turn it off the same way when you finish.', 'shot' => 'tab-maintenance']],
             'tips' => ['Do not forget to turn the mode off when the work is done, or staff stay unable to sign in.'],
         ],
+        [
+            'id' => 'error-tracking',
+            'title' => 'Error tracking',
+            'description' => '"Maintenance → Error tracking": every error a user runs into is recorded with an "Error code" such as E-7KQ3MD. The user sees the code — on the error page, or in a red notice when an action on a page failed — and gives it to you; you find the whole error here by that code. Each record says when it happened, who was signed in, the page and what was being done, the message, where in the system it failed, how many times the same error has happened, and — folded away — what was sent and the full details for whoever maintains the system. Passwords, tokens and keys are never kept. A page not found, a refused permission, a form that did not validate and a session that ran out are not errors and are not recorded.',
+            'roles' => [$admin, $withPermission],
+            'permissions' => ['View:ErrorReports'],
+            'steps' => [
+                ['text' => 'Open "Settings → Maintenance → Error tracking". The list starts with the unresolved errors, newest first; the number beside the menu item is how many are unresolved.'],
+                ['text' => 'Type the code the user gave you in the search box, or filter by "Status", "Source", "User" or "Today".'],
+                ['text' => 'Click "View" on a row for the whole record. "Full details" has the trace, with a copy button, to send to whoever maintains the system.'],
+                ['text' => 'Once it is dealt with, click "Mark as resolved": every other time the same error happened is marked with it. "Reopen" undoes that.'],
+            ],
+            'tips' => [
+                'Errors in background work, scheduled tasks and commands are recorded too, with no user.',
+                'The same error is recorded five times a minute at the most, and records are kept for 90 days.',
+                'The screen is the super admin\'s and the "admin" role\'s; give "View:ErrorReports" to another role to open it to them.',
+            ],
+        ],
     ],
 ];

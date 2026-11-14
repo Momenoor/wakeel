@@ -18,7 +18,7 @@ return [
                 ['text' => 'Open the system\'s link in your browser. The "Sign in" page appears.', 'shot' => 'login-1'],
                 ['text' => 'Type your "Username or Email" and "Password" (the eye icon shows what you typed). Tick "Remember me" if the device is your own, then click "Sign in".', 'shot' => 'login-2'],
             ],
-            'tips' => ['If you forget your password, ask your system administrator to reset it. To move between the office\'s systems (matters and properties), use the systems menu at the top of the side menu (it opens under its button inside the menu; when the menu is collapsed, only its icon shows).', '"Sign out" in the user menu signs you out on this device only. "Remember me" stays on your other devices.'],
+            'tips' => ['If you forget your password, click "Forgot password?" above the password field, type your username or email address and click the button: a link to choose a new password is sent to your email address and works for an hour. The page answers the same way whether or not it knows the username or address. If no email arrives (check the junk folder), or you have no email address in the system, ask your system administrator to reset it. To move between the office\'s systems (matters and properties), use the systems menu at the top of the side menu (it opens under its button inside the menu; when the menu is collapsed, only its icon shows).', '"Sign out" in the user menu signs you out on this device only. "Remember me" stays on your other devices.'],
         ],
 
         [

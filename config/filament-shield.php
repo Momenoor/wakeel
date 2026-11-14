@@ -3,9 +3,9 @@
 declare(strict_types=1);
 
 use App\Filament\Mms\Clusters\Templates;
-use App\Filament\Mms\Pages\SignPdf;
 use App\Filament\Mms\Pages\CompressPdf;
 use App\Filament\Mms\Pages\MergePdf;
+use App\Filament\Mms\Pages\SignPdf;
 use App\Filament\Mms\Pages\SplitPdf;
 use App\Filament\Mms\Resources\BulkMailCampaigns\BulkMailCampaignResource;
 use App\Filament\Mms\Resources\CalendarEvents\CalendarEventResource;
@@ -28,6 +28,8 @@ use App\Filament\Shared\Pages\MailCollectingSettings;
 use App\Filament\Shared\Pages\MailServerSettings;
 use App\Filament\Shared\Pages\NotificationSettings;
 use App\Filament\Shared\Pages\OfflineSettings;
+use App\Filament\Shared\Resources\ErrorReports\ErrorReportResource;
+use App\Models\ErrorReport;
 use App\Support\ScreenPermissions;
 use BezhanSalleh\FilamentShield\Resources\Roles\RoleResource;
 use Filament\Pages\Dashboard;
@@ -316,6 +318,8 @@ return [
             // Its own owner-or-shared rule (SignatureStampPolicy) on three custom permissions — see
             // ScreenPermissions — not the standard ones a resource would get.
             SignatureStampResource::class,
+            // Read-only records behind one permission (View:ErrorReports, below).
+            ErrorReportResource::class,
         ],
     ],
 
@@ -409,6 +413,8 @@ return [
         'Access:MultipleSystems',
         // Signing in as another user (the Impersonate button, User::canImpersonate()).
         'Impersonate:User',
+        // Settings → Error tracking (ErrorReportResource).
+        ErrorReport::PERMISSION,
         // One per relation manager and per tab — see App\Support\ScreenPermissions.
         ...ScreenPermissions::all(),
     ],

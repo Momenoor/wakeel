@@ -120,7 +120,19 @@
                     }
                 } catch (e) {}
                 const started = performance.now();
-                onError(({ response }) => report(response?.status ?? 0, request, started));
+                onError(({ response }) => {
+                    report(response?.status ?? 0, request, started);
+                    // The error's code (App\Support\ErrorTracker), for the user to give the administrator.
+                    const code = response?.headers?.get?.('X-Error-Code');
+                    if (code && window.FilamentNotification) {
+                        new window.FilamentNotification()
+                            .title(@js(__('Error code')) + ': ' + code)
+                            .body(@js(__('The error was recorded. If it keeps happening, give this code to your system administrator.')))
+                            .danger()
+                            .persistent()
+                            .send();
+                    }
+                });
                 onFailure(() => report(0, request, started));
             });
         });
