@@ -28,6 +28,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 /**
  * Settings → Error tracking: the errors users ran into (App\Support\ErrorTracker), each under the
@@ -70,7 +71,13 @@ class ErrorReportResource extends Resource
     /** How many are still to be looked at. */
     public static function getNavigationBadge(): ?string
     {
-        $count = ErrorReport::query()->unresolved()->count();
+        // On every page of whoever has the screen: it must never be what breaks one — as it did while an
+        // update had brought the code but not yet the table.
+        try {
+            $count = ErrorReport::query()->unresolved()->count();
+        } catch (Throwable) {
+            return null;
+        }
 
         return $count > 0 ? (string) $count : null;
     }
