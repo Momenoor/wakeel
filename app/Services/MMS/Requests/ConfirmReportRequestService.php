@@ -34,10 +34,19 @@ class ConfirmReportRequestService extends BaseRequestService
     {
         $this->markApproved($data);
 
-        // Apply the proposed received date to the matter
-        $this->request->matter->update([
-            'final_report_memo_date' => now(),
-        ]);
+        $matter = $this->request->matter;
+
+        if ($matter->type?->final_report_only) {
+            // The type's matters have this one report: the initial report (if not there yet), the final
+            // report and its memo date together — and what the review of an initial report would have said.
+            $matter->final_report_memo_date = now();
+            $matter->has_substantive_changes = $data['has_substantive_changes'] ?? false;
+            $matter->finalReportSubmission();
+        } else {
+            $matter->update([
+                'final_report_memo_date' => now(),
+            ]);
+        }
 
         $this->onApproveNotify();
         $this->refresh($component);

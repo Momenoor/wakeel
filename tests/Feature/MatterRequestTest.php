@@ -12,6 +12,7 @@ use App\Filament\Mms\Resources\MatterRequests\Pages\ViewMatterRequest;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Models\Matter;
 use App\Models\MatterRequest;
+use App\Models\Type;
 use App\Models\User;
 use App\Services\MMS\Requests\ChangeDifficultyRequestService;
 use App\Services\MMS\Requests\ChangeDistributedAtRequestService;
@@ -481,5 +482,41 @@ class MatterRequestTest extends TestCase
         $this->assertFalse(CreateRequestAction::awaitsReview($matter));
         $this->assertContains(RequestType::CHANGE_DIFFICULTY->value, CreateRequestAction::allowedTypes($matter));
         $this->assertNotContains(RequestType::REVIEW_REPORT->value, CreateRequestAction::allowedTypes($matter));
+    }
+
+    public function test_a_type_with_the_final_report_only_skips_the_review_and_approving_sets_every_report_date(): void
+    {
+        $this->allowEverything();
+        Mail::fake();
+        $this->actingAs(User::factory()->create());
+        $type = Type::create(['name' => 'One report', 'final_report_only' => true]);
+        $matter = $this->makeMatter(['type_id' => $type->id]);
+
+        // No review to ask for; the confirmation open at once, with nothing to wait for.
+        $allowed = CreateRequestAction::allowedTypes($matter);
+        $this->assertNotContains(RequestType::REVIEW_REPORT->value, $allowed);
+        $this->assertContains(RequestType::CONFIRM_REPORT->value, $allowed);
+        $this->assertFalse(CreateRequestAction::awaitsReview($matter));
+
+        $request = MatterRequest::create(['matter_id' => $matter->id, 'request_by' => auth()->id(), 'type' => RequestType::CONFIRM_REPORT, 'status' => RequestStatus::PENDING, 'comment' => 'final']);
+        RequestServiceFactory::make($request)->approve(['approved_comment' => 'ok', 'attachments' => [], 'has_substantive_changes' => true]);
+
+        $matter->refresh();
+        $this->assertEquals(RequestStatus::APPROVED, $request->fresh()->status);
+        $this->assertNotNull($matter->initial_report_at);
+        $this->assertNotNull($matter->final_report_at);
+        $this->assertTrue($matter->final_report_memo_date->isToday());
+        $this->assertTrue((bool) $matter->has_substantive_changes);
+
+        // Any other type: the confirmation sets the memo date alone, as before.
+        $other = $this->makeMatter(['number' => '2']);
+        $this->assertNotContains(RequestType::CONFIRM_REPORT->value, CreateRequestAction::allowedTypes($other));
+        $confirm = MatterRequest::create(['matter_id' => $other->id, 'request_by' => auth()->id(), 'type' => RequestType::CONFIRM_REPORT, 'status' => RequestStatus::PENDING, 'comment' => 'final']);
+        RequestServiceFactory::make($confirm)->approve(['approved_comment' => 'ok', 'attachments' => []]);
+
+        $other->refresh();
+        $this->assertNotNull($other->final_report_memo_date);
+        $this->assertNull($other->initial_report_at);
+        $this->assertNull($other->final_report_at);
     }
 }

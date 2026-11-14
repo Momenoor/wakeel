@@ -67,6 +67,7 @@ class Type extends Model
         'creditor_columns' => 'array',
         'allow_current_status_import' => 'boolean',
         'exclude_from_incentive_count' => 'boolean',
+        'final_report_only' => 'boolean',
         'incentive_config_id' => 'integer',
         'party_capacities' => 'array',
     ];
@@ -102,6 +103,8 @@ class Type extends Model
         'incentive_trigger_type',
         'allow_current_status_import',
         'exclude_from_incentive_count',
+        // One report only: no Review Report request; Confirm Report, approved, sets all three report dates.
+        'final_report_only',
         'incentive_config_id',
         'party_capacities',
         'onedrive_subfolders',

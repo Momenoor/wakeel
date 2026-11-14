@@ -118,6 +118,10 @@ class TypeForm
                                 ->label(__('Allow Current Status Import'))
                                 ->helperText(__('If enabled, matters can be imported for incentives even if not final reported, as long as they have collected fees.'))
                                 ->default(false),
+                            Toggle::make('final_report_only')
+                                ->label(__('Final report request only'))
+                                ->helperText(__('If enabled, matters of this type have no Review Report request: Confirm Report can be asked for straight away, and approving it sets the initial report date, the final report date and the final report memo date together.'))
+                                ->default(false),
                             Toggle::make('exclude_from_incentive_count')
                                 ->label(__('Exclude from Incentive Count'))
                                 ->helperText(__('If enabled, matters of this type will not be counted towards the monthly total for extra incentive percentages.'))

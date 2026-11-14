@@ -19,7 +19,7 @@ return [
         [
             'id' => 'create',
             'title' => 'Add a matter type',
-            'description' => 'The form has: the name, the incentive configuration (from the incentive calculations), the incentive trigger type (final report date or fee entry date), active, "Allow Current Status Import" (counts the incentive on matters whose report is not delivered yet, as long as their fees are collected), "Exclude from Incentive Count", and "Party capacities".',
+            'description' => 'The form has: the name, the incentive configuration (from the incentive calculations), the incentive trigger type (final report date or fee entry date), active, "Allow Current Status Import" (counts the incentive on matters whose report is not delivered yet, as long as their fees are collected), "Exclude from Incentive Count", "Final report request only" (for types whose matters have one report: no "Review Report" request is offered on them, "Confirm Report" can be asked for straight away, and approving it sets the initial report date, the final report date and the final report memo date together, so the matter becomes finalized), and "Party capacities".',
             'roles' => [$admin, $withPermission],
             'permissions' => ['Create:Type'],
             'steps' => [

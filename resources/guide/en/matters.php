@@ -190,7 +190,7 @@ return [
         [
             'id' => 'create-request',
             'title' => 'Make a request on a matter',
-            'description' => 'Requests go through an approval cycle: the assistant makes them and the person in charge reviews them. The types: "Change Difficulty", "Change Distributed Date", "Confirm Office Work", "Review Report", "Confirm Report" and "Review Incentive".',
+            'description' => 'Requests go through an approval cycle: the assistant makes them and the person in charge reviews them. The types: "Change Difficulty", "Change Distributed Date", "Confirm Office Work", "Review Report", "Confirm Report" and "Review Incentive". On a matter whose type has "Final report request only" turned on (Matter types), "Review Report" is not offered and "Confirm Report" can be asked for straight away; approving it sets the initial report date, the final report date and the final report memo date together.',
             'roles' => [$admin, $withPermission],
             'permissions' => ['CreateRequest:Matter'],
             'steps' => [

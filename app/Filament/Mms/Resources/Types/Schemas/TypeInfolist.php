@@ -47,6 +47,7 @@ class TypeInfolist
                             IconEntry::make('active')->label(__('Active'))->boolean(),
                             IconEntry::make('allow_current_status_import')->label(__('Allow Current Status Import'))->boolean(),
                             IconEntry::make('exclude_from_incentive_count')->label(__('Exclude from Incentive Count'))->boolean(),
+                            IconEntry::make('final_report_only')->label(__('Final report request only'))->boolean(),
                             TextEntry::make('matters_count')
                                 ->counts('matters')
                                 ->label(__('Total Matters'))

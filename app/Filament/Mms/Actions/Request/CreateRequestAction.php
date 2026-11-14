@@ -71,9 +71,11 @@ class CreateRequestAction extends Action
                 // A type already asked for (and not rejected) can't be asked again; the final report's
                 // confirmation only once the initial report's review is approved.
                 ->disableOptionWhen(fn (string $value, Matter $record): bool => ! in_array($value, self::allowedTypes($record), true))
-                ->helperText(fn (Matter $record): ?string => self::awaitsReview($record)
-                    ? __('Confirm Report can be asked for once a Review Report request on this matter is approved.')
-                    : null)
+                ->helperText(fn (Matter $record): ?string => match (true) {
+                    self::awaitsReview($record) => __('Confirm Report can be asked for once a Review Report request on this matter is approved.'),
+                    (bool) $record->type?->final_report_only => __('This matter type has the final report only: there is no Review Report request, and approving Confirm Report sets the initial and final report dates.'),
+                    default => null,
+                })
                 ->live()
                 // The type's own fields (new difficulty, new date …) filled
                 // as they appear — Filament's way for fields that depend on
@@ -99,7 +101,9 @@ class CreateRequestAction extends Action
 
     /**
      * The types that can be asked for on the matter now: not one already asked for and not rejected, and the
-     * final report's confirmation only after an approved review of the initial report.
+     * final report's confirmation only after an approved review of the initial report — unless the matter's
+     * type has the final report only (Type::$final_report_only): then no review at all, and the confirmation
+     * straight away.
      *
      * @return list<string>
      */
@@ -109,7 +113,9 @@ class CreateRequestAction extends Action
 
         return collect(RequestType::cases())
             ->map(fn (RequestType $type): string => $type->value)
-            ->reject(fn (string $type): bool => in_array($type, $state['open'], true) || ($type === RequestType::CONFIRM_REPORT->value && ! $state['reviewed']))
+            ->reject(fn (string $type): bool => in_array($type, $state['open'], true)
+                || ($type === RequestType::CONFIRM_REPORT->value && ! $state['reviewed'] && ! $state['final_only'])
+                || ($type === RequestType::REVIEW_REPORT->value && $state['final_only']))
             ->values()
             ->all();
     }
@@ -119,14 +125,14 @@ class CreateRequestAction extends Action
     {
         $state = self::state($matter);
 
-        return ! $state['reviewed'] && ! in_array(RequestType::CONFIRM_REPORT->value, $state['open'], true);
+        return ! $state['reviewed'] && ! $state['final_only'] && ! in_array(RequestType::CONFIRM_REPORT->value, $state['open'], true);
     }
 
     /**
      * The matter's requests, read once: the types asked for and not rejected, and whether a review of the
      * initial report was approved.
      *
-     * @return array{open: list<string>, reviewed: bool}
+     * @return array{open: list<string>, reviewed: bool, final_only: bool}
      */
     private static function state(Matter $matter): array
     {
@@ -138,6 +144,7 @@ class CreateRequestAction extends Action
                     ->map(fn (MatterRequest $request): string => $request->type->value)
                     ->values()
                     ->all(),
+                'final_only' => (bool) $matter->type?->final_report_only,
                 'reviewed' => $requests->contains(fn (MatterRequest $request): bool => $request->type === RequestType::REVIEW_REPORT && $request->status === RequestStatus::APPROVED),
             ];
         });
