@@ -43,6 +43,16 @@ class SendBulkMailBatch implements ShouldQueue
             return;
         }
 
+        // Its mailbox deactivated or deleted (Mail senders): nothing to send through. Paused, saying why — not
+        // tried again every minute.
+        if ($campaign->sender_config === null) {
+            Log::error("Campaign {$this->campaignId} paused: its mailbox [{$campaign->from_sender_key}] is deactivated or deleted.");
+            $campaign->update(['status' => BulkMailCampaignStatus::Paused, 'paused_reason' => BulkMailCampaign::MAILBOX_UNAVAILABLE]);
+            BulkMailCampaignUpdated::announce($campaign->id);
+
+            return;
+        }
+
         $remainingLimit = $campaign->getRemainingDailyLimit();
 
         if ($remainingLimit <= 0) {
@@ -51,8 +61,10 @@ class SendBulkMailBatch implements ShouldQueue
             return;
         }
 
+        // Not one waiting for its next try after a failed send (next_attempt_at): the others go meanwhile.
         $recipients = BulkMailRecipient::where('campaign_id', $this->campaignId)
             ->where('status', BulkMailRecipientStatus::Pending)
+            ->where(fn ($query) => $query->whereNull('next_attempt_at')->orWhere('next_attempt_at', '<=', now()))
             ->limit(min($this->batchSize, $remainingLimit))
             ->get();
 
@@ -96,7 +108,7 @@ class SendBulkMailBatch implements ShouldQueue
                 $campaign->increment('sent_count');
                 // An email to a matter's parties: a step in its progress.
                 MatterProgressRecorder::emailSent($campaign);
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
                 // Log the failure
                 Log::error("Bulk mail batch stopped. Failed for recipient {$email}: ".$e->getMessage());
 
@@ -107,8 +119,12 @@ class SendBulkMailBatch implements ShouldQueue
                         'status' => BulkMailRecipientStatus::Failed,
                         'failed_at' => now(),
                         'failure_reason' => $e->getMessage(),
+                        'next_attempt_at' => null,
                     ]);
                     $campaign->increment('failed_count');
+                } else {
+                    // Tried again after the wait set (mail_senders.retry_delay_minutes), not on the next run a minute later.
+                    $recipient->update(['next_attempt_at' => now()->addMinutes((int) config('mail_senders.retry_delay_minutes', 30))]);
                 }
 
                 BulkMailLog::create([

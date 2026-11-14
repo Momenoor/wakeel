@@ -41,11 +41,15 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
+use Illuminate\Support\Sleep;
 use Livewire\Livewire;
 use Mockery;
 use Spatie\Permission\Models\Role;
 use Tests\Support\MailSenders;
 use Tests\TestCase;
+use Webklex\PHPIMAP\Client;
+use Webklex\PHPIMAP\Connection\Protocols\ProtocolInterface;
+use Webklex\PHPIMAP\Connection\Protocols\Response as ImapResponse;
 use Webklex\PHPIMAP\Folder;
 use Webklex\PHPIMAP\Message;
 use Webklex\PHPIMAP\Query\WhereQuery;
@@ -71,6 +75,15 @@ class MatterRepliesTest extends TestCase
     private array $inbox = [];
 
     private bool $mailReadAllowed = true;
+
+    /** @var list<mixed> what Microsoft 365 answers the next times an email's files are asked for (then as usual) */
+    private array $attachmentAnswers = [];
+
+    /** Microsoft 365 failing to give an email's original (.eml). */
+    private bool $originalFails = false;
+
+    /** @var list<array<string, mixed>>|null what reading the Microsoft 365 mailbox since a time lists, when not all it holds */
+    private ?array $listed = null;
 
     protected function setUp(): void
     {
@@ -127,11 +140,19 @@ class MatterRepliesTest extends TestCase
             // The mailbox's messages since a time — every folder's.
             if (preg_match('~/messages\?.*receivedDateTime ge~', $url)) {
                 return $this->mailReadAllowed
-                    ? Http::response(['value' => $this->inbox])
+                    ? Http::response(['value' => $this->listed ?? $this->inbox])
                     : Http::response(['error' => ['code' => 'ErrorAccessDenied', 'message' => 'Access is denied.']], 403);
             }
 
+            if ($this->originalFails && str_ends_with($url, '/$value')) {
+                return Http::response(['error' => ['message' => 'Server busy']], 500);
+            }
+
             if (str_contains($url, '/attachments')) {
+                if ($this->attachmentAnswers !== []) {
+                    return array_shift($this->attachmentAnswers);
+                }
+
                 return Http::response(['value' => [
                     ['name' => 'شهادة.pdf', 'contentType' => 'application/pdf', 'isInline' => false, 'contentBytes' => base64_encode('%PDF-certificate')],
                     ['name' => 'logo.png', 'contentType' => 'image/png', 'isInline' => true, 'contentBytes' => base64_encode('png')],
@@ -793,5 +814,190 @@ class MatterRepliesTest extends TestCase
             ->assertNotified(__('Checking for emails'));
         // Read on the queue: what came of it in the notifications of whoever asked.
         $this->assertContains(trans_choice('No new replies.|:count new reply kept.|:count new replies kept.', 1, ['count' => 1]), auth()->user()->notifications()->get()->pluck('data.title')->all());
+    }
+
+    /** A reply in the Microsoft 365 mailbox "noreply", with files. */
+    private function graphReply(string $id, array $attributes = []): array
+    {
+        return [
+            'id' => $id, 'subject' => 'RE: طلب بيانات — JPA/2026/986/1', 'internetMessageId' => '<'.$id.'@police>', 'hasAttachments' => true,
+            'from' => ['emailAddress' => ['address' => 'info@dubaipolice.gov.ae', 'name' => 'شرطة دبي']],
+            'toRecipients' => [['emailAddress' => ['address' => 'no_reply@jpa.ae']]], 'receivedDateTime' => now()->subMinute()->toIso8601String(),
+            'body' => ['contentType' => 'html', 'content' => '<p>تم.</p>'], 'internetMessageHeaders' => [], ...$attributes,
+        ];
+    }
+
+    private function microsoftMailbox(): void
+    {
+        MailSender::query()->where('key', 'iflas')->first()->update(['collects' => false]);
+        MailSender::create(['driver' => MailSender::MICROSOFT, 'address' => 'no_reply@jpa.ae', 'name' => 'JPA', 'key' => 'noreply', 'is_active' => true]);
+        $this->sentEmail(['sender_key' => 'noreply']);
+    }
+
+    public function test_an_email_whose_files_microsoft_365_fails_to_give_is_not_kept_without_them_but_tried_again(): void
+    {
+        $this->microsoftMailbox();
+        $this->inbox = [$this->graphReply('r1')];
+        Sleep::fake();
+
+        // The files asked for, Microsoft 365 failing: not kept as an email with no files — not kept at all.
+        $this->attachmentAnswers = [Http::response(['error' => ['message' => 'Server busy']], 500)];
+        $result = app(MatterReplyCollector::class)->collect(null, 60);
+        $this->assertSame(0, $result['replies']);
+        $this->assertSame(0, MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->count());
+        $this->assertArrayHasKey('r1@police', (array) Setting::get(MatterReplyCollector::FAILED));
+
+        // The next run: read again, its files with it.
+        $this->assertSame(1, app(MatterReplyCollector::class)->collect(null, 60)['replies']);
+        $reply = MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->sole();
+        $this->assertNotNull($reply->files);
+        $this->assertTrue(collect($this->uploads)->contains(fn (string $url): bool => str_contains($url, 'شهادة.pdf')));
+        Sleep::assertNeverSlept();
+    }
+
+    public function test_microsoft_365_asking_to_wait_is_waited_for_and_asked_again(): void
+    {
+        $this->microsoftMailbox();
+        $this->inbox = [$this->graphReply('r1')];
+        Sleep::fake();
+
+        // Too many requests, then not available — each naming its wait — then the files.
+        $this->attachmentAnswers = [
+            Http::response(['error' => ['message' => 'Too many requests']], 429, ['Retry-After' => '3']),
+            Http::response(['error' => ['message' => 'Not available']], 503, ['Retry-After' => '2']),
+        ];
+        $this->assertSame(1, app(MatterReplyCollector::class)->collect(null, 60)['replies']);
+        Sleep::assertSequence([Sleep::for(3)->seconds(), Sleep::for(2)->seconds()]);
+        $this->assertSame([], (array) Setting::get(MatterReplyCollector::FAILED, []));
+
+        // Turned back every time: it fails after the tries, the email not kept.
+        $this->inbox = [$this->graphReply('r2')];
+        $this->attachmentAnswers = array_fill(0, 3, Http::response([], 429, ['Retry-After' => '1']));
+        $this->assertSame(0, app(MatterReplyCollector::class)->collect(null, 60)['replies']);
+        $this->assertSame([], $this->attachmentAnswers);
+        $this->assertSame(1, MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->count());
+    }
+
+    public function test_an_email_is_still_kept_when_only_its_original_cannot_be_read(): void
+    {
+        $this->microsoftMailbox();
+        $this->inbox = [$this->graphReply('r1', ['hasAttachments' => false])];
+        $this->originalFails = true;
+
+        $this->assertSame(1, app(MatterReplyCollector::class)->collect(null, 60)['replies']);
+        $reply = MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->sole();
+        $this->assertNotNull($reply->files);
+        // Its PDF in OneDrive, no .eml beside it.
+        $this->assertTrue(collect($this->uploads)->contains(fn (string $url): bool => str_contains($url, '.pdf')));
+        $this->assertFalse(collect($this->uploads)->contains(fn (string $url): bool => str_contains($url, '.eml')));
+    }
+
+    public function test_an_email_left_behind_is_tried_again_though_the_mailbox_is_read_from_further_on(): void
+    {
+        $this->microsoftMailbox();
+        $this->inbox = [$this->graphReply('r1'), $this->graphReply('r2')];
+        // The mailbox read from further on by now: reading it since then lists neither.
+        $this->listed = [];
+        $received = fn () => MatterEmail::query()->where('direction', MatterEmail::RECEIVED);
+
+        // One that failed before anything of it was kept, a moment ago: not yet (the run that failed may be this one's twin).
+        Setting::set(MatterReplyCollector::FAILED, ['r1@police' => ['sender' => 'noreply', 'at' => now()->toIso8601String(), 'tries' => 0, 'noted_at' => now()->toIso8601String()]], 'mail', 'json');
+        // One half kept — its row made, its files never — long enough ago.
+        $half = MatterEmail::create(['matter_id' => $this->matter->id, 'direction' => MatterEmail::RECEIVED, 'sender_key' => 'noreply', 'message_id' => 'r2@police', 'subject' => 'RE', 'at' => now(), 'status' => MatterEmail::FILED]);
+        $half->forceFill(['created_at' => now()->subMinutes(30)])->saveQuietly();
+        // And one half kept that is no longer in its mailbox.
+        $gone = MatterEmail::create(['matter_id' => $this->matter->id, 'direction' => MatterEmail::RECEIVED, 'sender_key' => 'noreply', 'message_id' => 'gone@police', 'subject' => 'RE', 'at' => now(), 'status' => MatterEmail::FILED]);
+        $gone->forceFill(['created_at' => now()->subMinutes(30)])->saveQuietly();
+
+        $result = app(MatterReplyCollector::class)->collect(null, 60);
+
+        // The half kept one found by its Message-ID and kept whole; the one gone left as it is, no longer waited for.
+        $this->assertSame(1, $result['replies']);
+        $this->assertNotNull($received()->where('message_id', 'r2@police')->sole()->files);
+        $this->assertSame([], $gone->fresh()->files);
+        $this->assertSame(0, $received()->where('message_id', 'r1@police')->count());
+
+        // Later: the one that had failed, found by its Message-ID and kept — and no longer on the list.
+        $this->travel(25)->minutes();
+        $this->assertSame(1, app(MatterReplyCollector::class)->collect(null, 60)['replies']);
+        $this->assertNotNull($received()->where('message_id', 'r1@police')->sole()->files);
+        $this->assertSame([], (array) Setting::get(MatterReplyCollector::FAILED, []));
+
+        // One that goes on failing is tried a few times, then left — not for ever.
+        $this->inbox[] = $this->graphReply('r3');
+        Setting::set(MatterReplyCollector::FAILED, ['r3@police' => ['sender' => 'noreply', 'at' => now()->toIso8601String(), 'tries' => 0, 'noted_at' => now()->subHour()->toIso8601String()]], 'mail', 'json');
+        foreach ([1, 2, 3] as $try) {
+            $this->attachmentAnswers = [Http::response([], 500)];
+            $this->assertSame(0, app(MatterReplyCollector::class)->collect(null, 60)['replies']);
+            $this->assertSame($try < 3 ? $try : null, ((array) Setting::get(MatterReplyCollector::FAILED, []))['r3@police']['tries'] ?? null);
+        }
+
+        // A run for one matter tries none of them.
+        Setting::set(MatterReplyCollector::FAILED, ['r3@police' => ['sender' => 'noreply', 'at' => now()->toIso8601String(), 'tries' => 0, 'noted_at' => now()->subHour()->toIso8601String()]], 'mail', 'json');
+        $this->assertSame(0, app(MatterReplyCollector::class)->collect($this->matter->id)['replies']);
+        $this->assertSame(0, $received()->where('message_id', 'r3@police')->count());
+    }
+
+    public function test_a_cpanel_email_is_read_by_when_it_arrived_not_by_the_date_its_sender_wrote(): void
+    {
+        MailSender::query()->update(['keep_all_inbox' => true]);
+        $message = function (int $n, string $date): Message {
+            $message = Message::fromString("Message-ID: <late{$n}@shop.com>\r\nDate: {$date}\r\nFrom: someone{$n}@shop.com\r\nTo: iflas@jpa.ae\r\nSubject: offer {$n}\r\nContent-Type: text/plain\r\n\r\nx");
+            $message->uid = $n;
+
+            return $message;
+        };
+        // 1: written three days ago, delivered an hour ago. 2: dated an hour ago, in the mailbox for three days.
+        $messages = [1 => $message(1, now()->subDays(3)->toRfc2822String()), 2 => $message(2, now()->subHour()->toRfc2822String())];
+        $arrivals = [1 => now()->subHour()->format('d-M-Y H:i:s O'), 2 => now()->subDays(3)->format('d-M-Y H:i:s O')];
+
+        $run = function (bool $serverSaysWhen) use ($messages, $arrivals): array {
+            $query = Mockery::mock(WhereQuery::class);
+            $query->shouldReceive('whereSince', 'leaveUnread', 'setFetchBody', 'setFetchFlags', 'setFetchOrderAsc', 'limit')->andReturnSelf();
+            $query->shouldReceive('errors')->andReturn([]);
+            $query->shouldReceive('get')->andReturn(new MessageCollection($messages));
+            $query->shouldReceive('getMessageByUid')->andReturnUsing(fn (int $uid) => $messages[$uid]);
+            $answer = Mockery::mock(ImapResponse::class);
+            $answer->shouldReceive('validatedData')->andReturn($arrivals);
+            $connection = Mockery::mock(ProtocolInterface::class);
+            $fetch = $connection->shouldReceive('fetch')->with(['INTERNALDATE'], [1, 2], null, Mockery::any());
+            $serverSaysWhen ? $fetch->andReturn($answer) : $fetch->andThrow(new \RuntimeException('BAD command'));
+            $client = Mockery::mock(Client::class);
+            $client->shouldReceive('openFolder')->andReturn([]);
+            $client->shouldReceive('getConnection')->andReturn($connection);
+            $folder = Mockery::mock(Folder::class);
+            $folder->path = 'INBOX';
+            $folder->shouldReceive('query')->andReturn($query);
+            $folder->shouldReceive('getClient')->andReturn($client);
+            $mailboxes = Mockery::mock(SentFolder::class);
+            $mailboxes->shouldReceive('inbox')->andReturn($folder);
+            $this->app->instance(SentFolder::class, $mailboxes);
+            Setting::forget(MatterReplyCollector::checkedKey('iflas'));
+
+            return app(MatterReplyCollector::class)->collect(null, 60);
+        };
+
+        // The server says when each arrived: the one delivered late is read, the one long there is not.
+        $result = $run(true);
+        $this->assertSame([], $result['errors']);
+        $this->assertSame(['late1@shop.com'], MatterEmail::pending()->pluck('message_id')->all());
+
+        // It does not say: none is left out for its date — the one kept already is passed over by its Message-ID.
+        $this->assertSame(1, $run(false)['unfiled']);
+        $this->assertEqualsCanonicalizing(['late1@shop.com', 'late2@shop.com'], MatterEmail::pending()->pluck('message_id')->all());
+
+        // How far a mailbox has been read goes by when an email arrived, where known.
+        $arrived = now()->subMinutes(10);
+        app(MatterReplyCollector::class)->handle([$this->reply(['message_id' => '<late3@x>', 'at' => now()->subDays(2)->toDateTimeString(), 'arrived' => $arrived->toIso8601String()])], collect(), 'iflas', null, null, $progress);
+        $this->assertSame($arrived->toDateTimeString(), $progress['reached']->toDateTimeString());
+    }
+
+    public function test_a_test_email_of_a_campaign_whose_mailbox_is_gone_says_so(): void
+    {
+        $campaign = BulkMailCampaign::create(['name' => 'Notice', 'subject' => 'Notice', 'body' => '<p>x</p>', 'from_sender_key' => 'nowhere', 'daily_send_limit' => 10, 'created_by' => $this->user->id]);
+
+        Livewire::test(ViewBulkMailCampaign::class, ['record' => $campaign->getRouteKey()])
+            ->callAction('send_test')
+            ->assertNotified(__('bulk_mail.notifications.mailbox_unavailable'));
     }
 }

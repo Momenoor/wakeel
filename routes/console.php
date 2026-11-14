@@ -12,10 +12,6 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-Schedule::command('mail:send-bulk-campaigns')
-    ->dailyAt('08:00')
-    ->timezone('Asia/Dubai');
-
 // The employees' and companies' documents expiring in 60, 30 or 7 days, or today: told to whoever looks after them,
 // once a day from 8 in the morning — asked every minute, so a minute the web cron misses never loses a day.
 Schedule::command('documents:warn-expiring')

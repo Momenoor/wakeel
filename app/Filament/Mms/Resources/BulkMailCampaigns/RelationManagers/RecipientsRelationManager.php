@@ -329,6 +329,7 @@ class RecipientsRelationManager extends RelationManager
                                         'sent_at' => null,
                                         'failed_at' => null,
                                         'attempt_count' => 0,
+                                        'next_attempt_at' => null,
                                     ]);
                                     $record->campaign->decrement('failed_count');
                                 }
@@ -368,6 +369,7 @@ class RecipientsRelationManager extends RelationManager
             'failed_at' => null,
             'failure_reason' => null,
             'attempt_count' => 0,
+            'next_attempt_at' => null,
             'pdf_path' => null,
         ]);
     }

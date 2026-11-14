@@ -24,6 +24,8 @@ use Carbon\CarbonInterface;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\Client\Response;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -31,12 +33,14 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\HtmlString;
+use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
 use RuntimeException;
 use Throwable;
 use Webklex\PHPIMAP\Address;
 use Webklex\PHPIMAP\Attachment as ImapAttachment;
 use Webklex\PHPIMAP\Folder;
+use Webklex\PHPIMAP\IMAP;
 use Webklex\PHPIMAP\Message;
 
 /**
@@ -143,6 +147,18 @@ class MatterReplyCollector
             ->when($matterId, fn ($q) => $q->where('matter_id', $matterId))
             ->get()
             ->groupBy('sender_key');
+
+        // What an earlier run left behind — an email half kept, or one that failed before anything of it was kept —
+        // first, found again by its Message-ID: the mailbox is read from further on by now.
+        if ($automatic) {
+            try {
+                foreach ($this->retryLeftBehind($sent, $deadline) as $kind => $count) {
+                    $result[$kind] += $count;
+                }
+            } catch (Throwable $e) {
+                Log::warning('Emails left behind not tried again: '.$e->getMessage());
+            }
+        }
 
         // Every mailbox set to be read (Mail senders, Mailbox folders, a user's own) — whether or not anything was
         // ever sent from it: a shared one the parties write to first still receives.
@@ -361,8 +377,9 @@ class MatterReplyCollector
 
             $id = MatterEmail::messageId($message['message_id'] ?? null);
             // How far the mailbox has been read — messages come oldest first, and a stop for time
-            // only ever happens before the next one is begun.
-            $at = isset($message['at']) ? self::arrivedAt($message) : null;
+            // only ever happens before the next one is begun. By when it reached the mailbox, where that is
+            // known apart from the Date its sender wrote (a cPanel mailbox: 'arrived').
+            $at = isset($message['arrived']) ? self::arrivedAt(['at' => $message['arrived']]) : (isset($message['at']) ? self::arrivedAt($message) : null);
             // A Date header in the future (a wrong clock) or an unreadable one must not move it past the rest.
             if ($at !== null && $at->lte($startedAt) && $at->year > 1971 && ($progress['reached'] === null || $at->gt($progress['reached']))) {
                 $progress['reached'] = $at;
@@ -383,7 +400,8 @@ class MatterReplyCollector
                 continue;
             }
 
-            // Kept already — but one that was cut off half way (its row made, its files never kept) is
+            // Kept already — but one that was cut off half way (its row made, its files never kept: one that came
+            // in, or one the office wrote from Outlook kept as sent) is
             // kept again by the automatic run: only once it is clearly abandoned (older than any run
             // lasts, so not another run still keeping it) and only a few times (one that kills PHP
             // every time must not stop the mailbox for ever).
@@ -463,8 +481,17 @@ class MatterReplyCollector
                 }
             } catch (Throwable $e) {
                 // Its row, if it was made, stays without files: once abandoned long enough, the
-                // automatic run tries it again (retryAbandoned()).
+                // automatic run tries it again (retryAbandoned()). Failed before its row was made: noted, and
+                // tried again by the runs after — wherever the mailbox is read from by then (retryLeftBehind()).
                 Log::warning('Email not kept: '.$e->getMessage(), ['message' => $id]);
+
+                if ($id !== null) {
+                    $this->threw[$id] = true;
+
+                    if ($matterId === null && $senderKey !== null) {
+                        $this->noteFailed($id, $senderKey, $message);
+                    }
+                }
             } finally {
                 $claim?->release();
             }
@@ -565,10 +592,8 @@ class MatterReplyCollector
      */
     private function retryAbandoned(string $id): void
     {
-        $half = MatterEmail::query()
-            ->where('direction', MatterEmail::RECEIVED)
+        $half = self::halfKept()
             ->where('message_id', $id)
-            ->whereNull('files')
             ->where('created_at', '<=', now()->subMinutes(self::ABANDONED_MINUTES))
             ->get();
 
@@ -587,6 +612,164 @@ class MatterReplyCollector
 
         Cache::put('mail-keep-retries:'.$id, $tries + 1, now()->addDays(7));
         $half->each->delete();
+    }
+
+    /**
+     * The emails read from a mailbox whose row was made but whose files were never kept: one that came in — or one
+     * the office wrote from Outlook, kept as sent (keepSentByOffice(): no source, its matter known by something).
+     * Not an email sent from Wakeel, which has its source and may rightly have no files.
+     *
+     * @return Builder<MatterEmail>
+     */
+    private static function halfKept(): Builder
+    {
+        return MatterEmail::query()
+            ->whereNull('files')
+            ->where(fn (Builder $query) => $query
+                ->where('direction', MatterEmail::RECEIVED)
+                ->orWhere(fn (Builder $query) => $query->where('direction', MatterEmail::SENT)->whereNull('source_type')->whereNotNull('matched_by')));
+    }
+
+    /** Setting: the emails that failed before anything of them was kept — Message-ID => {sender, at, tries, noted_at}. */
+    public const FAILED = 'mail_collect_failed';
+
+    /** The most kept in that list: the oldest gives way. */
+    private const FAILED_MOST = 200;
+
+    /** How many emails left behind an automatic run tries again, of each kind. */
+    private const RETRIED_A_RUN = 5;
+
+    /** How many days back a half-kept email is still tried again: older ones are from before, left as they are. */
+    private const LEFT_BEHIND_DAYS = 7;
+
+    /** @var array<string, true> the Message-IDs whose keeping threw, this run */
+    private array $threw = [];
+
+    /**
+     * @return array<string, array{sender: string, at: string, tries: int, noted_at: string}>
+     */
+    private static function failedList(): array
+    {
+        return array_filter((array) Setting::get(self::FAILED, []), 'is_array');
+    }
+
+    /**
+     * An email whose keeping failed before its row was made (the mailbox's server refused for now, say): noted, to
+     * be tried again by its Message-ID (retryLeftBehind()) once the mailbox is read from further on.
+     *
+     * @param  array<string, mixed>  $message
+     */
+    private function noteFailed(string $id, string $senderKey, array $message): void
+    {
+        $failed = self::failedList();
+
+        // Noted already; or its row was made — tried again through its row.
+        if (isset($failed[$id]) || MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->where('message_id', $id)->exists()) {
+            return;
+        }
+
+        $failed[$id] = ['sender' => $senderKey, 'at' => self::arrivedAt($message)->toIso8601String(), 'tries' => 0, 'noted_at' => now()->toIso8601String()];
+
+        Setting::set(self::FAILED, array_slice($failed, -self::FAILED_MOST, null, true), 'mail', 'json');
+    }
+
+    /**
+     * What earlier runs left behind, tried again whatever the time the mailboxes are read from by now: an email
+     * half kept (its row made, its files never kept) once abandoned, and one that failed before its row was made —
+     * each found again in its mailbox by its Message-ID, a few a run, up to RETRIES times. One no longer in its
+     * mailbox, or still failing after that, is left (and logged).
+     *
+     * @param  Collection<string, Collection<int, MatterEmail>>  $sent  the emails sent, by mailbox
+     * @return array{replies: int, emails: int, sent: int, unfiled: int}
+     */
+    private function retryLeftBehind(Collection $sent, ?float $deadline): array
+    {
+        $kept = ['replies' => 0, 'emails' => 0, 'sent' => 0, 'unfiled' => 0];
+        $mailboxes = array_map('strval', array_keys(SenderMailer::collected()));
+        $abandoned = now()->subMinutes(self::ABANDONED_MINUTES);
+        $tried = 0;
+        // Out of time: the rest next run (one is always tried).
+        $outOfTime = function () use ($deadline, &$tried): bool {
+            return $deadline !== null && $tried++ > 0 && microtime(true) >= $deadline;
+        };
+        $again = function (string $id, string $senderKey, mixed $at) use ($sent, &$kept): ?bool {
+            try {
+                $message = $this->findMessage((new MatterEmail)->forceFill(['message_id' => $id, 'sender_key' => $senderKey, 'at' => $at]));
+            } catch (Throwable $e) {
+                // The mailbox not reached: nothing said of the email — tried next run.
+                Log::warning('Email left behind not looked for: '.$e->getMessage(), ['message' => $id]);
+
+                return null;
+            }
+
+            if ($message === null) {
+                return false;
+            }
+
+            unset($this->threw[$id]);
+            foreach ($this->handleAll([$message], $sent->get($senderKey, collect()), $senderKey, null) as $kind => $count) {
+                $kept[$kind] += $count;
+            }
+
+            return true;
+        };
+
+        // Half kept: kept again through handleAll() (retryAbandoned() counts its tries, and leaves it after RETRIES).
+        $half = self::halfKept()
+            ->whereNotNull('message_id')
+            ->whereIn('sender_key', $mailboxes)
+            ->whereBetween('created_at', [now()->subDays(self::LEFT_BEHIND_DAYS), $abandoned])
+            ->oldest('id')
+            ->limit(self::RETRIED_A_RUN)
+            ->get();
+
+        foreach ($half as $email) {
+            if ($outOfTime()) {
+                return $kept;
+            }
+
+            if ($again((string) $email->message_id, (string) $email->sender_key, $email->at) === false) {
+                Log::warning('Email left half kept: no longer in its mailbox', ['message' => $email->message_id]);
+                $email->update(['files' => []]);
+            }
+        }
+
+        // Failed before its row was made.
+        $waiting = array_filter(self::failedList(), fn (array $entry): bool => in_array((string) ($entry['sender'] ?? ''), $mailboxes, true)
+            && Carbon::parse((string) ($entry['noted_at'] ?? 'now'))->lte($abandoned));
+
+        foreach (array_slice($waiting, 0, self::RETRIED_A_RUN, true) as $id => $entry) {
+            if ($outOfTime()) {
+                return $kept;
+            }
+
+            $id = (string) $id;
+            $found = $again($id, (string) $entry['sender'], $entry['at'] ?? null);
+
+            if ($found === null) {
+                continue;
+            }
+
+            $failed = self::failedList();
+            $tries = (int) ($entry['tries'] ?? 0) + 1;
+
+            if ($found === false || ! isset($this->threw[$id])) {
+                // Gone from its mailbox; or it went through this time (kept — or not one to keep).
+                unset($failed[$id]);
+                if ($found === false) {
+                    Log::warning('Email not kept: no longer in its mailbox', ['message' => $id]);
+                }
+            } elseif ($tries >= self::RETRIES) {
+                Log::warning('Email not kept after '.self::RETRIES.' more tries', ['message' => $id]);
+                unset($failed[$id]);
+            } else {
+                $failed[$id] = [...$entry, 'tries' => $tries];
+            }
+
+            Setting::set(self::FAILED, $failed, 'mail', 'json');
+        }
+
+        return $kept;
     }
 
     /**
@@ -1581,7 +1764,8 @@ class MatterReplyCollector
         try {
             $raw = (string) ($message['raw'])();
         } catch (Throwable $e) {
-            Log::info('Original email not read: '.$e->getMessage(), ['message' => $message['message_id'] ?? null]);
+            // The email is kept without its original — said, as it is not tried again.
+            Log::warning('Original email not read: '.$e->getMessage(), ['message' => $message['message_id'] ?? null]);
 
             return null;
         }
@@ -1877,15 +2061,21 @@ class MatterReplyCollector
      */
     private function imapPage(Folder $inbox, iterable $headers, CarbonInterface $since): iterable
     {
+        $arrivals = $this->imapArrivals($inbox, $headers);
+
         foreach ($headers as $header) {
-            // The whole day before was asked for (SINCE is a date): none from before the time asked.
             $date = $header->getDate()->toDate();
-            if ($date->year >= 1971 && $date->lt($since)) {
+            $uid = (int) $header->uid;
+            // The whole day before was asked for (SINCE is a date): none that reached the mailbox before the time
+            // asked — by when it arrived (INTERNALDATE), not by the Date its sender wrote: an email delivered
+            // hours late would never be read. Where the server does not say when, none is left out here: one
+            // kept already is passed over by its Message-ID.
+            $arrived = $arrivals[$uid] ?? null;
+            if ($arrived !== null && $arrived->lt($since)) {
                 continue;
             }
 
             $from = collect($header->get('from')?->all() ?? [])->first(fn ($a) => $a instanceof Address);
-            $uid = (int) $header->uid;
             // Decoded tolerantly: a badly encoded part ("iconv(): Detected an illegal character") must not lose the email.
             $whole = self::once(fn () => Tolerant::run(fn () => $inbox->query()->leaveUnread()->setFetchFlags(false)->getMessageByUid($uid)));
 
@@ -1900,6 +2090,8 @@ class MatterReplyCollector
                 // The moment with its offset — "+0000" from Outlook is not the app's local time.
                 // (An unreadable Date header comes back as 1970: read as now instead.)
                 'at' => $date->year < 1971 ? now()->toIso8601String() : $date->toIso8601String(),
+                // When it reached the mailbox, where the server says: how far the mailbox has been read goes by it.
+                ...($arrived !== null ? ['arrived' => $arrived->toIso8601String()] : []),
                 'headers' => fn (): array => self::headerLines((string) ($header->getHeader()?->raw ?? '')),
                 // The whole message, fetched once however many of these are asked for.
                 'body' => fn (): string => Tolerant::run(function () use ($whole): string {
@@ -1937,6 +2129,47 @@ class MatterReplyCollector
                 },
             ];
         }
+    }
+
+    /**
+     * When each message of a page reached the mailbox (IMAP's INTERNALDATE), by its uid — asked of the server in
+     * one call, as the library reads only the Date header. Empty when the server does not give it.
+     *
+     * @return array<int, CarbonInterface>
+     */
+    private function imapArrivals(Folder $inbox, iterable $headers): array
+    {
+        $uids = collect($headers)->map(fn ($header): int => (int) $header->uid)->filter()->values()->all();
+
+        if ($uids === []) {
+            return [];
+        }
+
+        try {
+            $client = $inbox->getClient();
+            $client->openFolder($inbox->path);
+            $dates = (array) $client->getConnection()->fetch(['INTERNALDATE'], $uids, null, IMAP::ST_UID)->validatedData();
+        } catch (Throwable $e) {
+            Log::debug('IMAP arrival times not read: '.$e->getMessage());
+
+            return [];
+        }
+
+        $arrivals = [];
+
+        foreach ($dates as $uid => $date) {
+            try {
+                $arrived = is_string($date) && trim($date) !== '' ? Carbon::parse($date) : null;
+            } catch (Throwable) {
+                $arrived = null;
+            }
+
+            if ($arrived !== null && $arrived->year > 1971) {
+                $arrivals[(int) $uid] = $arrived;
+            }
+        }
+
+        return $arrivals;
     }
 
     /**
@@ -2075,19 +2308,18 @@ class MatterReplyCollector
             'headers' => $headers->all(),
             'body' => ($item['body']['contentType'] ?? 'html') === 'html' ? (string) ($item['body']['content'] ?? '') : nl2br(e((string) ($item['body']['content'] ?? ''))),
             // The email as it came (MIME).
-            'raw' => function () use ($base, $graphId): string {
-                $response = Http::withToken($this->graph->getAccessToken())->timeout(120)->get($base.'/messages/'.rawurlencode($graphId).'/$value');
-
-                return $response->successful() ? $response->body() : '';
-            },
+            // A request that fails throws: the email is kept without its original, and said (original()).
+            'raw' => fn (): string => $this->graphGet($base.'/messages/'.rawurlencode($graphId).'/$value')->body(),
             'attachments' => function () use ($base, $graphId, $item): array {
                 if (! ($item['hasAttachments'] ?? false)) {
                     return [];
                 }
 
-                $response = Http::withToken($this->graph->getAccessToken())->timeout(120)->get($base.'/messages/'.rawurlencode($graphId).'/attachments');
+                // A request that fails throws — never "no files": the email is not kept as complete without
+                // them, and is tried again.
+                $response = $this->graphGet($base.'/messages/'.rawurlencode($graphId).'/attachments');
 
-                return collect($response->successful() ? ($response->json()['value'] ?? []) : [])
+                return collect($response->json()['value'] ?? [])
                     ->filter(fn ($a) => isset($a['contentBytes']) || ($a['@odata.type'] ?? '') === '#microsoft.graph.itemAttachment')
                     ->reject(fn ($a) => self::isPartOfText((string) ($a['name'] ?? ''), (string) ($a['contentType'] ?? ''), (string) ($a['contentId'] ?? ''), (int) ($a['size'] ?? strlen((string) base64_decode((string) ($a['contentBytes'] ?? '')))), (bool) ($a['isInline'] ?? false), (string) ($item['body']['content'] ?? '')))
                     ->map(fn ($a): ?array => isset($a['contentBytes'])
@@ -2103,23 +2335,60 @@ class MatterReplyCollector
     }
 
     /**
-     * An email attached to a Microsoft 365 email, as the .eml it is — null when it cannot be read.
+     * An email attached to a Microsoft 365 email, as the .eml it is — null when Microsoft 365 gives nothing for
+     * it. A request that fails throws (graphGet()): the email it came with is tried again, not kept without it.
      *
      * @param  array<string, mixed>  $attachment
      * @return array{name: string, contents: string, mime: string}|null
      */
     private function attachedEmail(string $base, string $graphId, array $attachment): ?array
     {
-        $response = Http::withToken($this->graph->getAccessToken())->timeout(120)
-            ->get($base.'/messages/'.rawurlencode($graphId).'/attachments/'.rawurlencode((string) ($attachment['id'] ?? '')).'/$value');
+        $response = $this->graphGet($base.'/messages/'.rawurlencode($graphId).'/attachments/'.rawurlencode((string) ($attachment['id'] ?? '')).'/$value');
 
-        if (! $response->successful() || $response->body() === '') {
+        if ($response->body() === '') {
             return null;
         }
 
         $name = trim((string) ($attachment['name'] ?? '')) ?: 'email';
 
         return ['name' => str_ends_with(mb_strtolower($name), '.eml') ? $name : $name.'.eml', 'contents' => $response->body(), 'mime' => 'message/rfc822'];
+    }
+
+    /** How many times a request Microsoft 365 turns back for now (429, 503) is made before it fails. */
+    private const GRAPH_TRIES = 3;
+
+    /** The longest Microsoft 365's Retry-After is waited for; asked to wait longer, the request fails and a later run tries. */
+    private const GRAPH_WAIT_SECONDS = 10;
+
+    /**
+     * A part of a Microsoft 365 message asked for (its files, its original): the answer — or, when the request
+     * fails, an exception, never an empty answer taken for "nothing there". Turned back for now (429 too many
+     * requests, 503 not available), it is asked again after the wait Microsoft 365 names (Retry-After), a couple
+     * of times.
+     */
+    private function graphGet(string $url, int $timeout = 120): Response
+    {
+        for ($try = 1; ; $try++) {
+            $response = Http::withToken($this->graph->getAccessToken())->timeout($timeout)->get($url);
+
+            if (! in_array($response->status(), [429, 503], true) || $try >= self::GRAPH_TRIES) {
+                break;
+            }
+
+            $wait = max(1, (int) $response->header('Retry-After'));
+
+            if ($wait > self::GRAPH_WAIT_SECONDS) {
+                break;
+            }
+
+            Sleep::for($wait)->seconds();
+        }
+
+        if ($response->failed()) {
+            throw new RuntimeException('Microsoft Graph '.$response->status().': '.($response->json('error.message') ?? Str::limit($response->body(), 300)));
+        }
+
+        return $response;
     }
 
     public static function checkedKey(string $senderKey): string

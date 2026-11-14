@@ -137,6 +137,8 @@ class BulkMailCampaignSchema
                     Select::make('status')
                         ->label(__('bulk_mail.fields.status'))
                         ->options(BulkMailCampaignStatus::class)
+                        // Paused by the system itself: why (its mailbox deactivated or deleted).
+                        ->helperText(fn (?BulkMailCampaign $record): ?string => $record?->pausedReasonLabel())
                         ->required()
                         ->default(BulkMailCampaignStatus::Draft),
                 ])->columns(3),

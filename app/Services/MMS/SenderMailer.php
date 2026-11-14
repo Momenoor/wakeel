@@ -4,6 +4,10 @@ namespace App\Services\MMS;
 
 use App\Models\MailSender;
 use App\Models\User;
+use App\Services\Installer\InstallationStatus;
+use Illuminate\Contracts\Encryption\DecryptException;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Microsoft\Graph\Generated\Models\ODataErrors\ODataError;
 use RuntimeException;
@@ -84,16 +88,57 @@ class SenderMailer
         }
 
         try {
-            $managed = MailSender::query()->where('is_active', true)->orderBy('name')->get()
-                ->mapWithKeys(fn (MailSender $sender) => [$sender->key => $sender->toSender()])
-                ->all();
-        } catch (Throwable) {
-            return []; // Before the table exists (e.g. mid-install).
+            $senders = MailSender::query()->where('is_active', true)->orderBy('name')->get();
+        } catch (Throwable $e) {
+            // Before the table exists (e.g. mid-install): none, quietly. Anything else is said.
+            if (! self::tableMissing($e)) {
+                Log::error('The mailboxes could not be read: '.$e->getMessage());
+            }
+
+            return [];
+        }
+
+        $managed = [];
+
+        foreach ($senders as $sender) {
+            try {
+                $managed[$sender->key] = $sender->toSender();
+            } catch (Throwable $e) {
+                // One that cannot be read — its password not decrypted (another APP_KEY, after a move) — is left
+                // out and said; the others stay.
+                self::logUnreadable($sender, $e);
+            }
         }
 
         app()->instance(self::CACHE, $managed);
 
         return $managed;
+    }
+
+    /** Whether a query failed only because the mail_senders table is not there yet (or no database is). */
+    private static function tableMissing(Throwable $e): bool
+    {
+        if (! $e instanceof QueryException) {
+            return false;
+        }
+
+        // 42S02: MySQL's "table doesn't exist"; SQLite says "no such table" under HY000.
+        return $e->getCode() === '42S02' || str_contains($e->getMessage(), 'no such table') || ! app(InstallationStatus::class)->isInstalled();
+    }
+
+    /** Said once every ten minutes a mailbox, not on every request. */
+    private static function logUnreadable(MailSender $sender, Throwable $e): void
+    {
+        try {
+            if (! Cache::add('mail-sender-unreadable:'.$sender->key, true, now()->addMinutes(10))) {
+                return;
+            }
+        } catch (Throwable) {
+            // No cache to remember it in: said each time.
+        }
+
+        Log::error('Mailbox '.$sender->address.' ['.$sender->key.'] cannot be read and is left out: '.$e->getMessage()
+            .($e instanceof DecryptException ? ' — its saved password was encrypted with another APP_KEY: enter the password again in Mail senders, or put the old APP_KEY back.' : ''));
     }
 
     /** Read again on next ask: a mailbox was added, changed or removed. */

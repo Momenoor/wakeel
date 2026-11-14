@@ -204,6 +204,7 @@ class CronWebhookRunner
             '--max-time' => $seconds,
             '--tries' => 3,
             '--timeout' => 35,
+            '--memory' => 256,
         ], $output);
 
         if ($event->output && $event->output !== $event->getDefaultOutput() && ($text = $output->fetch()) !== '') {

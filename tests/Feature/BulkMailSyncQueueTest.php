@@ -7,11 +7,16 @@ use App\Enums\BulkMailRecipientStatus;
 use App\Events\BulkMailCampaignUpdated;
 use App\Jobs\SendBulkMailBatch;
 use App\Models\BulkMailCampaign;
+use App\Models\BulkMailLog;
+use App\Models\MailSender;
 use App\Models\BulkMailRecipient;
 use App\Models\User;
+use App\Services\CronWebhookRunner;
 use App\Services\MMS\BulkMailService;
 use App\Services\MMS\SentFolder;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Event;
@@ -209,5 +214,119 @@ class BulkMailSyncQueueTest extends TestCase
         SendBulkMailBatch::dispatch($this->campaign(2)->id);
 
         Event::assertNotDispatched(BulkMailCampaignUpdated::class);
+    }
+
+    public function test_a_campaign_whose_mailbox_is_gone_is_paused_saying_why_and_the_others_still_send(): void
+    {
+        \Tests\Support\MailSenders::add('other', ['address' => 'other@example.com']);
+        $gone = $this->campaign(2);
+        $deleted = $this->campaign(2);
+        $deleted->update(['from_sender_key' => 'nowhere']);
+        $fine = $this->campaign(2);
+        $fine->update(['from_sender_key' => 'other']);
+        // Deactivated after the campaign was started.
+        MailSender::query()->where('key', 'test')->first()->update(['is_active' => false]);
+
+        $this->assertSame(0, Artisan::call('mail:send-bulk-campaigns'));
+
+        // Nothing sent from either, each paused with its reason — and the one after them sent.
+        foreach ([$gone, $deleted] as $campaign) {
+            $this->assertSame(BulkMailCampaignStatus::Paused, $campaign->fresh()->status);
+            $this->assertSame(BulkMailCampaign::MAILBOX_UNAVAILABLE, $campaign->fresh()->paused_reason);
+            $this->assertSame(__('bulk_mail.paused_reasons.mailbox_unavailable'), $campaign->fresh()->pausedReasonLabel());
+            $this->assertSame(2, $this->statusCount($campaign, BulkMailRecipientStatus::Pending));
+        }
+        $this->assertCount(2, $this->sent);
+        $this->assertSame(2, $this->statusCount($fine, BulkMailRecipientStatus::Sent));
+
+        // Paused: not looked at again the next minute. Started again with its mailbox back: the reason gone, and sent.
+        Artisan::call('mail:send-bulk-campaigns');
+        $this->assertCount(2, $this->sent);
+        MailSender::query()->where('key', 'test')->first()->update(['is_active' => true]);
+        $gone->fresh()->update(['status' => BulkMailCampaignStatus::Active]);
+        $this->assertNull($gone->fresh()->paused_reason);
+        Artisan::call('mail:send-bulk-campaigns');
+        $this->assertSame(2, $this->statusCount($gone, BulkMailRecipientStatus::Sent));
+    }
+
+    public function test_one_campaign_failing_never_stops_the_campaigns_after_it(): void
+    {
+        $broken = $this->campaign(1);
+        $broken->recipients()->first()->update(['email' => ['broken@example.com']]);
+        $fine = $this->campaign(2);
+        // Its send fails, and then recording the failure fails too — an error (not an Exception) out of the job.
+        Event::listen(MessageSending::class, function (MessageSending $event): void {
+            if ($event->message->getTo()[0]->getAddress() === 'broken@example.com') {
+                throw new \RuntimeException('Mailbox full');
+            }
+        });
+        BulkMailLog::creating(function (BulkMailLog $log) use ($broken): void {
+            if ((int) $log->campaign_id === (int) $broken->id) {
+                throw new \TypeError('Cannot record');
+            }
+        });
+
+        try {
+            $this->assertSame(0, Artisan::call('mail:send-bulk-campaigns'));
+        } finally {
+            BulkMailLog::flushEventListeners();
+        }
+
+        $this->assertStringContainsString('failed — Cannot record', Artisan::output());
+        $this->assertSame(2, $this->statusCount($fine, BulkMailRecipientStatus::Sent));
+    }
+
+    public function test_a_failed_recipient_waits_before_its_next_try_and_does_not_hold_the_others(): void
+    {
+        config(['mail_senders.retry_delay_minutes' => 30, 'mail_senders.retry_attempts' => 3]);
+        $campaign = $this->campaign(3);
+        $first = $campaign->recipients()->orderBy('id')->first();
+        $tries = 0;
+        // An Error, not an Exception: counted as a failed try all the same.
+        Event::listen(MessageSending::class, function (MessageSending $event) use (&$tries): void {
+            if ($event->message->getTo()[0]->getAddress() === 'creditor1@example.com') {
+                $tries++;
+                throw new \TypeError('Mailbox unavailable');
+            }
+        });
+
+        // Its first try fails: it waits half an hour, still pending.
+        Artisan::call('mail:send-bulk-campaigns');
+        $this->assertSame(1, $tries);
+        $this->assertSame(BulkMailRecipientStatus::Pending, $first->fresh()->status);
+        $this->assertSame(1, $first->fresh()->attempt_count);
+        $this->assertTrue($first->fresh()->next_attempt_at->between(now()->addMinutes(29), now()->addMinutes(31)));
+
+        // The runs a minute apart: the others go, it is not tried — and the campaign is not complete with it waiting.
+        Artisan::call('mail:send-bulk-campaigns');
+        Artisan::call('mail:send-bulk-campaigns');
+        $this->assertSame(1, $tries);
+        $this->assertSame(2, $this->statusCount($campaign, BulkMailRecipientStatus::Sent));
+        $this->assertSame(BulkMailCampaignStatus::Active, $campaign->fresh()->status);
+
+        // After the wait: tried again, and again after the next — then failed for good.
+        $this->travel(31)->minutes();
+        Artisan::call('mail:send-bulk-campaigns');
+        $this->assertSame(2, $tries);
+        $this->assertSame(BulkMailRecipientStatus::Pending, $first->fresh()->status);
+        Artisan::call('mail:send-bulk-campaigns');
+        $this->assertSame(2, $tries);
+
+        $this->travel(31)->minutes();
+        Artisan::call('mail:send-bulk-campaigns');
+        $this->assertSame(3, $tries);
+        $this->assertSame(BulkMailRecipientStatus::Failed, $first->fresh()->status);
+        $this->assertNull($first->fresh()->next_attempt_at);
+        $this->assertSame(1, $campaign->fresh()->failed_count);
+    }
+
+    public function test_the_campaigns_are_sent_by_one_scheduled_task_every_minute(): void
+    {
+        $events = collect(app(CronWebhookRunner::class)->schedule()->events())
+            ->filter(fn ($event) => CronWebhookRunner::artisanCommand($event) === 'mail:send-bulk-campaigns')
+            ->values();
+
+        $this->assertCount(1, $events);
+        $this->assertSame('* * * * *', $events[0]->expression);
     }
 }

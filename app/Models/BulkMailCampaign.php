@@ -33,6 +33,7 @@ class BulkMailCampaign extends Model
         'daily_send_limit',
         'scheduled_at',
         'status',
+        'paused_reason',
         'placeholders',
         'total_recipients',
         'sent_count',
@@ -50,6 +51,25 @@ class BulkMailCampaign extends Model
         'scheduled_at' => 'datetime',
         'status' => BulkMailCampaignStatus::class,
     ];
+
+    /** Why the system paused it itself (paused_reason): its mailbox was deactivated or deleted (SendBulkMailBatch). */
+    public const MAILBOX_UNAVAILABLE = 'mailbox_unavailable';
+
+    protected static function booted(): void
+    {
+        // Started again, or its status set by hand: why it was paused no longer holds.
+        static::saving(function (self $campaign): void {
+            if ($campaign->status !== BulkMailCampaignStatus::Paused) {
+                $campaign->paused_reason = null;
+            }
+        });
+    }
+
+    /** Why the system paused it, in words — null when a person paused it, or it is not paused. */
+    public function pausedReasonLabel(): ?string
+    {
+        return filled($this->paused_reason) ? __('bulk_mail.paused_reasons.'.$this->paused_reason) : null;
+    }
 
     public function uniqueIds(): array
     {

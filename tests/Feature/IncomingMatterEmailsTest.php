@@ -1461,4 +1461,37 @@ class IncomingMatterEmailsTest extends TestCase
         Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->second, 'pageClass' => ViewMatter::class])
             ->assertTableActionHidden('linkReply', $new);
     }
+
+    public function test_an_email_written_from_outlook_cut_off_half_way_is_kept_again_not_taken_for_a_copy(): void
+    {
+        User::factory()->create(['email' => 'amr@jpa.ae']);
+        $email = $this->email([
+            'message_id' => '<outlook-1@jpa.ae>', 'from' => 'amr@jpa.ae', 'from_name' => 'عمرو', 'subject' => 'طلب مستندات — القضية 987/2026',
+            'to' => ['office@albanna.ae'], 'cc' => ['iflas@jpa.ae'],
+        ]);
+        // Its row made as sent, its files never kept — a moment ago: another run may still be keeping it, so it is left.
+        $half = MatterEmail::create([
+            'matter_id' => $this->second->id, 'direction' => MatterEmail::SENT, 'status' => MatterEmail::FILED, 'matched_by' => MatterEmail::BY_SUBJECT,
+            'sender_key' => 'iflas', 'message_id' => 'outlook-1@jpa.ae', 'subject' => 'طلب مستندات — القضية 987/2026', 'to' => ['office@albanna.ae'], 'at' => now(),
+        ]);
+        $this->assertSame(0, $this->collect($email));
+        $this->assertNull($half->fresh()->files);
+
+        // Abandoned: kept again, whole — once.
+        $half->forceFill(['created_at' => now()->subMinutes(30)])->saveQuietly();
+        $this->assertSame(1, $this->collect($email));
+        $sent = MatterEmail::query()->where('direction', MatterEmail::SENT)->sole();
+        $this->assertNotNull($sent->files);
+        $this->assertSame(1, $this->second->progress()->where('type', ProgressType::EMAIL_SENT)->count());
+        $this->assertSame(0, $this->collect($email));
+
+        // An email sent from Wakeel has its source and may have no files: never taken for one cut off.
+        $ours = MatterEmail::create([
+            'matter_id' => $this->second->id, 'direction' => MatterEmail::SENT, 'source_type' => 'letter', 'source_id' => 1,
+            'sender_key' => 'iflas', 'message_id' => 'wakeel-1@jpa.ae', 'subject' => 'خطاب', 'to' => ['office@albanna.ae'], 'at' => now(),
+        ]);
+        $ours->forceFill(['created_at' => now()->subMinutes(30)])->saveQuietly();
+        $this->assertSame(0, $this->collect($this->email(['message_id' => '<wakeel-1@jpa.ae>', 'from' => 'iflas@jpa.ae', 'subject' => 'خطاب', 'to' => ['office@albanna.ae']])));
+        $this->assertNull($ours->fresh()->files);
+    }
 }

@@ -13,7 +13,9 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
 use Microsoft\Graph\Generated\Models\ODataErrors\MainError;
 use Microsoft\Graph\Generated\Models\ODataErrors\ODataError;
@@ -191,5 +193,35 @@ class MailSenderTest extends TestCase
         // For the previews: images stay inline.
         $this->assertStringContainsString('.wk-mail img', MailSender::previewCss());
         $this->assertStringContainsString('display: inline-block', MailSender::previewCss());
+    }
+
+    public function test_a_mailbox_whose_password_cannot_be_read_is_left_out_and_said_and_the_others_stay(): void
+    {
+        MailSenders::add('good', ['address' => 'good@jpaemirates.com', 'password' => 'p@ss']);
+        MailSenders::add('broken', ['address' => 'broken@jpaemirates.com']);
+        $this->microsoft('info', 'info@jpaemirates.com');
+        // As after a move to a server with another APP_KEY: what is saved is not this key's.
+        DB::table('mail_senders')->where('key', 'broken')->update(['password' => 'encrypted-with-another-key']);
+        SenderMailer::forget();
+        Log::spy();
+
+        $this->assertEqualsCanonicalizing(['good', 'info'], array_keys(SenderMailer::all()));
+        $this->assertSame('p@ss', SenderMailer::sender('good')['password']);
+        Log::shouldHaveReceived('error')->once()->withArgs(fn (string $line): bool => str_contains($line, 'broken@jpaemirates.com') && str_contains($line, 'APP_KEY'));
+
+        // Asked again (another request): the others still there, the same thing not said again at once.
+        SenderMailer::forget();
+        $this->assertCount(2, SenderMailer::all());
+        Log::shouldHaveReceived('error')->once();
+    }
+
+    public function test_before_the_mailboxes_table_exists_there_are_none_and_nothing_is_said(): void
+    {
+        Schema::drop('mail_senders');
+        SenderMailer::forget();
+        Log::spy();
+
+        $this->assertSame([], SenderMailer::all());
+        Log::shouldNotHaveReceived('error');
     }
 }

@@ -66,9 +66,13 @@ return [
         'placeholders' => 'Define keys used in subject/body, e.g. name, amount, matter_number',
         'scheduled_at' => 'Leave empty to send manually',
     ],
+    'paused_reasons' => [
+        'mailbox_unavailable' => 'Paused by the system: the mailbox this campaign is sent from is deactivated or deleted. Choose another mailbox (or activate it again), then start the campaign.',
+    ],
     'notifications' => [
         'completed' => 'Campaign ":name" has been completed.',
         'test_sent' => 'Test email sent successfully.',
+        'mailbox_unavailable' => 'The mailbox this campaign is sent from is deactivated or deleted. Choose another mailbox, or activate it again.',
         'starting' => 'The first emails go out within a minute.',
         'no_pdfs' => 'No PDF files are available for the selected recipients.',
     ],

@@ -91,6 +91,16 @@ class ViewBulkMailCampaign extends ViewRecord
                 ->label(__('bulk_mail.actions.send_test'))
                 ->icon('heroicon-o-paper-airplane')
                 ->action(function ($record) {
+                    // Its mailbox deactivated or deleted: said, nothing to send through.
+                    if ($record->sender_config === null) {
+                        Notification::make()
+                            ->danger()
+                            ->title(__('bulk_mail.notifications.mailbox_unavailable'))
+                            ->send();
+
+                        return;
+                    }
+
                     $recipient = new BulkMailRecipient([
                         'email' => auth()->user()->email,
                         'name' => auth()->user()->name,

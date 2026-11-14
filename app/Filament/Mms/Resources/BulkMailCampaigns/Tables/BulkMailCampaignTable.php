@@ -27,6 +27,7 @@ class BulkMailCampaignTable
                     ->badge(),
                 TextColumn::make('status')
                     ->label(__('bulk_mail.fields.status'))
+                    ->description(fn ($record): ?string => $record->pausedReasonLabel())
                     ->badge(),
                 TextColumn::make('stats')
                     ->label(__('bulk_mail.fields.progress'))

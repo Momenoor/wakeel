@@ -7,6 +7,8 @@ use App\Enums\BulkMailRecipientStatus;
 use App\Jobs\SendBulkMailBatch;
 use App\Models\BulkMailCampaign;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class SendBulkCampaignsCommand extends Command
 {
@@ -36,7 +38,16 @@ class SendBulkCampaignsCommand extends Command
             // worker. Dispatched onto a database queue (Laravel's default
             // when .env has no QUEUE_CONNECTION) the batch just sat in the
             // jobs table — cPanel has no queue:work to pick it up.
-            SendBulkMailBatch::dispatchSync($campaign->id);
+            // One campaign failing never stops the ones after it.
+            try {
+                SendBulkMailBatch::dispatchSync($campaign->id);
+            } catch (Throwable $e) {
+                Log::error("Bulk mail campaign {$campaign->id} failed: ".$e->getMessage());
+                report($e);
+                $this->error(sprintf('%s: failed — %s', $campaign->name, $e->getMessage()));
+
+                continue;
+            }
 
             $campaign->refresh();
             $pending = $campaign->recipients()->where('status', BulkMailRecipientStatus::Pending)->count();

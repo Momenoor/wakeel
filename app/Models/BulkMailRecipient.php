@@ -26,6 +26,8 @@ class BulkMailRecipient extends Model
         'failure_reason',
         'message_id',
         'attempt_count',
+        // After a failed send: not tried again before this (mail_senders.retry_delay_minutes).
+        'next_attempt_at',
         'unsubscribe_token',
         'pdf_path',
         'sent_subject',
@@ -38,6 +40,7 @@ class BulkMailRecipient extends Model
         'email' => 'array',
         'sent_at' => 'datetime',
         'failed_at' => 'datetime',
+        'next_attempt_at' => 'datetime',
         'status' => BulkMailRecipientStatus::class,
     ];
 
