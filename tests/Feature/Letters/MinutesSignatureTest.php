@@ -24,6 +24,7 @@ use App\Models\User;
 use App\Models\WhatsAppTemplate;
 use App\Services\MMS\Letters\MinutesSender;
 use App\Services\MMS\Letters\MinutesService;
+use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\SentFolder;
 use App\Services\Notifications\NotificationPreferences as Prefs;
 use App\Services\WhatsAppCloud;
@@ -400,6 +401,9 @@ class MinutesSignatureTest extends TestCase
         // Into the matter folder's signed-minutes subfolder.
         Http::assertSent(fn (Request $r) => str_contains($r->url(), '/drive/items/matter-folder/children') && $r['name'] === 'محاضر موقعة');
         Http::assertSent(fn (Request $r) => str_contains($r->url(), '/drive/items/signed-folder:/') && $r->body() === '%PDF-signed');
+        // Under its whole name — the "/" of "الأستاذ/" a space, not the start of the name.
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), '/drive/items/signed-folder:/')
+            && str_contains(rawurldecode($r->url()), __('signed by :name', ['name' => 'الأستاذ محمد عبد المقصود']).'.pdf'));
 
         // Thanked, once.
         $this->assertSame('text', end($this->whatsapp)['type']);
@@ -418,6 +422,43 @@ class MinutesSignatureTest extends TestCase
             ->assertTableColumnStateSet('signed', '1 / 1', $this->minutes)
             ->mountTableAction('signatures', $this->minutes)
             ->assertMountedActionModalSee(['https://od/signed/file.pdf', __('In OneDrive'), __('Signed').' '.Dates::dateTime($delivery->fresh()->signed_at)]);
+    }
+
+    public function test_a_signed_copys_link_cut_short_is_found_again_in_onedrive(): void
+    {
+        $this->send();
+
+        $delivery = $this->minutes->deliveries()->where('channel', MinutesDelivery::WHATSAPP)->sole();
+        $copy = $this->minutes->matter->attachments()->create([
+            'type' => 'minutes_signed', 'path' => 'attachments/minutes/signed/1.pdf', 'disk' => 'public',
+            'name' => 'محضر 1 — موقّع من الأستاذ/ محمد عبد المقصود.pdf', 'size' => 11, 'extension' => 'pdf',
+        ]);
+
+        // A link through Arabic folder names: six characters a letter, cut at the 255 the column took.
+        $whole = 'https://od/'.str_repeat('%D9%82', 60).'/file.pdf';
+        $delivery->update(['status' => MinutesDelivery::SIGNED, 'signed_attachments' => [$copy->id], 'onedrive_url' => substr($whole, 0, 255)]);
+
+        $file = fn (string $name, string $url, int $size): array => ['id' => $name, 'name' => $name, 'webUrl' => $url, 'folder' => false, 'children' => null, 'size' => $size, 'modified' => null, 'mime' => 'application/pdf'];
+        $inFolder = [$file('محمد عبد المقصود.pdf', $whole, 11), $file('another.pdf', 'https://od/another.pdf', 99)];
+
+        $folders = Mockery::mock(MatterOneDriveFolders::class)->makePartial();
+        $folders->shouldReceive('signedMinutesFiles')->once()->andReturn($inFolder);
+        $this->app->instance(MatterOneDriveFolders::class, $folders);
+
+        $this->artisan('minutes:relink-signed-copies')->expectsOutputToContain('1 of 1 links found again.')->assertSuccessful();
+        $this->assertSame($whole, $delivery->fresh()->onedrive_url);
+
+        // Nothing left to find.
+        $this->artisan('minutes:relink-signed-copies')->expectsOutputToContain('No link was cut.')->assertSuccessful();
+
+        // By its size; several of that size, by its name — as it is put there now, or as it was (after the "/" alone);
+        // none or several: left.
+        $name = 'محضر 1 — موقّع من الأستاذ/ محمد عبد المقصود.pdf';
+        $this->assertSame($whole, MatterOneDriveFolders::signedCopyAmong($inFolder, $name, 11)['webUrl']);
+        $this->assertSame($whole, MatterOneDriveFolders::signedCopyAmong([...$inFolder, $file('twin.pdf', 'https://od/twin.pdf', 11)], $name, 11)['webUrl']);
+        $this->assertSame('https://od/new.pdf', MatterOneDriveFolders::signedCopyAmong([$file('محضر 1 — موقّع من الأستاذ محمد عبد المقصود.pdf', 'https://od/new.pdf', 5)], $name, null)['webUrl']);
+        $this->assertNull(MatterOneDriveFolders::signedCopyAmong([$file('another.pdf', 'https://od/another.pdf', 99)], $name, 11));
+        $this->assertNull(MatterOneDriveFolders::signedCopyAmong([$file('a.pdf', 'https://od/a.pdf', 11), $file('b.pdf', 'https://od/b.pdf', 11)], $name, 11));
     }
 
     public function test_the_sender_is_told_of_a_reply_only_when_they_want_the_bell(): void

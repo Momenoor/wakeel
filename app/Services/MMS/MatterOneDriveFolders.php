@@ -1589,15 +1589,70 @@ class MatterOneDriveFolders
             return null;
         }
 
-        // A name with no extension stays without one: "name." is refused ("illegal characters").
-        $extension = pathinfo($name, PATHINFO_EXTENSION);
-        $file = (self::clean(pathinfo($name, PATHINFO_FILENAME)) ?: 'file').($extension !== '' ? '.'.$extension : '');
+        $file = self::uploadName($name);
 
         $item = $this->client->upload($target['user'], $target['id'], $file, $contents, $mime, $replace);
         // On the send screens' kept list of the folder's files at once.
         app(MatterOneDriveExplorer::class)->fileAdded($target['folder'], $target['id'], $item['id'], $file);
 
         return $item['webUrl'];
+    }
+
+    /**
+     * A file's name as uploadToSubfolder() puts it in OneDrive: whole — a "/" in it ("signed by الأستاذ/ …") a
+     * space, not the start of the name (pathinfo() kept only what followed it). A name with no extension stays
+     * without one: "name." is refused ("illegal characters").
+     */
+    private static function uploadName(string $name): string
+    {
+        [$base, $extension] = SentEmailArchive::splitName($name);
+
+        return (self::clean($base) ?: 'file').($extension !== '' ? '.'.$extension : '');
+    }
+
+    /**
+     * The files in the matter's signed-minutes folder, as OneDrive has them now — none when the matter has no
+     * folder or the folder is not there.
+     *
+     * @return list<array{id: string, name: string, webUrl: string, folder: bool, children: ?int, size: ?int, modified: ?string, mime: ?string}>
+     */
+    public function signedMinutesFiles(Matter $matter): array
+    {
+        $folder = self::folderFor($matter);
+
+        if (! $folder) {
+            return [];
+        }
+
+        $user = $folder->driveUser();
+        $id = $this->walk($user, (string) $folder->drive_item_id, self::signedMinutesFolderFor($matter));
+
+        return $id === null ? [] : array_values(array_filter($this->client->children($user, $id), fn (array $item): bool => ! $item['folder']));
+    }
+
+    /**
+     * A signed copy among those files, to link it again: the only one of its size — else the only one of its name,
+     * as it is put there or as it was before (what followed a "/" in its name alone). Null when none or several.
+     *
+     * @param  list<array{name: string, webUrl: string, size: ?int}>  $files
+     * @return ?array{name: string, webUrl: string, size: ?int}
+     */
+    public static function signedCopyAmong(array $files, string $name, ?int $size): ?array
+    {
+        $extension = pathinfo($name, PATHINFO_EXTENSION);
+        $names = array_map('mb_strtolower', [
+            self::uploadName($name),
+            (self::clean(pathinfo($name, PATHINFO_FILENAME)) ?: 'file').($extension !== '' ? '.'.$extension : ''),
+        ]);
+
+        $ofSize = $size === null ? [] : array_values(array_filter($files, fn (array $file): bool => $file['size'] === $size));
+        $ofName = array_values(array_filter($ofSize !== [] ? $ofSize : $files, fn (array $file): bool => in_array(mb_strtolower($file['name']), $names, true)));
+
+        return match (true) {
+            count($ofSize) === 1 => $ofSize[0],
+            count($ofName) === 1 => $ofName[0],
+            default => null,
+        };
     }
 
     /**
