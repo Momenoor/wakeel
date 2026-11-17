@@ -33,6 +33,7 @@
             'leave' => __('Leaving this page ends the call.'),
             'output' => __('Speaker'),
             'input' => __('Microphone'),
+            'thisDevice' => __('This device (phone or computer)'),
         ],
     ];
 @endphp
@@ -57,6 +58,7 @@
             inputId: '',
             devicesOpen: false,
             devicesWatched: false,
+            allSpeakers: false,
             timers: {},
 
             init() {
@@ -341,10 +343,26 @@
                 }
             },
 
-            // Whether the browser lets the page pick where the sound goes (computers; most phones decide it
-            // themselves, from what is connected).
+            // Whether the browser lets the page pick where the sound goes (computers, Chrome on Android; an
+            // iPhone's Safari decides it itself, from what is connected).
             get canPickOutput() {
-                return typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype && this.outputs.length > 1;
+                return typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype && this.outputs.length > 0;
+            },
+
+            // The choices: this device's own sound — and a phone's earpiece and loudspeaker, when its browser names
+            // them — then the Bluetooth headphones and speakers connected. Browsers do not say a device is
+            // Bluetooth, so it is told by its name ("Hands-Free", "AirPods", "Buds", a headphones maker); "All
+            // sound devices" shows the rest (screens, wired headphones, a name not recognised).
+            get speakers() {
+                const own = /earpiece|handset|receiver|speakerphone|loudspeaker|phone speaker/i;
+                const bluetooth = /bluetooth|hands-?free|airpods|\bbuds\b|galaxy buds|\b(wh|wf)-|bose|jbl|beats|jabra|soundcore|sennheiser|plantronics|\bpoly\b|redmi|realme|oneplus|nothing ear|\bbt\b/i;
+                const real = this.outputs.filter((d) => d.deviceId !== 'default' && d.deviceId !== 'communications' && d.deviceId !== '');
+                const shown = this.allSpeakers ? real : real.filter((d) => own.test(d.label) || bluetooth.test(d.label));
+                return [{ deviceId: '', label: cfg.t.thisDevice }, ...shown];
+            },
+
+            get moreSpeakers() {
+                return ! this.allSpeakers && this.outputs.filter((d) => d.deviceId !== 'default' && d.deviceId !== 'communications' && d.deviceId !== '').length > this.speakers.length - 1;
             },
 
             async setOutput(id, keep = true) {
@@ -445,7 +463,7 @@
 
             reset() {
                 this.cleanup();
-                Object.assign(this, { state: 'idle', role: null, callId: null, status: '', muted: false, seconds: 0, devicesOpen: false });
+                Object.assign(this, { state: 'idle', role: null, callId: null, status: '', muted: false, seconds: 0, devicesOpen: false, allSpeakers: false });
             },
 
             cleanup() {
@@ -606,16 +624,17 @@
             <template x-if="canPickOutput">
                 <div>
                     <p class="wk-call-devices-title">{{ __('Sound comes out of') }}</p>
-                    <template x-for="d in outputs" x-bind:key="'o' + d.deviceId">
-                        <button type="button" x-on:click="setOutput(d.deviceId)" x-bind:class="{ chosen: d.deviceId === outputId || (! outputId && d.deviceId === 'default') }">
+                    <template x-for="d in speakers" x-bind:key="'o' + d.deviceId">
+                        <button type="button" x-on:click="setOutput(d.deviceId)" x-bind:class="{ chosen: d.deviceId === outputId || (! outputId && d.deviceId === '') }">
                             <span x-text="d.label"></span>
                         </button>
                     </template>
+                    <p x-show="speakers.length === 1" class="wk-call-devices-note">{{ __('No Bluetooth headphones or speaker connected. Connect one and it shows here.') }}</p>
+                    <button type="button" x-show="moreSpeakers" x-on:click="allSpeakers = true" style="opacity: .7; font-size: .75rem;">{{ __('All sound devices') }}</button>
                 </div>
             </template>
-            <template x-if="! canPickOutput">
-                <p class="wk-call-devices-note">{{ __('On a phone the sound goes where the phone sends it: to Bluetooth headphones when they are connected. To switch between the earpiece and the loudspeaker, use the phone\'s own sound controls; browsers on phones cannot switch it.') }}</p>
-            </template>
+            {{-- On a phone whose browser names no earpiece or loudspeaker, those stay with the phone itself. --}}
+            <p x-show="! canPickOutput || (/Android|iPhone|iPad|iPod/.test(navigator.userAgent) && ! speakers.some((d) => /earpiece|handset|receiver|speakerphone|loudspeaker/i.test(d.label)))" class="wk-call-devices-note">{{ __('On a phone the sound goes where the phone sends it: to Bluetooth headphones when they are connected. To switch between the earpiece and the loudspeaker, use the phone\'s own sound controls; browsers on phones cannot switch it.') }}</p>
             <template x-if="inputs.length > 1">
                 <div>
                     <p class="wk-call-devices-title">{{ __('Microphone') }}</p>

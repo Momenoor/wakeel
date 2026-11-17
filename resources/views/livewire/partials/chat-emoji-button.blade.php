@@ -16,19 +16,23 @@
         x-cloak
         x-transition.opacity
         class="wk-emoji-panel border border-gray-950/10 bg-white shadow-xl dark:border-white/10 dark:bg-gray-900"
-        style="position: absolute; bottom: calc(100% + 6px); inset-inline: 8px; z-index: 30; display: flex; flex-direction: column; height: 270px; border-radius: 16px; overflow: hidden;"
+        style="position: absolute; bottom: calc(100% + 6px); inset-inline: 8px; z-index: 30; height: 270px; border-radius: 16px; overflow: hidden;"
     >
-        <div class="border-b border-gray-100 dark:border-white/10" style="display: flex; gap: 2px; padding: 4px 6px; overflow-x: auto;">
+      {{-- The layout on an inner box: x-show takes the outer one's display away when it shows it, and the emojis
+           then ran past its bottom instead of scrolling. --}}
+      <div style="display: flex; flex-direction: column; height: 100%;">
+        <div class="wk-noscroll border-b border-gray-100 dark:border-white/10" style="display: flex; gap: 2px; padding: 4px 6px; overflow-x: auto; overflow-y: hidden;">
             <button type="button" x-show="recent.length" x-on:click="tab = -1" title="{{ __('Recently used') }}" x-bind:class="tab === -1 ? 'bg-gray-100 dark:bg-white/10' : ''" style="width: 34px; height: 30px; flex-shrink: 0; border-radius: 8px; font-size: 1rem;">🕘</button>
             <template x-for="(group, index) in groups" x-bind:key="index">
                 <button type="button" x-on:click="tab = index" x-bind:title="group.label" x-bind:class="tab === index ? 'bg-gray-100 dark:bg-white/10' : ''" style="width: 34px; height: 30px; flex-shrink: 0; border-radius: 8px; font-size: 1.05rem;" x-text="group.icon"></button>
             </template>
         </div>
         <p class="text-gray-500 dark:text-gray-400" style="padding: 6px 10px 2px; font-size: .7rem; font-weight: 600;" x-text="title"></p>
-        <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 2px 6px 8px; display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); align-content: start;">
+        <div class="wk-noscroll" style="flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 2px 6px 8px; display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); align-content: start;">
             <template x-for="emoji in shown" x-bind:key="emoji">
                 <button type="button" x-on:click="pick(emoji)" class="hover:bg-gray-100 dark:hover:bg-white/10" style="height: 36px; border-radius: 8px; font-size: 1.35rem; line-height: 1;" x-text="emoji"></button>
             </template>
         </div>
+      </div>
     </div>
 </div>

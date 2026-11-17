@@ -10,6 +10,63 @@
     // No chat bubble on the Chat page itself (nor for whoever has no chat).
     $chatHere = \App\Filament\Mms\Pages\Chat::canAccess() && ! request()->routeIs('filament.mms.pages.chat');
 @endphp
+<style>
+    /* Scrolling in the chat or the to-do window stays there: a list at its end does not hand on to the page. */
+    .wakeel-dock-panel, .wakeel-dock-panel * { overscroll-behavior: contain; }
+</style>
+<script>
+    // Over the chat or to-do window, the wheel and a finger scroll only what can scroll inside it — the messages,
+    // the conversations, the emojis — and never the page behind it, also over a part that does not scroll (the
+    // header, the message box) or a list already at its end. Ctrl+wheel (zoom) and two fingers (the window's
+    // pinch) are left alone.
+    (() => {
+        const panelOf = (target) => target instanceof Element ? target.closest('.wakeel-dock-panel') : null;
+
+        // Something between the target and the window that can still move this way.
+        const canScroll = (target, panel, dx, dy) => {
+            for (let el = target; el && el !== panel.parentElement; el = el.parentElement) {
+                const style = getComputedStyle(el);
+                if (dy !== 0 && /(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 1) {
+                    if ((dy < 0 && el.scrollTop > 0) || (dy > 0 && el.scrollTop + el.clientHeight < el.scrollHeight - 1)) {
+                        return true;
+                    }
+                }
+                if (dx !== 0 && /(auto|scroll)/.test(style.overflowX) && el.scrollWidth > el.clientWidth + 1) {
+                    // In Arabic scrollLeft runs from 0 down to minus the width.
+                    const left = Math.abs(el.scrollLeft), room = el.scrollWidth - el.clientWidth - 1;
+                    const towardEnd = style.direction === 'rtl' ? dx < 0 : dx > 0;
+                    if ((towardEnd && left < room) || (! towardEnd && left > 0)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+
+        document.addEventListener('wheel', (e) => {
+            const panel = panelOf(e.target);
+            if (panel && ! e.ctrlKey && ! canScroll(e.target, panel, e.deltaX, e.deltaY)) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        let touch = null;
+        document.addEventListener('touchstart', (e) => {
+            touch = e.touches.length === 1 && panelOf(e.target) ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null;
+        }, { passive: true });
+        document.addEventListener('touchmove', (e) => {
+            const panel = panelOf(e.target);
+            if (! panel || ! touch || e.touches.length !== 1 || ! e.cancelable) {
+                return;
+            }
+            const dx = touch.x - e.touches[0].clientX, dy = touch.y - e.touches[0].clientY;
+            const vertical = Math.abs(dy) >= Math.abs(dx);
+            if (! canScroll(e.target, panel, vertical ? 0 : dx, vertical ? dy : 0)) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+    })();
+</script>
 <script>
     (() => {
         const pinned = { todo: @js($dock['todo']), chat: @js($dock['chat'] && $chatHere) };

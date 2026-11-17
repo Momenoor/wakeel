@@ -13,6 +13,11 @@
         ['icon' => '🇦🇪', 'label' => __('Flags'), 'emojis' => '🇦🇪 🇸🇦 🇪🇬 🇯🇴 🇱🇧 🇸🇾 🇮🇶 🇰🇼 🇶🇦 🇧🇭 🇴🇲 🇾🇪 🇵🇸 🇲🇦 🇩🇿 🇹🇳 🇸🇩 🇮🇳 🇵🇰 🇧🇩 🇱🇰 🇵🇭 🇳🇵 🇬🇧 🇺🇸 🏳️ 🏴'],
     ];
 @endphp
+<style>
+    /* The picker's tabs and emojis scroll (by wheel, touch or trackpad) with no scroll bar showing. */
+    .wk-noscroll { scrollbar-width: none; -ms-overflow-style: none; }
+    .wk-noscroll::-webkit-scrollbar { display: none; width: 0; height: 0; }
+</style>
 <script>
     (() => {
         const groups = @js($emojiGroups).map((g) => ({ ...g, emojis: g.emojis.split(' ') }));
