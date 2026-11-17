@@ -73,7 +73,7 @@ return [
                 'The call stays on the page you started or answered it on: opening another page in the same tab ends it, so the browser asks first. To look at something else during a call, open it in a new tab.',
                 'Each call leaves a line in the conversation: "Voice call · 4:12" with its length, "Missed voice call" (in red, and in the bell) when nobody answered within 45 seconds, "Declined voice call" or "Voice call could not connect".',
                 'Someone already on a call cannot be called: you see "On another call. Try again later."',
-                'Both of you need the system open in a browser for it to ring; a closed browser does not ring, and the call shows as missed.',
+                'With no page of the system open, or the phone locked, a call still rings as a notification — "Incoming voice call" with the caller\'s name, kept on the screen and buzzing like a call, again after 15 and 30 seconds — on each device where notifications are turned on (the bell icon in the top bar). Tap it to open the conversation, where the call window rings: then "Answer the call". On an iPhone this needs the system added to the Home Screen ("Install the app"). When the call is answered, declined or cancelled, the notification goes away; a call not answered becomes "Missed voice call".',
             ],
         ],
 

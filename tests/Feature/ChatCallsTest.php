@@ -4,13 +4,18 @@ namespace Tests\Feature;
 
 use App\Events\ChatCallSignal;
 use App\Events\ChatMessageSent;
+use App\Jobs\RingCallAgain;
 use App\Models\ChatCall;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
+use App\Models\PushSubscription;
 use App\Models\User;
+use App\Services\Chat\ChatCalls;
+use App\Services\Push\WebPushSender;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 /**
@@ -187,6 +192,55 @@ class ChatCallsTest extends TestCase
         $call = $this->startCall();
 
         $this->actingAs($this->callee)->getJson(route('chat.calls.current'))->assertOk()->assertJsonPath('call_id', $call->id);
+    }
+
+    public function test_a_call_rings_on_the_phones_of_the_one_called_and_goes_away_when_over(): void
+    {
+        $this->withoutDefer();
+        Queue::fake();
+        $pushed = [];
+        $this->app->instance(WebPushSender::class, new class($pushed) extends WebPushSender
+        {
+            public function __construct(private array &$pushed) {}
+
+            public function sendToUser(int $userId, array $payload): int
+            {
+                $this->pushed[] = [$userId, $payload];
+
+                return 1;
+            }
+        });
+        PushSubscription::create([
+            'user_id' => $this->callee->id,
+            'endpoint' => 'https://push.test/callee',
+            'endpoint_hash' => PushSubscription::hashEndpoint('https://push.test/callee'),
+            'public_key' => 'BKey',
+            'auth_token' => 'auth',
+        ]);
+
+        $call = $this->startCall();
+
+        // Rings on the locked phone: stays until touched, buzzes, opens the conversation.
+        [$userId, $ring] = $pushed[0];
+        $this->assertSame($this->callee->id, $userId);
+        $this->assertSame('Momen', $ring['title']);
+        $this->assertTrue($ring['requireInteraction']);
+        $this->assertNotEmpty($ring['vibrate']);
+        $this->assertSame('wakeel-chat-'.$this->conversation->id, $ring['tag']);
+        $this->assertStringContainsString('conversation='.$this->conversation->id, $ring['url']);
+
+        // Rings again twice while it still rings.
+        Queue::assertPushed(RingCallAgain::class, 2);
+        (new RingCallAgain($call->id))->handle(app(ChatCalls::class));
+        $this->assertCount(2, $pushed);
+
+        // Answered: taken off the phone — and not rung again.
+        $this->actingAs($this->callee)->postJson(route('chat.calls.answer', $call), ['answer' => 'a'])->assertOk();
+        $this->assertTrue(end($pushed)[1]['close']);
+        $this->assertSame('wakeel-chat-'.$this->conversation->id, end($pushed)[1]['tag']);
+        $count = count($pushed);
+        (new RingCallAgain($call->id))->handle(app(ChatCalls::class));
+        $this->assertCount($count, $pushed);
     }
 
     public function test_the_turn_server_password_is_made_for_the_user(): void

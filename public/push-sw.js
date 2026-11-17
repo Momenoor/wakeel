@@ -8,7 +8,7 @@
  */
 
 // Its own name per version of the page kept; an older one is removed.
-const OFFLINE_CACHE = 'wakeel-offline-v1';
+const OFFLINE_CACHE = 'wakeel-offline-v2';
 const offlineUrl = () => new URL('offline', self.registration.scope).href;
 
 self.addEventListener('install', (event) => {
@@ -73,8 +73,22 @@ self.addEventListener('push', (event) => {
             // once however many tabs and devices it reaches.
             tag,
             renotify: !! data.renotify,
+            // A call ringing: kept on screen until it is touched, and the phone
+            // buzzes like a call (where the phone allows it).
+            requireInteraction: !! data.requireInteraction,
+            vibrate: Array.isArray(data.vibrate) ? data.vibrate : undefined,
+            silent: !! data.close,
             data: { url: data.url || self.registration.scope },
         });
+
+        // A call that is over (answered, declined, cancelled): its ringing
+        // notification replaced by this one and both taken away at once.
+        if (data.close) {
+            const shown = await self.registration.getNotifications({ tag });
+            shown.forEach((notification) => notification.close());
+
+            return;
+        }
 
         // Wakeel is in front: its own toast / chat window already shows it.
         // A push must still show something, so it is closed straight away.

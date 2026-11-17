@@ -3,12 +3,17 @@
 namespace App\Services\Chat;
 
 use App\Events\ChatCallSignal;
+use App\Jobs\RingCallAgain;
 use App\Models\ChatCall;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
+use App\Models\PushSubscription;
 use App\Models\User;
+use App\Services\Push\WebPushSender;
 use Illuminate\Support\Facades\DB;
 use Throwable;
+
+use function Illuminate\Support\defer;
 
 /**
  * Voice calls in the chat, between the two people of a one-to-one conversation. Their browsers talk to each
@@ -102,7 +107,53 @@ class ChatCalls
             'avatar' => $caller->getFilamentAvatarUrl(),
         ]);
 
+        // Also on their phones and computers with no Wakeel page open, or locked — after the answer has gone
+        // back; and again twice while it still rings, a phone sounding a notification once.
+        $call->setRelation('caller', $caller);
+        defer(fn () => $this->ringOnDevices($call));
+        RingCallAgain::dispatch((int) $call->getKey())->delay(now()->addSeconds(15));
+        RingCallAgain::dispatch((int) $call->getKey())->delay(now()->addSeconds(30));
+
         return $call;
+    }
+
+    /** The call's ringing notification taken off the phones and computers of the one called, after the answer. */
+    private function stopRingingOnDevices(ChatCall $call): void
+    {
+        $calleeId = (int) $call->callee_id;
+        $conversationId = (int) $call->chat_conversation_id;
+
+        if (! PushSubscription::where('user_id', $calleeId)->exists()) {
+            return;
+        }
+
+        defer(function () use ($calleeId, $conversationId) {
+            try {
+                app(WebPushSender::class)->sendToUser($calleeId, WebPushSender::closing($conversationId));
+            } catch (Throwable $e) {
+                report($e);
+            }
+        });
+    }
+
+    /** The call's notification pushed to the one called (WebPushSender::callPayload). */
+    public function ringOnDevices(ChatCall $call): void
+    {
+        $call->loadMissing('caller');
+        if ($call->caller === null || ! PushSubscription::where('user_id', $call->callee_id)->exists()) {
+            return;
+        }
+
+        try {
+            app(WebPushSender::class)->sendToUser((int) $call->callee_id, WebPushSender::callPayload(
+                (int) $call->chat_conversation_id,
+                (string) ($call->caller->display_name ?: $call->caller->name),
+                $call->caller->getFilamentAvatarUrl(),
+                ChatMessenger::chatUrl().(str_contains(ChatMessenger::chatUrl(), '?') ? '&' : '?').'conversation='.$call->chat_conversation_id,
+            ));
+        } catch (Throwable $e) {
+            report($e);
+        }
     }
 
     /** The one called answers with their browser's answer: the caller reads it and the call is on. */
@@ -118,8 +169,9 @@ class ChatCalls
             return false;
         }
 
-        // The caller reads the answer; the callee's other tabs stop ringing.
+        // The caller reads the answer; the callee's other tabs stop ringing, and their other phones and computers.
         $this->signal([(int) $call->caller_id, (int) $call->callee_id], ['event' => 'answered', 'call_id' => $call->getKey()]);
+        $this->stopRingingOnDevices($call);
 
         return true;
     }
@@ -187,6 +239,10 @@ class ChatCalls
         }
 
         $call->refresh()->load(['conversation.participants', 'caller']);
+
+        // Its ringing notification taken off the phones of the one called — before a missed call's own takes its
+        // place (both after the answer has gone back, in this order).
+        $this->stopRingingOnDevices($call);
 
         try {
             DB::transaction(function () use ($call, $status) {

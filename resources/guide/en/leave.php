@@ -4,7 +4,7 @@
 
 return [
     'title' => 'Leave',
-    'intro' => 'Employees\' leave requests and the ledger of approved leave. When a request is approved, the absence is split across the leave types (annual, sick on full, half or no pay, unpaid…). It is taken off the balance for that type and counted in the salary, and the days are recorded in the leave ledger so the system sees them when it assigns matters. Find it under "Human Resources → Employee requests → Leave Requests" and "Leave Ledger". A leave request can also be made from "Employee requests" (the "New leave request" button or the "Vacation" option).',
+    'intro' => 'Employees\' leave requests and the ledger of approved leave. When a request is approved, the absence is split across the leave types (annual, sick on full, half or no pay, unpaid…). It is taken off the balance for that type and counted in the salary, and the days are recorded in the leave ledger so the system sees them when it assigns matters. Find it under "Human Resources → Leave Requests" (with the number of requests waiting for a decision, for those who decide them) and "Leave Ledger". A leave request can also be made from "Employee requests" (the "New leave request" button or the "Vacation" option).',
     'actions' => [
         [
             'id' => 'list',
@@ -13,7 +13,7 @@ return [
             'roles' => [$admin, $withPermission],
             'permissions' => ['ViewAny:LeaveRequest', 'View:LeaveRequest', 'ViewAll:LeaveRequest (to see everyone\'s requests)'],
             'steps' => [
-                ['text' => 'In the side menu, go to "Human Resources" → "Employee requests" → "Leave Requests".', 'shot' => 'list-1'],
+                ['text' => 'In the side menu, go to "Human Resources" → "Leave Requests".', 'shot' => 'list-1'],
                 ['text' => 'The buttons on each pending request: approve, reject, edit, delete.', 'shot' => 'list-actions'],
             ],
         ],

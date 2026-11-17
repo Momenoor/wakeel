@@ -73,6 +73,46 @@ class WebPushSender
     }
 
     /**
+     * A voice call ringing for someone, on their phones and computers with no Wakeel page open, the phone locked
+     * too: kept on screen until touched, the phone buzzing like a call; touched, it opens the chat, where the call
+     * window rings (ChatCallController::current). The conversation's own tag, so the call's line ("Missed voice
+     * call") takes its place — and closing() takes it away when the call is over.
+     *
+     * @return array<string, mixed>
+     */
+    public static function callPayload(int $conversationId, string $callerName, ?string $avatar, string $url): array
+    {
+        return [
+            'id' => 'call-'.$conversationId,
+            'title' => $callerName,
+            'body' => '📞 '.__('Incoming voice call'),
+            'url' => $url,
+            'tag' => 'wakeel-chat-'.$conversationId,
+            'icon' => $avatar ?: Branding::faviconUrl(),
+            'renotify' => true,
+            'requireInteraction' => true,
+            'vibrate' => [600, 300, 600, 300, 600, 300, 600, 300, 600],
+        ];
+    }
+
+    /**
+     * Takes a call's ringing notification away (answered, declined, cancelled): the same tag, shown and closed at
+     * once by the service worker (public/push-sw.js), silently.
+     *
+     * @return array<string, mixed>
+     */
+    public static function closing(int $conversationId): array
+    {
+        return [
+            'id' => 'call-over-'.$conversationId,
+            'title' => (string) config('app.name'),
+            'body' => '',
+            'tag' => 'wakeel-chat-'.$conversationId,
+            'close' => true,
+        ];
+    }
+
+    /**
      * Sends to every subscription the user has; returns how many took it.
      *
      * @param  array<string, mixed>  $payload
