@@ -5,7 +5,7 @@
         x-on:click="toggle()"
         title="{{ __('Emoji') }}"
         aria-label="{{ __('Emoji') }}"
-        x-bind:style="open ? 'color: rgb(var(--primary-600))' : ''"
+        x-bind:style="open ? { color: 'var(--primary-600)' } : {}"
         style="display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 9999px; color: rgb(107 114 128);"
     >
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01M15 9h.01"/></svg>

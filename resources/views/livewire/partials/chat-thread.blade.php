@@ -466,8 +466,10 @@
             x-on:dragover.prevent="dragging = true"
             x-on:dragleave="dragging = false"
             x-on:drop.prevent="drop($event)"
-            x-bind:style="dragging ? 'outline: 2px dashed rgb(37 99 235); outline-offset: -4px;' : ''"
-            class="flex items-center gap-2 border-t border-gray-100 p-3 dark:border-white/10"
+            {{-- An object, not a string: a string replaced the whole style, and the emoji picker above lost the
+                 box it is placed by. --}}
+            x-bind:style="dragging ? { outline: '2px dashed rgb(37 99 235)', outlineOffset: '-4px' } : {}"
+            class="relative flex items-center gap-2 border-t border-gray-100 p-3 dark:border-white/10"
             style="position: relative;"
         >
             <template x-ref="pending">
