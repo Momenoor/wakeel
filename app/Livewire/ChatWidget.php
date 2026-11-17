@@ -8,6 +8,7 @@ use App\Events\ChatMessagesStatusChanged;
 use App\Filament\Mms\Pages\Chat;
 use App\Livewire\Concerns\ListensOnOwnChannel;
 use App\Livewire\Concerns\SavesDockWidth;
+use App\Models\ChatCall;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\User;
@@ -206,10 +207,12 @@ class ChatWidget extends Component
         // A desktop notification too, when Wakeel is in a background tab —
         // the same tag as its push, so it never shows twice. Not for the
         // conversation on screen: it is being read.
-        $latest->loadMissing(['sender', 'conversation']);
+        $latest->loadMissing(['sender', 'conversation', 'chatCall']);
         // Nor when chat messages are turned off in the bell (the desktop one follows it).
         $onScreen = (int) $latest->chat_conversation_id === (int) $this->activeConversationId && ($this->isOpen || $this->mode !== 'popup');
-        if (! $onScreen && NotificationPreferences::wants(Auth::user(), NotificationType::CHAT_MESSAGE, NotificationChannel::BELL)) {
+        // A voice call's line is news only when it was missed — one answered or declined was seen as it happened.
+        $quietCall = $latest->chat_call_id !== null && $latest->chatCall?->status !== ChatCall::MISSED;
+        if (! $onScreen && ! $quietCall && NotificationPreferences::wants(Auth::user(), NotificationType::CHAT_MESSAGE, NotificationChannel::BELL)) {
             // In a group: the group, then who wrote.
             $title = ($latest->conversation?->is_group ? $latest->conversation->name.' — ' : '').(string) ($latest->sender?->display_name ?: $latest->sender?->name ?: __('Chat'));
             $this->dispatch('wakeel-desktop-notification', id: 'chat-'.$latest->chat_conversation_id, title: $title, body: $latest->preview(), url: ChatMessenger::chatUrl($latest));
@@ -314,7 +317,7 @@ class ChatWidget extends Component
         // The newest $messageLimit, oldest first.
         return ChatMessage::query()
             ->where('chat_conversation_id', $this->activeConversation->id)
-            ->with(['sender', 'replyTo.sender'])
+            ->with(['sender', 'replyTo.sender', 'replyTo.chatCall', 'chatCall'])
             ->latest('created_at')
             ->latest('id')
             ->limit($this->messageLimit)

@@ -25,6 +25,7 @@
                     class="truncate text-xs text-white/80"
                 ></span>
             </span>
+            @include('livewire.partials.chat-call-button', ['user' => $other, 'class' => 'text-white/90 hover:bg-white/15'])
         @endif
     @else
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="h-5 w-5 flex-shrink-0">

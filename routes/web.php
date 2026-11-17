@@ -3,6 +3,7 @@
 use App\Filament\Mms\Pages\FeeDataMaintenance;
 use App\Http\Controllers\BackupDownloadController;
 use App\Http\Controllers\ChatAttachmentController;
+use App\Http\Controllers\ChatCallController;
 use App\Http\Controllers\ChatMessageController;
 use App\Http\Controllers\ClientErrorController;
 use App\Http\Controllers\LetterFontFileController;
@@ -91,6 +92,15 @@ Route::middleware('auth')->group(function () {
     Route::get('/chat/files/{message}/{index}', ChatAttachmentController::class)->whereNumber('index')->name('chat.attachment');
     // A message with files, uploaded straight from the browser.
     Route::post('/chat/conversations/{conversation}/messages', [ChatMessageController::class, 'store'])->name('chat.messages.store');
+
+    // Voice calls in the chat (filament.partials.chat-call).
+    Route::get('/chat/calls/ice', [ChatCallController::class, 'ice'])->name('chat.calls.ice');
+    Route::get('/chat/calls/current', [ChatCallController::class, 'current'])->name('chat.calls.current');
+    Route::post('/chat/conversations/{conversation}/calls', [ChatCallController::class, 'store'])->middleware('throttle:20,1')->name('chat.calls.store');
+    Route::get('/chat/calls/{call}', [ChatCallController::class, 'show'])->whereNumber('call')->name('chat.calls.show');
+    Route::post('/chat/calls/{call}/answer', [ChatCallController::class, 'answer'])->name('chat.calls.answer');
+    Route::post('/chat/calls/{call}/ping', [ChatCallController::class, 'ping'])->name('chat.calls.ping');
+    Route::post('/chat/calls/{call}/end', [ChatCallController::class, 'end'])->name('chat.calls.end');
 });
 
 // The system's font, when an uploaded one is chosen for it — signed-in users

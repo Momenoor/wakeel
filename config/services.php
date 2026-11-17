@@ -69,6 +69,14 @@ return [
         'app_secret' => env('WHATSAPP_APP_SECRET'),
     ],
 
+    // Voice calls in the chat (App\Services\Chat\ChatCalls::iceServers): STUN, and the office's TURN server
+    // (coturn with use-auth-secret) — e.g. "turn:system.example.com:3478?transport=udp,turn:system.example.com:3478?transport=tcp".
+    'webrtc' => [
+        'stun' => env('WEBRTC_STUN_URLS', 'stun:stun.l.google.com:19302'),
+        'turn_urls' => env('WEBRTC_TURN_URLS'),
+        'turn_secret' => env('WEBRTC_TURN_SECRET'),
+    ],
+
     // Claude (Anthropic): names translated from Arabic to English (App\Services\Translation\NameTranslator).
     'anthropic' => [
         'key' => env('ANTHROPIC_API_KEY'),

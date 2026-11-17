@@ -285,6 +285,12 @@ class MmsPanelProvider extends PanelProvider
             }
         );
 
+        // Voice calls: rings on whichever page is open, the Chat page too (filament.partials.chat-call).
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::BODY_END,
+            fn (): string => Auth::check() && Chat::canAccess() ? view('filament.partials.chat-call')->render() : '',
+        );
+
         FilamentView::registerRenderHook(
             PanelsRenderHook::HEAD_END,
             function (): string {

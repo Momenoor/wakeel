@@ -58,6 +58,25 @@ return [
         ],
 
         [
+            'id' => 'call',
+            'title' => 'Make a voice call',
+            'description' => 'Talk to a colleague by voice from a one-to-one conversation, through the browser, with no phone and no other program. Calls are between two people; a group has none.',
+            'roles' => [$admin, $withPermission],
+            'permissions' => ['View:Chat'],
+            'steps' => [
+                ['text' => 'Open the conversation with the colleague and click the phone icon beside their name at the top. The first time, the browser asks to use your microphone: click "Allow". A window at the top of the page says "Calling…", then "Ringing…" while it rings for them.'],
+                ['text' => 'On their side, the same window rings on whatever page of the system they have open, with their name and picture, "Answer the call" and "Decline". If the system is in a background tab, a desktop notification says "Incoming voice call".'],
+                ['text' => 'Once they answer, the window shows how long you have been talking. "Mute" turns your microphone off and on; "Hang up" ends the call for both of you.'],
+            ],
+            'tips' => [
+                'The call stays on the page you started or answered it on: opening another page in the same tab ends it, so the browser asks first. To look at something else during a call, open it in a new tab.',
+                'Each call leaves a line in the conversation: "Voice call · 4:12" with its length, "Missed voice call" (in red, and in the bell) when nobody answered within 45 seconds, "Declined voice call" or "Voice call could not connect".',
+                'Someone already on a call cannot be called: you see "On another call. Try again later."',
+                'Both of you need the system open in a browser for it to ring; a closed browser does not ring, and the call shows as missed.',
+            ],
+        ],
+
+        [
             'id' => 'dock',
             'title' => 'The chat and to-do list windows',
             'description' => 'At the bottom of every page there are two bubbles: chat (blue) and "To-do list" (purple). The number on each is how many new items there are. Each opens a floating window next to its bubble. In the to-do list: "Add a to-do… (@ to mention someone)", "To the next day", "Hide done" / "Clear done", "Larger text" / "Smaller text" (remembered for you), and "Pin to the page". Both windows remember whether they were open or closed, for each user on each device, so they come back as you left them after you move to another page or refresh. On a phone, if there is no room for the window beside its bubble, it moves aside to stay on the screen (16 pixels from each edge, or centred if it is wider). It does the same when you drag the bubble, resize the window or turn the screen.',

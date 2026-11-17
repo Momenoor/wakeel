@@ -15,6 +15,7 @@ class ChatMessage extends Model
         'chat_conversation_id',
         'user_id',
         'reply_to_id',
+        'chat_call_id',
         'body',
         'attachments',
         'reactions',
@@ -90,6 +91,16 @@ class ChatMessage extends Model
     }
 
     /**
+     * The voice call this line in the conversation tells of.
+     *
+     * @return BelongsTo<ChatCall, $this>
+     */
+    public function chatCall(): BelongsTo
+    {
+        return $this->belongsTo(ChatCall::class);
+    }
+
+    /**
      * @return list<array{path: string, name: string, size: int, mime: string}>
      */
     public function files(): array
@@ -118,6 +129,11 @@ class ChatMessage extends Model
      */
     public function preview(int $limit = 150): string
     {
+        // A voice call: how it went, as the one called sees it ("Missed voice call").
+        if ($this->chat_call_id !== null && $this->chatCall !== null) {
+            return '📞 '.$this->chatCall->summary();
+        }
+
         $text = trim((string) $this->body);
         if ($text !== '') {
             return Str::limit($text, $limit);

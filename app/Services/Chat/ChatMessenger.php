@@ -55,6 +55,18 @@ class ChatMessenger
             'attachments' => $this->store($files, $conversation->id, $voice) ?: null,
         ]);
 
+        $this->tell($message, $conversation, $sender);
+
+        return $message;
+    }
+
+    /**
+     * A message just kept, told to the conversation: marked read by its sender, shown live to everyone in it, and
+     * — when $alert — in the others' bell and pushed to their browsers and phones. A voice call's line alerts only
+     * when it was missed (ChatCalls).
+     */
+    public function tell(ChatMessage $message, ChatConversation $conversation, User $sender, bool $alert = true): void
+    {
         $conversation->update(['last_message_at' => $message->created_at]);
         $conversation->participants()->updateExistingPivot($sender->getKey(), ['last_read_at' => $message->created_at]);
 
@@ -62,6 +74,10 @@ class ChatMessenger
         // Pusher no longer holds up the sender's own reply.
         $message->load('sender');
         defer(fn () => broadcast(new ChatMessageSent($message))->toOthers());
+
+        if (! $alert) {
+            return;
+        }
 
         // And as a push to the other side's browsers and phones — seen even
         // with no Wakeel tab open.
@@ -98,8 +114,6 @@ class ChatMessenger
                 }
             });
         }
-
-        return $message;
     }
 
     /**
