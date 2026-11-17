@@ -35,6 +35,7 @@ use App\Support\Branding;
 use App\Support\Live;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use CraftForge\FilamentLanguageSwitcher\FilamentLanguageSwitcherPlugin;
+use Filament\Actions\Action;
 use Filament\FontProviders\LocalFontProvider;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -84,6 +85,14 @@ trait SharesPanelConfiguration
             ->brandLogoHeight('4rem')
             ->favicon(fn (): string => Branding::faviconUrl())
             ->profile(CustomProfile::class, isSimple: false)
+            // Wakeel as an app on this device (filament.partials.app-install) — not shown inside the app itself.
+            ->userMenuItems([
+                'install-app' => Action::make('install-app')
+                    ->label(fn (): string => __('Install the app'))
+                    ->icon('heroicon-o-arrow-down-tray')
+                    ->alpineClickHandler('window.wakeelInstall?.()')
+                    ->extraAttributes(['x-data' => '{}', 'x-show' => '! (window.wakeelInstalled?.() ?? false)']),
+            ])
             ->renderHook(
                 PanelsRenderHook::USER_MENU_PROFILE_AFTER,
                 fn () => Blade::render('@livewire(\'font-size-slider\')')

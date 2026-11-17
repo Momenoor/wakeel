@@ -1,6 +1,8 @@
 <?php
 
 use App\Filament\Mms\Pages\FeeDataMaintenance;
+use App\Http\Controllers\AppIconController;
+use App\Http\Controllers\AppManifestController;
 use App\Http\Controllers\BackupDownloadController;
 use App\Http\Controllers\ChatAttachmentController;
 use App\Http\Controllers\ChatCallController;
@@ -14,7 +16,6 @@ use App\Models\Setting;
 use App\Services\MMS\FeeFixLog;
 use App\Services\Updater\Updater;
 use App\Support\AppUpdate;
-use App\Support\Branding;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
@@ -115,28 +116,11 @@ Route::get('/fonts/letter/{font}/{weight}', LetterFontFileController::class)->na
 Route::view('/privacy', 'legal.privacy')->name('legal.privacy');
 Route::view('/terms', 'legal.terms')->name('legal.terms');
 
-// Lets phones add Wakeel to the home screen — which iPhone requires
-// before it will deliver push notifications.
-Route::get('/manifest.webmanifest', function () {
-    $root = rtrim((string) config('app.url'), '/').'/';
-    $name = (string) Setting::get('app_name', config('app.name'));
-
-    return response()->json([
-        'name' => $name,
-        'short_name' => $name,
-        'start_url' => $root,
-        'scope' => $root,
-        'display' => 'standalone',
-        'background_color' => '#ffffff',
-        'theme_color' => '#1e3a8a',
-        'icons' => [['src' => Branding::faviconUrl(), 'sizes' => 'any', 'type' => 'image/png']],
-    ], 200, [
-        'Content-Type' => 'application/manifest+json',
-        // Kept by the browser for a day: it was fetched again on every page,
-        // one more request queueing for the server at each page load.
-        'Cache-Control' => 'public, max-age=86400',
-    ]);
-})->name('manifest');
+// Wakeel installed as an app (AppManifestController), with its icons; and the page it shows with no connection
+// (kept by the service worker, public/push-sw.js).
+Route::get('/manifest.webmanifest', AppManifestController::class)->name('manifest');
+Route::get('/app-icon/{size}-{purpose}.png', AppIconController::class)->whereNumber('size')->whereIn('purpose', ['any', 'maskable'])->name('app-icon');
+Route::view('/offline', 'offline')->name('offline');
 
 if (config('modules.mms')) {
     require __DIR__.'/mms.php';

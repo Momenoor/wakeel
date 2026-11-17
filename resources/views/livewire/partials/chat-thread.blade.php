@@ -468,6 +468,7 @@
             x-on:drop.prevent="drop($event)"
             x-bind:style="dragging ? 'outline: 2px dashed rgb(37 99 235); outline-offset: -4px;' : ''"
             class="flex items-center gap-2 border-t border-gray-100 p-3 dark:border-white/10"
+            style="position: relative;"
         >
             <template x-ref="pending">
                 <div class="flex justify-end" style="opacity: 0.6;">
@@ -485,6 +486,7 @@
                 <input type="file" multiple x-on:change="pick($event)" style="display: none;">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
             </label>
+            @include('livewire.partials.chat-emoji-button')
             <input
                 type="text"
                 x-ref="input"

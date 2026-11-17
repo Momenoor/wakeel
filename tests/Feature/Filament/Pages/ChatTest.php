@@ -3,6 +3,7 @@
 namespace Tests\Feature\Filament\Pages;
 
 use App\Filament\Mms\Pages\Chat;
+use App\Models\ChatConversation;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -42,6 +43,22 @@ class ChatTest extends TestCase
             ->assertSuccessful()
             ->assertSee('@media (max-width: 767px) { input:not([type=checkbox])', false)
             ->assertSee('font-size: 16px !important', false);
+    }
+
+    public function test_a_conversation_has_the_emoji_picker_and_a_one_to_one_its_call_button(): void
+    {
+        $colleague = User::factory()->create();
+        $conversation = ChatConversation::betweenUsers(auth()->user(), $colleague);
+
+        $this->get(Chat::getUrl().'?conversation='.$conversation->id)
+            ->assertSuccessful()
+            // The emojis once in the page, the picker by the message box.
+            ->assertSee("Alpine.data('wkEmoji'", false)
+            ->assertSee('x-data="wkEmoji"', false)
+            ->assertSee('🇦🇪', false)
+            // Calls: the window that rings, and the phone icon of this conversation.
+            ->assertSee('wkCall(', false)
+            ->assertSee("\$dispatch('wk-call', { conversationId: {$conversation->id}", false);
     }
 
     public function test_guest_cannot_access_the_chat_page(): void

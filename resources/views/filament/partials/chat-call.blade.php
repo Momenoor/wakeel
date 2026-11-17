@@ -31,6 +31,8 @@
             'mic' => __('The microphone could not be used. Allow it in the browser to call.'),
             'unsupported' => __('Your browser cannot make calls.'),
             'leave' => __('Leaving this page ends the call.'),
+            'output' => __('Speaker'),
+            'input' => __('Microphone'),
         ],
     ];
 @endphp
@@ -49,6 +51,12 @@
             local: null,
             remote: null,
             tone: null,
+            outputs: [],
+            inputs: [],
+            outputId: '',
+            inputId: '',
+            devicesOpen: false,
+            devicesWatched: false,
             timers: {},
 
             init() {
@@ -282,12 +290,89 @@
 
             async microphone() {
                 try {
-                    this.local = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
-                    return true;
+                    this.local = await navigator.mediaDevices.getUserMedia({ audio: this.micConstraints(this.saved('input'), false), video: false });
                 } catch (e) {
                     this.finish(cfg.t.mic);
                     return false;
                 }
+                this.inputId = this.local.getAudioTracks()[0]?.getSettings?.().deviceId || '';
+                await this.loadDevices();
+                // The sound last chosen in this browser, if it is still there (the headphones connected).
+                const output = this.saved('output');
+                if (output && this.outputs.some((d) => d.deviceId === output)) {
+                    await this.setOutput(output, false);
+                }
+                return true;
+            },
+
+            // ── Sound and microphone ─────────────────────────────────
+
+            micConstraints(deviceId, exact) {
+                const audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+                if (deviceId) {
+                    audio.deviceId = exact ? { exact: deviceId } : { ideal: deviceId };
+                }
+                return audio;
+            },
+
+            saved(kind) {
+                try { return localStorage.getItem('wakeel-call-' + kind) || ''; } catch (e) { return ''; }
+            },
+
+            remember(kind, id) {
+                try { localStorage.setItem('wakeel-call-' + kind, id); } catch (e) {}
+            },
+
+            // The speakers, earpieces and headphones this browser offers — named once the microphone is allowed —
+            // and the microphones. Again when headphones are connected or taken off.
+            async loadDevices() {
+                try {
+                    const all = await navigator.mediaDevices.enumerateDevices();
+                    const named = (list, word) => list.map((d, i) => ({ deviceId: d.deviceId, label: d.label || word + ' ' + (i + 1) }));
+                    this.outputs = named(all.filter((d) => d.kind === 'audiooutput'), cfg.t.output);
+                    this.inputs = named(all.filter((d) => d.kind === 'audioinput'), cfg.t.input);
+                } catch (e) {
+                    this.outputs = [];
+                    this.inputs = [];
+                }
+                if (! this.devicesWatched && navigator.mediaDevices?.addEventListener) {
+                    this.devicesWatched = true;
+                    navigator.mediaDevices.addEventListener('devicechange', () => { if (this.live) this.loadDevices(); });
+                }
+            },
+
+            // Whether the browser lets the page pick where the sound goes (computers; most phones decide it
+            // themselves, from what is connected).
+            get canPickOutput() {
+                return typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype && this.outputs.length > 1;
+            },
+
+            async setOutput(id, keep = true) {
+                try {
+                    await this.remote.setSinkId(id);
+                    this.outputId = id;
+                    if (keep) {
+                        this.remember('output', id);
+                    }
+                } catch (e) {}
+            },
+
+            // Another microphone, put into the call as it goes on — muted still, if it was.
+            async setInput(id) {
+                if (id === this.inputId) {
+                    return;
+                }
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: this.micConstraints(id, true), video: false });
+                    const track = stream.getAudioTracks()[0];
+                    track.enabled = ! this.muted;
+                    const sender = this.pc?.getSenders().find((s) => s.track?.kind === 'audio');
+                    await sender?.replaceTrack(track);
+                    this.local?.getTracks().forEach((t) => t.stop());
+                    this.local = stream;
+                    this.inputId = id;
+                    this.remember('input', id);
+                } catch (e) {}
             },
 
             // The connection to the other browser, made with the office's servers; what `make` sets on it
@@ -360,7 +445,7 @@
 
             reset() {
                 this.cleanup();
-                Object.assign(this, { state: 'idle', role: null, callId: null, status: '', muted: false, seconds: 0 });
+                Object.assign(this, { state: 'idle', role: null, callId: null, status: '', muted: false, seconds: 0, devicesOpen: false });
             },
 
             cleanup() {
@@ -461,6 +546,14 @@
         .wk-call-green span { background: #22c55e; }
         .wk-call-grey span { background: rgba(255,255,255,.16); }
         .wk-call-grey.on span { background: #fff; color: #111827; }
+        .wk-call-devices { align-self: stretch; display: flex; flex-direction: column; gap: 10px; max-height: 40vh; overflow-y: auto; padding-top: 4px; border-top: 1px solid rgba(255,255,255,.12); }
+        .wk-call-devices-title { font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: rgba(255,255,255,.55); margin: 6px 4px 4px; }
+        .wk-call-devices-note { font-size: .75rem; line-height: 1.5; color: rgba(255,255,255,.75); margin: 6px 4px 0; }
+        .wk-call-devices button { display: flex; align-items: center; width: 100%; padding: 8px 10px; border-radius: 10px; font-size: .82rem; text-align: start; color: #fff; }
+        .wk-call-devices button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .wk-call-devices button:hover { background: rgba(255,255,255,.08); }
+        .wk-call-devices button.chosen { background: rgba(34,197,94,.22); }
+        .wk-call-devices button.chosen::before { content: '✓'; margin-inline-end: 8px; color: #4ade80; }
     </style>
     <div class="wk-call-card" x-bind:class="{ 'wk-call-ringing': state === 'incoming' || state === 'outgoing' }">
         <template x-if="avatar"><img class="wk-call-avatar" x-bind:src="avatar" alt=""></template>
@@ -495,10 +588,42 @@
                         </span>
                         <span x-text="muted ? @js(__('Unmute')) : @js(__('Mute'))" style="width: auto; height: auto; background: none;"></span>
                     </button>
+                    {{-- Where the sound comes out (speaker, earpiece, headphones) and which microphone. --}}
+                    <button type="button" class="wk-call-btn wk-call-grey" x-bind:class="{ on: devicesOpen }" x-on:click="devicesOpen = ! devicesOpen; if (devicesOpen) loadDevices()">
+                        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg></span>
+                        {{ __('Sound') }}
+                    </button>
                     <button type="button" class="wk-call-btn wk-call-red" x-on:click="hangUp()">
                         <span><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="transform: rotate(135deg);"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg></span>
                         {{ __('Hang up') }}
                     </button>
+                </div>
+            </template>
+        </div>
+
+        {{-- The sound's way out and the microphone, chosen during the call. --}}
+        <div x-show="devicesOpen && ['outgoing', 'connecting', 'active'].includes(state)" x-cloak x-transition.opacity class="wk-call-devices">
+            <template x-if="canPickOutput">
+                <div>
+                    <p class="wk-call-devices-title">{{ __('Sound comes out of') }}</p>
+                    <template x-for="d in outputs" x-bind:key="'o' + d.deviceId">
+                        <button type="button" x-on:click="setOutput(d.deviceId)" x-bind:class="{ chosen: d.deviceId === outputId || (! outputId && d.deviceId === 'default') }">
+                            <span x-text="d.label"></span>
+                        </button>
+                    </template>
+                </div>
+            </template>
+            <template x-if="! canPickOutput">
+                <p class="wk-call-devices-note">{{ __('On a phone the sound goes where the phone sends it: to Bluetooth headphones when they are connected. To switch between the earpiece and the loudspeaker, use the phone\'s own sound controls; browsers on phones cannot switch it.') }}</p>
+            </template>
+            <template x-if="inputs.length > 1">
+                <div>
+                    <p class="wk-call-devices-title">{{ __('Microphone') }}</p>
+                    <template x-for="d in inputs" x-bind:key="'i' + d.deviceId">
+                        <button type="button" x-on:click="setInput(d.deviceId)" x-bind:class="{ chosen: d.deviceId === inputId }">
+                            <span x-text="d.label"></span>
+                        </button>
+                    </template>
                 </div>
             </template>
         </div>

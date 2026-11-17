@@ -72,6 +72,20 @@ return [
         ],
 
         [
+            'id' => 'install-app',
+            'title' => 'Install the system as an app',
+            'description' => 'The system installs on a computer or phone as an app, with no app store: its own icon, its own window without the address bar, and notifications. It is always up to date — every update on the server reaches it at once.',
+            'roles' => [$everyone],
+            'permissions' => [],
+            'steps' => [
+                ['text' => 'On a computer (Chrome or Edge) or an Android phone (Chrome): click your avatar, then "Install the app", and confirm in the window the browser opens. The app is then in the Start menu or the Dock, or among the phone\'s apps. Chrome and Edge also show an install button at the right of the address bar.'],
+                ['text' => 'On an iPhone or iPad: open the system in Safari, tap the Share button (the square with an arrow pointing up), then "Add to Home Screen" and "Add". "Install the app" in the menu shows these steps too. This is also what lets an iPhone receive the system\'s notifications.'],
+                ['text' => 'A right-click on the app\'s icon (a long press on a phone) opens Chat or Matters straight away. With no internet connection, the app says "No connection" and opens the page by itself when the connection is back.'],
+            ],
+            'tips' => ['The app shares the browser\'s sign-in and permissions: a microphone allowed in the browser is allowed in the app. Inside the app, "Install the app" no longer shows in the menu.'],
+        ],
+
+        [
             'id' => 'demo-data',
             'title' => 'Fill the system with complete demo data',
             'description' => 'To try the system or train staff without using real data, the system has a demo data seeder that creates realistic Arabic data: users with avatars, a fake logo, courts and matter types, parties and experts, thirty matters at every stage with their fees, payments, requests, notes and attachments, letterheads, letter templates, sent letters and meeting minutes, and calendar appointments. You run it once on a separate, empty database.',

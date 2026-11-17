@@ -124,6 +124,18 @@ class Branding
         return is_file($file) ? $file : null;
     }
 
+    /**
+     * The icon as a file on disk — the uploaded one, else the shipped one — for the installed app's icons
+     * (AppIconController).
+     */
+    public static function faviconFile(): ?string
+    {
+        $path = static::path(self::FAVICON);
+        $file = $path !== null ? Storage::disk('public')->path($path) : public_path('images/favicon.png');
+
+        return is_file($file) ? $file : null;
+    }
+
     public static function faviconUrl(): string
     {
         $path = static::path(self::FAVICON);

@@ -27,7 +27,7 @@ return [
             'roles' => [$admin, $withPermission],
             'permissions' => ['View:Chat'],
             'steps' => [
-                ['text' => 'Click in the "Type a message..." box at the bottom of the conversation and type your text. The paperclip icon attaches a file or picture, and the microphone icon records a voice message.', 'shot' => 'chat-3-typing'],
+                ['text' => 'Click in the "Type a message..." box at the bottom of the conversation and type your text. The paperclip icon attaches a file or picture, the smiley icon adds an emoji where the cursor is (those you used lately come first), and the microphone icon records a voice message.', 'shot' => 'chat-3-typing'],
                 ['text' => 'Click the blue send button (or press Enter). Your message appears for everyone straight away.', 'shot' => 'chat-4-sent'],
             ],
             'tips' => ['When you hover over a message, buttons appear: "Reply" to reply to it, "React" to add an emoji, and "Delete" to delete your own message.'],
@@ -67,6 +67,7 @@ return [
                 ['text' => 'Open the conversation with the colleague and click the phone icon beside their name at the top. The first time, the browser asks to use your microphone: click "Allow". A window at the top of the page says "Calling…", then "Ringing…" while it rings for them.'],
                 ['text' => 'On their side, the same window rings on whatever page of the system they have open, with their name and picture, "Answer the call" and "Decline". If the system is in a background tab, a desktop notification says "Incoming voice call".'],
                 ['text' => 'Once they answer, the window shows how long you have been talking. "Mute" turns your microphone off and on; "Hang up" ends the call for both of you.'],
+                ['text' => '"Sound" chooses where you hear the call — the computer\'s speakers, wired or wireless (Bluetooth) headphones, a headset — and which microphone you speak into, during the call. The browser remembers your choice for the next call. On a phone, the sound goes to Bluetooth headphones by itself when they are connected; switching between the earpiece and the loudspeaker is done with the phone\'s own sound controls, which browsers on phones cannot change.'],
             ],
             'tips' => [
                 'The call stays on the page you started or answered it on: opening another page in the same tab ends it, so the browser asks first. To look at something else during a call, open it in a new tab.',

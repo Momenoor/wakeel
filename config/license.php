@@ -16,6 +16,14 @@ return [
     'server_url' => env('LICENSE_SERVER_URL', 'https://license.jpaemirates.com'),
 
     /*
+    | Other addresses of the same license server, tried in turn when the one
+    | above cannot be reached or answers with an error (comma-separated) —
+    | the one that answered is asked first next time (LicenseClient).
+    */
+
+    'fallback_urls' => env('LICENSE_FALLBACK_URLS', 'https://license.jpaemirates.website'),
+
+    /*
     |--------------------------------------------------------------------------
     | Installation ID
     |--------------------------------------------------------------------------

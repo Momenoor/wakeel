@@ -3,6 +3,7 @@
 namespace App\Services\License;
 
 use App\Support\AppUpdate;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Throwable;
 
@@ -52,18 +53,37 @@ class LicenseClient
      */
     private function call(string $endpoint, array $payload): array
     {
-        try {
-            // Also runs inside a page request (EnsureLicenseIsValid) — an
-            // unreachable server must fail fast, not stall the page.
-            $response = Http::connectTimeout(3)
-                ->timeout(10)
-                ->baseUrl(rtrim((string) config('license.server_url'), '/').'/api/v1/license')
-                ->post($endpoint, $payload);
+        $failure = 'network_error';
+
+        // Each address of the license server in turn (license.jpaemirates.com, then .website): one that cannot be
+        // reached, or answers with an error page rather than the license server's answer (a 404 from a host the
+        // name still points to, a 500), gives way to the next. A real answer — a key not found too — is final.
+        foreach (self::servers() as $server) {
+            try {
+                // Also runs inside a page request (EnsureLicenseIsValid) — an
+                // unreachable server must fail fast, not stall the page.
+                $response = Http::connectTimeout(3)
+                    ->timeout(10)
+                    ->baseUrl($server.'/api/v1/license')
+                    ->post($endpoint, $payload);
+            } catch (Throwable) {
+                $failure = 'network_error';
+
+                continue;
+            }
 
             $body = $response->json();
 
+            if (! is_array($body) || ! array_key_exists('valid', $body)) {
+                $failure = 'server_error';
+
+                continue;
+            }
+
+            self::remember($server);
+
             return [
-                'valid' => (bool) ($body['valid'] ?? false),
+                'valid' => (bool) $body['valid'],
                 'reason' => $body['reason'] ?? ($response->successful() ? null : 'server_error'),
                 'expires_at' => $body['expires_at'] ?? null,
                 'plan' => $body['plan'] ?? null,
@@ -71,16 +91,53 @@ class LicenseClient
                 'release_notes' => $body['release_notes'] ?? null,
                 'released_at' => $body['released_at'] ?? null,
             ];
+        }
+
+        return [
+            'valid' => false,
+            'reason' => $failure,
+            'expires_at' => null,
+            'plan' => null,
+            'latest_version' => null,
+            'release_notes' => null,
+            'released_at' => null,
+        ];
+    }
+
+    /** Where the last answer came from: asked first next time. */
+    private const ANSWERED = 'license.server_answered';
+
+    /**
+     * The license server's addresses, the one that answered last first.
+     *
+     * @return list<string>
+     */
+    public static function servers(): array
+    {
+        $servers = array_values(array_unique(array_filter(array_map(
+            fn (string $url): string => rtrim(trim($url), '/'),
+            [(string) config('license.server_url'), ...explode(',', (string) config('license.fallback_urls'))],
+        ))));
+
+        try {
+            $answered = Cache::get(self::ANSWERED);
         } catch (Throwable) {
-            return [
-                'valid' => false,
-                'reason' => 'network_error',
-                'expires_at' => null,
-                'plan' => null,
-                'latest_version' => null,
-                'release_notes' => null,
-                'released_at' => null,
-            ];
+            $answered = null;
+        }
+
+        if (is_string($answered) && in_array($answered, $servers, true)) {
+            $servers = [$answered, ...array_values(array_diff($servers, [$answered]))];
+        }
+
+        return $servers;
+    }
+
+    private static function remember(string $server): void
+    {
+        try {
+            Cache::put(self::ANSWERED, $server, now()->addDay());
+        } catch (Throwable) {
+            // No cache: the usual order next time.
         }
     }
 }

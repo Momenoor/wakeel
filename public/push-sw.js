@@ -1,11 +1,50 @@
 /*
  * Wakeel's service worker: shows Web Push notifications even when no Wakeel
- * tab is open, and opens the notification's link when it is clicked.
- * Registered by resources/views/filament/partials/desktop-notifications.blade.php.
+ * tab is open, and opens the notification's link when it is clicked; and,
+ * with no connection, shows the "No connection" page (resources/views/offline)
+ * instead of the browser's error — what makes Wakeel installable as an app.
+ * Registered on every page (filament.partials.app-install), and by
+ * filament.partials.desktop-notifications for push.
  */
 
-self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+// Its own name per version of the page kept; an older one is removed.
+const OFFLINE_CACHE = 'wakeel-offline-v1';
+const offlineUrl = () => new URL('offline', self.registration.scope).href;
+
+self.addEventListener('install', (event) => {
+    event.waitUntil((async () => {
+        try {
+            const cache = await caches.open(OFFLINE_CACHE);
+            await cache.add(new Request(offlineUrl(), { cache: 'reload' }));
+        } catch (e) {
+            // No connection while installing: kept on the next visit.
+        }
+        await self.skipWaiting();
+    })());
+});
+
+self.addEventListener('activate', (event) => event.waitUntil((async () => {
+    const names = await caches.keys();
+    await Promise.all(names.filter((name) => name.startsWith('wakeel-offline-') && name !== OFFLINE_CACHE).map((name) => caches.delete(name)));
+    await self.clients.claim();
+})()));
+
+// A page opened: from the server always — only when it cannot be reached, the "No connection" page.
+self.addEventListener('fetch', (event) => {
+    if (event.request.mode !== 'navigate' || event.request.method !== 'GET') {
+        return;
+    }
+
+    event.respondWith((async () => {
+        try {
+            return await fetch(event.request);
+        } catch (e) {
+            const kept = await caches.match(offlineUrl());
+
+            return kept || Response.error();
+        }
+    })());
+});
 
 /** A Wakeel tab the user is looking at right now. */
 async function wakeelInFront() {

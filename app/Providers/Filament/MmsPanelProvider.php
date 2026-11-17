@@ -230,13 +230,15 @@ class MmsPanelProvider extends PanelProvider
                 : ''
         );
 
-        // Lets phones add Wakeel to the home screen (iPhone needs that for
-        // push notifications).
+        // Wakeel installable as an app — on a computer, an Android phone, an iPhone's home screen (which iPhone
+        // needs for push notifications) — and how to, for "Install the app" in the user menu.
         FilamentView::registerRenderHook(
             PanelsRenderHook::HEAD_END,
-            fn (): string => '<link rel="manifest" href="'.e(route('manifest')).'">'
-                .'<link rel="apple-touch-icon" href="'.e(Branding::faviconUrl()).'">'
-                .'<meta name="apple-mobile-web-app-capable" content="yes">'
+            fn (): string => view('filament.partials.app-install')->render()
+        );
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::BODY_END,
+            fn (): string => Auth::check() ? view('filament.partials.app-install-help')->render() : ''
         );
 
         // The to-do note and chat pinned to the page (App\Support\Dock): in
@@ -247,6 +249,7 @@ class MmsPanelProvider extends PanelProvider
             fn (): string => Auth::check()
                 ? view('filament.partials.dock-script')->render().view('filament.partials.client-errors-script')->render()
                     .view('filament.partials.chat-voice-script')->render()
+                    .view('filament.partials.chat-emoji-script')->render()
                     // With Pusher: what the pages polled for, told to them (App\Support\Live).
                     .(Live::viaPusher() ? view('filament.partials.live-events-script')->render() : '')
                 : '',
