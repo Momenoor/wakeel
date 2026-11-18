@@ -313,4 +313,29 @@ class ForwardedEmailFilingTest extends TestCase
             ->assertMountedActionModalSee('عقد.pdf')
             ->assertMountedActionModalDontSee('email.eml');
     }
+
+    public function test_the_pdf_of_an_email_filed_from_a_forward_is_made_again_from_the_forward(): void
+    {
+        $this->read($forward = $this->forward());
+        $email = MatterEmail::query()->where('direction', MatterEmail::RECEIVED)->sole();
+        // Quoted only: its Message-ID made of the forward's — in no mailbox.
+        $this->assertStringStartsWith('forwarded.', $email->message_id);
+
+        // The mailboxes as they are now: the forward still in the filing mailbox, nothing under the made-up ID.
+        $dependencies = array_map(fn (\ReflectionParameter $parameter) => app((string) $parameter->getType()), (new \ReflectionClass(MatterReplyCollector::class))->getConstructor()->getParameters());
+        $collector = Mockery::mock(MatterReplyCollector::class.'[findById]', $dependencies)->shouldAllowMockingProtectedMethods();
+        $asked = [];
+        $collector->shouldReceive('findById')->andReturnUsing(function (string $id, string $senderKey) use ($forward, &$asked): ?array {
+            $asked[] = [$id, $senderKey];
+
+            return $senderKey === 'files' && '<'.$id.'>' === $forward['message_id'] ? $forward : null;
+        });
+
+        $done = $collector->regenerate($email);
+
+        // Read out of the forward again, as when it was filed: made again, not "no longer in the mailbox".
+        $this->assertTrue($done['pdf']);
+        $this->assertSame([trim($forward['message_id'], '<>'), 'files'], $asked[0]);
+        $this->assertSame('مستندات الدعوى', $email->fresh()->subject);
+    }
 }

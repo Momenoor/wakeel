@@ -8,6 +8,7 @@ use App\Filament\Mms\Resources\BulkMailCampaigns\BulkMailCampaignResource;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Models\Attachment;
 use App\Models\BulkMailRecipient;
+use App\Models\EmailForward;
 use App\Models\MailSender;
 use App\Models\Matter;
 use App\Models\MatterContact;
@@ -1201,7 +1202,50 @@ class MatterReplyCollector
     private function findMessage(MatterEmail $email): ?array
     {
         $id = trim((string) $email->message_id, '<> ');
-        $sender = SenderMailer::all()[(string) $email->sender_key] ?? null;
+        $forwarded = str_starts_with($id, 'forwarded.');
+
+        // In the mailbox it came to, by its own Message-ID.
+        if (! $forwarded && ($message = $this->findById($id, (string) $email->sender_key, $email->at)) !== null) {
+            return $message;
+        }
+
+        // Filed from a forward (an email from Outlook forwarded to the filing mailbox): the forward found again
+        // there, and the email read out of it as when it was filed — its Message-ID, made of the forward's when only
+        // quoted ("forwarded.…"), was in no mailbox, and the PDF could never be made again.
+        $forward = EmailForward::query()->where('matter_email_id', $email->getKey())->latest('id')->first();
+        if ($forward !== null && ($message = $this->findById(trim((string) $forward->message_id, '<> '), (string) $forward->sender_key, null)) !== null) {
+            $original = ForwardedEmail::original($message);
+
+            if ($original !== null) {
+                $original['at'] ??= $email->at ?? ($message['at'] ?? null);
+
+                return $original;
+            }
+        }
+
+        // Its own Message-ID in the office's other Microsoft 365 mailboxes (expert@, info@ …): one that came to
+        // several, or was moved out of the mailbox it was collected from.
+        if (! $forwarded && $id !== '') {
+            foreach (SenderMailer::all() as $key => $sender) {
+                if ((string) $key !== (string) $email->sender_key && SenderMailer::isMicrosoft($sender)
+                    && ($message = rescue(fn () => $this->findById($id, (string) $key, null), null, report: false)) !== null) {
+                    return $message;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * A message found in one mailbox by its Message-ID: all its folders (Microsoft 365), or the inbox around when
+     * it came, then all of it (cPanel). Null when it is not there.
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function findById(string $id, string $senderKey, ?CarbonInterface $at): ?array
+    {
+        $sender = SenderMailer::all()[$senderKey] ?? null;
 
         if ($id === '' || ! is_array($sender)) {
             return null;
@@ -1216,14 +1260,14 @@ class MatterReplyCollector
             return is_array($item) ? $this->graphMessage($base, $item) : null;
         }
 
-        $inbox = $this->mailboxes->inbox((string) $email->sender_key, $sender);
+        $inbox = $this->mailboxes->inbox($senderKey, $sender);
         // Searched for in the days around when it came first: a whole inbox searched by its Message-ID is
         // every message's headers read by the server (a minute on a big cPanel inbox); then everywhere.
         $search = fn (bool $near) => $inbox->query()->whereMessageId('<'.$id.'>')
-            ->when($near, fn ($query) => $query->since($email->at->copy()->subDays(2))->before($email->at->copy()->addDays(3)))
+            ->when($near, fn ($query) => $query->since(Carbon::instance($at)->subDays(2))->before(Carbon::instance($at)->addDays(3)))
             ->leaveUnread()->setFetchBody(false)->setFetchFlags(false)->get();
 
-        foreach ($email->at ? [true, false] : [false] as $near) {
+        foreach ($at ? [true, false] : [false] as $near) {
             foreach ($this->imapPage($inbox, $search($near), Carbon::create(1971)) as $message) {
                 return $message;
             }
