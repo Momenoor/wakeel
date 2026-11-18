@@ -99,4 +99,26 @@ class EmailPdfFontTest extends TestCase
         $this->assertStringContainsString('<p dir="rtl"', EmailPdf::directed(EmailPdf::withoutCharset($html)));
         $this->assertStringContainsString('تم.', EmailPdf::directed(EmailPdf::withoutCharset($html)));
     }
+
+    public function test_a_font_written_short_is_spelled_out_so_gmail_chips_take_a_line_not_a_page(): void
+    {
+        // The shorthand spelled out: the weight in numbers no longer taken for the size.
+        $this->assertSame(
+            'width:386px; font-weight:400; font-size:14px; line-height:20px; font-family:"Google Sans",sans-serif; border:1px solid red',
+            EmailPdf::fontSpelledOut('width:386px; font:400 14px/20px "Google Sans",sans-serif; border:1px solid red'),
+        );
+        $this->assertSame('font-style:italic; font-weight:bold; font-size:12pt; font-family:Arial', EmailPdf::fontSpelledOut('font: italic bold 12pt Arial'));
+        // Not a shorthand of a size and a family: left as it is; font-size untouched.
+        $this->assertSame('font: inherit', EmailPdf::fontSpelledOut('font: inherit'));
+        $this->assertSame('font-size:14px', EmailPdf::fontSpelledOut('font-size:14px'));
+
+        // A forwarded Gmail email with 24 Google Drive chips (an email filed on 11 Nov 2026 came out 71 pages):
+        // each chip a line, the whole a few pages.
+        $chip = fn (int $i): string => '<div class="gmail_chip gmail_drive_chip" dir="ltr" style="width:386px; height:20px; max-height:20px; background-color:rgb(245,245,245); margin:6px 0px; padding:10px; font:400 14px/20px &quot;Google Sans&quot;,sans-serif; border:1px solid rgb(221,221,221)"><a href="https://drive.google.com/file/d/x" aria-label="'.$i.'.jpeg" style="color:rgb(32,33,36); display:inline-block; max-width:356px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-decoration:none"><img alt="" style="vertical-align:text-bottom; border:none; padding-right:10px; height:20px" src="https://ssl.gstatic.com/docs/doclist/images/icon_10_generic_list.png">&nbsp;<span dir="ltr" style="vertical-align:bottom">'.$i.'.jpeg</span></a><div aria-label="Delete"><div></div></div></div>';
+        $html = '<div class="gmail_quote" dir="auto"><div dir="ltr"><div dir="ltr">'.implode('', array_map($chip, range(1, 24))).'</div></div></div><p>Dear Team,</p>';
+
+        $pdf = EmailPdf::render('JPA/2026/1183/1', $html, ['name' => 'zeeshan', 'address' => 'z@gmail.com'], 'expert', ['expert@jpaemirates.com'], received: true);
+
+        $this->assertLessThanOrEqual(4, preg_match_all('#/Type\s*/Page[^s]#', $pdf));
+    }
 }

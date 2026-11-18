@@ -276,6 +276,12 @@ class Type extends Model
     }
 
     /** Its own OneDrive folders (Settings → OneDrive Folders): empty — the default one. */
+    /**
+     * Where its emails go in OneDrive and what they are named: changed, the existing matters' emails can be put in
+     * their place (EditType, RefileTypeEmails).
+     */
+    public const EMAIL_FILING_FIELDS = ['onedrive_received_emails', 'onedrive_received_plaintiff', 'onedrive_received_defendant', 'onedrive_received_creditors', 'received_name', 'received_name_plaintiff', 'received_name_defendant', 'received_name_creditor', 'onedrive_sent_emails', 'onedrive_attachments', 'onedrive_attachments_plaintiff', 'onedrive_attachments_defendant', 'onedrive_attachments_creditors', 'onedrive_first_to_creditors', 'first_mail_name'];
+
     public const FOLDER_FIELDS = ['onedrive_subfolders', 'phase_keep_folders', 'onedrive_received_emails', 'onedrive_received_plaintiff', 'onedrive_received_defendant', 'onedrive_received_creditors', 'received_name', 'received_name_plaintiff', 'received_name_defendant', 'received_name_creditor', 'onedrive_sent_emails', 'onedrive_signed_minutes', 'onedrive_periodic_reports', 'onedrive_attachments', 'onedrive_attachments_plaintiff', 'onedrive_attachments_defendant', 'onedrive_attachments_creditors', 'onedrive_sent_creditors', 'onedrive_first_to_creditors', 'first_mail_name'];
 
     /**

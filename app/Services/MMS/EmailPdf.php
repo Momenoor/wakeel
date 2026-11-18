@@ -212,6 +212,17 @@ class EmailPdf
         self::wrapLoose($dom, $root);
         $xpath = new DOMXPath($dom);
 
+        // The font written short ("font: 400 14px/20px …", a Gmail Drive chip's) spelled out: the PDF engine took its
+        // weight for its size, and an email of 24 such chips came out 76 pages, each file name in letters a page high.
+        foreach ($xpath->query('//*[@style]') as $element) {
+            /** @var DOMElement $element */
+            $style = $element->getAttribute('style');
+
+            if (stripos($style, 'font') !== false && ($spelled = self::fontSpelledOut($style)) !== $style) {
+                $element->setAttribute('style', $spelled);
+            }
+        }
+
         // What the email itself says is left to right (a signature) — before any is set here.
         $said = [];
         foreach ($xpath->query('//*[@dir]') as $element) {
@@ -271,6 +282,41 @@ class EmailPdf
         }
 
         return $out;
+    }
+
+    /**
+     * A style's "font:" shorthand — [style] [variant] [weight] size[/line-height] family — written out as its parts
+     * (font-style, font-variant, font-weight, font-size, line-height, font-family). One the PDF engine reads wrongly:
+     * a weight in numbers (400) before the size taken as the size. Left as it is when it isn't a size and a family
+     * ("font: inherit", a system font).
+     */
+    public static function fontSpelledOut(string $style): string
+    {
+        return (string) preg_replace_callback('/(?<![-\w])font\s*:\s*([^;]+)/i', function (array $m): string {
+            $value = trim(html_entity_decode($m[1], ENT_QUOTES));
+
+            if (! preg_match('~^((?:(?:italic|oblique|normal|small-caps|bold|bolder|lighter|[1-9]00)\s+)*)(xx-small|x-small|small|medium|large|x-large|xx-large|smaller|larger|\d*\.?\d+(?:px|pt|em|rem|%|ex|ch)?)(?:\s*/\s*(normal|\d*\.?\d+(?:px|pt|em|rem|%)?))?\s+(.+)$~i', $value, $p)) {
+                return $m[0];
+            }
+
+            $parts = [];
+            foreach (preg_split('/\s+/', trim($p[1]), -1, PREG_SPLIT_NO_EMPTY) as $token) {
+                $token = strtolower($token);
+                $parts[] = match (true) {
+                    in_array($token, ['italic', 'oblique'], true) => 'font-style:'.$token,
+                    $token === 'small-caps' => 'font-variant:small-caps',
+                    $token === 'normal' => null,
+                    default => 'font-weight:'.$token,
+                };
+            }
+
+            return implode('; ', array_filter([
+                ...$parts,
+                'font-size:'.$p[2],
+                ($p[3] ?? '') !== '' ? 'line-height:'.$p[3] : null,
+                'font-family:'.trim($p[4]),
+            ]));
+        }, $style);
     }
 
     /**
