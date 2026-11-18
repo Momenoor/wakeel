@@ -25,6 +25,7 @@ use App\Models\User;
 use App\Services\MMS\Calendar\MatterReferenceMatcher;
 use App\Services\MMS\CollectedEmailUndo;
 use App\Services\MMS\EmailDownloadLinks;
+use App\Services\MMS\ForwardedEmail;
 use App\Services\MMS\IncomingEmailMatcher;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterReplyCollector;
@@ -669,6 +670,34 @@ class IncomingMatterEmailsTest extends TestCase
             ['url' => 'https://portal.example.ae/case/doc?id=7', 'label' => 'اضغط هنا للتحميل'],
             ['url' => 'https://www.dropbox.com/scl/fi/abc/bundle.zip?dl=0', 'label' => 'bundle.zip'],
         ], $links);
+    }
+
+    public function test_a_reply_or_forward_does_not_carry_the_links_of_the_email_it_quotes(): void
+    {
+        $original = '<p>المستندات: <a href="https://drive.google.com/file/d/1AbC/view">ملف القضية</a></p>';
+        $outlook = '<div id="appendonsend"></div><hr style="display:inline-block;width:98%"><div id="divRplyFwdMsg" dir="ltr"><font face="Calibri"><b>From:</b> Office Al Banna &lt;office@albanna.ae&gt;<br>'
+            .'<b>Sent:</b> Thursday, October 22, 2026 9:15 AM<br><b>To:</b> JPA &lt;iflas@jpa.ae&gt;<br><b>Subject:</b> مستندات الدعوى</font></div>'.$original;
+        $gmail = '<div class="gmail_quote"><div dir="ltr" class="gmail_attr">On Thu, 22 Oct 2026 at 09:15, Office Al Banna &lt;office@albanna.ae&gt; wrote:<br></div>'
+            .'<blockquote class="gmail_quote">'.$original.'</blockquote></div>';
+        $arabic = '<div dir="rtl"><b>من:</b> مكتب البنا<br><b>تاريخ الإرسال:</b> الخميس، 22 أكتوبر 2026<br><b>إلى:</b> JPA<br><b>الموضوع:</b> مستندات الدعوى</div>'.$original;
+
+        // Answered or forwarded, from Outlook, Gmail, an Arabic Outlook: the quoted email's link is not theirs.
+        foreach ([$outlook, $gmail, $arabic] as $quoted) {
+            $this->assertSame([], EmailDownloadLinks::in(ForwardedEmail::ownPart('<p>تم الاستلام، شكراً.</p>'.$quoted)));
+        }
+
+        // Its own link above the quote: that one only.
+        $this->assertSame(
+            [['url' => 'https://we.tl/t-New', 'label' => 'الرد']],
+            EmailDownloadLinks::in(ForwardedEmail::ownPart('<p>مرفق <a href="https://we.tl/t-New">الرد</a>.</p>'.$gmail)),
+        );
+
+        // Nothing quoted: all of it.
+        $this->assertSame([['url' => 'https://drive.google.com/file/d/1AbC/view', 'label' => 'ملف القضية']], EmailDownloadLinks::in(ForwardedEmail::ownPart($original)));
+
+        // Collected: the reply has none of the original's links.
+        $this->collect($this->email(['subject' => 'RE: مستندات القضية 987/2026', 'attachments' => [], 'body' => '<p>تم الاستلام.</p>'.$gmail]));
+        $this->assertSame([], MatterEmail::where('matter_id', $this->second->id)->sole()->downloadLinks());
     }
 
     public function test_an_email_with_its_documents_as_links_says_so_on_the_matters_emails_tab(): void

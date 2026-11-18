@@ -1612,7 +1612,8 @@ class MatterReplyCollector
         $side = $matter ? ReceivedEmailFiling::side($matter, $from) : ReceivedEmailFiling::GENERAL;
         $name = ReceivedEmailFiling::name($matter, $side, self::partyName($from) ?? $fromName, (string) ($message['subject'] ?? ''), $at, $reply, $from);
 
-        return [$pdf, $files, $name, self::original($message), EmailDownloadLinks::in($body), $side, $from, self::partyName($from) ?? $fromName];
+        // Its own links only: a reply or forward does not carry as its own the links of the email it quotes.
+        return [$pdf, $files, $name, self::original($message), EmailDownloadLinks::in(ForwardedEmail::ownPart($body)), $side, $from, self::partyName($from) ?? $fromName];
     }
 
     /**

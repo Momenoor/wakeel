@@ -236,6 +236,35 @@ class ForwardedEmail
     }
 
     /**
+     * An email's own part, as HTML: what it says above the email it answers or forwards — cut where the quoted one
+     * begins: its "From: … Subject:" header (Outlook, Arabic or English, a Gmail forward), Gmail's quote ("On …
+     * wrote:"), Apple Mail's and Yahoo's, Outlook's separator, "-----Original Message-----". All of it when nothing
+     * is quoted. So the links of the email answered are not read as this one's (EmailDownloadLinks).
+     */
+    public static function ownPart(string $html): string
+    {
+        $cuts = array_filter([
+            self::headerOffset($html),
+            ...array_map(
+                fn (string $pattern): ?int => preg_match($pattern, $html, $m, PREG_OFFSET_CAPTURE) ? (int) $m[0][1] : null,
+                [
+                    // Gmail's quote of an answer or a forward, as Gmail writes it — and as Outlook keeps it ("x_").
+                    '#<div[^>]*\bclass="[^"]*\b(?:x_)?gmail_quote\b#i',
+                    // Apple Mail.
+                    '#<blockquote[^>]*\btype="cite"#i',
+                    // Yahoo.
+                    '#<div[^>]*\bclass="[^"]*\byahoo_quoted\b#i',
+                    // Outlook's separator above the quoted header.
+                    '#<div[^>]*\bid="(?:x_)?(?:divRplyFwdMsg|appendonsend)"#i',
+                    '#-{3,}\s*(?:Original Message|Forwarded message|الرسالة الأصلية|رسالة معاد توجيهها)\s*-{3,}#iu',
+                ],
+            ),
+        ], fn (?int $offset): bool => $offset !== null);
+
+        return $cuts === [] ? $html : substr($html, 0, min($cuts));
+    }
+
+    /**
      * The forwarder's own words: the text above the quoted email (all of it when none is quoted).
      */
     public static function note(string $html): string
