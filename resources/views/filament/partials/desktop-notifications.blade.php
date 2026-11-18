@@ -67,8 +67,19 @@
                 }
                 this.pushActive = true;
                 const json = subscription.toJSON();
-                const marker = 'wakeel-push:' + json.endpoint;
+                // v2: sent once more with the browser's number, so its older subscriptions are removed.
+                const marker = 'wakeel-push2:' + json.endpoint;
                 try { if (! force && sessionStorage.getItem(marker)) { return; } } catch (e) {}
+                // This browser's own number, kept: its older subscriptions are removed when it subscribes again
+                // (each notification came twice or more otherwise — PushSubscriptionController).
+                let device = '';
+                try {
+                    device = localStorage.getItem('wakeel-device') || '';
+                    if (! device) {
+                        device = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2));
+                        localStorage.setItem('wakeel-device', device);
+                    }
+                } catch (e) {}
                 const response = await fetch(@js($subscribeUrl), {
                     method: 'POST',
                     credentials: 'same-origin',
@@ -77,6 +88,7 @@
                         endpoint: json.endpoint,
                         keys: json.keys,
                         contentEncoding: (PushManager.supportedContentEncodings || ['aes128gcm'])[0],
+                        device: device || undefined,
                     }),
                 });
                 if (response.ok) { try { sessionStorage.setItem(marker, '1'); } catch (e) {} }

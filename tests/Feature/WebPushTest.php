@@ -70,6 +70,38 @@ class WebPushTest extends TestCase
         ]);
     }
 
+    public function test_a_browser_subscribing_again_keeps_one_subscription(): void
+    {
+        $amr = User::factory()->create();
+        $edge = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Edg/140.0';
+        $sub = fn (string $endpoint, ?string $device = null) => $this->actingAs($amr)
+            ->withHeader('User-Agent', $edge)
+            ->postJson('/push/subscriptions', array_filter([
+                'endpoint' => $endpoint,
+                'keys' => ['p256dh' => 'BPublicKey', 'auth' => 'secret'],
+                'device' => $device,
+            ]))->assertNoContent();
+
+        // From before browsers had a number: two of this Edge, one of the iPhone.
+        $sub('https://wns2-pn1p.notify.windows.com/w/?token=old1');
+        $sub('https://wns2-pn1p.notify.windows.com/w/?token=old2');
+        $iphone = $this->subscribe($amr, 'https://web.push.apple.com/QAbc');
+
+        // The same Edge with its number: its older ones gone, the iPhone kept.
+        $sub('https://wns2-pn1p.notify.windows.com/w/?token=new', 'dev-1');
+        $this->assertSame(['https://web.push.apple.com/QAbc', 'https://wns2-pn1p.notify.windows.com/w/?token=new'], PushSubscription::orderBy('endpoint')->pluck('endpoint')->all());
+
+        // It renews its address later: still one for it.
+        $sub('https://wns2-pn1p.notify.windows.com/w/?token=newer', 'dev-1');
+        $this->assertSame(2, PushSubscription::count());
+        $this->assertTrue(PushSubscription::whereKey($iphone->id)->exists());
+        $this->assertSame('dev-1', PushSubscription::where('endpoint', 'like', '%newer')->value('device_id'));
+
+        // Another computer with its own number keeps its own.
+        $sub('https://wns2-pn1p.notify.windows.com/w/?token=other-pc', 'dev-2');
+        $this->assertSame(3, PushSubscription::count());
+    }
+
     public function test_the_page_records_this_browser_for_the_signed_in_user(): void
     {
         $payload = [
