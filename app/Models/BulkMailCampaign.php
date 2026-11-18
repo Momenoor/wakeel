@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Storage;
 
 class BulkMailCampaign extends Model
 {
@@ -29,6 +30,7 @@ class BulkMailCampaign extends Model
         'bcc_emails',
         'has_attachment',
         'attachment_path',
+        'attachment_names',
         'attachment_disk',
         'daily_send_limit',
         'scheduled_at',
@@ -46,6 +48,7 @@ class BulkMailCampaign extends Model
         'bcc_emails' => 'array',
         'placeholders' => 'array',
         'attachment_path' => 'array',
+        'attachment_names' => 'array',
         'has_attachment' => 'boolean',
         'first_mail' => 'boolean',
         'scheduled_at' => 'datetime',
@@ -155,6 +158,29 @@ class BulkMailCampaign extends Model
         $paths = is_array($this->attachment_path) ? $this->attachment_path : (json_decode((string) $this->attachment_path, true) ?? []);
 
         return array_values(array_filter($paths));
+    }
+
+    /** A file's name as it was uploaded (attachment_names) — else as it is kept (an imported one keeps its own). */
+    public function attachmentName(string $path): string
+    {
+        $name = ((array) ($this->attachment_names ?? []))[$path] ?? null;
+
+        return filled($name) ? (string) $name : basename($path);
+    }
+
+    /**
+     * The files a recipient gets, by their own names and sizes — as the email's PDF lists them.
+     *
+     * @return list<array{name: string, size: ?int}>
+     */
+    public function attachmentFilesFor(BulkMailRecipient $recipient): array
+    {
+        $disk = Storage::disk('public');
+
+        return array_map(fn (string $path): array => [
+            'name' => $this->attachmentName($path),
+            'size' => $disk->exists($path) ? $disk->size($path) : null,
+        ], $this->attachmentsFor($recipient));
     }
 
     public function renderSubject(BulkMailRecipient $recipient, array $recipientPlaceholders = []): string

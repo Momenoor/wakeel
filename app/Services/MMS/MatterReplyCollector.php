@@ -295,7 +295,7 @@ class MatterReplyCollector
         }
 
         $downloads = array_values(array_map(
-            fn (array $file): array => ['name' => (string) $file['name'], 'url' => $this->downloadUrl($matter, (string) $file['path'])],
+            fn (array $file): array => ['name' => (string) $file['name'], 'url' => $this->downloadUrl($matter, (string) $file['path'], (string) $file['name'])],
             array_filter($kept, fn (array $file) => filled($file['path'] ?? null)),
         ));
 
@@ -313,9 +313,9 @@ class MatterReplyCollector
     }
 
     /** Where to download a file kept for an email: through the matter's attachment it is, else by its path. */
-    private function downloadUrl(Matter $matter, string $path): string
+    private function downloadUrl(Matter $matter, string $path, string $name): string
     {
-        return $matter->attachments()->where('path', $path)->first()?->url() ?? MatterEmail::fileUrl($path);
+        return $matter->attachments()->where('path', $path)->first()?->url() ?? MatterEmail::fileUrl($path, $name);
     }
 
     /**

@@ -365,7 +365,7 @@
             </div>
             <span class="att-names">
             @foreach($attachments as $path)
-                    {{ basename($path) }}@if(!$loop->last); @endif
+                    {{ $campaign->attachmentName($path) }}@if(!$loop->last); @endif
                 @endforeach
         </span>
         </div>

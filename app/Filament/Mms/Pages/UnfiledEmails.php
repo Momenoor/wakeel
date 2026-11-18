@@ -294,7 +294,7 @@ class UnfiledEmails extends Page implements HasTable
                     ->label(__('Open'))
                     ->icon('heroicon-o-document-text')
                     ->color('gray')
-                    ->url(fn (MatterEmail $record): ?string => filled($path = $record->files[0]['path'] ?? null) ? MatterEmail::fileUrl($path) : null, shouldOpenInNewTab: true),
+                    ->url(fn (MatterEmail $record): ?string => filled($path = $record->files[0]['path'] ?? null) ? MatterEmail::fileUrl($path, $record->pdfName()) : null, shouldOpenInNewTab: true),
 
                 // The files it came with, each to open — to tell what it is about before filing it.
                 Action::make('attachments')

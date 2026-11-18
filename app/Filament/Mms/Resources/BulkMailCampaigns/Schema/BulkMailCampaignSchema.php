@@ -119,6 +119,8 @@ class BulkMailCampaignSchema
                         ->previewable()
                         ->downloadable()
                         ->directory('mail_attachments')
+                        // Sent, listed and downloaded under its own name, not the one it is kept under.
+                        ->storeFileNamesIn('attachment_names')
                         ->acceptedFileTypes(['application/pdf', 'image/*', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'])
                         ->maxSize(10240)
                         ->visible(fn ($get) => $get('has_attachment')),

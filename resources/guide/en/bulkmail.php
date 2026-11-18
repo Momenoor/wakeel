@@ -32,6 +32,7 @@ return [
             ],
             'tips' => [
                 'Turn on "Has Attachment" to attach one file to every message.',
+                'Each file goes out under the name it had when you uploaded it, and is listed and downloaded under that name too, whatever name the system keeps it under.',
                 'On a matter that has creditors, tick "First mail to creditors" (under the matter) for a notice to those who may be its creditors: each email is saved with the matter\'s first mails, named as set in Settings → OneDrive Folders, and its day is the "First email sent" of whom it went to on the Contacts tab.',
                 'A placeholder can be cut short: {{matter.plaintiffs,c:30}} gives its first 30 characters and {{matter.plaintiffs,w:3}} its first 3 words.',
             ],

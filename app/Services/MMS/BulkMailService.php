@@ -28,7 +28,7 @@ class BulkMailService
         $sentAt = $recipient->sent_at ?? now();
         $cc = array_merge($campaign->cc_emails ?? [], $recipient->cc_emails ?? []);
         $bcc = $campaign->bcc_emails ?? [];
-        $attachments = $campaign->attachmentsFor($recipient);
+        $attachments = $campaign->attachmentFilesFor($recipient);
 
         $pdf = EmailPdf::render(
             $subject,

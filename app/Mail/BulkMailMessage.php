@@ -66,6 +66,7 @@ class BulkMailMessage extends Mailable
                 if ($path && Storage::disk($disk)->exists($path)) {
 
                     $attachments[] = Attachment::fromStorageDisk($disk, $path)
+                        ->as($this->campaign->attachmentName($path))
                         ->withMime(Storage::disk($disk)->mimeType($path) ?? 'application/octet-stream');
                 }
             }

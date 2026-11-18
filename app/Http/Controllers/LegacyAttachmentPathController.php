@@ -8,6 +8,7 @@ use App\Models\BulkMailCampaign;
 use App\Support\Documents;
 use App\Support\StoredFile;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -22,10 +23,12 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  *    (email-replies/) to those who see campaigns, and nothing else to anyone.
  * A document of the system's still on this server comes here too: the web server sends its folders to Wakeel
  * (public/.htaccess) instead of serving the file to anyone with its address.
+ * At /files/<path> (MatterEmail::fileUrl()) the same, under the name given with it (?name=): an email's file as it
+ * came or was sent, not as it is kept.
  */
 class LegacyAttachmentPathController extends Controller
 {
-    public function __invoke(string $oldPath): RedirectResponse|StreamedResponse
+    public function __invoke(Request $request, string $oldPath): RedirectResponse|StreamedResponse
     {
         $moved = Attachment::query()->where('legacy_path', $oldPath)->oldest('id')->limit(5)->get();
 
@@ -40,7 +43,29 @@ class LegacyAttachmentPathController extends Controller
         abort_unless($disk !== null, 404);
         abort_unless(self::mayOpen($oldPath), 403);
 
-        return StoredFile::response($disk, $oldPath, basename($oldPath));
+        return StoredFile::response($disk, $oldPath, self::name($oldPath, $request->query('name')));
+    }
+
+    /**
+     * The name it is shown and saved under: the one given (an email's file as it came or was sent), else its
+     * attachment's, else as kept. A given name keeps the kept file's extension, so it opens as what it is.
+     */
+    public static function name(string $path, mixed $given): string
+    {
+        $given = is_string($given) ? trim((string) preg_replace('~[\\\\/\x{0000}-\x{001F}\x{007F}]+~u', ' ', $given)) : '';
+        $kept = basename($path);
+
+        if ($given === '' || mb_strlen($given) > 255) {
+            $given = (string) Attachment::withTrashed()->where('path', $path)->value('name');
+        }
+
+        if ($given === '') {
+            return $kept;
+        }
+
+        $extension = strtolower(pathinfo($kept, PATHINFO_EXTENSION));
+
+        return $extension === '' || strtolower(pathinfo($given, PATHINFO_EXTENSION)) === $extension ? $given : $given.'.'.$extension;
     }
 
     private static function mayOpen(string $path): bool

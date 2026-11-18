@@ -634,7 +634,7 @@ class IncomingMatterEmailsTest extends TestCase
         $page->mountTableAction('view', $received)
             ->assertMountedActionModalSee([
                 $received->files[0]['name'].' ('.__('the email as PDF').')',
-                MatterEmail::fileUrl($received->files[0]['path']),
+                MatterEmail::fileUrl($received->files[0]['path'], $received->files[0]['name']),
                 $received->from,
                 'PDF in OneDrive', 'EML in OneDrive', 'Not saved', 'Attachments in OneDrive',
             ])

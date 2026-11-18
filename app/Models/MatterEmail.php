@@ -13,7 +13,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 use Throwable;
@@ -167,21 +166,22 @@ class MatterEmail extends Model
     {
         return collect($attachmentsOnly ? $this->attachmentFiles() : (array) $this->files)
             ->filter(fn ($file): bool => Documents::linkable($file['path'] ?? null))
-            ->map(fn (array $file): array => ['name' => (string) $file['name'], 'url' => self::fileUrl($file['path']), 'kind' => $file['kind'] ?? null])
+            ->map(fn (array $file): array => ['name' => (string) $file['name'], 'url' => self::fileUrl($file['path'], (string) $file['name']), 'kind' => $file['kind'] ?? null])
             ->values()
             ->all();
     }
 
     /**
-     * The link to a file kept in the system (the public disk): each part of its path encoded, so
-     * a file named with a "?", "#" or "%" in it opens instead of being cut at that character.
+     * The link to a file kept in the system (the public disk), opened through Wakeel (LegacyAttachmentPathController)
+     * under its own name — the one it came or was sent with, not the one it is kept under — when shown and when
+     * saved. Each part of its path encoded, so a file named with a "?", "#" or "%" in it opens instead of being
+     * cut at that character.
      */
-    public static function fileUrl(string $path): string
+    public static function fileUrl(string $path, ?string $name = null): string
     {
-        $disk = Storage::disk('public');
-        $plain = $disk->url('x');
+        $url = url('files').'/'.implode('/', array_map('rawurlencode', explode('/', $path)));
 
-        return substr($plain, 0, -1).implode('/', array_map('rawurlencode', explode('/', $path)));
+        return filled($name) ? $url.'?name='.rawurlencode($name) : $url;
     }
 
     /**

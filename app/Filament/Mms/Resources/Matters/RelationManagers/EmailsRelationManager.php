@@ -600,7 +600,7 @@ class EmailsRelationManager extends RelationManager
     {
         $path = $email->files[0]['path'] ?? null;
 
-        return Documents::linkable($path) ? MatterEmail::fileUrl($path) : null;
+        return Documents::linkable($path) ? MatterEmail::fileUrl($path, $email->pdfName()) : null;
     }
 
     /**

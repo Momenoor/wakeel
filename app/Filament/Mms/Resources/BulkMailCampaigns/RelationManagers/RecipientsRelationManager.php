@@ -265,7 +265,7 @@ class RecipientsRelationManager extends RelationManager
                                 TextEntry::make('files')
                                     ->hiddenLabel()
                                     ->formatStateUsing(fn (array $state): string => (string) $state['name'])
-                                    ->url(fn (array $state): ?string => filled($state['path'] ?? null) ? MatterEmail::fileUrl($state['path']) : null, shouldOpenInNewTab: true)
+                                    ->url(fn (array $state): ?string => filled($state['path'] ?? null) ? MatterEmail::fileUrl($state['path'], (string) ($state['name'] ?? '')) : null, shouldOpenInNewTab: true)
                                     ->icon(fn (array $state): ?string => filled($state['path'] ?? null) ? 'heroicon-o-document-arrow-down' : null)
                                     ->color(fn (array $state): ?string => filled($state['path'] ?? null) ? 'primary' : null)
                                     ->listWithLineBreaks(),

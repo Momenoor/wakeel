@@ -12,10 +12,10 @@ use App\Http\Controllers\LegacyAttachmentPathController;
 use App\Http\Controllers\MatterReceivedNotificationController;
 use App\Http\Controllers\MinutesLiveFilesController;
 use App\Http\Controllers\PayrollJournalVoucherPrintController;
+use App\Http\Controllers\PdfToolsOneDriveController;
 use App\Http\Controllers\SalaryAuthorizationFormPrintController;
 use App\Http\Controllers\SignatureStampImageController;
 use App\Http\Controllers\SignedAttachmentController;
-use App\Http\Controllers\PdfToolsOneDriveController;
 use App\Models\BulkMailRecipient;
 use App\Models\MatterLetter;
 use App\Models\MatterMinutes;
@@ -179,6 +179,9 @@ Route::middleware('auth')->group(function () {
     // (Its parameter is not called {path}: Laravel's own route for the "local" disk has that very address, and
     // the later of two routes of one address replaces the earlier.)
     Route::get('storage/{oldPath}', LegacyAttachmentPathController::class)->where('oldPath', '.*')->name('attachment.legacy');
+    // The same file at an address the web server never serves by itself, under the name given with it (?name=,
+    // MatterEmail::fileUrl()) — the one it came or was sent with, not the one it is kept under.
+    Route::get('files/{oldPath}', LegacyAttachmentPathController::class)->where('oldPath', '.*')->name('document.file');
 
     Route::get('incentive/calculations/{calculation}/print', IncentiveCalculationPrintController::class)
         ->name('incentive.calculation.print')
