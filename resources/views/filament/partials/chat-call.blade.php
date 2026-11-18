@@ -52,6 +52,8 @@
             local: null,
             remote: null,
             tone: null,
+            remoteStream: null,
+            needsTap: false,
             outputs: [],
             inputs: [],
             outputId: '',
@@ -62,9 +64,12 @@
             timers: {},
 
             init() {
-                this.remote = new Audio();
+                // In the page (a phone plays a call's sound from an element it can see), out of sight.
+                this.remote = document.createElement('audio');
                 this.remote.autoplay = true;
                 this.remote.setAttribute('playsinline', '');
+                this.remote.style.display = 'none';
+                document.body.appendChild(this.remote);
 
                 this.listen();
 
@@ -139,6 +144,7 @@
                     return;
                 }
                 Object.assign(this, { state: 'outgoing', role: 'caller', name, avatar, status: cfg.t.calling, muted: false, seconds: 0 });
+                this.unlockSound();
 
                 if (! await this.microphone()) {
                     return;
@@ -190,6 +196,7 @@
                 }
                 this.stopTones();
                 clearTimeout(this.timers.ring);
+                this.unlockSound();
                 this.state = 'connecting';
                 this.status = cfg.t.connecting;
 
@@ -301,13 +308,31 @@
                 await this.loadDevices();
                 // The sound last chosen in this browser, if it is still there (the headphones connected).
                 const output = this.saved('output');
-                if (output && this.outputs.some((d) => d.deviceId === output)) {
+                if (! this.ios && output && this.outputs.some((d) => d.deviceId === output)) {
                     await this.setOutput(output, false);
                 }
                 return true;
             },
 
             // ── Sound and microphone ─────────────────────────────────
+
+            // At the tap on Call or Answer: the player started then, empty, so the voice arriving seconds later
+            // plays — phones (Safari, often Chrome on Android) refuse sound that starts without a tap.
+            unlockSound() {
+                this.remoteStream = new MediaStream();
+                this.remote.srcObject = this.remoteStream;
+                this.remote.muted = false;
+                this.remote.play().catch(() => {});
+            },
+
+            // The voice played; refused still, a "Tap to turn on the sound" button does it.
+            playRemote() {
+                this.remote.play().then(() => { this.needsTap = false; }).catch(() => { this.needsTap = true; });
+            },
+
+            get ios() {
+                return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            },
 
             micConstraints(deviceId, exact) {
                 const audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
@@ -346,7 +371,8 @@
             // Whether the browser lets the page pick where the sound goes (computers, Chrome on Android; an
             // iPhone's Safari decides it itself, from what is connected).
             get canPickOutput() {
-                return typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype && this.outputs.length > 0;
+                // An iPhone takes the setting but loses the call's sound with it (WebKit bug 320087): left to iOS.
+                return ! this.ios && typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype && this.outputs.length > 0;
             },
 
             // The choices: this device's own sound — and a phone's earpiece and loudspeaker, when its browser names
@@ -401,9 +427,15 @@
                     const pc = new RTCPeerConnection({ iceServers: ice.data?.iceServers || [] });
                     this.pc = pc;
                     this.local.getTracks().forEach((t) => pc.addTrack(t, this.local));
+                    // The other one's voice into the player started at the tap (unlockSound), not a new one a
+                    // phone would refuse to play.
                     pc.ontrack = (e) => {
-                        this.remote.srcObject = e.streams[0];
-                        this.remote.play().catch(() => {});
+                        if (! this.remoteStream) {
+                            this.remoteStream = new MediaStream();
+                            this.remote.srcObject = this.remoteStream;
+                        }
+                        this.remoteStream.addTrack(e.track);
+                        this.playRemote();
                     };
                     pc.onconnectionstatechange = () => this.connectionChanged(pc.connectionState);
                     await make(pc);
@@ -476,7 +508,10 @@
                 this.pc = null;
                 this.local?.getTracks().forEach((t) => t.stop());
                 this.local = null;
+                this.remote.pause();
                 this.remote.srcObject = null;
+                this.remoteStream = null;
+                this.needsTap = false;
             },
 
             // ── Sounds ────────────────────────────────────────────────
@@ -579,6 +614,8 @@
         <div style="display: flex; flex-direction: column; align-items: center; gap: 2px; max-width: 100%;">
             <div class="wk-call-name" dir="auto" x-text="name"></div>
             <div class="wk-call-status" x-text="state === 'active' && ! status ? clock : status"></div>
+            {{-- The phone refused to start the sound by itself: one tap does. --}}
+            <button type="button" x-show="needsTap && ['connecting', 'active'].includes(state)" x-on:click="playRemote()" style="margin-top: 8px; padding: 6px 14px; border-radius: 9999px; background: #22c55e; color: #fff; font-size: .8rem; font-weight: 600;">🔊 {{ __('Tap to turn on the sound') }}</button>
         </div>
 
         <div class="wk-call-buttons">
