@@ -13,7 +13,7 @@ return [
             'roles' => [$admin, 'Anyone with the permission to manage updates'],
             'permissions' => ['View:SystemUpdates'],
             'steps' => [['text' => 'Open "Settings → Maintenance → System Updates" and click "Check for updates". If there is a newer version, follow the update button that appears. The update runs in the background: a cron link starts its next steps every minute (even during maintenance mode), and the page tells you that you can close it.', 'shot' => 'page-1']],
-            'tips' => ['Back up the database ("Back up now", below) and the files before updating, and do not update at the busiest time of the working day.'],
+            'tips' => ['Back up the database ("Back up now", below) and the files before updating, and do not update at the busiest time of the working day.', 'When it finishes, the update also clears the PHP code the server keeps in memory and tells the background workers (the queue, and Reverb for live updates and calls) to start again on the new version, each after the job it is on — nothing to restart by hand. A voice call at that moment may drop.'],
         ],
         [
             'id' => 'backups',

@@ -503,7 +503,34 @@ class Updater
 
         Setting::set('last_updated_at', now()->toDateTimeString(), 'system');
 
-        return $this->forgetCompiledCode().__('Updated to version :version.', ['version' => AppUpdate::currentVersion()])."\n";
+        return $this->forgetCompiledCode().$this->restartWorkers().__('Updated to version :version.', ['version' => AppUpdate::currentVersion()])."\n";
+    }
+
+    /**
+     * The programs running in the background told to start again on the new code — the queue's workers once each
+     * has finished the job it is on, and Reverb (live updates, calls) when it is the broadcaster — Supervisor, or the
+     * next cron run, starting them again. Without it they ran the old version's code until the server was restarted:
+     * a job new in the update failed in them. Nothing of the server's own to run (no root): Laravel's own signals.
+     */
+    private function restartWorkers(): string
+    {
+        $output = '';
+
+        try {
+            $output .= $this->artisan('queue:restart');
+        } catch (Throwable $e) {
+            $output .= __('The queue workers could not be told to restart: :error', ['error' => $e->getMessage()])."\n";
+        }
+
+        if (config('broadcasting.default') === 'reverb' && array_key_exists('reverb:restart', Artisan::all())) {
+            try {
+                $output .= $this->artisan('reverb:restart');
+            } catch (Throwable $e) {
+                $output .= __('Reverb could not be told to restart: :error', ['error' => $e->getMessage()])."\n";
+            }
+        }
+
+        return $output;
     }
 
     private function restoreOfflineMode(): void

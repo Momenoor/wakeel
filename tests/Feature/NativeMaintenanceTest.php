@@ -5,7 +5,9 @@ namespace Tests\Feature;
 use App\Models\Setting;
 use App\Services\Updater\NativeMaintenance;
 use App\Services\Updater\Updater;
+use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\File;
 use Tests\TestCase;
@@ -92,7 +94,7 @@ class NativeMaintenanceTest extends TestCase
         $payload = json_decode(base64_decode($queued->getValue()), true);
         $this->assertSame(hash_hmac('sha256', $payload['expires_at'], $native->secret()), $payload['mac']);
 
-        $this->assertTrue(app(\Illuminate\Cookie\Middleware\EncryptCookies::class)->isDisabled('laravel_maintenance'));
+        $this->assertTrue(app(EncryptCookies::class)->isDisabled('laravel_maintenance'));
     }
 
     public function test_the_update_steps_take_the_site_down_and_bring_it_back(): void
@@ -107,11 +109,19 @@ class NativeMaintenanceTest extends TestCase
         $this->assertStringContainsString($this->storage.'/framework', str_replace('\\', '/', storage_path('framework')));
         $this->assertStringContainsString(app(NativeMaintenance::class)->secret(), $updater->state()['log']);
 
+        config(['broadcasting.default' => 'reverb']);
+        Cache::forget('illuminate:queue:restart');
+        Cache::forget('laravel:reverb:restart');
+
         $this->complete($updater, ['preflight', 'maintenance', 'code', 'dependencies', 'database', 'permissions', 'cleanup', 'optimize']);
         $this->assertTrue($updater->runNextStep()); // finish
 
         $this->assertFalse(app()->isDownForMaintenance());
         $this->assertFalse(Setting::get('app_offline'));
+
+        // The workers and Reverb told to start again on the new code (they read these signals, Supervisor restarts them).
+        $this->assertNotNull(Cache::get('illuminate:queue:restart'));
+        $this->assertNotNull(Cache::get('laravel:reverb:restart'));
     }
 
     public function test_abandoning_a_failed_update_brings_the_site_back_up(): void
