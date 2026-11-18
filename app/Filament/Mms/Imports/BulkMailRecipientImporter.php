@@ -30,9 +30,23 @@ class BulkMailRecipientImporter extends Importer
                 ->example('شركة جيه بي ايه لتدقيق ومراجعة الحسابات'),
             ImportColumn::make('email')
                 ->requiredMapping()
-                ->multiple(',')
+                // One address each: a cell of several split on ; , ؛ ، or a new line (multiple(',') took "a;b" for one).
+                ->castStateUsing(fn (mixed $state): array => self::addresses($state))
                 ->example('example1@example.com;example2@example.com'),
         ];
+    }
+
+    /**
+     * A cell's addresses, each once: split on ; , ؛ ، or a new line.
+     *
+     * @return list<string>
+     */
+    public static function addresses(mixed $cell): array
+    {
+        $cells = is_array($cell) ? $cell : [$cell];
+        $all = array_merge(...array_map(fn ($one): array => PartyImporter::split(preg_replace('/\R+/u', ';', (string) $one)), $cells ?: ['']));
+
+        return array_values(array_unique($all));
     }
 
     public function resolveRecord(): BulkMailRecipient

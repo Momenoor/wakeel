@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\BulkMailCampaignStatus;
+use App\Enums\BulkMailRecipientStatus;
 use App\Filament\Mms\Imports\BulkMailRecipientImporter;
 use App\Filament\Mms\Resources\BulkMailCampaigns\Pages\CreateBulkMailCampaign;
 use App\Models\BulkMailCampaign;
@@ -344,5 +345,33 @@ class BulkMailPlaceholdersTest extends TestCase
 
         $this->assertSame('Gulf Supplies', $recipient->name);
         $this->assertSame(['claim_amount' => '12,500', 'رقم_المطالبة' => 'C-77'], $recipient->placeholders);
+    }
+
+    public function test_addresses_in_one_cell_are_imported_each_as_its_own(): void
+    {
+        $campaign = $this->campaign(null, 's', 'b');
+        $import = Import::create([
+            'file_name' => 'recipients.csv', 'file_path' => 'recipients.csv', 'importer' => BulkMailRecipientImporter::class,
+            'total_rows' => 1, 'user_id' => User::factory()->create()->id,
+        ]);
+
+        $importer = new BulkMailRecipientImporter($import, ['name' => 'Company', 'email' => 'Email'], ['campaign_id' => $campaign->id]);
+        $importer(['Company' => 'Gulf Supplies', 'Email' => "a@example.com; b@example.com,c@example.com ؛ d@example.com\ne@example.com;a@example.com;"]);
+
+        $this->assertSame(['a@example.com', 'b@example.com', 'c@example.com', 'd@example.com', 'e@example.com'], $campaign->recipients()->sole()->email);
+    }
+
+    public function test_addresses_imported_as_one_before_are_split(): void
+    {
+        $campaign = $this->campaign(null, 's', 'b');
+        $joined = BulkMailRecipient::create(['campaign_id' => $campaign->id, 'name' => 'A', 'email' => ['a@example.com'], 'status' => BulkMailRecipientStatus::Pending]);
+        // As the import kept it.
+        DB::table('bulk_mail_recipients')->where('id', $joined->id)->update(['email' => json_encode(['a@example.com;b@example.com', 'c@example.com'])]);
+        $fine = BulkMailRecipient::create(['campaign_id' => $campaign->id, 'name' => 'B', 'email' => ['x@example.com'], 'status' => BulkMailRecipientStatus::Pending]);
+
+        (require database_path('migrations/2020_01_01_000252_bulk_mail_recipients_split_addresses.php'))->up();
+
+        $this->assertSame(['a@example.com', 'b@example.com', 'c@example.com'], $joined->fresh()->email);
+        $this->assertSame(['x@example.com'], $fine->fresh()->email);
     }
 }

@@ -137,11 +137,11 @@ class PartyImporter extends Importer
     }
 
     /**
-     * A cell's values.
+     * A cell's values: split on ; , ؛ ، (BulkMailRecipientImporter's addresses too).
      *
      * @return list<string>
      */
-    private static function split(mixed $cell): array
+    public static function split(mixed $cell): array
     {
         return array_values(array_filter(array_map('trim', preg_split(self::SPLIT, trim((string) $cell)) ?: []), fn (string $v) => $v !== ''));
     }
