@@ -251,17 +251,23 @@ class EmailPdf
         foreach ($xpath->query('//p|//div[not(@id="email-root")]|//li|//ul|//ol|//h1|//h2|//h3|//h4|//h5|//h6|//td|//th|//blockquote|//table') as $element) {
             /** @var DOMElement $element */
             $rtl = BulkMailService::containsArabic($element->textContent);
+            // Written in one script only — all English, or all Arabic: that script's direction, whatever is said
+            // around it (an English reply inside an Arabic Outlook's dir="rtl", an Arabic email quoted in a
+            // left-to-right block). Not in a signature, which keeps its lines together as it says.
+            $own = self::inSignature($xpath, $element) ? null : self::scriptDirection($element->textContent);
 
             if ($element->tagName === 'table') {
                 // A table's columns run the way its text does — unless something around it (a signature) says otherwise.
-                if (! $element->hasAttribute('dir') && $rtl && ! $underSaid($element)) {
+                if (! $element->hasAttribute('dir') && $rtl && ($own === 'rtl' || ! $underSaid($element))) {
                     $element->setAttribute('dir', 'rtl');
                 }
 
                 continue;
             }
 
-            if (! $element->hasAttribute('dir')) {
+            if ($own !== null) {
+                $element->setAttribute('dir', $own);
+            } elseif (! $element->hasAttribute('dir')) {
                 // Inside something that says its direction (a signature: left to right) it is that too; elsewhere, by its own text.
                 $element->setAttribute('dir', $nearestSaid($element) ?? ($rtl ? 'rtl' : 'ltr'));
             }
@@ -282,6 +288,25 @@ class EmailPdf
         }
 
         return $out;
+    }
+
+    /** rtl for text in Arabic letters only, ltr for Latin letters only; null for both, or neither (numbers, signs). */
+    public static function scriptDirection(string $text): ?string
+    {
+        $arabic = BulkMailService::containsArabic($text);
+        $latin = (bool) preg_match('/\p{Latin}/u', $text);
+
+        return match (true) {
+            $arabic && ! $latin => 'rtl',
+            $latin && ! $arabic => 'ltr',
+            default => null,
+        };
+    }
+
+    /** Within a signature (Outlook's id="Signature", Gmail's gmail_signature, …): it keeps the direction it says. */
+    private static function inSignature(DOMXPath $xpath, DOMElement $element): bool
+    {
+        return $xpath->query('ancestor-or-self::*[contains(translate(@id, "SIGNATURE", "signature"), "signature") or contains(translate(@class, "SIGNATURE", "signature"), "signature")]', $element)->length > 0;
     }
 
     /**

@@ -75,6 +75,22 @@ class EmailPdfFontTest extends TestCase
         $this->assertStringContainsString('<p dir="ltr" style="text-align: left">رضا درويش</p>', $html);
     }
 
+    public function test_an_english_reply_runs_left_to_right_and_the_arabic_it_quotes_right_to_left_whatever_is_said_around_them(): void
+    {
+        // An Arabic Outlook's reply in English: all of it inside dir="rtl", a line even saying so itself; the Arabic email
+        // it quotes inside a block that says left to right.
+        $html = EmailPdf::directed('<div dir="rtl"><p>Dear Dr Redha,</p><p dir="rtl">The Company thanks you.</p>'
+            .'<div dir="ltr"><p><b>From:</b> Mohamed El Baz</p><p>تحية طيبة وبعد،،</p><table><tr><td>البند</td><td>١</td></tr></table></div>'
+            .'<p>السادة/ Arco Interiors LLC</p></div>');
+
+        $this->assertStringContainsString('<p dir="ltr" style="text-align: left">Dear Dr Redha,</p>', $html);
+        $this->assertStringContainsString('<p dir="ltr" style="text-align: left">The Company thanks you.</p>', $html);
+        $this->assertStringContainsString('<p dir="rtl" style="text-align: right">تحية طيبة وبعد،،</p>', $html);
+        $this->assertStringContainsString('<table dir="rtl">', $html);
+        // Both scripts in one line: as it is said around it.
+        $this->assertStringContainsString('<p dir="rtl" style="text-align: right">السادة/ Arco Interiors LLC</p>', $html);
+    }
+
     public function test_the_body_of_an_email_is_written_in_calibri_or_the_offices_font(): void
     {
         // Calibri whether or not the file was uploaded: the mail program has it.
