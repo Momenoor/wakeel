@@ -8,6 +8,7 @@ use App\Http\Controllers\ChatAttachmentController;
 use App\Http\Controllers\ChatCallController;
 use App\Http\Controllers\ChatMessageController;
 use App\Http\Controllers\ClientErrorController;
+use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\LetterFontFileController;
 use App\Http\Controllers\LicenseController;
 use App\Http\Controllers\PushSubscriptionController;
@@ -88,6 +89,8 @@ Route::middleware('auth')->group(function () {
     // A background request that failed in the browser (filament.partials.client-errors-script).
     Route::post('/client-errors', [ClientErrorController::class, 'store'])->middleware('throttle:30,1')->name('client-errors.store');
     Route::delete('/push/subscriptions', [PushSubscriptionController::class, 'destroy'])->name('push.unsubscribe');
+    // A page starred or no longer, from the side menu or the page (filament.partials.favorites-script).
+    Route::post('/favorites/toggle', FavoriteController::class)->middleware('throttle:60,1')->name('favorites.toggle');
 
     // A file sent in a chat message, to those in the conversation.
     Route::get('/chat/files/{message}/{index}', ChatAttachmentController::class)->whereNumber('index')->name('chat.attachment');

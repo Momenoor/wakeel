@@ -103,6 +103,20 @@ trait SharesPanelConfiguration
                 PanelsRenderHook::SIDEBAR_NAV_START,
                 fn () => filament()->hasTopNavigation() ? '' : SystemSwitcher::render(inSidebar: true)
             )
+            // The user's favourites (App\Support\Favorites): their group at the top of the side menu, under the system
+            // switcher; a star beside each page's heading; the stars on the menu pages and their clicks.
+            ->renderHook(
+                PanelsRenderHook::SIDEBAR_NAV_START,
+                fn () => filament()->hasTopNavigation() || ! auth()->check() ? '' : view('filament.partials.favorites')
+            )
+            ->renderHook(
+                PanelsRenderHook::PAGE_HEADER_HEADING_AFTER,
+                fn () => filament()->hasTopNavigation() || ! auth()->check() ? '' : view('filament.partials.favorites-star')
+            )
+            ->renderHook(
+                PanelsRenderHook::BODY_END,
+                fn () => filament()->hasTopNavigation() || ! auth()->check() ? '' : view('filament.partials.favorites-script')
+            )
             ->renderHook(
                 PanelsRenderHook::GLOBAL_SEARCH_BEFORE,
                 fn () => filament()->hasTopNavigation() ? SystemSwitcher::render() : ''
