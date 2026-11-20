@@ -67,6 +67,23 @@ class FavoritesTest extends TestCase
         $this->assertSame([parse_url($one, PHP_URL_PATH)], Favorites::urls($this->user->fresh(), 'mms'));
     }
 
+    public function test_a_sections_own_page_shows_with_the_sections_icon(): void
+    {
+        // A section (a cluster, like Settings) whose menu page is one of its own pages: /mms/settings/general.
+        $panel = Filament::getPanel('mms');
+        $section = collect($panel->getNavigation())->flatMap(fn ($group) => $group->getItems())
+            ->first(fn ($item) => substr_count((string) parse_url((string) $item->getUrl(), PHP_URL_PATH), '/') >= 3);
+        $this->assertNotNull($section, 'No section with pages of its own in the menu.');
+        $folder = dirname((string) parse_url((string) $section->getUrl(), PHP_URL_PATH));
+
+        // Another of its pages, starred from the section's own menu.
+        Favorites::toggle($this->user, 'mms', $folder.'/another-page', 'Another page');
+
+        $item = Favorites::items($this->user->fresh(), $panel)[0];
+        $this->assertSame('Another page', $item->getLabel());
+        $this->assertEquals($section->getIcon(), $item->getIcon());
+    }
+
     public function test_only_this_sites_pages_and_a_known_system(): void
     {
         $this->postJson(route('favorites.toggle'), ['panel' => 'mms', 'url' => 'https://evil.example/x'])->assertStatus(422);

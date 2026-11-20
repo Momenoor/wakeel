@@ -56,11 +56,15 @@
         };
 
         const pageButton = () => document.querySelector('[data-wk-fav-page]');
-        const pageUrl = () => location.pathname + location.search;
+        // The page by its path: what the page adds to its address once open (?tab=…, filters) is not another page.
+        const pageUrl = () => location.pathname;
+        const pathOf = (url) => url.split('?')[0];
+        // The favourite this page is, if starred — by path, however it was starred.
+        const pageFavorite = () => [...urls].find((url) => pathOf(url) === pageUrl()) || null;
 
-        // A star on each menu page of the side menu (not those of the Favorites group itself, starred already).
+        // A star on each menu page — of the side menu, and of a section's own menu (Settings and the like).
         const decorate = () => {
-            document.querySelectorAll('.fi-sidebar-nav .fi-sidebar-item > a.fi-sidebar-item-btn').forEach((link) => {
+            document.querySelectorAll('.fi-sidebar-item > a.fi-sidebar-item-btn').forEach((link) => {
                 const item = link.parentElement;
                 const url = normal(link.getAttribute('href') || '');
                 if (! url) {
@@ -84,7 +88,7 @@
 
             const page = pageButton();
             if (page) {
-                mark(page, urls.has(pageUrl()));
+                mark(page, pageFavorite() !== null);
             }
         };
 
@@ -120,15 +124,33 @@
             if (page) {
                 event.preventDefault();
                 const heading = document.querySelector('.fi-header-heading');
-                toggle(pageUrl(), (heading?.textContent || document.title).trim());
+                toggle(pageFavorite() || pageUrl(), (heading?.textContent || document.title).trim());
             }
         });
 
+        // Livewire draws the page and the side menu again on each update, as the server has them: stars gone, the
+        // page's own empty. Put back after every change to the page, once a frame.
+        let queued = false;
+        const later = () => {
+            if (! queued) {
+                queued = true;
+                requestAnimationFrame(() => {
+                    queued = false;
+                    decorate();
+                });
+            }
+        };
+
         window.wkFavorites = { decorate };
-        document.addEventListener('DOMContentLoaded', decorate);
-        document.addEventListener('livewire:navigated', decorate);
-        if (document.readyState !== 'loading') {
+        const start = () => {
             decorate();
+            new MutationObserver(later).observe(document.body, { childList: true, subtree: true });
+        };
+        document.addEventListener('livewire:navigated', later);
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', start);
+        } else {
+            start();
         }
     })();
 </script>

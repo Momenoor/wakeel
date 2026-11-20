@@ -99,12 +99,13 @@ final class Favorites
         }
 
         $menu = self::menu($panel);
+        $root = '/'.trim((string) $panel->getPath(), '/');
         $current = self::normalize($current ?? request()->getRequestUri());
         $currentPath = $current === null ? null : strtok($current, '?');
 
-        return array_map(function (array $favorite) use ($menu, $current, $currentPath): NavigationItem {
+        return array_map(function (array $favorite) use ($menu, $root, $current, $currentPath): NavigationItem {
             $exact = $menu[$favorite['url']] ?? null;
-            $icon = $exact?->getIcon() ?? self::sectionOf($menu, $favorite['url'])?->getIcon() ?? 'heroicon-o-star';
+            $icon = $exact?->getIcon() ?? self::sectionOf($menu, $favorite['url'], $root)?->getIcon() ?? 'heroicon-o-star';
             $url = $favorite['url'];
 
             return NavigationItem::make($exact ? $exact->getLabel() : $favorite['label'])
@@ -140,18 +141,27 @@ final class Favorites
         return $menu;
     }
 
-    /** The menu page an address lies under (the longest that starts it): one matter → Matters. */
-    private static function sectionOf(array $menu, string $url): ?NavigationItem
+    /**
+     * The menu page an address lies under (the longest that starts it): one matter → Matters. A section's own page
+     * (Settings → Mail senders, at /settings/mail-senders) → the section, whose menu page is another of its pages
+     * (/settings/general): its folder (/settings) counts too — not the system's own (/mms), which all lie under.
+     */
+    private static function sectionOf(array $menu, string $url, string $root): ?NavigationItem
     {
-        $path = strtok($url, '?');
+        $path = (string) strtok($url, '?');
         $found = null;
         $length = 0;
 
         foreach ($menu as $address => $item) {
             $base = rtrim((string) strtok($address, '?'), '/');
-            if ($base !== '' && strlen($base) > $length && ($path === $base || str_starts_with($path, $base.'/'))) {
-                $found = $item;
-                $length = strlen($base);
+            $folder = rtrim(str_replace('\\', '/', dirname($base)), '/');
+
+            foreach (array_unique([$base, $folder]) as $candidate) {
+                if ($candidate !== '' && $candidate !== rtrim($root, '/') && strlen($candidate) > $length
+                    && ($path === $candidate || str_starts_with($path, $candidate.'/'))) {
+                    $found = $item;
+                    $length = strlen($candidate);
+                }
             }
         }
 
