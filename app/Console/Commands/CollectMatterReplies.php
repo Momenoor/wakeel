@@ -37,6 +37,8 @@ class CollectMatterReplies extends Command
             $this->warn($error);
         }
 
-        return $result['errors'] === [] ? self::SUCCESS : self::FAILURE;
+        // A mailbox not read is in the error log already, with its reason and trace (MailboxNotCollected): the run
+        // itself went through, the others read — not "the scheduled command failed" on top of it, saying nothing.
+        return self::SUCCESS;
     }
 }

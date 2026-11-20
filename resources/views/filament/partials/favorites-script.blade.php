@@ -17,6 +17,8 @@
     .wk-fav-star.wk-on .wk-fav-on, .wk-fav-page-star.wk-on .wk-fav-on { display: inline; }
     .wk-fav-star.wk-on .wk-fav-off, .wk-fav-page-star.wk-on .wk-fav-off { display: none; }
     .wk-fav-page-star { display: inline-flex; align-items: center; margin-inline-start: .5rem; padding: .3rem; border-radius: .5rem; color: rgb(156 163 175); vertical-align: middle; }
+    /* The page's star on the line of its name, not under it. */
+    .fi-header-heading:has(+ .wk-fav-page-star) { display: inline-block; vertical-align: middle; }
     .wk-fav-page-star svg { width: 1.25rem; height: 1.25rem; }
     .wk-favorites > .fi-sidebar-nav-groups { margin-bottom: 1.5rem; }
     /* The sidebar folded to icons: no stars. */

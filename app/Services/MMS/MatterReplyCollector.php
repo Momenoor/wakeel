@@ -213,6 +213,8 @@ class MatterReplyCollector
                 }
             } catch (Throwable $e) {
                 Log::warning('Emails not collected from '.$senderKey.': '.$e->getMessage());
+                // In the error log with the mailbox, the reason and its trace (Settings → Error tracking).
+                report(MailboxNotCollected::for($senderKey, $e));
                 $result['errors'][] = $senderKey.': '.$e->getMessage();
             }
         }

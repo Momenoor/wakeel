@@ -12,6 +12,7 @@ use App\Filament\Mms\Resources\Matters\RelationManagers\EmailsRelationManager;
 use App\Filament\Support\EmailSendFields;
 use App\Livewire\TabbedDatabaseNotifications;
 use App\Models\BulkMailCampaign;
+use App\Models\ErrorReport;
 use App\Models\Letterhead;
 use App\Models\LetterTemplate;
 use App\Models\MailSender;
@@ -24,6 +25,7 @@ use App\Models\Setting;
 use App\Models\User;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterMailer;
+use App\Services\MMS\MailboxNotCollected;
 use App\Services\MMS\MatterOneDriveExplorer;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterReplyCollector;
@@ -603,11 +605,15 @@ class MatterRepliesTest extends TestCase
         // The inbox is read oldest first, so a run that stops can go on from there.
         Http::assertSent(fn (Request $request) => str_contains(rawurldecode($request->url()), '$orderby=receivedDateTime asc'));
 
-        // An error is shown, and the command says it failed.
+        // An error is shown, and kept in the error log with the mailbox and the reason — the run itself went through.
         $this->mailReadAllowed = false;
         Setting::forget(MatterReplyCollector::LAST_RUN);
-        $this->artisan('mail:collect-replies', ['--max-seconds' => 30])->assertFailed();
+        $this->artisan('mail:collect-replies', ['--max-seconds' => 30])->expectsOutputToContain('noreply')->assertSuccessful();
         $this->assertStringContainsString('Mail.Read', MatterReplyCollector::lastRunSummary());
+        $report = ErrorReport::query()->where('exception', MailboxNotCollected::class)->latest('id')->first();
+        $this->assertNotNull($report);
+        $this->assertStringContainsString('mailbox "noreply"', $report->message);
+        $this->assertNotEmpty($report->previous);
     }
 
     public function test_without_its_headers_a_reply_is_known_by_its_subject_from_someone_it_went_to(): void
