@@ -2,11 +2,13 @@
 
 namespace App\Filament\Mms\Resources\MatterRequests\Schemas;
 
+use App\Models\Attachment;
 use App\Models\MatterRequest;
 use App\Services\MMS\Requests\RequestHistory;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\RepeatableEntry\TableColumn;
 use Filament\Infolists\Components\TextEntry;
+use Illuminate\Support\Collection;
 
 /**
  * A request's history as a table — submitted, changes requested, resubmitted, approved — each step with who,
@@ -38,5 +40,30 @@ class RequestHistoryEntry
                 TextEntry::make('comment')->placeholder('—')->wrap(),
             ])
             ->columnSpanFull();
+    }
+
+    /**
+     * The request's files, each knowing its request (no query a file) — for stage(): $record->attachments each with
+     * its owner set.
+     *
+     * @return Collection<int, Attachment>
+     */
+    public static function files(MatterRequest $request): Collection
+    {
+        return $request->attachments->each(fn (Attachment $file) => $file->setRelation('attachable', $request))->values();
+    }
+
+    /** The step of the request a file was added at (RequestHistory::stageOf()), as a badge. Its rows from files(). */
+    public static function stage(string $name = 'stage'): TextEntry
+    {
+        $stage = fn (Attachment $record): ?array => $record->attachable instanceof MatterRequest ? RequestHistory::stageOf($record->attachable, $record) : null;
+
+        return TextEntry::make($name)
+            ->label(__('Stage'))
+            ->state(fn (Attachment $record): ?string => $stage($record)['label'] ?? null)
+            ->badge()
+            ->color(fn (Attachment $record): string => $stage($record)['color'] ?? 'gray')
+            ->icon(fn (Attachment $record): ?string => $stage($record)['icon'] ?? null)
+            ->placeholder('—');
     }
 }

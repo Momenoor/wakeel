@@ -3,6 +3,7 @@
 namespace App\Services\MMS\Requests;
 
 use App\Enums\RequestStatus;
+use App\Models\Attachment;
 use App\Models\MatterRequest;
 use App\Models\User;
 use ArrayObject;
@@ -190,6 +191,23 @@ class RequestHistory
         }
 
         return $steps;
+    }
+
+    /**
+     * The step a file of the request was added at: the last one taken by the time it was saved — each step's
+     * status is set first, then its files are (BaseRequestService) — so a file sent with the request reads
+     * "Request submitted", one sent back with the changes asked "Changes requested", one of the corrected
+     * report "Resubmitted", one with the decision "Approved" or "Rejected". Its history read once a request.
+     *
+     * @return array{step: string, label: string, color: string, icon: string}
+     */
+    public static function stageOf(MatterRequest $request, Attachment $file): array
+    {
+        $at = $file->created_at;
+        $steps = array_values(array_filter(self::for($request), fn (array $step): bool => $step['at'] !== null && $at !== null && $step['at']->lte($at)));
+        $step = $steps === [] ? self::SUBMITTED : $steps[count($steps) - 1]['step'];
+
+        return ['step' => $step, 'label' => self::label($step), 'color' => self::color($step), 'icon' => self::icon($step)];
     }
 
     public static function label(string $step): string

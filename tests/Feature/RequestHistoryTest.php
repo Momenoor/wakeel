@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\AttachmentCategory;
 use App\Enums\RequestStatus;
 use App\Enums\RequestType;
 use App\Filament\Mms\Resources\MatterRequests\Pages\ViewMatterRequest;
@@ -9,6 +10,7 @@ use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Models\Matter;
 use App\Models\MatterRequest;
 use App\Models\User;
+use App\Services\Attachments\AttachmentService;
 use App\Services\MMS\Requests\RequestHistory;
 use App\Services\MMS\Requests\RequestServiceFactory;
 use Filament\Facades\Filament;
@@ -17,6 +19,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -85,6 +88,38 @@ class RequestHistoryTest extends TestCase
             ->assertSee('Changes requested')
             ->assertSee('Fix the dates')
             ->assertSee('Resubmitted');
+    }
+
+    public function test_each_file_says_the_step_it_came_with(): void
+    {
+        Storage::fake('attachments');
+        $file = fn (MatterRequest $request, string $name) => app(AttachmentService::class)->store($request, '%PDF-'.$name, AttachmentCategory::REQUEST, $name.'.pdf', auth()->user());
+
+        $request = $this->request();
+        $file($request, 'report');
+        $this->travel(1)->minutes();
+        $this->actingAs($this->reviewer);
+        RequestServiceFactory::make($request->refresh())->requestChanges(['approved_comment' => 'Fix the dates']);
+        $file($request, 'comments');
+        $this->travel(1)->minutes();
+        $this->actingAs($this->assistant);
+        RequestServiceFactory::make($request->refresh())->resubmit(['comment' => 'Dates fixed']);
+        $file($request, 'corrected');
+        $this->travel(1)->minutes();
+        $this->actingAs($this->reviewer);
+        RequestServiceFactory::make($request->refresh())->approve(['approved_comment' => 'Good', 'attachments' => []]);
+        $file($request, 'approval');
+
+        $request->refresh();
+        $this->assertSame(
+            ['report.pdf' => 'Request submitted', 'comments.pdf' => 'Changes requested', 'corrected.pdf' => 'Resubmitted', 'approval.pdf' => 'Approved'],
+            $request->attachments->sortBy('id')->mapWithKeys(fn ($attachment): array => [$attachment->name => RequestHistory::stageOf($request, $attachment)['label']])->all(),
+        );
+
+        // On the request's page, beside each file.
+        Livewire::test(ViewMatterRequest::class, ['record' => $request->getRouteKey()])
+            ->assertSee('Stage')
+            ->assertSeeInOrder(['report.pdf', 'Request submitted', 'comments.pdf', 'Changes requested', 'corrected.pdf', 'Resubmitted', 'approval.pdf', 'Approved']);
     }
 
     public function test_a_matters_requests_read_their_history_together_once(): void

@@ -663,7 +663,9 @@ class MatterInfolist
                             ->visible(fn ($record) => $record->status !== RequestStatus::PENDING || filled($record->extra['rounds'] ?? null)),
                         RepeatableEntry::make('attachments')
                             ->label(__('Attachments'))
+                            ->state(fn ($record) => RequestHistoryEntry::files($record))
                             ->columnSpanFull()
+                            ->columns(['default' => 1, 'sm' => 3])
                             ->visible(fn ($record) => $record->attachments->isNotEmpty())
                             ->schema([
                                 TextEntry::make('name')
@@ -671,7 +673,10 @@ class MatterInfolist
                                     ->icon('heroicon-o-paper-clip')
                                     ->url(fn ($record) => $record->url())
                                     ->openUrlInNewTab()
-                                    ->color('primary'),
+                                    ->color('primary')
+                                    ->columnSpan(['default' => 1, 'sm' => 2]),
+                                // The step of the request it came with.
+                                RequestHistoryEntry::stage()->hiddenLabel(),
                             ]),
                         // The same as on the request's own page, for whoever works from the matter and has no
                         // Requests list: approve, ask for changes, reject — and the assistant's corrected report.

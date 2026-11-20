@@ -118,7 +118,8 @@ class MatterRequestInfolist
                             ->schema([
                                 RepeatableEntry::make('attachments')
                                     ->hiddenLabel()
-                                    ->columns(5)
+                                    ->state(fn ($record) => RequestHistoryEntry::files($record))
+                                    ->columns(6)
                                     ->columnSpanFull()
                                     ->visible(fn ($record) => $record->attachments->isNotEmpty())
                                     ->schema([
@@ -130,6 +131,8 @@ class MatterRequestInfolist
                                             ->openUrlInNewTab()
                                             ->alignJustify()
                                             ->columnSpan(2),
+                                        // The step it came with: submitted, changes requested, resubmitted, decided.
+                                        RequestHistoryEntry::stage(),
                                         TextEntry::make('size')
                                             ->label(__('Size'))
                                             ->numeric()
