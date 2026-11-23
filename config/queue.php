@@ -40,9 +40,10 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            // Longer than the longest job may run (EmailJob, CollectMatterEmails: 300 seconds) — else a job still
-            // running is handed to another worker and done twice.
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 330),
+            // Longer than the longest job may run (RefileTypeEmails: an hour) — else a job still running is handed to
+            // another worker after this many seconds and run again beside it, or marked failed while it works. Never
+            // less, whatever the .env says (an older .env has 330, from when the longest was EmailJob's 300).
+            'retry_after' => max((int) env('DB_QUEUE_RETRY_AFTER', 3660), 3660),
             'after_commit' => true,
         ],
 

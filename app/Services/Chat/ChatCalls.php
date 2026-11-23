@@ -111,8 +111,13 @@ class ChatCalls
         // back; and again twice while it still rings, a phone sounding a notification once.
         $call->setRelation('caller', $caller);
         defer(fn () => $this->ringOnDevices($call));
-        RingCallAgain::dispatch((int) $call->getKey())->delay(now()->addSeconds(15));
-        RingCallAgain::dispatch((int) $call->getKey())->delay(now()->addSeconds(30));
+
+        // Not when jobs run at once (no worker, or no cron link: Integrations): the delay is not kept then, and
+        // both would ring with the first.
+        if (config('queue.default') !== 'sync') {
+            RingCallAgain::dispatch((int) $call->getKey())->delay(now()->addSeconds(15));
+            RingCallAgain::dispatch((int) $call->getKey())->delay(now()->addSeconds(30));
+        }
 
         return $call;
     }

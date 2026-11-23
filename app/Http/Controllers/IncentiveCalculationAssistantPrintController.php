@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\IncentiveCalculation;
 use App\Models\Party;
 use App\Services\MMS\IncentiveCalculatorService;
+use App\Support\FinanceViewers;
 
 class IncentiveCalculationAssistantPrintController extends Controller
 {
@@ -17,6 +18,8 @@ class IncentiveCalculationAssistantPrintController extends Controller
      *
      *  - whoever may print calculations (managers), for anybody; or
      *  - the assistant themselves, for their own party only.
+     *
+     * Either way, only the finance viewers when some are chosen (Settings → General), as My Incentive is.
      */
     public function __invoke(IncentiveCalculation $calculation, Party $party)
     {
@@ -24,7 +27,7 @@ class IncentiveCalculationAssistantPrintController extends Controller
         $isOwnStatement = $user?->party?->id === $party->id;
 
         abort_unless(
-            $isOwnStatement || $user?->can('print', $calculation),
+            FinanceViewers::allows($user) && ($isOwnStatement || $user?->can('print', $calculation)),
             403
         );
 

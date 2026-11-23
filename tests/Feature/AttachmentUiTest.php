@@ -20,8 +20,10 @@ use App\Models\MatterRequest;
 use App\Models\User;
 use App\Services\Attachments\AttachmentService;
 use Filament\Actions\Testing\TestAction;
+use Filament\Notifications\NotificationMailbox;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -177,18 +179,18 @@ class AttachmentUiTest extends TestCase
         $this->allowEverything();
         Mail::fake();
         $matter = Matter::factory()->create();
-        Storage::disk('local')->put(AttachmentFields::DIRECTORY.'/a/Report.pdf', '%PDF-report');
+        Storage::disk('local')->put(AttachmentFields::DIRECTORY.'/a/Report.docx', '%DOCX-report');
 
         CreateRequestAction::make()->record($matter)->data([
             'type' => RequestType::REVIEW_REPORT,
             'comment' => 'Please review',
-            'attachments' => [AttachmentFields::DIRECTORY.'/a/Report.pdf'],
+            'attachments' => [AttachmentFields::DIRECTORY.'/a/Report.docx'],
         ])->call(['component' => null]);
 
         $request = $matter->requests()->sole();
         $file = $request->attachments()->sole();
-        $this->assertSame([Category::REQUEST, 'Report.pdf', 'attachments', $matter->id, auth()->id()], [$file->category, $file->name, $file->disk, $file->matter_id, $file->user_id]);
-        $this->assertSame('%PDF-report', Storage::disk('attachments')->get($file->path));
+        $this->assertSame([Category::REQUEST, 'Report.docx', 'attachments', $matter->id, auth()->id()], [$file->category, $file->name, $file->disk, $file->matter_id, $file->user_id]);
+        $this->assertSame('%DOCX-report', Storage::disk('attachments')->get($file->path));
     }
 
     public function test_a_file_already_stored_by_whatsapp_is_kept_as_its_source(): void
@@ -229,7 +231,7 @@ class AttachmentUiTest extends TestCase
         $attached = AttachmentFields::save($fee, ['files' => [AttachmentFields::DIRECTORY.'/a/run.exe', AttachmentFields::DIRECTORY.'/b/ok.pdf'], 'category' => 'general']);
 
         $this->assertSame(['ok.pdf'], $attached->pluck('name')->all());
-        $notifications = session('filament.notifications') ?? [];
+        $notifications = $this->sentNotifications();
         $this->assertSame(['danger'], collect($notifications)->pluck('status')->unique()->values()->all());
         $this->assertStringContainsString('run.exe', json_encode($notifications));
         // Nothing left waiting.
@@ -259,7 +261,7 @@ class AttachmentUiTest extends TestCase
 
         $this->assertSame(['second.pdf'], $attached->pluck('name')->all());
         $this->assertSame(2, $fee->ownedAttachments()->count());
-        $notifications = collect(session('filament.notifications') ?? []);
+        $notifications = $this->sentNotifications();
         $this->assertSame(['warning'], $notifications->pluck('status')->all());
         $this->assertStringContainsString('second.pdf', json_encode($notifications));
     }
@@ -388,5 +390,18 @@ class AttachmentUiTest extends TestCase
             ->assertHasNoActionErrors();
         $this->assertSame(RequestStatus::REJECTED, $request->refresh()->status);
         $this->assertSame(['Why.pdf'], $request->attachments()->pluck('name')->all());
+    }
+
+    /**
+     * The notifications sent: kept in Filament's mailbox (the cache), not in the session, since Filament 5.10.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function sentNotifications(): Collection
+    {
+        $mailbox = app(NotificationMailbox::class);
+        $mailbox->flush();
+
+        return collect($mailbox->pull());
     }
 }

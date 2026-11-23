@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\IncentiveCalculation;
 use App\Services\MMS\IncentiveCalculatorService;
+use App\Support\FinanceViewers;
 
 class IncentiveCalculationPrintController extends Controller
 {
@@ -15,8 +16,9 @@ class IncentiveCalculationPrintController extends Controller
         // The whole office's payroll. The route carried nothing but `auth`, so
         // every signed-in user could read it; the policy ability existed and was
         // simply never consulted. An assistant wanting their own figures has
-        // My Incentive and the per-assistant print.
-        abort_unless(auth()->user()?->can('print', $calculation), 403);
+        // My Incentive and the per-assistant print. Only the finance viewers, when some are chosen (Settings →
+        // General), as the calculations' own pages are.
+        abort_unless(FinanceViewers::allows(auth()->user()) && auth()->user()?->can('print', $calculation), 403);
 
         // The matters' lines, for the cards' totals only (each matter is in its assistants' rows); an amount
         // entered by hand is in its assistant's rows.

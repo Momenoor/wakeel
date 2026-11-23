@@ -52,6 +52,10 @@ class DuplicateMatterTest extends TestCase
         $row = MatterParty::create(['matter_id' => $this->source->id, 'party_id' => $this->plaintiff->id, 'role' => 'party', 'type' => 'plaintiff']);
         MatterParty::create(['matter_id' => $this->source->id, 'party_id' => $this->lawyer->id, 'role' => 'representative', 'type' => 'plaintiff', 'parent_id' => $row->id]);
         Fee::create(['matter_id' => $this->source->id, 'type' => FeeType::cases()[0]->value, 'amount' => 1000]);
+
+        // A type with phases, and the matter in one of them: the copy is in it too.
+        $this->source->type->update(['has_phases' => true, 'phases' => ['First instance', 'Appeal']]);
+        $this->source->update(['phase' => 'Appeal']);
     }
 
     public function test_duplicate_opens_the_create_page_for_the_matter(): void
@@ -68,6 +72,7 @@ class DuplicateMatterTest extends TestCase
             ->assertSchemaStateSet([
                 'court_id' => $this->source->court_id,
                 'type_id' => $this->source->type_id,
+                'phase' => 'Appeal',
                 'year' => (string) now()->year,
                 'level' => MatterLevel::cases()[0],
                 'number' => null,
@@ -97,6 +102,7 @@ class DuplicateMatterTest extends TestCase
         $copy = Matter::where('number', '1200')->sole();
         $this->assertSame($this->source->court_id, $copy->court_id);
         $this->assertSame($this->source->type_id, $copy->type_id);
+        $this->assertSame('Appeal', $copy->phase);
         $this->assertSame([$this->expert->id], $copy->expertsOnly()->pluck('party_id')->all());
         $this->assertSame(40.0, (float) $copy->expertsOnly()->value('commission_percentage'));
         $party = $copy->mainPartiesOnly()->sole();

@@ -50,6 +50,7 @@ use App\Services\MMS\OneDriveFolderLinker;
 use App\Services\MMS\Requests\RequestHistory;
 use App\Support\Currency;
 use App\Support\Dates;
+use App\Support\FinanceViewers;
 use App\Support\RequestMemo;
 use App\Support\ScreenPermissions;
 use Closure;
@@ -1280,7 +1281,8 @@ class MatterInfolist
         $seesAll = $user?->isSuperAdmin() ?? false;
         $parties = $user?->ownMatterPartyIds() ?? [];
 
-        if (! $seesAll && $parties === []) {
+        // Kept to the finance viewers, when some are chosen (Settings → General) — the super admin too.
+        if (! FinanceViewers::allows($user) || (! $seesAll && $parties === [])) {
             return collect();
         }
 

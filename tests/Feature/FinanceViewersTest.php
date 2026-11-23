@@ -10,6 +10,8 @@ use App\Filament\Mms\Resources\EmployeeProfiles\RelationManagers\SalaryComponent
 use App\Filament\Mms\Resources\Incentive\IncentiveCalculations\IncentiveCalculationResource;
 use App\Filament\Mms\Resources\PayrollRuns\PayrollRunResource;
 use App\Models\EmployeeProfile;
+use App\Models\IncentiveCalculation;
+use App\Models\Party;
 use App\Models\Setting;
 use App\Models\User;
 use App\Support\FinanceViewers;
@@ -77,5 +79,23 @@ class FinanceViewersTest extends TestCase
         Setting::set(FinanceViewers::SETTING, [], 'general');
         Setting::clearCache();
         $this->assertSame($all, $this->seen($this->other));
+    }
+
+    public function test_the_incentive_prints_are_kept_to_the_chosen_too_at_their_address(): void
+    {
+        $calculation = IncentiveCalculation::create(['name' => 'June', 'period_start' => '2026-06-01', 'period_end' => '2026-06-30', 'status' => 'draft']);
+        $party = Party::factory()->create(['user_id' => $this->other->id]);
+        $all = route('incentive.calculation.print', $calculation);
+        $own = route('incentive.calculation.print.assistant', [$calculation, $party]);
+
+        // No one chosen: the permission decides (a super admin may print).
+        $this->actingAs($this->other)->get($all)->assertOk();
+
+        // One chosen: the other is refused both, their own statement too — as My Incentive is.
+        Setting::set(FinanceViewers::SETTING, [(string) $this->chosen->id], 'general');
+        Setting::clearCache();
+        $this->actingAs($this->other)->get($all)->assertForbidden();
+        $this->actingAs($this->other)->get($own)->assertForbidden();
+        $this->actingAs($this->chosen)->get($all)->assertOk();
     }
 }

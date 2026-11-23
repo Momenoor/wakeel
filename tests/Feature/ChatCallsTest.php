@@ -197,6 +197,7 @@ class ChatCallsTest extends TestCase
     public function test_a_call_rings_on_the_phones_of_the_one_called_and_goes_away_when_over(): void
     {
         $this->withoutDefer();
+        config(['queue.default' => 'database']); // a worker: the re-rings wait their seconds
         Queue::fake();
         $pushed = [];
         $this->app->instance(WebPushSender::class, new class($pushed) extends WebPushSender
@@ -241,6 +242,18 @@ class ChatCallsTest extends TestCase
         $count = count($pushed);
         (new RingCallAgain($call->id))->handle(app(ChatCalls::class));
         $this->assertCount($count, $pushed);
+    }
+
+    public function test_a_call_is_not_rung_again_when_jobs_run_at_once(): void
+    {
+        // Jobs run at once (no worker): a re-ring's delay is not kept, so it would ring with the first.
+        $this->withoutDefer();
+        config(['queue.default' => 'sync']);
+        Queue::fake();
+
+        $this->startCall();
+
+        Queue::assertNotPushed(RingCallAgain::class);
     }
 
     public function test_the_turn_server_password_is_made_for_the_user(): void
