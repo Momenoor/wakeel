@@ -119,7 +119,9 @@ final class AttachmentFields
             ->preserveFilenames()
             ->getUploadedFileNameForStorageUsing(fn (TemporaryUploadedFile $file): string => FileName::safe($file->getClientOriginalName(), 'attachment'))
             // Only what was uploaded now: a path sent from the browser is never taken for a file.
-            ->preventFilePathTampering()
+            ->preventFilePathTampering(
+                allowFilePathUsing: fn (string $file): bool => str_starts_with($file, self::DIRECTORY.'/'),
+            )
             ->maxSize(fn (): int => (int) config('attachments.max_kb'))
             ->rule(fn (): string => 'extensions:'.implode(',', (array) config('attachments.extensions')))
             ->helperText(fn (): string => __('Up to :size MB each.', ['size' => round((int) config('attachments.max_kb') / 1024)]));
