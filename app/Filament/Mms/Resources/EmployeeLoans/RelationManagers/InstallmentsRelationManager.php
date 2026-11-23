@@ -2,11 +2,15 @@
 
 namespace App\Filament\Mms\Resources\EmployeeLoans\RelationManagers;
 
+use App\Enums\LoanStatus;
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Mms\Concerns\RefreshesPayrollData;
 use App\Models\LoanInstallment;
+use App\Services\MMS\LoanScheduleService;
 use App\Support\Currency;
 use App\Support\ScreenPermissions;
+use Filament\Actions\Action;
+use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Columns\Summarizers\Sum;
 use Filament\Tables\Columns\TextColumn;
@@ -70,6 +74,25 @@ class InstallmentsRelationManager extends RelationManager
                     ->color(fn (LoanInstallment $record): string => $record->payslip_id === null
                         ? 'warning'
                         : 'success'),
+            ])
+            ->recordActions([
+                // Nothing deducted for it this month: it and the later ones a month later, the loan ending a month later.
+                Action::make('postpone')
+                    ->label(__('Delay to next month'))
+                    ->icon('heroicon-o-forward')
+                    ->color('warning')
+                    ->visible(fn (LoanInstallment $record): bool => ! $record->isDeducted()
+                        && $this->getOwnerRecord()->getAttribute('status') === LoanStatus::ACTIVE
+                        && (bool) auth()->user()?->can('Update:EmployeeLoan'))
+                    ->requiresConfirmation()
+                    ->modalHeading(fn (LoanInstallment $record): string => __('Delay instalment :no to next month', ['no' => $record->seq]))
+                    ->modalDescription(__('Nothing is deducted for it in its month: it and every later instalment not yet deducted move one month later, with the same amounts, and the loan ends a month later.'))
+                    ->action(function (LoanInstallment $record): void {
+                        $moved = app(LoanScheduleService::class)->postpone($record);
+                        Notification::make()->success()
+                            ->title(trans_choice(':count instalment moved a month later.|:count instalments moved a month later.', $moved, ['count' => $moved]))
+                            ->send();
+                    }),
             ])
             ->defaultSort('seq')
             ->paginated(false)

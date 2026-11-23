@@ -32,7 +32,7 @@ return [
             'roles' => [$admin, $withPermission],
             'permissions' => ['View:EmployeeLoan', 'Approve:EmployeeLoan', 'View:EmployeeLoanInstallmentsRelation'],
             'steps' => [['text' => 'Click "View" on the loan\'s row to see its instalments and who approved it.', 'shot' => 'view-1']],
-            'tips' => ['Instalments are deducted automatically from the payslip for their month when the payroll run is generated.'],
+            'tips' => ['Instalments are deducted automatically from the payslip for their month when the payroll run is generated.', '"Delay to next month" on an instalment not yet deducted (for whoever may edit loans): nothing is deducted for it in its month; it and every later instalment not yet deducted move one month later with the same amounts, and the loan ends a month later.'],
         ],
     ],
 ];

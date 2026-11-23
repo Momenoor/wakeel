@@ -113,6 +113,36 @@ class LoanScheduleService
     }
 
     /**
+     * An instalment delayed a month: nothing deducted for it in the month it was due, it and every later one not
+     * yet deducted each a month later — the same amounts, the loan ending a month later. Payroll takes what is due
+     * by its month (PayrollService), so the run of that month leaves it.
+     *
+     * @return int how many instalments moved
+     */
+    public function postpone(LoanInstallment $installment): int
+    {
+        if ($installment->isDeducted()) {
+            throw new InvalidArgumentException(__('This instalment was already deducted by payroll; it cannot be delayed.'));
+        }
+
+        return DB::transaction(function () use ($installment): int {
+            $later = LoanInstallment::query()
+                ->where('employee_loan_id', $installment->getAttribute('employee_loan_id'))
+                ->whereNull('payslip_id')
+                ->where('seq', '>=', $installment->getAttribute('seq'))
+                ->lockForUpdate()
+                ->get();
+
+            // One by one: each its own month moved on (logged in its history), whatever the months between them.
+            foreach ($later as $each) {
+                $each->update(['due_period' => CarbonImmutable::createFromFormat('Y-m', (string) $each->getAttribute('due_period'))->startOfMonth()->addMonth()->format('Y-m')]);
+            }
+
+            return $later->count();
+        });
+    }
+
+    /**
      * The rounded monthly instalment, and the term it implies.
      *
      * @return array{0: float, 1: int}

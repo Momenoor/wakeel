@@ -262,6 +262,35 @@ class PayrollRunTest extends TestCase
         $this->assertEqualsWithDelta(8250.0, $loan->fresh()->outstanding(), 0.005);
     }
 
+    public function test_an_instalment_delayed_a_month_moves_with_the_later_ones_and_payroll_skips_its_month(): void
+    {
+        $party = $this->employee();
+        $loan = EmployeeLoan::create(['party_id' => $party->id, 'kind' => LoanKind::LOAN, 'principal' => 10000, 'months' => 6, 'starts_on' => '2026-06-01']);
+        $service = app(LoanScheduleService::class);
+        $service->generateFor($loan);
+
+        // June deducted as planned.
+        $this->payroll->generate($this->payrollRun('2026-06'));
+        $first = $loan->installments()->where('seq', 1)->sole();
+        $this->assertTrue($first->isDeducted());
+
+        // July's delayed: it and the four after it a month later, the same amounts; the deducted one stays.
+        $this->assertSame(5, $service->postpone($loan->installments()->where('seq', 2)->sole()));
+        $this->assertSame(
+            [1 => '2026-06', 2 => '2026-08', 3 => '2026-09', 4 => '2026-10', 5 => '2026-11', 6 => '2026-12'],
+            $loan->installments()->orderBy('seq')->pluck('due_period', 'seq')->all(),
+        );
+        $this->assertEqualsWithDelta(8250.0, $loan->fresh()->outstanding(), 0.005);
+
+        // July's run deducts nothing for the loan; August's takes instalment 2.
+        $this->assertSame('0.00', $this->payroll->generate($this->payrollRun('2026-07'))->first()->loan_deduction);
+        $this->assertSame('1650.00', $this->payroll->generate($this->payrollRun('2026-08'))->first()->loan_deduction);
+
+        // One already deducted cannot be delayed.
+        $this->expectException(InvalidArgumentException::class);
+        $service->postpone($first->fresh());
+    }
+
     public function test_regenerating_a_draft_releases_the_instalments_it_had_taken(): void
     {
         $party = $this->employee();
