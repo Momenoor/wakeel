@@ -5597,5 +5597,7 @@
     "Favorites": "المفضلة",
     "Add to favorites": "إضافة إلى المفضلة",
     "Remove from favorites": "إزالة من المفضلة",
-    "Up to :max favorites; remove one first.": "المفضلة تتسع لـ :max صفحة؛ أزل واحدة أولاً."
+    "Up to :max favorites; remove one first.": "المفضلة تتسع لـ :max صفحة؛ أزل واحدة أولاً.",
+    "Add the report as a Word file (.doc or .docx), beside any other files.": "أضف التقرير كملف Word ‏(.doc أو .docx)، إلى جانب أي ملفات أخرى.",
+    "Include the report as a Word file (.doc or .docx).": "أرفق التقرير كملف Word ‏(.doc أو .docx)."
 }

@@ -16,6 +16,12 @@ class ConfirmReportRequestService extends BaseRequestService
         return true;
     }
 
+    /** The final report as a Word file among them, beside any other (a PDF, its annexes). */
+    public static function requiresWordFile(): bool
+    {
+        return true;
+    }
+
     public static function approvalFormFields(): array
     {
         return [

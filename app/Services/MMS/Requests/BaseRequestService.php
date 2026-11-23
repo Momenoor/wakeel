@@ -49,6 +49,12 @@ abstract class BaseRequestService
         return false;
     }
 
+    /** Whether its files must include a Word file (the report itself, to be edited) — on asking and on sending it again. */
+    public static function requiresWordFile(): bool
+    {
+        return false;
+    }
+
     /**
      * Build the comment/extra payload to store on the new MatterRequest row.
      *

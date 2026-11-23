@@ -9,6 +9,7 @@ use App\Models\Matter;
 use App\Services\Attachments\AttachmentService;
 use App\Support\FileName;
 use Closure;
+use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -18,6 +19,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Throwable;
@@ -42,6 +44,42 @@ final class AttachmentFields
     public const DISK = 'local';
 
     public const DIRECTORY = 'attachments-incoming';
+
+    /** A Word file's extensions. */
+    public const WORD = ['doc', 'docx'];
+
+    /**
+     * Whether a Word file is among these — paths, file names, or files just uploaded.
+     *
+     * @param  iterable<string|TemporaryUploadedFile>  $files
+     */
+    public static function hasWordFile(iterable $files): bool
+    {
+        foreach ($files as $file) {
+            $name = $file instanceof TemporaryUploadedFile ? $file->getClientOriginalName() : (string) $file;
+
+            if (in_array(strtolower(pathinfo($name, PATHINFO_EXTENSION)), self::WORD, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * A report request's files with no Word file among them: refused, the reason under the files field of the
+     * action's form (its "attachments"), the form left open.
+     *
+     * @param  iterable<string|TemporaryUploadedFile>  $files
+     */
+    public static function requireWordFile(Action $action, iterable $files, string $field = 'attachments'): void
+    {
+        if (! self::hasWordFile($files)) {
+            throw ValidationException::withMessages([
+                'mountedActions.'.($action->getNestingIndex() ?? 0).'.data.'.$field => __('Add the report as a Word file (.doc or .docx), beside any other files.'),
+            ]);
+        }
+    }
 
     /** The fields given() adds — to leave out of the record's own data. */
     public const GIVEN = ['files', 'file_category'];

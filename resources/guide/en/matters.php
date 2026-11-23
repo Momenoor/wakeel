@@ -198,7 +198,7 @@ return [
                 ['text' => 'Choose the "Request Type".', 'shot' => 'req-1'],
                 ['text' => 'The fields for that type appear (such as "New Difficulty" to change the difficulty). Write a "Comment" explaining why, add an attachment if needed, then click "Submit".', 'shot' => 'req-2'],
             ],
-            'tips' => ['The person in charge gets a notification in the system and an email with a signed link to review it.', '"Confirm Report" (the final report) stays greyed out in the list until a "Review Report" request (the initial report) on the matter is approved.'],
+            'tips' => ['The person in charge gets a notification in the system and an email with a signed link to review it.', 'A report request ("Review Report" or "Confirm Report") needs the report as a Word file (.doc or .docx) among its files, uploaded or picked from OneDrive, beside any others (a PDF, annexes); without one it is not sent and the reason shows under Attachments. The same goes for the corrected report sent again after changes were asked.', '"Confirm Report" (the final report) stays greyed out in the list until a "Review Report" request (the initial report) on the matter is approved.'],
         ],
 
         [

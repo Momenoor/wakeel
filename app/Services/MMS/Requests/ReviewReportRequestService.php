@@ -17,6 +17,12 @@ class ReviewReportRequestService extends BaseRequestService
         return true;
     }
 
+    /** The report as a Word file among them, beside any other (a PDF, its annexes). */
+    public static function requiresWordFile(): bool
+    {
+        return true;
+    }
+
     public static function prepareForCreation(array $data, Matter $matter): array
     {
         return [

@@ -107,6 +107,7 @@ return [
             ],
             'tips' => [
                 'Errors in background work, scheduled tasks and commands are recorded too, with no user.',
+                'A mailbox whose emails could not be read is recorded with its name and the reason ("Emails not collected from mailbox …"), the error behind it under "Full details". The other mailboxes are still read, and this one again on the next run, a few minutes later.',
                 'The same error is recorded five times a minute at the most, and records are kept for 90 days.',
                 'The screen is the super admin\'s and the "admin" role\'s; give "View:ErrorReports" to another role to open it to them.',
             ],

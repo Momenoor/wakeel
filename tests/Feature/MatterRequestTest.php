@@ -21,9 +21,11 @@ use App\Services\MMS\Requests\RequestServiceFactory;
 use App\Services\MMS\Requests\ReviewReportRequestService;
 use Filament\Notifications\Notification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Permission;
@@ -305,6 +307,48 @@ class MatterRequestTest extends TestCase
 
         $this->assertEquals(RequestStatus::APPROVED, $request->fresh()->status);
         $this->assertEquals('2026-05-01', $matter->fresh()->distributed_at->toDateString());
+    }
+
+    public function test_a_report_request_needs_a_word_file_among_its_files_on_asking_and_on_sending_it_again(): void
+    {
+        $this->allowEverything();
+        Mail::fake();
+        Storage::fake('attachments');
+        Storage::fake('public');
+        $assistant = User::factory()->create();
+        $this->actingAs($assistant);
+        $matter = $this->makeMatter();
+        $ask = fn (array $files) => Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])
+            ->call('mountAction', 'add_request', [], ['recordKey' => (string) $matter->getKey(), 'schemaComponent' => 'infolist'])
+            ->set('mountedActions.0.data.type', RequestType::REVIEW_REPORT->value)
+            ->set('mountedActions.0.data.comment', 'Please review')
+            ->set('mountedActions.0.data.attachments', $files)
+            ->call('callMountedAction');
+
+        // A PDF only: refused, nothing asked.
+        $ask([UploadedFile::fake()->create('report.pdf', 5)])->assertHasErrors(['mountedActions.0.data.attachments']);
+        $this->assertSame(0, $matter->requests()->count());
+
+        // The Word file beside it: asked, both kept.
+        $ask([UploadedFile::fake()->create('report.pdf', 5), UploadedFile::fake()->create('التقرير.DOCX', 5)])->assertHasNoErrors();
+        $request = $matter->requests()->sole();
+        $this->assertCount(2, $request->attachments);
+
+        // Sent back for changes, then sent again: the corrected report as a Word file too.
+        $request->update(['status' => RequestStatus::NEEDS_CHANGES, 'approved_comment' => 'Fix the dates']);
+        Livewire::test(ViewMatterRequest::class, ['record' => $request->id])
+            ->callAction(ResubmitRequestAction::class, data: ['comment' => 'Fixed', 'attachments' => [UploadedFile::fake()->create('fixed.pdf', 5)]])
+            ->assertHasActionErrors(['attachments']);
+        $this->assertSame(RequestStatus::NEEDS_CHANGES, $request->fresh()->status);
+
+        Livewire::test(ViewMatterRequest::class, ['record' => $request->id])
+            ->callAction(ResubmitRequestAction::class, data: ['comment' => 'Fixed', 'attachments' => [UploadedFile::fake()->create('fixed.doc', 5)]])
+            ->assertHasNoActionErrors();
+        $this->assertSame(RequestStatus::PENDING, $request->fresh()->status);
+
+        // Another kind of request asks for no Word file.
+        $this->assertFalse(ChangeDifficultyRequestService::requiresWordFile());
+        $this->assertTrue(ConfirmReportRequestService::requiresWordFile());
     }
 
     public function test_the_matter_page_offers_a_report_sent_back_for_changes_to_be_sent_again_by_its_requester_only(): void

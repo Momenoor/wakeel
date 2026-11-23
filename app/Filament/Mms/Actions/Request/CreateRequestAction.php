@@ -34,13 +34,19 @@ class CreateRequestAction extends Action
             ->visible(fn ($record) => auth()->user()->can('Create:MatterRequest') || auth()->user()->can('CreateRequest:Matter'))
             ->modalHeading(__('Submit New Request'))
             ->successNotificationTitle(__('Request submitted successfully.'))
-            ->action(function (array $data, $record, $component) {
-                // From OneDrive: fetched first — one that can't be had stops
-                // the request before anything is saved.
-                $fromOneDrive = OneDriveFilePicker::fetch($record, array_values((array) ($data['onedrive_files'] ?? [])));
-
+            ->action(function (Action $action, array $data, $record, $component) {
                 $type = $data['type'];
                 $service = RequestServiceFactory::classFor($type);
+                $picked = array_values((array) ($data['onedrive_files'] ?? []));
+
+                // A report: the report itself as a Word file among its files — uploaded, or picked from OneDrive.
+                if ($service::requiresWordFile()) {
+                    AttachmentFields::requireWordFile($action, [...array_values((array) ($data['attachments'] ?? [])), ...OneDriveFilePicker::names($record, $picked)]);
+                }
+
+                // From OneDrive: fetched first — one that can't be had stops
+                // the request before anything is saved.
+                $fromOneDrive = OneDriveFilePicker::fetch($record, $picked);
                 $prepared = $service::prepareForCreation($data, $record);
 
                 $request = $record->requests()->create([
@@ -93,7 +99,10 @@ class CreateRequestAction extends Action
             // Required by the type — unless one comes from OneDrive.
             AttachmentFields::upload('attachments')
                 ->label(__('Attachments'))
-                ->required(fn (Get $get) => $get('type') && RequestServiceFactory::classFor($get('type'))::requiresAttachmentsOnCreate() && blank($get('onedrive_files'))),
+                ->required(fn (Get $get) => $get('type') && RequestServiceFactory::classFor($get('type'))::requiresAttachmentsOnCreate() && blank($get('onedrive_files')))
+                // A report's: said before it is sent.
+                ->hint(fn (Get $get): ?string => $get('type') && RequestServiceFactory::classFor($get('type'))::requiresWordFile() ? __('Include the report as a Word file (.doc or .docx).') : null)
+                ->hintColor('warning'),
             OneDriveFilePicker::field($this->getRecord() instanceof Matter ? $this->getRecord() : null)
                 ->helperText(__('Files from this matter\'s OneDrive folder, kept with the request as they are now.')),
         ]);

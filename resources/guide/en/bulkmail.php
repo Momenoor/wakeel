@@ -48,7 +48,7 @@ return [
                 ['text' => 'Open the campaign by clicking "View", then scroll down to the "Bulk Mail Recipients" table.', 'shot' => 'view-draft'],
                 ['text' => 'Click "New Bulk Mail Recipient" to add one recipient (email, name, CC and placeholder values), or "Import Bulk Mail Recipients" to upload a file with columns for the email, the name and the placeholder values.'],
             ],
-            'tips' => ['The icons on each row: preview the message as it will arrive, download PDF, print, resend, edit and delete.'],
+            'tips' => ['The icons on each row: preview the message as it will arrive, download PDF, print, resend, edit and delete.', 'In the imported file, a recipient with more than one email address can have them all in one cell, separated by ; or , (or a new line): each is kept as an address of its own, and one written twice is kept once.'],
         ],
 
         [

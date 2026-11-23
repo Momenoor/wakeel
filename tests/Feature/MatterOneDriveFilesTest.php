@@ -285,10 +285,16 @@ class MatterOneDriveFilesTest extends TestCase
             ->call('callMountedAction')
             ->assertHasErrors(['mountedActions.0.data.attachments'])
             ->set('mountedActions.0.data.onedrive_files', [$this->folder->id.'|file-id'])
+            // A report's files must hold the report as a Word file: the PDF from OneDrive alone is refused…
+            ->call('callMountedAction')
+            ->assertHasErrors(['mountedActions.0.data.attachments'])
+            // …and taken with a Word file beside it.
+            ->set('mountedActions.0.data.attachments', [UploadedFile::fake()->create('report.docx', 5)])
             ->call('callMountedAction')
             ->assertHasNoErrors();
 
-        $attachment = $this->matter->requests()->sole()->attachments()->sole();
+        $this->assertEqualsCanonicalizing(['report.pdf', 'report.docx'], $this->matter->requests()->sole()->attachments()->pluck('name')->all());
+        $attachment = $this->matter->requests()->sole()->attachments()->where('name', 'report.pdf')->sole();
         $this->assertSame('report.pdf', $attachment->name);
         // Kept as it was then, like an upload, on the private disk.
         $this->assertSame('attachments', $attachment->disk);

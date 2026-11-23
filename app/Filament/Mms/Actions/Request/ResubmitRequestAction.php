@@ -30,7 +30,14 @@ class ResubmitRequestAction extends Action
             ->visible(fn ($record): bool => $record->status === RequestStatus::NEEDS_CHANGES && auth()->id() === $record->request_by)
             ->modalHeading(__('Send the corrected report for review'))
             ->successNotificationTitle(__('Report sent for review again.'))
-            ->action(fn ($record, array $data, $component) => RequestServiceFactory::make($record)->resubmit(data: $data, component: $component));
+            ->action(function (Action $action, $record, array $data, $component): void {
+                // The corrected report as a Word file among its files, as on asking.
+                if (RequestServiceFactory::classFor($record->type)::requiresWordFile()) {
+                    AttachmentFields::requireWordFile($action, array_values((array) ($data['attachments'] ?? [])));
+                }
+
+                RequestServiceFactory::make($record)->resubmit(data: $data, component: $component);
+            });
     }
 
     public function getSchema(Schema $schema): Schema
@@ -39,7 +46,9 @@ class ResubmitRequestAction extends Action
             Textarea::make('comment')->label(__('What was changed'))->required()->rows(3),
             AttachmentFields::upload('attachments')
                 ->label(__('Corrected report'))
-                ->minFiles(1),
+                ->minFiles(1)
+                ->hint(fn ($record): ?string => RequestServiceFactory::classFor($record->type)::requiresWordFile() ? __('Include the report as a Word file (.doc or .docx).') : null)
+                ->hintColor('warning'),
         ]);
     }
 }
