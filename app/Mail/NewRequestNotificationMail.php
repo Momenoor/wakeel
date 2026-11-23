@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Mail\Concerns\AttachesRequestFiles;
 use App\Models\Matter;
 use App\Models\MatterRequest;
 use Illuminate\Bus\Queueable;
@@ -13,7 +14,7 @@ use Illuminate\Queue\SerializesModels;
 
 class NewRequestNotificationMail extends Mailable
 {
-    use Queueable, SerializesModels;
+    use AttachesRequestFiles, Queueable, SerializesModels;
 
     /**
      * Create a new message instance.
@@ -51,25 +52,6 @@ class NewRequestNotificationMail extends Mailable
      */
     public function attachments(): array
     {
-        $attachments = $this->matterRequest->attachments()->get();
-
-        $mailAttachments = [];
-
-        foreach ($attachments as $attachment) {
-            if (! $attachment->fileExists()) {
-                continue;
-            }
-            try {
-                $mailAttachments[] = Attachment::fromStorageDisk($attachment->disk ?: 'public', $attachment->path)
-                    ->as($attachment->name)
-                    ->withMime(
-                        $attachment->storage()->mimeType($attachment->path) ?? 'application/octet-stream'
-                    );
-            } catch (\Exception $e) {
-                \Log::error('Failed to attach file: '.$attachment->path.' Error: '.$e->getMessage());
-            }
-        }
-
-        return $mailAttachments;
+        return $this->requestFiles($this->matterRequest->attachments()->get());
     }
 }

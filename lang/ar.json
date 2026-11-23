@@ -5604,5 +5604,6 @@
     "Delay instalment :no to next month": "تأجيل القسط :no للشهر التالي",
     "Nothing is deducted for it in its month: it and every later instalment not yet deducted move one month later, with the same amounts, and the loan ends a month later.": "لا يُخصم شيء عنه في شهره: يتأخر هو وكل قسط بعده لم يُخصم بعد شهراً واحداً بالمبالغ نفسها، وتنتهي السلفة بعد شهر من موعدها.",
     ":count instalment moved a month later.|:count instalments moved a month later.": "تأخّر :count قسط شهراً واحداً.|تأخّرت :count أقساط شهراً واحداً.",
-    "This instalment was already deducted by payroll; it cannot be delayed.": "خُصم هذا القسط في الرواتب؛ لا يمكن تأجيله."
+    "This instalment was already deducted by payroll; it cannot be delayed.": "خُصم هذا القسط في الرواتب؛ لا يمكن تأجيله.",
+    ":count file is not attached: together they are larger than an email takes. Open it from its link above.|:count files are not attached: together they are larger than an email takes. Open them from their links above.": "لم يُرفق :count ملف: مجموع الملفات أكبر مما يحمله البريد. افتحه من رابطه أعلاه.|لم تُرفق :count ملفات: مجموعها أكبر مما يحمله البريد. افتحها من روابطها أعلاه."
 }

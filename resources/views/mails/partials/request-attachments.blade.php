@@ -12,5 +12,9 @@
                 </li>
             @endforeach
         </ul>
+        @if(($filesLeft ?? 0) > 0)
+            {{-- Too large together for an email (AttachesRequestFiles): opened from the links above. --}}
+            <p style="font-size: 13px; color: #6b7280;">{{ trans_choice(':count file is not attached: together they are larger than an email takes. Open it from its link above.|:count files are not attached: together they are larger than an email takes. Open them from their links above.', $filesLeft, ['count' => $filesLeft]) }}</p>
+        @endif
     </div>
 @endif
