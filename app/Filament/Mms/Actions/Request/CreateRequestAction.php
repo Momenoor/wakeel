@@ -11,7 +11,9 @@ use App\Models\Matter;
 use App\Models\MatterRequest;
 use App\Services\MMS\Requests\RequestServiceFactory;
 use App\Support\RequestMemo;
+use Closure;
 use Filament\Actions\Action;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Schemas\Components\Group;
@@ -100,9 +102,13 @@ class CreateRequestAction extends Action
             AttachmentFields::upload('attachments')
                 ->label(__('Attachments'))
                 ->required(fn (Get $get) => $get('type') && RequestServiceFactory::classFor($get('type'))::requiresAttachmentsOnCreate() && blank($get('onedrive_files')))
-                // A report's: said before it is sent.
+                // A report's: said before it is sent, and checked with the field — before the uploads are kept.
                 ->hint(fn (Get $get): ?string => $get('type') && RequestServiceFactory::classFor($get('type'))::requiresWordFile() ? __('Include the report as a Word file (.doc or .docx).') : null)
-                ->hintColor('warning'),
+                ->hintColor('warning')
+                ->rule(
+                    fn (FileUpload $component, Get $get, $record): Closure => AttachmentFields::wordFileRule($component, fn (): array => OneDriveFilePicker::names($record instanceof Matter ? $record : null, array_values((array) $get('onedrive_files')))),
+                    fn (Get $get): bool => (bool) $get('type') && RequestServiceFactory::classFor($get('type'))::requiresWordFile(),
+                ),
             OneDriveFilePicker::field($this->getRecord() instanceof Matter ? $this->getRecord() : null)
                 ->helperText(__('Files from this matter\'s OneDrive folder, kept with the request as they are now.')),
         ]);

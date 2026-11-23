@@ -67,8 +67,26 @@ final class AttachmentFields
     }
 
     /**
+     * The files field's own rule: a Word file among what it holds and the other files given (picked from
+     * OneDrive) — checked with the field, before anything uploaded is kept. Refused after, the uploads already
+     * kept came back to the form as paths of their own, and sent again were taken for paths put in by hand
+     * ("the attachments field contains a file path that is not allowed").
+     *
+     * @param  Closure(): iterable<string>  $others  the other files' names
+     */
+    public static function wordFileRule(FileUpload $field, ?Closure $others = null): Closure
+    {
+        return function (string $attribute, mixed $value, Closure $fail) use ($field, $others): void {
+            if (! self::hasWordFile([...array_values((array) $field->getState()), ...($others ? $others() : [])])) {
+                $fail(__('Add the report as a Word file (.doc or .docx), beside any other files.'));
+            }
+        };
+    }
+
+    /**
      * A report request's files with no Word file among them: refused, the reason under the files field of the
-     * action's form (its "attachments"), the form left open.
+     * action's form (its "attachments"), the form left open. For files picked from OneDrive alone (nothing
+     * uploaded, which the field's own rule — wordFileRule() — would have checked).
      *
      * @param  iterable<string|TemporaryUploadedFile>  $files
      */

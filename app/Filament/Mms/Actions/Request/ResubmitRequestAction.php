@@ -5,7 +5,9 @@ namespace App\Filament\Mms\Actions\Request;
 use App\Enums\RequestStatus;
 use App\Filament\Support\AttachmentFields;
 use App\Services\MMS\Requests\RequestServiceFactory;
+use Closure;
 use Filament\Actions\Action;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Textarea;
 use Filament\Schemas\Schema;
 
@@ -48,7 +50,12 @@ class ResubmitRequestAction extends Action
                 ->label(__('Corrected report'))
                 ->minFiles(1)
                 ->hint(fn ($record): ?string => RequestServiceFactory::classFor($record->type)::requiresWordFile() ? __('Include the report as a Word file (.doc or .docx).') : null)
-                ->hintColor('warning'),
+                ->hintColor('warning')
+                // Checked with the field, before the uploads are kept (AttachmentFields::wordFileRule()).
+                ->rule(
+                    fn (FileUpload $component): Closure => AttachmentFields::wordFileRule($component),
+                    fn ($record): bool => RequestServiceFactory::classFor($record->type)::requiresWordFile(),
+                ),
         ]);
     }
 }

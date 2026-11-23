@@ -318,19 +318,22 @@ class MatterRequestTest extends TestCase
         $assistant = User::factory()->create();
         $this->actingAs($assistant);
         $matter = $this->makeMatter();
-        $ask = fn (array $files) => Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])
+        $form = Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])
             ->call('mountAction', 'add_request', [], ['recordKey' => (string) $matter->getKey(), 'schemaComponent' => 'infolist'])
             ->set('mountedActions.0.data.type', RequestType::REVIEW_REPORT->value)
             ->set('mountedActions.0.data.comment', 'Please review')
-            ->set('mountedActions.0.data.attachments', $files)
-            ->call('callMountedAction');
+            ->set('mountedActions.0.data.attachments', [UploadedFile::fake()->create('report.pdf', 5)]);
 
-        // A PDF only: refused, nothing asked.
-        $ask([UploadedFile::fake()->create('report.pdf', 5)])->assertHasErrors(['mountedActions.0.data.attachments']);
+        // A PDF only: refused with the field, nothing asked and nothing kept.
+        $form->call('callMountedAction')->assertHasErrors(['mountedActions.0.data.attachments']);
         $this->assertSame(0, $matter->requests()->count());
+        $this->assertSame([], Storage::disk('public')->allFiles());
 
-        // The Word file beside it: asked, both kept.
-        $ask([UploadedFile::fake()->create('report.pdf', 5), UploadedFile::fake()->create('التقرير.DOCX', 5)])->assertHasNoErrors();
+        // The Word file added in the same form, beside the PDF already there: asked, both kept — not refused as
+        // a file path put in by hand, as the PDF was once kept by the refusal that came after.
+        $form->set('mountedActions.0.data.attachments.word', UploadedFile::fake()->create('التقرير.DOCX', 5))
+            ->call('callMountedAction')
+            ->assertHasNoErrors();
         $request = $matter->requests()->sole();
         $this->assertCount(2, $request->attachments);
 
