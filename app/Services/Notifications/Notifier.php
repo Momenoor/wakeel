@@ -154,7 +154,8 @@ class Notifier
 
                     foreach ($files->keys() as $index) {
                         try {
-                            $cloud->sendDocument($phone, ...$uploaded($index));
+                            $document = $uploaded($index);
+                            $cloud->sendDocument($phone, $document['id'], $document['filename']);
                         } catch (Throwable $e) {
                             Log::warning('A notification\'s file not sent on WhatsApp (sent as a plain file: Meta delivers one within 24 hours of their last message only — a "Notification with a file" template reaches anyone)', ['user' => $user->getKey(), 'file' => $files[$index]->name, 'error' => $e->getMessage()]);
                         }
