@@ -33,6 +33,9 @@ class Integrations
 
     public const MS_CALENDAR = 'integration_ms_calendar_mailbox';
 
+    /** '1': what became of each email sent from a matter read from Microsoft 365's message trace (MessageTrace). */
+    public const MS_TRACE = 'integration_ms_message_trace';
+
     public const PUSHER_APP = 'integration_pusher_app_id';
 
     public const PUSHER_KEY = 'integration_pusher_key';
@@ -68,7 +71,7 @@ class Integrations
     public const AZURE_PUBLIC_DISK = 'azure-public';
 
     public const KEYS = [
-        self::MS_TENANT, self::MS_CLIENT, self::MS_SECRET, self::MS_CALENDAR,
+        self::MS_TENANT, self::MS_CLIENT, self::MS_SECRET, self::MS_CALENDAR, self::MS_TRACE,
         self::PUSHER_APP, self::PUSHER_KEY, self::PUSHER_SECRET, self::PUSHER_CLUSTER,
         self::CRON_TOKEN,
         self::WHATSAPP_PHONE, self::WHATSAPP_TOKEN,

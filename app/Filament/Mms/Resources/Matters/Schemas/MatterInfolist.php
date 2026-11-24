@@ -10,6 +10,7 @@ use App\Filament\Mms\Actions\Request\ApproveRequestAction;
 use App\Filament\Mms\Actions\Request\CreateRequestAction;
 use App\Filament\Mms\Actions\Request\EditRequestAction;
 use App\Filament\Mms\Actions\Request\RejectRequestAction;
+use App\Filament\Mms\Actions\Request\ReplaceRequestFileAction;
 use App\Filament\Mms\Actions\Request\RequestChangesAction;
 use App\Filament\Mms\Actions\Request\ResubmitRequestAction;
 use App\Filament\Mms\Resources\CalendarEvents\CalendarEventResource;
@@ -674,6 +675,8 @@ class MatterInfolist
                                     ->icon('heroicon-o-paper-clip')
                                     ->url(fn ($record) => $record->url())
                                     ->openUrlInNewTab()
+                                    // Another file in its place — the super admin's.
+                                    ->suffixAction(ReplaceRequestFileAction::make())
                                     ->color('primary')
                                     ->columnSpan(['default' => 1, 'sm' => 2]),
                                 // The step of the request it came with.

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Resources\Matters\RelationManagers;
 
+use App\Enums\DeliveryStatus;
 use App\Filament\Concerns\HasRelationManagerPermission;
 use App\Filament\Concerns\RefreshesMatterPage;
 use App\Filament\Forms\Components\RichText;
@@ -25,6 +26,7 @@ use App\Services\MMS\MatterCreditors;
 use App\Services\MMS\MatterEmailDeletion;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterReplyCollector;
+use App\Services\MMS\MessageTrace;
 use App\Services\MMS\ReceivedEmailFiling;
 use App\Services\MMS\SenderMailer;
 use App\Support\Addresses;
@@ -121,6 +123,15 @@ class EmailsRelationManager extends RelationManager
                     ->badge()
                     ->formatStateUsing(fn (string $state): string => $state === MatterEmail::SENT ? __('Sent') : __('Received'))
                     ->color(fn (string $state): string => $state === MatterEmail::SENT ? 'info' : 'success'),
+                // What became of it, sent or received, from Microsoft 365's message trace (MessageTrace): the worst of its
+                // addresses, each one's in the tooltip. Shown only while that is on.
+                TextColumn::make('delivery_status')
+                    ->label(__('Delivery'))
+                    ->badge()
+                    ->tooltip(fn (MatterEmail $record): ?string => self::deliveryTooltip($record))
+                    ->placeholder(__('Not yet known'))
+                    ->visible(fn (): bool => MessageTrace::enabled())
+                    ->toggleable(),
                 TextColumn::make('party')
                     ->label(__('From / To'))
                     ->state(fn (MatterEmail $record): string => $record->direction === MatterEmail::SENT
@@ -529,6 +540,26 @@ class EmailsRelationManager extends RelationManager
     public static function getBadgeColor(Model $ownerRecord, string $pageClass): ?string
     {
         return 'warning';
+    }
+
+    /**
+     * Each address of a sent email and what became of it there — the reason Microsoft gives for one not delivered.
+     */
+    private static function deliveryTooltip(MatterEmail $email): ?string
+    {
+        $lines = collect((array) ($email->delivery ?? []))
+            ->map(function (array $entry, string $address): string {
+                $status = DeliveryStatus::tryFrom((string) ($entry['status'] ?? ''));
+                $line = $address.': '.($status?->getLabel() ?? '—');
+
+                if (filled($entry['at'] ?? null)) {
+                    $line .= ' ('.Dates::dateTime($entry['at']).')';
+                }
+
+                return filled($entry['detail'] ?? null) ? $line.' — '.$entry['detail'] : $line;
+            });
+
+        return $lines->isEmpty() ? null : $lines->implode("\n");
     }
 
     /**

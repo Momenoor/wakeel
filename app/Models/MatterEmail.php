@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\DeliveryStatus;
 use App\Models\Concerns\AnnouncesChanges;
 use App\Services\MMS\MatterEmailSentNotifier;
 use App\Support\Documents;
@@ -69,7 +70,7 @@ class MatterEmail extends Model
     /** Written from Outlook in reply to an email that came in on the matter (MatterReplyCollector::handleOwn()): kept beside it. */
     public const BY_REPLY = 'reply';
 
-    protected $fillable = ['matter_id', 'direction', 'first_mail', 'status', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'cc', 'content_hash', 'files', 'links', 'onedrive', 'candidates', 'matched_by', 'at', 'user_id', 'was_unread', 'body', 'shared_files'];
+    protected $fillable = ['matter_id', 'direction', 'first_mail', 'status', 'parent_id', 'source_type', 'source_id', 'sender_key', 'message_id', 'subject', 'from', 'to', 'cc', 'content_hash', 'files', 'links', 'onedrive', 'candidates', 'matched_by', 'at', 'user_id', 'was_unread', 'body', 'shared_files', 'delivery_status', 'delivery', 'delivery_checked_at'];
 
     protected function casts(): array
     {
@@ -84,6 +85,9 @@ class MatterEmail extends Model
             'was_unread' => 'boolean',
             'shared_files' => 'array',
             'first_mail' => 'boolean',
+            'delivery_status' => DeliveryStatus::class,
+            'delivery' => 'array',
+            'delivery_checked_at' => 'datetime',
         ];
     }
 

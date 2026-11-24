@@ -60,6 +60,13 @@ class IntegrationsSettingsForm
                         ->email()
                         ->helperText(__('The Outlook calendar sessions are kept in. Empty: no calendar sync.'))
                         ->extraInputAttributes(['dir' => 'ltr']),
+                    // What became of each email sent from a matter, from Microsoft 365's message trace (MessageTrace).
+                    Toggle::make(Integrations::MS_TRACE)
+                        ->label(__('Follow the delivery of sent emails'))
+                        ->helperText(__('Every quarter of an hour, Microsoft 365\'s message trace is read for every email the system keeps of its Microsoft 365 mailboxes — sent from it, written from Outlook, or received: delivered, on its way, not delivered (with the reason), quarantined or taken for spam — at each address, on the matter\'s Emails tab. Needs the application permission ExchangeMessageTrace.Read.All on the app registration, with admin consent.'))
+                        ->formatStateUsing(fn ($state): bool => (bool) $state)
+                        ->dehydrateStateUsing(fn ($state): string => $state ? '1' : '0')
+                        ->columnSpanFull(),
                 ]),
 
             // The server's own Reverb, cron and workers: said here, with nothing to fill in.

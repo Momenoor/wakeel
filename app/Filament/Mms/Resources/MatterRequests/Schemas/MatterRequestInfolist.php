@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Resources\MatterRequests\Schemas;
 
 use App\Enums\RequestStatus;
+use App\Filament\Mms\Actions\Request\ReplaceRequestFileAction;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
@@ -129,6 +130,8 @@ class MatterRequestInfolist
                                             ->icon('heroicon-o-document-text')
                                             ->url(fn ($record) => $record->url())
                                             ->openUrlInNewTab()
+                                            // Another file in its place — the super admin's.
+                                            ->suffixAction(ReplaceRequestFileAction::make())
                                             ->alignJustify()
                                             ->columnSpan(2),
                                         // The step it came with: submitted, changes requested, resubmitted, decided.

@@ -30,6 +30,7 @@ return [
                 'Every email on the matter has a step in the "Progress" tab and a line in the "History".',
                 'A Microsoft 365 mailbox is read in every folder, not only the Inbox: an email a rule or a person moved to another folder is still filed. Only Sent Items, Outbox, Drafts, Junk Email and Deleted Items are never read. A cPanel mailbox is read in its Inbox, or the folder chosen in "Mailbox folders".',
                 'Reading a mailbox changes nothing in it: an email the system keeps stays read or unread in Outlook as it was.',
+                'The "Delivery" column shows what became of each email on the matter — sent from the system, written from Outlook, or received — as Microsoft 365\'s message trace says: "Delivered", "On its way", "Not delivered", "Quarantined" or "Taken for spam". The worst of its addresses shows; hovering over it lists each address, its status and time, and for one not delivered the reason Microsoft gives (such as "550 5.1.1 the account does not exist"). An email received is traced at our mailbox it came to. It is read every quarter of an hour for the emails of Microsoft 365 mailboxes of the last ten days; one through another mailbox (cPanel) shows "No trace" after two days. It is turned on in Settings → Integrations → Microsoft 365 → "Follow the delivery of sent emails", and needs the application permission ExchangeMessageTrace.Read.All on the app registration, with admin consent.',
             ],
         ],
         [

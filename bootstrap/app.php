@@ -97,6 +97,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // Teams meetings made in the system that Teams has not yet taken as asked (recording by itself, co-organizers): asked again.
         $schedule->command('calendar:ready-teams')->everyFifteenMinutes()->withoutOverlapping(10);
 
+        // What became of the emails sent from matters, from Microsoft 365's message trace (while it is on).
+        $schedule->command('mail:trace-delivery')->everyFifteenMinutes()->withoutOverlapping(10);
+
         // Super admins and admins hear about calendar events naming a matter
         // number that is not in the system — each morning, when there are any.
         $schedule->command('calendar:report-unmatched')->dailyAt('08:00')->withoutOverlapping(30);
