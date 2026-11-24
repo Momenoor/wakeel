@@ -5624,5 +5624,18 @@
     "Replace this file": "استبدال هذا الملف",
     "Replace :name": "استبدال :name",
     "The file chosen takes its place, at the same step of the request. The one replaced is deleted, and nobody is notified.": "يحلّ الملف المختار محلّه في المرحلة نفسها من الطلب. يُحذف الملف المستبدَل، ولا يُبلَّغ أحد.",
-    ":old replaced by :new": "استُبدل :old بـ :new"
+    ":old replaced by :new": "استُبدل :old بـ :new",
+    "Fix folders": "إصلاح المجلدات",
+    "Fix the matter's folders": "إصلاح مجلدات القضية",
+    "In each assistant's folder of this matter: every subfolder of its structure (the matter type's, and its phase's) is made where missing, and one there under another spelling of its name is renamed to it — the emails and files kept in it stay linked. Nothing is deleted.": "في مجلد كل مساعد لهذه القضية: يُنشأ كل مجلد فرعي من هيكلها (هيكل نوع القضية ومرحلتها) إن لم يكن موجوداً، ويُعاد تسمية الموجود منها باسم مكتوب بشكل آخر إلى اسمه الصحيح — وتبقى الرسائل والملفات المحفوظة فيه مرتبطة به. لا يُحذف شيء.",
+    "Give the matter's folder its standard name too": "إعطاء مجلد القضية اسمه المعتمد أيضاً",
+    "\":name\". Not for a folder shared with another matter of the case.": "«:name». لا ينطبق على مجلد مشترك مع قضية أخرى من الدعوى نفسها.",
+    "Fix": "إصلاح",
+    "The folders could not be fixed": "تعذّر إصلاح المجلدات",
+    "Renamed: :what": "أُعيدت تسميته: :what",
+    "Made: :what": "أُنشئ: :what",
+    "The folders were already right.": "المجلدات سليمة بالفعل.",
+    "The matter's folders fixed": "تم إصلاح مجلدات القضية",
+    "The matter has no folder made in OneDrive yet: use \"Create folders\".": "لم يُنشأ للقضية مجلد في OneDrive بعد: استخدم «إنشاء المجلدات».",
+    "\":name\" is shared with another matter of the case: its name is kept.": "«:name» مشترك مع قضية أخرى من الدعوى نفسها: يبقى اسمه كما هو."
 }

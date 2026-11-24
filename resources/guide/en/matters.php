@@ -237,6 +237,7 @@ return [
                 'The largest file allowed is 50 MB.',
                 'A PDF has a "Sign & stamp" icon that opens it in "Sign PDF", to put your signature or the office stamp on it and save a signed copy (see the "PDF tools" section).',
                 'When keeping files in Azure is turned on, a "Kept in" column (Azure or this server) and a filter of the same name appear.',
+                'The super admin has a "Fix folders" button in the matter\'s OneDrive section, even when the folders were made already: in each assistant\'s folder every subfolder of the matter\'s structure (its type\'s and its phase\'s) is made where missing, and one there under another spelling of its name (an extra space, ه for ة, a number in front, no "ال") is renamed to it, the emails and files kept in it staying linked. The matter\'s folder itself can be given its standard name too (year-number - type - court), unless it is shared with another matter of the case. Nothing is deleted, other folders are left as they are, and a notification says what was done.',
             ],
         ],
 

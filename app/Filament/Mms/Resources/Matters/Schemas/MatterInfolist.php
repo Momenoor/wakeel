@@ -39,6 +39,7 @@ use App\Models\IncentiveAssistantLine;
 use App\Models\MarketingCommission;
 use App\Models\Matter;
 use App\Models\MatterExpense;
+use App\Models\MatterOneDriveFolder;
 use App\Models\Party;
 use App\Models\Type;
 use App\Services\MMS\Calendar\EventMatterLinker;
@@ -1346,6 +1347,53 @@ class MatterInfolist
                             ->send();
 
                         // The file manager shows them as they now are.
+                        $livewire->dispatch('onedrive-folders-changed');
+                    }),
+                // The super admin's: each folder of the matter made right even when made already — every subfolder
+                // of its structure there (made, or renamed from another spelling of its name), and its standard name.
+                Action::make('fixOneDriveFolders')
+                    ->label(__('Fix folders'))
+                    ->icon('heroicon-o-wrench-screwdriver')
+                    ->color('gray')
+                    ->size('sm')
+                    ->visible(fn ($record): bool => (auth()->user()?->isSuperAdmin() ?? false)
+                        && MatterOneDriveFolders::enabled()
+                        && $record->oneDriveFolders()->where('status', MatterOneDriveFolder::CREATED)->whereNotNull('drive_item_id')->exists())
+                    ->modalHeading(__('Fix the matter\'s folders'))
+                    ->modalDescription(__('In each assistant\'s folder of this matter: every subfolder of its structure (the matter type\'s, and its phase\'s) is made where missing, and one there under another spelling of its name is renamed to it — the emails and files kept in it stay linked. Nothing is deleted.'))
+                    ->schema([
+                        Toggle::make('rename_main')
+                            ->label(__('Give the matter\'s folder its standard name too'))
+                            ->helperText(fn ($record): string => __('":name". Not for a folder shared with another matter of the case.', ['name' => MatterOneDriveFolders::folderName($record)]))
+                            ->default(true),
+                    ])
+                    ->modalSubmitActionLabel(__('Fix'))
+                    ->action(function ($record, array $data, $livewire): void {
+                        abort_unless(auth()->user()?->isSuperAdmin() ?? false, 403);
+                        @set_time_limit(300);
+
+                        try {
+                            $done = app(MatterOneDriveFolders::class)->repair($record, (bool) ($data['rename_main'] ?? true));
+                        } catch (\Throwable $e) {
+                            report($e);
+                            Notification::make()->danger()->title(__('The folders could not be fixed'))->body($e->getMessage())->persistent()->send();
+
+                            return;
+                        }
+
+                        $lines = [
+                            ...array_map(fn (string $line): string => __('Renamed: :what', ['what' => $line]), [...$done['main'], ...$done['renamed']]),
+                            ...array_map(fn (string $line): string => __('Made: :what', ['what' => $line]), $done['created']),
+                            ...$done['notes'],
+                        ];
+
+                        Notification::make()
+                            ->success()
+                            ->title($lines === [] ? __('The folders were already right.') : __('The matter\'s folders fixed'))
+                            ->body(implode("\n", $lines) ?: null)
+                            ->persistent($lines !== [])
+                            ->send();
+
                         $livewire->dispatch('onedrive-folders-changed');
                     }),
                 // A matter from before: its folder already in OneDrive, as it

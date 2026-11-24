@@ -21,6 +21,7 @@ use App\Models\Type;
 use App\Models\User;
 use App\Services\MMS\Calendar\MatterReferenceMatcher;
 use App\Services\Notifications\Notifier;
+use App\Support\ArabicSearch;
 use App\Support\RequestMemo;
 use Carbon\CarbonInterface;
 use Filament\Actions\Action;
@@ -1929,6 +1930,161 @@ class MatterOneDriveFolders
         }
 
         return $url;
+    }
+
+    // ── A matter's folders put right (the super admin's "Fix folders")
+
+    /**
+     * Each of the matter's folders in OneDrive put right, even made already: every subfolder of its structure
+     * (subfoldersFor(): the type's, its phase's) made where missing — and one there under another spelling of its
+     * name ("المراسلات  الواردة", "01 - مستندات", "الملفات المستلمه") renamed to it, what the system keeps under it
+     * moved with it (repathKept()) — and, asked, the folder itself given the matter's standard name (folderName()),
+     * unless it is shared with another matter of the case. Shortcuts to another's folder are that folder: fixed once.
+     *
+     * @return array{folders: int, main: list<string>, renamed: list<string>, created: list<string>, notes: list<string>}
+     */
+    public function repair(Matter $matter, bool $renameMain = true): array
+    {
+        $done = ['folders' => 0, 'main' => [], 'renamed' => [], 'created' => [], 'notes' => []];
+
+        $rows = MatterOneDriveFolder::query()
+            ->where('matter_id', $matter->getKey())
+            ->where('status', MatterOneDriveFolder::CREATED)
+            ->whereNotNull('drive_item_id')
+            ->whereNull('owner_party_id')
+            ->with('party')
+            ->get()
+            ->filter(fn (MatterOneDriveFolder $folder): bool => filled($folder->party?->onedrive_email))
+            ->unique('drive_item_id');
+
+        if ($rows->isEmpty()) {
+            $done['notes'][] = __('The matter has no folder made in OneDrive yet: use "Create folders".');
+
+            return $done;
+        }
+
+        $expected = array_values(array_filter(array_map(self::cleanPath(...), self::subfoldersFor($matter))));
+
+        foreach ($rows as $row) {
+            $user = $row->driveUser();
+            $rootId = (string) $row->drive_item_id;
+            $owner = (string) $row->party?->name;
+            $done['folders']++;
+
+            if ($renameMain) {
+                $this->repairMainName($matter, $row, $user, $done);
+            }
+
+            // Each folder's children read once, kept as they change.
+            $children = [];
+
+            foreach ($expected as $path) {
+                $this->repairPath($matter, $user, $rootId, $path, $expected, $children, $owner, $done);
+            }
+        }
+
+        return $done;
+    }
+
+    /**
+     * @param  array{folders: int, main: list<string>, renamed: list<string>, created: list<string>, notes: list<string>}  $done
+     */
+    private function repairMainName(Matter $matter, MatterOneDriveFolder $row, string $user, array &$done): void
+    {
+        $wanted = self::folderName($matter);
+        $current = (string) ($this->client->itemInfo($user, (string) $row->drive_item_id)['name'] ?? '');
+
+        if ($current === '' || mb_strtolower($current) === mb_strtolower($wanted)) {
+            return;
+        }
+
+        // The case's main folder, holding another matter of it (another phase): its name is not this matter's to change.
+        $shared = MatterOneDriveFolder::query()
+            ->where('drive_item_id', $row->drive_item_id)
+            ->where('matter_id', '!=', $matter->getKey())
+            ->exists();
+
+        if ($shared) {
+            $done['notes'][] = __('":name" is shared with another matter of the case: its name is kept.', ['name' => $current]);
+
+            return;
+        }
+
+        $item = $this->client->rename($user, (string) $row->drive_item_id, $wanted);
+
+        MatterOneDriveFolder::query()
+            ->where('matter_id', $matter->getKey())
+            ->where('drive_item_id', $row->drive_item_id)
+            ->update(['folder_name' => $wanted, 'web_url' => (string) ($item['webUrl'] ?? $row->web_url)]);
+
+        // Links that hold the folder's old name.
+        $this->repathKept($matter, $current, $wanted);
+        $done['main'][] = $current.' → '.$wanted;
+    }
+
+    /**
+     * One line of the structure made right, a folder at a time: there under its name — on into it; there under
+     * another spelling, and not itself a folder of the structure — renamed; not there — made.
+     *
+     * @param  list<string>  $expected  every line of the structure, to know which folders are its own
+     * @param  array<string, list<array{id: string, name: string, webUrl: string}>>  $children  read so far, by folder
+     * @param  array{folders: int, main: list<string>, renamed: list<string>, created: list<string>, notes: list<string>}  $done
+     */
+    private function repairPath(Matter $matter, string $user, string $rootId, string $path, array $expected, array &$children, string $owner, array &$done): void
+    {
+        $parentId = $rootId;
+        $prefix = '';
+
+        foreach (OneDriveClient::segments($path) as $segment) {
+            $children[$parentId] ??= $this->client->childFolders($user, $parentId);
+            $here = $prefix === '' ? $segment : $prefix.'/'.$segment;
+            $found = collect($children[$parentId])->first(fn (array $folder): bool => mb_strtolower($folder['name']) === mb_strtolower($segment));
+
+            if ($found === null) {
+                // The structure's names at this level: none of them taken for another's misspelling.
+                $ownNames = collect($expected)
+                    ->filter(fn (string $line): bool => $prefix === '' || str_starts_with(mb_strtolower($line), mb_strtolower($prefix).'/'))
+                    ->map(fn (string $line): string => mb_strtolower((string) (OneDriveClient::segments($prefix === '' ? $line : mb_substr($line, mb_strlen($prefix) + 1))[0] ?? '')))
+                    ->all();
+                $loose = self::looseName($segment);
+                $found = collect($children[$parentId])->first(fn (array $folder): bool => ! in_array(mb_strtolower($folder['name']), $ownNames, true) && self::looseName($folder['name']) === $loose);
+
+                if ($found !== null) {
+                    $old = $prefix === '' ? $found['name'] : $prefix.'/'.$found['name'];
+                    $this->client->rename($user, $found['id'], $segment);
+                    $this->repathKept($matter, $old, $here);
+                    $done['renamed'][] = $owner.': '.$old.' → '.$here;
+                } else {
+                    $found = $this->client->createFolder($user, $parentId, $segment);
+                    $done['created'][] = $owner.': '.$here;
+                }
+
+                // As it now is.
+                $children[$parentId] = [
+                    ...array_values(array_filter($children[$parentId], fn (array $folder): bool => $folder['id'] !== (string) $found['id'])),
+                    ['id' => (string) $found['id'], 'name' => $segment, 'webUrl' => (string) ($found['webUrl'] ?? '')],
+                ];
+            }
+
+            $parentId = (string) $found['id'];
+            $prefix = $here;
+        }
+    }
+
+    /**
+     * A folder's name as it is compared for another spelling of it: no numbering in front ("01 - ", "2."), no
+     * diacritics or tatweel, the letters written alike written one way (أ إ آ → ا, ة → ه, ى → ي), no "ال" at the
+     * start of a word, no spaces, dashes or dots, in small letters.
+     */
+    public static function looseName(string $name): string
+    {
+        $name = mb_strtolower(trim($name));
+        $name = (string) preg_replace('/^[\d٠-٩]+\s*[-_.)]\s*/u', '', $name);
+        $name = (string) preg_replace('/[\x{064B}-\x{0652}\x{0640}]/u', '', $name);
+        $name = ArabicSearch::normalize($name);
+        $name = (string) preg_replace('/(^|\s)ال/u', '$1', $name);
+
+        return (string) preg_replace('/[\s\-_.،,()]+/u', '', $name);
     }
 
     // ── The two folders at the top of each assistant's OneDrive
