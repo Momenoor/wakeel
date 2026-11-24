@@ -41,7 +41,7 @@ class ExpertiseAreaTest extends TestCase
     {
         Livewire::test(ManageExpertiseAreas::class)
             ->callAction(TestAction::make('create')->table(), ['name_en' => 'Real Estate Valuation', 'name_ar' => 'التقييم العقاري', 'is_active' => true])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $area = ExpertiseArea::where('name_en', 'Real Estate Valuation')->sole();
         $this->assertSame('real_estate_valuation', $area->key);

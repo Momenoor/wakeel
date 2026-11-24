@@ -4,6 +4,7 @@ namespace Tests\Feature\PMS\Reports;
 
 use App\Enums\PMS\UnitStatus;
 use App\Filament\Pms\Pages\Reports\RentRollReport;
+use Filament\Actions\Testing\TestAction;
 use Livewire\Livewire;
 
 class RentRollReportTest extends PmsReportTestCase
@@ -63,7 +64,7 @@ class RentRollReportTest extends PmsReportTestCase
         $this->lease($this->unit($this->buildingA, '101'), 'Alpha Trading');
 
         Livewire::test(RentRollReport::class)
-            ->callTableAction('exportExcel')
+            ->callAction(TestAction::make('exportExcel')->table())
             ->assertFileDownloaded();
     }
 }

@@ -69,7 +69,7 @@ class MatterFormPartyPickingTest extends TestCase
         Livewire::test(EditMatter::class, ['record' => $matter->getRouteKey()])
             ->set('data.marketers', ['row' => ['party_id' => null, 'marketing_rate' => null]])
             ->callAction(TestAction::make('createOption')->schemaComponent('marketers.row.party_id'), ['name' => 'Salem Office', 'phone' => ['0501112233'], 'email' => []])
-            ->assertHasNoActionErrors()
+            ->assertHasNoFormErrors()
             ->assertSet('data.marketers.row.party_id', $salem->id);
 
         $this->assertContains('marketer', $salem->fresh()->role['role']);

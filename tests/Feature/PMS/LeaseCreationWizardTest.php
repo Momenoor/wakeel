@@ -281,7 +281,7 @@ class LeaseCreationWizardTest extends TestCase
                 'tenant_type' => 'person',
                 'identification_type' => 'emirates_id',
             ])
-            ->assertHasNoActionErrors()
+            ->assertHasNoFormErrors()
             ->callAction(TestAction::make('createOption')->schemaComponent("units.{$unitKey}.unit_id"), [
                 'unit_number' => 'B-204',
                 'unit_type' => 'apartment',
@@ -289,7 +289,7 @@ class LeaseCreationWizardTest extends TestCase
                 'rental_rate' => 50000,
                 'status' => 'vacant',
             ])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $party = Party::where('name', 'New Tenant LLC')->sole();
         $this->assertNotNull($party->tenant);

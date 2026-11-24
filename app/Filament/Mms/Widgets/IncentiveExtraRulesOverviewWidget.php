@@ -19,7 +19,7 @@ class IncentiveExtraRulesOverviewWidget extends TableWidget
 
     protected int|string|array $columnSpan = 'full';
 
-    protected function getTableQuery(): Builder
+    protected function rowsQuery(): Builder
     {
         return IncentiveExtraRule::query();
     }
@@ -27,6 +27,7 @@ class IncentiveExtraRulesOverviewWidget extends TableWidget
     public function table(Table $table): Table
     {
         return $table
+            ->query(fn (): Builder => $this->rowsQuery())
             ->heading(__('Extra % Rules'))
             ->defaultSort('min_count')
             ->columns([

@@ -122,7 +122,7 @@ class WordTemplateImportTest extends TestCase
 
         Livewire::test(ListLetterTemplates::class)
             ->callAction('importWord', ['file' => $file, 'name' => 'Notice', 'category' => 'letter'])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $this->assertSame(1, LetterTemplate::where('name', 'Notice')->count());
     }

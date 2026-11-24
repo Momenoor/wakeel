@@ -19,6 +19,7 @@ use App\Services\MMS\Letters\MinutesService;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\SentEmailArchive;
 use App\Services\MMS\SentFolder;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -114,7 +115,7 @@ class ExternalEntityLettersTest extends TestCase
         LetterTemplate::create(['name' => 'Another', 'slug' => 'another', 'locale' => 'ar', 'category' => 'letter', 'subject' => 'x', 'body' => '<p>x</p>']);
 
         $page = Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('issue')
+            ->mountAction(TestAction::make('issue')->table())
             ->set('mountedActions.0.data.external_entity', $this->police->id)
             // Its template, and the entity as a recipient with its email.
             ->assertSet('mountedActions.0.data.letter_template_id', $template->id)
@@ -122,11 +123,11 @@ class ExternalEntityLettersTest extends TestCase
             ->assertSet('mountedActions.0.data.extra_recipients', fn ($rows) => array_values($rows)[0]['party_id'] === $this->police->id
                 && array_values($rows)[0]['emails'] === ['info@dubaipolice.gov.ae'])
             // Issued and sent as any other letter.
-            ->callMountedTableAction(['send' => true])
-            ->assertHasNoTableActionErrors()
-            ->setTableActionData(['sender' => 'iflas'])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->callMountedAction(['send' => true])
+            ->assertHasNoFormErrors()
+            ->fillForm(['sender' => 'iflas'])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $letter = MatterLetter::sole();
         $this->assertSame($template->id, $letter->letter_template_id);

@@ -109,13 +109,13 @@ class FeeVatTest extends TestCase
             ->assertFormFieldExists('is_vat_included')
             ->assertMountedActionModalSee(__('Including VAT'))
             ->callMountedAction()
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $fee = $this->matter->fees()->sole();
         $this->assertSame([1000.0, 50.0, true, 1050.0], [(float) $fee->amount, (float) $fee->vat, $fee->is_vat_included, $fee->total]);
 
         // Excluded: the amount is the basic, the VAT added.
-        $this->page()->callAction($this->addFee(), ['type' => FeeType::OTHER->value, 'amount' => 1000, 'is_vat_included' => false])->assertHasNoActionErrors();
+        $this->page()->callAction($this->addFee(), ['type' => FeeType::OTHER->value, 'amount' => 1000, 'is_vat_included' => false])->assertHasNoFormErrors();
         $other = $this->matter->fees()->where('type', FeeType::OTHER->value)->sole();
         $this->assertSame([1000.0, 50.0, false], [(float) $other->amount, (float) $other->vat, $other->is_vat_included]);
     }
@@ -127,7 +127,7 @@ class FeeVatTest extends TestCase
         $edit = TestAction::make('editFee')->schemaComponent('fees.0', 'infolist');
 
         $this->page()->mountAction($edit)
-            ->assertActionDataSet(['amount' => 1000.0, 'is_vat_included' => false])
+            ->assertSchemaStateSet(['amount' => 1000.0, 'is_vat_included' => false])
             ->fillForm(['description' => 'Its note only'])
             ->callMountedAction();
         $this->assertSame([1000.0, 0.0], [(float) $fee->refresh()->amount, (float) $fee->vat]);
@@ -148,7 +148,7 @@ class FeeVatTest extends TestCase
             ->assertFormFieldHidden('is_vat_included')
             ->assertMountedActionModalSee(__('No VAT'))
             ->callMountedAction()
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $fee = $this->matter->fees()->sole();
         $this->assertSame([1000.0, 0.0, false, true, 1000.0], [(float) $fee->amount, (float) $fee->vat, $fee->is_vat_included, $fee->is_vat_exempt, $fee->total]);
@@ -156,7 +156,7 @@ class FeeVatTest extends TestCase
         // Edited: shown as it is, kept without VAT when only its note changes; VAT applying again, split.
         $edit = TestAction::make('editFee')->schemaComponent('fees.0', 'infolist');
         $this->page()->mountAction($edit)
-            ->assertActionDataSet(['amount' => 1000.0, 'is_vat_exempt' => true])
+            ->assertSchemaStateSet(['amount' => 1000.0, 'is_vat_exempt' => true])
             ->fillForm(['description' => 'Its note only'])
             ->callMountedAction();
         $this->assertSame([1000.0, 0.0, true], [(float) $fee->refresh()->amount, (float) $fee->vat, $fee->is_vat_exempt]);

@@ -22,6 +22,7 @@ use App\Services\MMS\Letters\LetterMailer;
 use App\Services\MMS\Letters\SharedAttachments;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\SentFolder;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -301,8 +302,8 @@ class SharedAttachmentsTest extends TestCase
         Storage::fake('local');
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $letter->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('email', $letter)
-            ->setTableActionData([
+            ->mountAction(TestAction::make('email')->table($letter))
+            ->fillForm([
                 'sender' => 'iflas',
                 'recipients' => [$letter->recipients->first()->id],
                 'attachments' => [UploadedFile::fake()->create('statement.pdf', 12, 'application/pdf')],
@@ -350,16 +351,16 @@ class SharedAttachmentsTest extends TestCase
         Storage::fake('local');
 
         $screen = Livewire::test(LettersRelationManager::class, ['ownerRecord' => $letter->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('email', $letter)
-            ->setTableActionData(['sender' => 'iflas', 'recipients' => [$letter->recipients->first()->id]]);
+            ->mountAction(TestAction::make('email')->table($letter))
+            ->fillForm(['sender' => 'iflas', 'recipients' => [$letter->recipients->first()->id]]);
 
         // Under the limit: attached as usual, nothing shared.
-        $screen->setTableActionData(['attachments' => [UploadedFile::fake()->create('small.pdf', 100, 'application/pdf')]]);
+        $screen->fillForm(['attachments' => [UploadedFile::fake()->create('small.pdf', 100, 'application/pdf')]]);
         $this->assertNull($letter->fresh()->shared_files);
         $this->assertCount(1, $screen->get('mountedActions.0.data.attachments'));
 
         // Over it: shared by link the moment the file is there, the fields emptied, and said.
-        $screen->setTableActionData(['attachments' => [UploadedFile::fake()->create('small.pdf', 100, 'application/pdf'), UploadedFile::fake()->create('big.pdf', 1100, 'application/pdf')]])
+        $screen->fillForm(['attachments' => [UploadedFile::fake()->create('small.pdf', 100, 'application/pdf'), UploadedFile::fake()->create('big.pdf', 1100, 'application/pdf')]])
             ->assertNotified(__('More than an email takes: the files are shared by link'))
             ->assertSet('mountedActions.0.data.attachments', []);
         $this->assertSame(['small.pdf', 'big.pdf'], $letter->fresh()->shared_files['names']);

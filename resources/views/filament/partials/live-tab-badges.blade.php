@@ -1,6 +1,6 @@
 {{--
     Keeps a list page's tab counts current, through Filament's own API for
-    deferred tab badges (Tab::deferBadge()): the tabs load their counts with
+    deferred tab badges (Tab::lazyLoadedBadge()): the tabs load their counts with
     $wire.callSchemaComponentMethod(<key>, 'getDeferredTabBadges'),
     and this calls it again —
 

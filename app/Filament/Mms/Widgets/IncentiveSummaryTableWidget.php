@@ -115,7 +115,7 @@ class IncentiveSummaryTableWidget extends TableWidget
         );
     }
 
-    protected function getTableQuery(): Builder
+    protected function rowsQuery(): Builder
     {
         return IncentiveAssistantLine::query()
             ->whereHas('incentiveLine', fn ($q) => $q->where('incentive_calculation_id', $this->calculationId))
@@ -142,6 +142,7 @@ class IncentiveSummaryTableWidget extends TableWidget
     public function table(Table $table): Table
     {
         return $table
+            ->query(fn (): Builder => $this->rowsQuery())
             ->heading(__('Incentive Summary'))
             ->paginationPageOptions([25, 50, 100, 200])
             ->defaultPaginationPageOption(100)

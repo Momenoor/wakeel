@@ -322,7 +322,7 @@ class PayrollModuleResourcesTest extends TestCase
 
         Livewire::test(ListLeaveRequests::class)
             ->callAction(TestAction::make('approve_leave')->table($request), ['periods' => $periods])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $this->assertSame(-5.0, app(LeaveBalanceService::class)->balance($party->id));
         $this->assertSame(0.0, $request->fresh()->unpaidDays());
@@ -343,7 +343,7 @@ class PayrollModuleResourcesTest extends TestCase
         Livewire::test(ListLeaveRequests::class)
             ->filterTable('status', [RequestStatus::APPROVED->value])
             ->callAction(TestAction::make('change_leave_types')->table($request->fresh()), ['periods' => $period(LeaveType::NEW_BABY)])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $this->assertSame(0.0, $request->fresh()->unpaidDays());
         $this->assertSame([LeaveType::NEW_BABY], PartyLeave::where('party_id', $party->id)->pluck('leave_type')->all());
@@ -363,12 +363,12 @@ class PayrollModuleResourcesTest extends TestCase
         Livewire::test(ListLeaveRequests::class)
             ->filterTable('status', [RequestStatus::APPROVED->value])
             ->callAction(TestAction::make('end_leave_early')->table($request->fresh()), ['mode' => 'end_early', 'last_day' => '2026-06-05'])
-            ->assertHasActionErrors(['last_day']);
+            ->assertHasFormErrors(['last_day']);
 
         Livewire::test(ListLeaveRequests::class)
             ->filterTable('status', [RequestStatus::APPROVED->value])
             ->callAction(TestAction::make('end_leave_early')->table($request->fresh()), ['mode' => 'end_early', 'last_day' => '2026-06-02'])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $this->assertSame('2026-06-02', $request->fresh()->end_date->toDateString());
         $this->assertSame(-2.0, app(LeaveBalanceService::class)->balance($party->id));
@@ -376,7 +376,7 @@ class PayrollModuleResourcesTest extends TestCase
         Livewire::test(ListLeaveRequests::class)
             ->filterTable('status', [RequestStatus::APPROVED->value])
             ->callAction(TestAction::make('end_leave_early')->table($request->fresh()), ['mode' => 'cancel', 'reason' => 'Not travelling'])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $this->assertSame(RequestStatus::CANCELLED, $request->fresh()->status);
         $this->assertSame(0.0, app(LeaveBalanceService::class)->balance($party->id));
@@ -392,7 +392,7 @@ class PayrollModuleResourcesTest extends TestCase
             ->callAction(TestAction::make('reject_leave')->table($request), [
                 'approved_comment' => null,
             ])
-            ->assertHasActionErrors(['approved_comment' => 'required']);
+            ->assertHasFormErrors(['approved_comment' => 'required']);
 
         $this->assertSame(RequestStatus::PENDING, $request->fresh()->status);
     }
@@ -555,7 +555,7 @@ class PayrollModuleResourcesTest extends TestCase
             'ownerRecord' => $run,
             'pageClass' => ViewPayrollRun::class,
         ])
-            ->mountTableAction('loan_breakdown', $payslip)
+            ->mountAction(TestAction::make('loan_breakdown')->table($payslip))
             ->assertMountedActionModalSee([
                 LoanKind::LOAN->getLabel(),
                 __(':seq of :total', ['seq' => 1, 'total' => 6]),
@@ -677,7 +677,7 @@ class PayrollModuleResourcesTest extends TestCase
 
         Livewire::test(ListPayrollRuns::class)
             ->assertCanSeeTableRecords([$run])
-            ->mountTableAction('journal_voucher', $run)
+            ->mountAction(TestAction::make('journal_voucher')->table($run))
             ->assertOk();
     }
 

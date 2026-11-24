@@ -28,18 +28,18 @@ class BrandingSettingsSection
                 static::upload(Branding::LOGO)
                     ->label(__('Company Logo'))
                     ->helperText(__('Shown in the panel header and in emails. Leave empty to use the default logo.'))
-                    ->imageEditorAspectRatios(self::LOGO_RATIOS),
+                    ->imageEditorAspectRatioOptions(self::LOGO_RATIOS),
 
                 static::upload(Branding::LOGO_DARK)
                     ->label(__('Company Logo (Dark Mode)'))
                     ->helperText(__('Shown in the panel header in dark mode. Leave empty to use the logo above.'))
-                    ->imageEditorAspectRatios(self::LOGO_RATIOS),
+                    ->imageEditorAspectRatioOptions(self::LOGO_RATIOS),
 
                 static::upload(Branding::FAVICON)
                     ->label(__('Favicon'))
                     ->helperText(__('The browser tab icon. A square image, e.g. 64×64 PNG.'))
                     ->acceptedFileTypes(['image/png', 'image/x-icon', 'image/vnd.microsoft.icon', 'image/svg+xml'])
-                    ->imageEditorAspectRatios(['1:1'])
+                    ->imageEditorAspectRatioOptions(['1:1'])
                     ->maxSize(512),
 
                 static::upload(Branding::DEFAULT_AVATAR)

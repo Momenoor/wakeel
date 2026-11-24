@@ -21,6 +21,7 @@ use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\MatterPeople;
 use App\Services\MMS\Requests\RequestServiceFactory;
 use App\Services\MMS\SenderMailer;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
@@ -171,7 +172,7 @@ class WorkAccountsTest extends TestCase
         // The owner's to see and file, though the matter is not theirs.
         $this->actingAs($amr->fresh());
         Livewire::test(UnfiledEmails::class)->assertCanSeeTableRecords([$email])
-            ->callTableAction('file', $email, ['matter_id' => $theirs->id]);
+            ->callAction(TestAction::make('file')->table($email), ['matter_id' => $theirs->id]);
         $this->assertSame($theirs->id, $email->fresh()->matter_id);
     }
 

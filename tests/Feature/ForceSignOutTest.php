@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Services\Auth\ForceSignOut;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -62,8 +63,8 @@ class ForceSignOutTest extends TestCase
         $this->loggedInBrowser($other);
 
         Livewire::test(ListUsers::class)
-            ->assertTableActionVisible('forceSignOut', $user)
-            ->callTableAction('forceSignOut', $user)
+            ->assertActionVisible(TestAction::make('forceSignOut')->table($user))
+            ->callAction(TestAction::make('forceSignOut')->table($user))
             ->assertNotified();
 
         $this->assertSame(0, $this->sessionsOf($user));
@@ -78,7 +79,7 @@ class ForceSignOutTest extends TestCase
         $this->loggedInBrowser($this->admin);
 
         Livewire::test(ListUsers::class)
-            ->callTableBulkAction('forceSignOut', [...$users, $this->admin]);
+            ->selectTableRecords([...$users, $this->admin])->callAction(TestAction::make('forceSignOut')->table()->bulk());
 
         $users->each(fn (User $user) => $this->assertSame(0, $this->sessionsOf($user)));
         $this->assertSame(1, $this->sessionsOf($this->admin));
@@ -87,7 +88,7 @@ class ForceSignOutTest extends TestCase
     public function test_your_own_row_has_no_sign_out(): void
     {
         Livewire::test(ListUsers::class)
-            ->assertTableActionHidden('forceSignOut', $this->admin);
+            ->assertActionHidden(TestAction::make('forceSignOut')->table($this->admin));
     }
 
     public function test_the_service_skips_the_signed_in_user(): void

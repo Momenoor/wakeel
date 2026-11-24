@@ -9,6 +9,7 @@ use App\Models\LeasePrintTemplate;
 use App\Models\LeasePrintTemplateField;
 use App\Models\LeasePrintTemplatePage;
 use App\Models\User;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -41,7 +42,7 @@ class PrintTemplatePageBuilderTest extends TestCase
             'ownerRecord' => $page->template,
             'pageClass' => EditLeasePrintTemplate::class,
         ])
-            ->mountTableAction('edit_field_positions', $page)
+            ->mountAction(TestAction::make('edit_field_positions')->table($page))
             ->assertMountedActionModalSee(__('Field to place'));
     }
 

@@ -262,13 +262,13 @@ class CalendarMatterLinkingTest extends TestCase
         $event = $this->event('12/2024, 15/2024 (Dubai Courts)');
 
         Livewire::test(ListCalendarEvents::class)
-            ->mountTableAction('edit', $event)
-            ->assertTableActionDataSet(fn (array $data) => collect($data['matters'] ?? [])->map(fn ($id) => (int) $id)->sort()->values()->all() === collect([$a->id, $b->id])->sort()->values()->all())
+            ->mountAction(TestAction::make('edit')->table($event))
+            ->assertSchemaStateSet(fn (array $data) => collect($data['matters'] ?? [])->map(fn ($id) => (int) $id)->sort()->values()->all() === collect([$a->id, $b->id])->sort()->values()->all())
             // Its title follows the matters chosen.
             ->set('mountedActions.0.data.matters', [$b->id, $c->id])
-            ->assertTableActionDataSet(['title' => 'د.رضا 15/2024, 16/2024 ('.$b->court->name.($b->court_id === $c->court_id ? '' : '، '.$c->court->name).') ('.$b->type->name.($b->type_id === $c->type_id ? '' : '، '.$c->type->name).') (جلسات المحكمة)'])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->assertSchemaStateSet(['title' => 'د.رضا 15/2024, 16/2024 ('.$b->court->name.($b->court_id === $c->court_id ? '' : '، '.$c->court->name).') ('.$b->type->name.($b->type_id === $c->type_id ? '' : '، '.$c->type->name).') (جلسات المحكمة)'])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $this->assertEqualsCanonicalizing([$b->id, $c->id], $event->matters()->pluck('matters.id')->all());
         $this->assertStringStartsWith('د.رضا 15/2024, 16/2024 (', $event->fresh()->title);
@@ -289,10 +289,10 @@ class CalendarMatterLinkingTest extends TestCase
         $later->matters()->sync([$a->id]);
 
         Livewire::test(ListCalendarEvents::class)
-            ->mountTableAction('edit', $event)
+            ->mountAction(TestAction::make('edit')->table($event))
             ->set('mountedActions.0.data.matters', [$b->id, $c->id])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         // Added: its date. Removed: its next one ahead. Kept: as it was.
         $this->assertTrue($c->fresh()->next_session_date->equalTo($event->start_datetime));
@@ -307,8 +307,8 @@ class CalendarMatterLinkingTest extends TestCase
         $event = $this->event('Site visit', ['outlook_event_id' => 'shared-9', 'synced_to_outlook' => true, 'location' => 'Dubai Courts']);
 
         Livewire::test(ListCalendarEvents::class)
-            ->assertTableActionVisible('syncToOutlook', $event)
-            ->callTableAction('syncToOutlook', $event)
+            ->assertActionVisible(TestAction::make('syncToOutlook')->table($event))
+            ->callAction(TestAction::make('syncToOutlook')->table($event))
             ->assertNotified(__('Sending to Outlook'));
         // On the queue (run at once here): told in the bell.
         $this->assertSame(__('Updated in Outlook'), auth()->user()->notifications()->sole()->data['title']);
@@ -552,14 +552,14 @@ class CalendarMatterLinkingTest extends TestCase
         $event = $this->event('Weekly meeting');
 
         Livewire::test(ListCalendarEvents::class)
-            ->callTableAction('linkMatters', $event, ['matters' => [$a->id, $b->id]])
-            ->assertHasNoTableActionErrors();
+            ->callAction(TestAction::make('linkMatters')->table($event), ['matters' => [$a->id, $b->id]])
+            ->assertHasNoFormErrors();
 
         $this->assertEqualsCanonicalizing([$a->id, $b->id], $event->matters()->pluck('matters.id')->all());
         $this->assertSame('bulk', $event->fresh()->type);
 
         // Down to one: it becomes the event's matter.
-        Livewire::test(ListCalendarEvents::class)->callTableAction('linkMatters', $event, ['matters' => [$b->id]]);
+        Livewire::test(ListCalendarEvents::class)->callAction(TestAction::make('linkMatters')->table($event), ['matters' => [$b->id]]);
         $this->assertSame($b->id, $event->fresh()->matter_id);
         $this->assertSame('single', $event->fresh()->type);
     }
@@ -571,7 +571,7 @@ class CalendarMatterLinkingTest extends TestCase
         $event = CalendarEvent::withoutEvents(fn () => $this->event('Session 639/2025'));
 
         Livewire::test(ListCalendarEvents::class)
-            ->callTableBulkAction('linkFromTitles', [$event]);
+            ->selectTableRecords([$event])->callAction(TestAction::make('linkFromTitles')->table()->bulk());
 
         $this->assertSame([$matter->id], $event->matters()->pluck('matters.id')->all());
     }

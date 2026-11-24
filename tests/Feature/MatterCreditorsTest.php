@@ -186,14 +186,14 @@ class MatterCreditorsTest extends TestCase
     public function test_the_contacts_tab_lists_creditors_and_their_agents_and_exports_them_for_bulk_mail(): void
     {
         Livewire::test(MatterContacts::class, ['matter' => $this->matter])
-            ->callTableAction('addCreditor', data: ['name' => 'بنك المشرق', 'claim_amount' => '250000', 'emails' => ['claims@mashreq.ae'], 'phone' => ['043334444']])
-            ->assertHasNoTableActionErrors();
+            ->callAction(TestAction::make('addCreditor')->table(), ['name' => 'بنك المشرق', 'claim_amount' => '250000', 'emails' => ['claims@mashreq.ae'], 'phone' => ['043334444']])
+            ->assertHasNoFormErrors();
         $creditor = $this->matter->creditors()->sole();
         $this->assertSame('250000.00', $creditor->claim_amount);
 
         $tab = Livewire::test(MatterContacts::class, ['matter' => $this->matter]);
-        $tab->callTableAction('addAgent', 'c:'.$creditor->id, ['agent_name' => 'مكتب الهاشمي', 'emails' => ['lawyer@hashmi.ae', 'hashmi@gmail.com']])
-            ->assertHasNoTableActionErrors();
+        $tab->callAction(TestAction::make('addAgent')->table('c:'.$creditor->id), ['agent_name' => 'مكتب الهاشمي', 'emails' => ['lawyer@hashmi.ae', 'hashmi@gmail.com']])
+            ->assertHasNoFormErrors();
 
         $rows = collect((new MatterContactsExport($this->matter))->rows())->keyBy('name');
         $this->assertSame('الدائن', $rows['بنك المشرق']['capacity']);
@@ -272,8 +272,8 @@ class MatterCreditorsTest extends TestCase
         $campaign->recipients()->create(['name' => 'Amal', 'email' => ['INFO@amal.ae'], 'status' => 'pending']);
 
         Livewire::test(RecipientsRelationManager::class, ['ownerRecord' => $campaign, 'pageClass' => ViewBulkMailCampaign::class])
-            ->callTableAction('fromCreditors')
-            ->assertHasNoTableActionErrors();
+            ->callAction(TestAction::make('fromCreditors')->table())
+            ->assertHasNoFormErrors();
 
         $added = $campaign->recipients()->where('name', 'بنك المشرق')->sole();
         $this->assertSame(['claims@mashreq.ae', 'lawyer@hashmi.ae'], $added->email);
@@ -287,8 +287,8 @@ class MatterCreditorsTest extends TestCase
         $this->matter->type->update(['has_creditors' => false]);
 
         Livewire::test(MatterContacts::class, ['matter' => $this->matter->fresh()])
-            ->assertTableActionHidden('addCreditor')
-            ->assertTableActionHidden('exportCreditors');
+            ->assertActionHidden(TestAction::make('addCreditor')->table())
+            ->assertActionHidden(TestAction::make('exportCreditors')->table());
     }
 
     public function test_creditors_are_numbered_known_by_their_licence_and_copied_from_another_matter(): void
@@ -305,8 +305,8 @@ class MatterCreditorsTest extends TestCase
 
         // A second creditor with the same licence: refused on the Contacts tab.
         Livewire::test(MatterContacts::class, ['matter' => $this->matter])
-            ->callTableAction('addCreditor', data: ['name' => 'المشرق مرة أخرى', 'id_number' => 'CN-1001', 'emails' => ['x@mashreq.ae']])
-            ->assertHasTableActionErrors(['id_number']);
+            ->callAction(TestAction::make('addCreditor')->table(), ['name' => 'المشرق مرة أخرى', 'id_number' => 'CN-1001', 'emails' => ['x@mashreq.ae']])
+            ->assertHasFormErrors(['id_number']);
         $this->assertSame(2, $this->matter->creditors()->count());
 
         // A list with the licence: merged into it, not a second one — its own column kept with it.
@@ -501,8 +501,8 @@ class MatterCreditorsTest extends TestCase
 
         // From its row: the plaintiff is a creditor too — both capacities on the one row, its emails filed as a creditor's.
         Livewire::test(MatterContacts::class, ['matter' => $this->matter])
-            ->callTableAction('makeCreditor', $plaintiff, ['name' => 'شركة المهاد', 'agent' => false])
-            ->assertHasNoTableActionErrors();
+            ->callAction(TestAction::make('makeCreditor')->table($plaintiff), ['name' => 'شركة المهاد', 'agent' => false])
+            ->assertHasNoFormErrors();
         $mahad = $this->matter->creditors()->where('name', 'شركة المهاد')->sole();
         // Its lawyer on the matter: its agent at once, by name and address, and the lawyer's email moved to its folder.
         $this->assertSame(['info@mahad.ae' => [false, null], 'lawyer@hashmi.ae' => [true, 'مكتب الهاشمي']], $mahad->addresses()->orderBy('agent')->get()->mapWithKeys(fn ($address): array => [$address->email => [(bool) $address->agent, $address->agent_name]])->all());
@@ -517,15 +517,15 @@ class MatterCreditorsTest extends TestCase
         $this->assertSame([false, true], $rows->filter(fn (array $row): bool => $row['creditor_id'] === $mahad->id)->pluck('agent')->sort()->values()->all());
         // One Edit on its row: the creditor's.
         Livewire::test(MatterContacts::class, ['matter' => $this->matter])
-            ->assertTableActionVisible('editCreditor', $plaintiff)
-            ->assertTableActionHidden('edit', $plaintiff)
-            ->assertTableActionVisible('edit', $defendant);
+            ->assertActionVisible(TestAction::make('editCreditor')->table($plaintiff))
+            ->assertActionHidden(TestAction::make('edit')->table($plaintiff))
+            ->assertActionVisible(TestAction::make('edit')->table($defendant));
 
         // Many at once: the defendant and someone who wrote in — the plaintiff, a creditor already, left as it is;
         // the defendant's lawyer, ticked along, linked as its agent and not made a creditor of its own.
         Livewire::test(MatterContacts::class, ['matter' => $this->matter])
-            ->callTableBulkAction('makeCreditors', [$plaintiff, $defendant, $noorLawyer, 'e:court@dubai.gov.ae'])
-            ->assertHasNoTableBulkActionErrors()
+            ->selectTableRecords([$plaintiff, $defendant, $noorLawyer, 'e:court@dubai.gov.ae'])->callAction(TestAction::make('makeCreditors')->table()->bulk())
+            ->assertHasNoFormErrors()
             ->assertNotified(trans_choice('No creditor made.|:count creditor made.|:count creditors made.', 2, ['count' => 2]));
         $this->assertSame(3, $this->matter->creditors()->count());
         $noor = $this->matter->creditors()->where('name', 'شركة النور')->sole();
@@ -534,8 +534,8 @@ class MatterCreditorsTest extends TestCase
 
         // Edited from the party's row: every column of a creditor, its number among them.
         Livewire::test(MatterContacts::class, ['matter' => $this->matter])
-            ->callTableAction('editCreditor', $plaintiff, ['name' => 'شركة المهاد', 'number' => 9, 'id_number' => 'CN-9', 'claim_amount' => '1000', 'emails' => ['info@mahad.ae'], 'phone' => []])
-            ->assertHasNoTableActionErrors();
+            ->callAction(TestAction::make('editCreditor')->table($plaintiff), ['name' => 'شركة المهاد', 'number' => 9, 'id_number' => 'CN-9', 'claim_amount' => '1000', 'emails' => ['info@mahad.ae'], 'phone' => []])
+            ->assertHasNoFormErrors();
         $this->assertSame([9, 'CN-9', '1000.00'], [(int) $mahad->fresh()->number, $mahad->fresh()->id_number, $mahad->fresh()->claim_amount]);
     }
 
@@ -548,10 +548,10 @@ class MatterCreditorsTest extends TestCase
 
         // Its IBAN and bank on the Contacts tab: any country's, typed with spaces; a wrong one refused.
         Livewire::test(MatterContacts::class, ['matter' => $this->matter])
-            ->callTableAction('editCreditor', 'c:'.$mashreq->id, ['name' => 'بنك المشرق', 'iban' => 'gb29 nwbk 6016 1331 9268 19', 'bank_name' => 'Barclays Bank', 'emails' => ['claims@mashreq.ae'], 'phone' => []])
-            ->assertHasNoTableActionErrors()
-            ->callTableAction('editCreditor', 'c:'.$amal->id, ['name' => 'مؤسسة الأمل', 'iban' => '12345', 'emails' => ['info@amal.ae'], 'phone' => []])
-            ->assertHasTableActionErrors(['iban' => 'regex']);
+            ->callAction(TestAction::make('editCreditor')->table('c:'.$mashreq->id), ['name' => 'بنك المشرق', 'iban' => 'gb29 nwbk 6016 1331 9268 19', 'bank_name' => 'Barclays Bank', 'emails' => ['claims@mashreq.ae'], 'phone' => []])
+            ->assertHasNoFormErrors()
+            ->callAction(TestAction::make('editCreditor')->table('c:'.$amal->id), ['name' => 'مؤسسة الأمل', 'iban' => '12345', 'emails' => ['info@amal.ae'], 'phone' => []])
+            ->assertHasFormErrors(['iban' => 'regex']);
         $this->assertSame(['GB29NWBK60161331926819', 'Barclays Bank'], [$mashreq->fresh()->iban, $mashreq->fresh()->bank_name]);
 
         // Written to one by one: the bank's agent on the 3rd (copied in), the bank itself on the 5th; Amal by the
@@ -586,15 +586,15 @@ class MatterCreditorsTest extends TestCase
 
         // Added from the Contacts tab with "No." empty: numbered after them.
         Livewire::test(MatterContacts::class, ['matter' => $this->matter])
-            ->callTableAction('addCreditor', data: ['name' => 'شركة المهاد', 'number' => null, 'emails' => ['info@mahad.ae']])
-            ->assertHasNoTableActionErrors();
+            ->callAction(TestAction::make('addCreditor')->table(), ['name' => 'شركة المهاد', 'number' => null, 'emails' => ['info@mahad.ae']])
+            ->assertHasNoFormErrors();
         $this->assertSame(5, (int) $this->matter->creditors()->where('name', 'شركة المهاد')->sole()->number);
 
         // Edited with "No." emptied: given the next, not left empty.
         DB::table('matter_creditors')->where('id', $noor->id)->update(['number' => null]);
         Livewire::test(MatterContacts::class, ['matter' => $this->matter])
-            ->callTableAction('editCreditor', 'c:'.$noor->id, ['name' => 'شركة النور', 'number' => '', 'emails' => ['noor@noor.ae'], 'phone' => []])
-            ->assertHasNoTableActionErrors();
+            ->callAction(TestAction::make('editCreditor')->table('c:'.$noor->id), ['name' => 'شركة النور', 'number' => '', 'emails' => ['noor@noor.ae'], 'phone' => []])
+            ->assertHasNoFormErrors();
         $this->assertSame(6, (int) $noor->fresh()->number);
 
         // The upgrade numbers those a server has with none, matter by matter.
@@ -626,27 +626,27 @@ class MatterCreditorsTest extends TestCase
         $this->assertArrayHasKey('p:'.$plaintiffId, $targets[__('Parties')]);
 
         // Merged into the creditor: its own address, its email in its folder — the party ticked along left as it is.
-        $tab()->callTableBulkAction('mergeInto', ['e:claims@mashreq.ae', 'p:'.$plaintiffId], ['target' => 'c:'.$mashreq->id])
-            ->assertHasNoTableBulkActionErrors();
+        $tab()->selectTableRecords(['e:claims@mashreq.ae', 'p:'.$plaintiffId])->callAction(TestAction::make('mergeInto')->table()->bulk(), ['target' => 'c:'.$mashreq->id])
+            ->assertHasNoFormErrors();
         $this->assertSame(['claims@mashreq.ae', 'info@mashreq.ae'], $mashreq->addresses()->where('agent', false)->orderBy('email')->pluck('email')->all());
         $this->assertContains('07 مطالبات الدائنين/بنك المشرق/وارد 0.pdf', $this->oneDrive->files());
 
         // The agent of a new creditor, named here: by their own name, their email in the new creditor's folder.
-        $tab()->callTableBulkAction('agentOf', ['e:lawyer@hashmi.ae'], ['target' => 'new', 'creditor_name' => 'بنك دبي'])
-            ->assertHasNoTableBulkActionErrors();
+        $tab()->selectTableRecords(['e:lawyer@hashmi.ae'])->callAction(TestAction::make('agentOf')->table()->bulk(), ['target' => 'new', 'creditor_name' => 'بنك دبي'])
+            ->assertHasNoFormErrors();
         $dubai = $this->matter->creditors()->where('name', 'بنك دبي')->sole();
         $this->assertTrue((bool) $dubai->addresses()->where('email', 'lawyer@hashmi.ae')->sole()->agent);
         $this->assertContains('07 مطالبات الدائنين/بنك دبي/وارد 1.pdf', $this->oneDrive->files());
 
         // Merged into the plaintiff: the party's own address now, its email in the plaintiff's folder.
-        $tab()->callTableBulkAction('mergeInto', ['e:manager@mahad.ae'], ['target' => 'p:'.$plaintiffId])
-            ->assertHasNoTableBulkActionErrors();
+        $tab()->selectTableRecords(['e:manager@mahad.ae'])->callAction(TestAction::make('mergeInto')->table()->bulk(), ['target' => 'p:'.$plaintiffId])
+            ->assertHasNoFormErrors();
         $this->assertSame(['info@mahad.ae', 'manager@mahad.ae'], Party::find($plaintiffId)->email);
         $this->assertContains('05 المدعي/وارد 2.pdf', $this->oneDrive->files());
 
         // The plaintiff's agent: its representative on the matter, of a party of their own; their email on its side.
-        $tab()->callTableBulkAction('agentOf', ['e:advocate@law.ae'], ['target' => 'p:'.$plaintiffId])
-            ->assertHasNoTableBulkActionErrors();
+        $tab()->selectTableRecords(['e:advocate@law.ae'])->callAction(TestAction::make('agentOf')->table()->bulk(), ['target' => 'p:'.$plaintiffId])
+            ->assertHasNoFormErrors();
         $advocate = Party::query()->where('email', 'like', '%advocate@law.ae%')->sole();
         $row = MatterParty::query()->where('matter_id', $this->matter->id)->where('party_id', $advocate->id)->sole();
         $this->assertSame(['representative', MatterParty::query()->where('matter_id', $this->matter->id)->where('party_id', $plaintiffId)->value('id')], [$row->role, $row->parent_id]);

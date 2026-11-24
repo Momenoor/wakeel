@@ -47,19 +47,19 @@ class PartyFormTest extends TestCase
         // A plain party, then an expert who is not an assistant: none.
         $page = Livewire::test(CreateParty::class)->fillForm(['role' => ['role' => ['party']]]);
         foreach ($fields as $field) {
-            $page->assertFormFieldIsHidden($field);
+            $page->assertFormFieldHidden($field);
         }
         $page->fillForm(['role' => ['role' => ['expert'], 'type' => ['certified']]]);
         foreach ($fields as $field) {
-            $page->assertFormFieldIsHidden($field);
+            $page->assertFormFieldHidden($field);
         }
 
         // An assistant: all of them — and the expert type and expertise area asked for.
         $page->fillForm(['role' => ['role' => ['expert'], 'type' => ['assistant']]]);
         foreach ($fields as $field) {
-            $page->assertFormFieldIsVisible($field);
+            $page->assertFormFieldVisible($field);
         }
-        $page->assertFormFieldIsVisible('role.type')->assertFormFieldIsVisible('role.field');
+        $page->assertFormFieldVisible('role.type')->assertFormFieldVisible('role.field');
     }
 
     public function test_an_assistant_is_created_with_their_folders_and_reviewers(): void
@@ -90,7 +90,7 @@ class PartyFormTest extends TestCase
 
         Livewire::test(EditParty::class, ['record' => $party->getRouteKey()])
             ->assertFormSet(['name' => 'Sara', 'legal_name' => 'Sara Ali', 'role.role' => ['expert'], 'role.type' => ['assistant'], 'onedrive_email' => 'amr@firm.ae'])
-            ->assertFormFieldIsVisible('onedrive_path')
+            ->assertFormFieldVisible('onedrive_path')
             ->fillForm(['onedrive_finished_path' => 'Work/Finished'])
             ->call('save')
             ->assertHasNoFormErrors();

@@ -85,10 +85,10 @@ class InstallmentsRelationManagerTest extends TestCase
             'pageClass' => ViewLease::class,
         ]);
 
-        $page->assertTableActionHidden('view_payments', $installment)
+        $page->assertActionHidden(TestAction::make('view_payments')->table($installment))
             ->callAction(TestAction::make('record_payment')->table($installment), ['amount' => 1000, 'transaction_reference' => 'TRX-77', 'paid_date' => '2026-05-04']);
 
-        $page->mountTableAction('view_payments', $installment->fresh())
+        $page->mountAction(TestAction::make('view_payments')->table($installment->fresh()))
             ->assertMountedActionModalSee(['04/05/2026', '1,000.00', 'TRX-77'])
             ->assertMountedActionModalDontSee(__('No payments recorded yet.'));
     }

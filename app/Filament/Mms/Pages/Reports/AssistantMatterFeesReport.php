@@ -50,7 +50,7 @@ class AssistantMatterFeesReport extends Page implements HasTable
     {
 
         return $table
-            ->query(fn () => $this->getTableQuery())
+            ->query(fn () => $this->rowsQuery())
             // 50 rows a page (All for printing — see ReportPrintAction): every row at
             // once made pages of many megabytes, seconds to build.
             ->paginated([25, 50, 100, 'all'])
@@ -122,7 +122,7 @@ class AssistantMatterFeesReport extends Page implements HasTable
             ]);
     }
 
-    protected function getTableQuery(): Builder
+    protected function rowsQuery(): Builder
     {
         return MatterParty::query()
             ->where('matter_party.role', 'expert')

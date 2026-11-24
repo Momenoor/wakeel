@@ -259,7 +259,7 @@ class MatterInfolist
                             ->schema([
                                 Livewire::make(MatterContacts::class, fn ($record) => ['matter' => $record])
                                     ->key('matter-contacts')
-                                    ->lazy(),
+                                    ->lazyLoaded(),
                             ]),
                         // Last: everything done to it and to what is on it, who and when (each request keeps its own too).
                         Tab::make(__('History'))->key('history', isInheritable: false)
@@ -268,7 +268,7 @@ class MatterInfolist
                             ->schema([
                                 Livewire::make(MatterHistoryTab::class, fn ($record) => ['matterId' => (int) $record->getKey()])
                                     ->key('matter-history')
-                                    ->lazy(),
+                                    ->lazyLoaded(),
                             ]),
                     ]),
             ]);
@@ -1394,7 +1394,7 @@ class MatterInfolist
                 // After the page: OneDrive takes a moment (a spinner meanwhile).
                 Livewire::make(MatterOneDriveFiles::class, fn ($record) => ['matter' => $record])
                     ->key('matter-onedrive-files')
-                    ->lazy(),
+                    ->lazyLoaded(),
             ]);
     }
 

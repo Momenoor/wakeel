@@ -31,6 +31,7 @@ use App\Services\WhatsAppCloud;
 use App\Support\CompanyContact;
 use App\Support\Dates;
 use App\Support\EmailGrouping;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -138,7 +139,7 @@ class MinutesSignatureTest extends TestCase
     private function send(): void
     {
         Livewire::test(MinutesRelationManager::class, ['ownerRecord' => $this->minutes->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('sendForSignature', $this->minutes)
+            ->mountAction(TestAction::make('sendForSignature')->table($this->minutes))
             // The attendees present, with their email and WhatsApp.
             ->assertSet('mountedActions.0.data.whatsapp_template_id', WhatsAppTemplate::default(WhatsAppTemplate::MINUTES_SIGNATURE)->id)
             ->assertSet('mountedActions.0.data.recipients', fn (array $rows) => array_values($rows) == [[
@@ -147,9 +148,9 @@ class MinutesSignatureTest extends TestCase
                 // The party it goes with: its own.
                 'group' => $this->minutes->attendees[0]['party_id'],
             ]])
-            ->setTableActionData(['sender' => 'iflas'])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->fillForm(['sender' => 'iflas'])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
     }
 
     public function test_finalised_minutes_go_to_the_attendees_by_email_and_whatsapp(): void
@@ -205,12 +206,12 @@ class MinutesSignatureTest extends TestCase
             'party_id' => Party::factory()->create(['email' => ['expert@jpa.ae']])->id]);
 
         Livewire::test(MinutesRelationManager::class, ['ownerRecord' => $this->minutes->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('sendForSignature', $this->minutes)
+            ->mountAction(TestAction::make('sendForSignature')->table($this->minutes))
             ->assertSet('mountedActions.0.data.cc', ['sara@jpa.ae'])
             // One more, and the recipient's own (not copied to themselves).
-            ->setTableActionData(['sender' => 'iflas', 'cc' => ['sara@jpa.ae', 'boss@jpa.ae', 'm@law.ae']])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->fillForm(['sender' => 'iflas', 'cc' => ['sara@jpa.ae', 'boss@jpa.ae', 'm@law.ae']])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $this->assertSame(['m@law.ae'], array_map(fn ($a) => $a->getAddress(), $this->sent[0]->getTo()));
         $this->assertSame(['sara@jpa.ae', 'boss@jpa.ae'], array_map(fn ($a) => $a->getAddress(), $this->sent[0]->getCc()));
@@ -278,11 +279,11 @@ class MinutesSignatureTest extends TestCase
         EmailTemplate::default(EmailTemplate::MINUTES_SIGNATURE, 'ar')->update(['cc' => ['minutes@jpa.ae']]);
 
         Livewire::test(MinutesRelationManager::class, ['ownerRecord' => $this->minutes->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('sendForSignature', $this->minutes)
+            ->mountAction(TestAction::make('sendForSignature')->table($this->minutes))
             ->assertSet('mountedActions.0.data.cc', ['minutes@jpa.ae'])
-            ->setTableActionData(['sender' => 'iflas'])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->fillForm(['sender' => 'iflas'])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $this->assertSame(['minutes@jpa.ae'], array_map(fn ($a) => $a->getAddress(), $this->sent[0]->getCc()));
     }
@@ -292,13 +293,13 @@ class MinutesSignatureTest extends TestCase
         Storage::fake('local');
 
         Livewire::test(MinutesRelationManager::class, ['ownerRecord' => $this->minutes->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('sendForSignature', $this->minutes)
-            ->setTableActionData([
+            ->mountAction(TestAction::make('sendForSignature')->table($this->minutes))
+            ->fillForm([
                 'sender' => 'iflas',
                 'attachments' => [UploadedFile::fake()->create('مذكرة.pdf', 12, 'application/pdf')],
             ])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $this->assertSame([MinutesService::fileName($this->minutes).'.pdf', 'مذكرة.pdf'],
             array_map(fn ($part) => $part->getFilename(), $this->sent[0]->getAttachments()));
@@ -319,15 +320,15 @@ class MinutesSignatureTest extends TestCase
         $template->update(['subject' => 'للتوقيع: محضر {{minutes.number}}', 'body' => '<p>عزيزي {{recipient.name}}، مرفق المحضر.</p>']);
 
         Livewire::test(MinutesRelationManager::class, ['ownerRecord' => $this->minutes->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('sendForSignature', $this->minutes)
+            ->mountAction(TestAction::make('sendForSignature')->table($this->minutes))
             ->assertSet('mountedActions.0.data.email_template_id', $template->id)
             ->assertSet('mountedActions.0.data.subject', 'للتوقيع: محضر {{minutes.number}}')
             // No template chosen: the standard email again.
-            ->setTableActionData(['email_template_id' => null])
+            ->fillForm(['email_template_id' => null])
             ->assertSet('mountedActions.0.data.subject', MinutesSender::defaultSubject(true))
-            ->setTableActionData(['email_template_id' => $template->id, 'sender' => 'iflas'])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->fillForm(['email_template_id' => $template->id, 'sender' => 'iflas'])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $this->assertSame('للتوقيع: محضر 1', $this->sent[0]->getSubject());
         $this->assertStringContainsString('عزيزي محمد عبد المقصود، مرفق المحضر.', $this->sent[0]->getHtmlBody());
@@ -420,7 +421,7 @@ class MinutesSignatureTest extends TestCase
 
         Livewire::test(MinutesRelationManager::class, ['ownerRecord' => $this->minutes->matter, 'pageClass' => ViewMatter::class])
             ->assertTableColumnStateSet('signed', '1 / 1', $this->minutes)
-            ->mountTableAction('signatures', $this->minutes)
+            ->mountAction(TestAction::make('signatures')->table($this->minutes))
             ->assertMountedActionModalSee(['https://od/signed/file.pdf', __('In OneDrive'), __('Signed').' '.Dates::dateTime($delivery->fresh()->signed_at)]);
     }
 
@@ -544,7 +545,7 @@ class MinutesSignatureTest extends TestCase
         $this->assertCount($sentBefore + 1, $this->whatsapp);
 
         Livewire::test(MinutesRelationManager::class, ['ownerRecord' => $this->minutes->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('signatures', $this->minutes)
+            ->mountAction(TestAction::make('signatures')->table($this->minutes))
             ->assertMountedActionModalSee([
                 'وعندي ملاحظة على البند 3',
                 __('Their reply'),
@@ -560,7 +561,7 @@ class MinutesSignatureTest extends TestCase
             ->assertCanSeeTableRecords(WhatsAppTemplate::all())
             ->mountAction('webhook')
             ->assertSet('mountedActions.0.data.url', route('webhooks.whatsapp'))
-            ->setActionData(['app_secret' => 'new-secret'])
+            ->fillForm(['app_secret' => 'new-secret'])
             ->callMountedAction();
 
         $this->assertSame('new-secret', WhatsAppCloud::appSecret());

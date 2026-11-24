@@ -980,7 +980,7 @@ class MatterOneDriveFolderTest extends TestCase
             ->assertSet('folderRenames', ['02 المستندات']);
 
         $page->callAction('renameFolders', ['renames' => [['from' => '02 المستندات', 'to' => '02 الوثائق']], 'finished' => false, 'group' => false])
-            ->assertHasNoActionErrors()
+            ->assertHasNoFormErrors()
             ->assertSet('folderRenames', []);
 
         // Renamed in the matter's OneDrive, what was in it still in it; the email's record follows.

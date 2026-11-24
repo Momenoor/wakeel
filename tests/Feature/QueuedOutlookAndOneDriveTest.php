@@ -65,7 +65,7 @@ class QueuedOutlookAndOneDriveTest extends TestCase
 
         Livewire::test(ListCalendarEvents::class)
             ->callAction(TestAction::make('syncWithOutlook')->table(), ['from' => '2026-01-01', 'to' => '2026-03-31'])
-            ->assertHasNoActionErrors()
+            ->assertHasNoFormErrors()
             ->assertNotified(__('Syncing with Outlook'));
 
         Bus::assertDispatched(SyncOutlookCalendarRange::class, fn (SyncOutlookCalendarRange $job): bool => $job->from->toDateString() === '2026-01-01'

@@ -38,7 +38,7 @@ class UpcomingSessionsWidget extends TableWidget
         'xl' => 3,
     ];
 
-    protected function getTableQuery(): Builder
+    protected function rowsQuery(): Builder
     {
         return Matter::query()
             ->visibleTo(auth()->user())
@@ -53,7 +53,7 @@ class UpcomingSessionsWidget extends TableWidget
         return $table
             ->heading(__('Upcoming Sessions'))
             ->description(__('Hearings scheduled in the next 14 days'))
-            ->query($this->getTableQuery())
+            ->query($this->rowsQuery())
             // Unconditionally tighter, not the app's usual .custom-compact-table
             // (that class only kicks in below 1280px, so on an ordinary desktop
             // it does nothing) — a dashboard glance widget should read compact

@@ -17,6 +17,7 @@ use App\Filament\Pms\Pages\Reports\SecurityDepositsReport;
 use App\Filament\Pms\Pages\Reports\VatReport;
 use App\Models\InstallmentPayment;
 use App\Services\PMS\OwnerStatement;
+use Filament\Actions\Testing\TestAction;
 use Livewire\Livewire;
 
 class PmsReportsTest extends PmsReportTestCase
@@ -28,8 +29,8 @@ class PmsReportsTest extends PmsReportTestCase
             SecurityDepositsReport::class] as $report) {
             Livewire::test($report)
                 ->assertSuccessful()
-                ->assertTableActionExists('exportExcel')
-                ->assertTableActionExists('print');
+                ->assertActionExists(TestAction::make('exportExcel')->table())
+                ->assertActionExists(TestAction::make('print')->table());
 
             $this->get($report::getUrl())->assertSuccessful();
         }
@@ -187,7 +188,7 @@ class PmsReportsTest extends PmsReportTestCase
         $this->assertEquals(3000, $rows[$this->groupA->id]->deposits_held);
         $this->assertEquals(0, $rows[$this->groupB->id]->due_amount);
 
-        $table->callTableAction('statementPdf', $this->groupA)->assertFileDownloaded();
+        $table->callAction(TestAction::make('statementPdf')->table($this->groupA))->assertFileDownloaded();
 
         $pdf = OwnerStatement::pdf($this->groupA, now()->startOfMonth(), now()->endOfMonth());
         $this->assertStringStartsWith('%PDF', file_get_contents($pdf));

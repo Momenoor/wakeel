@@ -101,7 +101,7 @@ class MatterEmailDeletionTest extends TestCase
         Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
             ->assertActionHidden(TestAction::make('delete')->table($email));
         Livewire::test(MatterContacts::class, ['matter' => $this->matter])
-            ->assertTableActionHidden('deleteContact', 'e:lawyer@hashmi.ae');
+            ->assertActionHidden(TestAction::make('deleteContact')->table('e:lawyer@hashmi.ae'));
     }
 
     public function test_an_email_is_deleted_with_all_its_files_and_its_replies_stay(): void
@@ -144,9 +144,9 @@ class MatterEmailDeletionTest extends TestCase
         MatterContactDetail::create(['matter_id' => $this->matter->id, 'email' => 'lawyer@hashmi.ae', 'name' => 'مكتب الهاشمي', 'capacity' => 'محامٍ']);
 
         Livewire::test(MatterContacts::class, ['matter' => $this->matter])
-            ->assertTableActionVisible('deleteContact', 'e:lawyer@hashmi.ae')
-            ->callTableAction('deleteContact', 'e:lawyer@hashmi.ae')
-            ->assertHasNoTableActionErrors()
+            ->assertActionVisible(TestAction::make('deleteContact')->table('e:lawyer@hashmi.ae'))
+            ->callAction(TestAction::make('deleteContact')->table('e:lawyer@hashmi.ae'))
+            ->assertHasNoFormErrors()
             ->assertNotified(__('The contact is deleted'));
 
         $this->assertModelMissing($first);

@@ -81,7 +81,7 @@ class PagesRelationManager extends RelationManager
                 ImageColumn::make('background_image_path')
                     ->label(__('Preview'))
                     ->disk('public')
-                    ->height(80),
+                    ->imageHeight(80),
                 TextColumn::make('fields_count')
                     ->label(__('Fields Placed'))
                     ->counts('fields'),

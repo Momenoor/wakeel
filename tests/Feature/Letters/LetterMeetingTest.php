@@ -15,6 +15,7 @@ use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterDocx;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterPdf;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -105,10 +106,10 @@ class LetterMeetingTest extends TestCase
         $candidateIds = array_keys(LetterComposer::candidates($this->matter));
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('issue')
-            ->setTableActionData(['letter_template_id' => $this->template->id])
+            ->mountAction(TestAction::make('issue')->table())
+            ->fillForm(['letter_template_id' => $this->template->id])
             ->assertMountedActionModalSee('Create a Teams meeting in Outlook and put its link in the letter')
-            ->setTableActionData([
+            ->fillForm([
                 'recipients' => $candidateIds,
                 'inputs.meeting_date' => '2026-10-05',
                 'inputs.meeting_time' => '10:30',
@@ -116,8 +117,8 @@ class LetterMeetingTest extends TestCase
                 'create_meeting' => true,
                 'meeting_minutes' => 45,
             ])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $event = CalendarEvent::sole();
         $this->assertSame($this->matter->id, $event->matter_id);
@@ -144,14 +145,14 @@ class LetterMeetingTest extends TestCase
         $this->fakeGraph();
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->callTableAction('issue', data: [
+            ->callAction(TestAction::make('issue')->table(), [
                 'letter_template_id' => $this->template->id,
                 'recipients' => array_keys(LetterComposer::candidates($this->matter)),
                 'inputs' => ['meeting_date' => '2026-10-05', 'meeting_time' => '10:30'],
                 'create_meeting' => true,
                 'invite_recipients' => true,
             ])
-            ->assertHasNoTableActionErrors();
+            ->assertHasNoFormErrors();
 
         Http::assertSent(fn (Request $request) => str_contains($request->url(), '/events')
             && ($request['attendees'][0]['emailAddress']['address'] ?? null) === 'mona@example.com');
@@ -162,7 +163,7 @@ class LetterMeetingTest extends TestCase
         $this->fakeGraph(['error' => ['message' => 'Forbidden']], 403);
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->callTableAction('issue', data: [
+            ->callAction(TestAction::make('issue')->table(), [
                 'letter_template_id' => $this->template->id,
                 'recipients' => array_keys(LetterComposer::candidates($this->matter)),
                 'inputs' => ['meeting_date' => '2026-10-05', 'meeting_time' => '10:30'],
@@ -182,13 +183,13 @@ class LetterMeetingTest extends TestCase
         $template = LetterTemplate::create(['name' => 'اجتماع', 'slug' => 'meeting-'.uniqid(), 'locale' => 'ar', 'category' => 'letter', 'subject' => 'دعوة', 'inputs' => $inputs, 'body' => $body]);
 
         return Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->callTableAction('issue', data: [
+            ->callAction(TestAction::make('issue')->table(), [
                 'letter_template_id' => $template->id,
                 'recipients' => array_keys(LetterComposer::candidates($this->matter)),
                 'inputs' => ['meeting_date' => '2026-10-05', 'meeting_time' => '10:30'],
                 'create_meeting' => true,
             ])
-            ->assertHasNoTableActionErrors();
+            ->assertHasNoFormErrors();
     }
 
     private const DATE_AND_TIME = [
@@ -262,17 +263,17 @@ class LetterMeetingTest extends TestCase
             'body' => '<p>{{recipients}}</p><p>يوم {{meeting.day}} الموافق {{meeting.date}} الساعة {{meeting.time}}</p><p>للانضمام: <span data-type="mergeTag" data-id="meeting.link">meeting.link</span></p>']);
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('issue')
-            ->setTableActionData(['letter_template_id' => $template->id])
+            ->mountAction(TestAction::make('issue')->table())
+            ->fillForm(['letter_template_id' => $template->id])
             ->assertMountedActionModalSee('Create a Teams meeting in Outlook and put its link in the letter')
-            ->setTableActionData([
+            ->fillForm([
                 'recipients' => array_keys(LetterComposer::candidates($this->matter)),
                 'create_meeting' => true,
                 'meeting_date' => '2026-10-07',
                 'meeting_time' => '13:00',
             ])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $this->assertSame('2026-10-07 13:00', CalendarEvent::sole()->start_datetime->format('Y-m-d H:i'));
         $html = MatterLetter::sole()->rendered_html;
@@ -287,7 +288,7 @@ class LetterMeetingTest extends TestCase
         $this->fakeGraph();
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->callTableAction('write', data: [
+            ->callAction(TestAction::make('write')->table(), [
                 'subject' => 'اجتماع',
                 'recipients' => array_keys(LetterComposer::candidates($this->matter)),
                 'body' => '<p>{{recipients}}</p><p>الرابط: {{meeting.link}}</p>',
@@ -295,7 +296,7 @@ class LetterMeetingTest extends TestCase
                 'meeting_date' => '2026-10-08',
                 'meeting_time' => '09:30',
             ])
-            ->assertHasNoTableActionErrors();
+            ->assertHasNoFormErrors();
 
         $this->assertSame('2026-10-08 09:30', CalendarEvent::sole()->start_datetime->format('Y-m-d H:i'));
         $this->assertStringContainsString(e(self::JOIN_URL), MatterLetter::sole()->rendered_html);
@@ -307,8 +308,8 @@ class LetterMeetingTest extends TestCase
             'body' => '<p>{{recipients}}</p><p>للانضمام: {{meeting.link}}</p>']);
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->callTableAction('issue', data: ['letter_template_id' => $template->id, 'recipients' => array_keys(LetterComposer::candidates($this->matter))])
-            ->assertHasNoTableActionErrors()
+            ->callAction(TestAction::make('issue')->table(), ['letter_template_id' => $template->id, 'recipients' => array_keys(LetterComposer::candidates($this->matter))])
+            ->assertHasNoFormErrors()
             ->assertNotified(__('This letter has :placeholder, but no Teams meeting was created', ['placeholder' => '{'.'{meeting.link}'.'}']));
 
         $this->assertStringNotContainsString('meeting.link', MatterLetter::sole()->rendered_html);
@@ -320,7 +321,7 @@ class LetterMeetingTest extends TestCase
         // Unset, the browser didn't reliably send what was then picked: the
         // meeting switch showed on and reached the server off.
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('issue')
+            ->mountAction(TestAction::make('issue')->table())
             ->set('mountedActions.0.data.letter_template_id', $this->template->id)
             ->assertSet('mountedActions.0.data.create_meeting', false)
             ->assertSet('mountedActions.0.data.meeting_minutes', 60)
@@ -330,7 +331,7 @@ class LetterMeetingTest extends TestCase
                 && array_key_exists('meeting_link', (array) $inputs));
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('write')
+            ->mountAction(TestAction::make('write')->table())
             ->assertSet('mountedActions.0.data.create_meeting', false)
             ->assertSet('mountedActions.0.data.meeting_minutes', 60);
     }

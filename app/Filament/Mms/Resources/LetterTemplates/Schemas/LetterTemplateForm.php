@@ -46,7 +46,7 @@ class LetterTemplateForm
                         TextInput::make('name')
                             ->label(__('Name'))
                             ->afterStateUpdated(fn ($state, Set $set) => $set('slug', Str::slug((string) $state) ?: Str::random(8)))
-                            ->lazy()
+                            ->live(onBlur: true)
                             ->required(),
                         TextInput::make('slug')
                             ->label(__('Code'))

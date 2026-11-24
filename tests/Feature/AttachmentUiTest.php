@@ -154,7 +154,7 @@ class AttachmentUiTest extends TestCase
 
         Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])
             ->callAction('initial_report', data: ['screen_shot' => UploadedFile::fake()->image('shot.png')])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $file = $matter->refresh()->ownedAttachments()->sole();
         $this->assertNotNull($matter->initial_report_at);
@@ -297,9 +297,9 @@ class AttachmentUiTest extends TestCase
             ->assertCanSeeTableRecords([$note])
             ->assertCanNotSeeTableRecords([$invoice])
             ->removeTableFilters()
-            ->assertTableActionVisible('preview', $invoice)
-            ->assertTableActionHidden('preview', $note)
-            ->assertTableActionVisible('download', $note);
+            ->assertActionVisible(TestAction::make('preview')->table($invoice))
+            ->assertActionHidden(TestAction::make('preview')->table($note))
+            ->assertActionVisible(TestAction::make('download')->table($note));
 
         $this->assertSame($invoice->url(), route('attachment.download', ['attachment' => $invoice->id]));
     }
@@ -367,7 +367,7 @@ class AttachmentUiTest extends TestCase
 
         Livewire::test(ViewMatterRequest::class, ['record' => $request->id])
             ->callAction(ApproveRequestAction::class, data: ['approved_comment' => 'ok', 'has_substantive_changes' => false, 'attachments' => [$this->pdf('Reviewed.pdf')]])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $file = $request->refresh()->attachments()->sole();
         $this->assertSame([RequestStatus::APPROVED, MatterRequest::class, $request->id, Category::REQUEST, 'attachments', 'user', 'Reviewed.pdf'], [$request->status, $file->attachable_type, $file->attachable_id, $file->category, $file->disk, $file->source, $file->name]);
@@ -382,12 +382,12 @@ class AttachmentUiTest extends TestCase
 
         Livewire::test(ViewMatterRequest::class, ['record' => $request->id])
             ->callAction(RejectRequestAction::class, data: ['approved_comment' => 'no', 'attachments' => []])
-            ->assertHasActionErrors(['attachments']);
+            ->assertHasFormErrors(['attachments']);
         $this->assertSame(RequestStatus::PENDING, $request->refresh()->status);
 
         Livewire::test(ViewMatterRequest::class, ['record' => $request->id])
             ->callAction(RejectRequestAction::class, data: ['approved_comment' => 'no', 'attachments' => [$this->pdf('Why.pdf')]])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
         $this->assertSame(RequestStatus::REJECTED, $request->refresh()->status);
         $this->assertSame(['Why.pdf'], $request->attachments()->pluck('name')->all());
     }

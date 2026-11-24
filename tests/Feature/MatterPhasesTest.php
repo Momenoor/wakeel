@@ -76,7 +76,7 @@ class MatterPhasesTest extends TestCase
             ->mountAction('clone')
             ->assertSchemaStateSet(['phase' => 'المرحلة الثانية'], 'mountedActionSchema0')
             ->callMountedAction()
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $this->assertSame('المرحلة الثانية', Matter::query()->where('parent_id', $parent->id)->sole()->phase);
         $this->assertSame('المرحلة الأولى', $parent->fresh()->phase);
@@ -103,7 +103,7 @@ class MatterPhasesTest extends TestCase
                 'field' => $field->id,
                 'phases' => [['option' => 'first', 'phase' => 'المرحلة الأولى'], ['option' => 'second', 'phase' => 'المرحلة الثانية'], ['option' => 'third', 'phase' => 'المرحلة الثالثة']],
             ])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         foreach ([$iflas, $esar] as $type) {
             $this->assertSame(['المرحلة الأولى', 'المرحلة الثانية', 'المرحلة الثالثة'], $type->fresh()->phaseNames());

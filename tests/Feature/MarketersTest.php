@@ -209,7 +209,7 @@ class MarketersTest extends TestCase
             ->assertCanSeeTableRecords([$commission])
             ->selectTableRecords([$commission])
             ->callAction(TestAction::make('markPaid')->table()->bulk(), data: ['paid_at' => '2026-07-01'])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
         $this->assertSame('2026-07-01', $commission->fresh()->paid_at?->toDateString());
         $this->assertSame(__('Paid'), MarketingCommissionsReport::status($commission->fresh()));
     }

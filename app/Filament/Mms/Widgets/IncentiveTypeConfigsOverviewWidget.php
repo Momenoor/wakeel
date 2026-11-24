@@ -18,7 +18,7 @@ class IncentiveTypeConfigsOverviewWidget extends TableWidget
 
     protected int|string|array $columnSpan = 'full';
 
-    protected function getTableQuery(): Builder
+    protected function rowsQuery(): Builder
     {
         return MatterTypeIncentiveConfig::query()->withCount('tiers');
     }
@@ -26,6 +26,7 @@ class IncentiveTypeConfigsOverviewWidget extends TableWidget
     public function table(Table $table): Table
     {
         return $table
+            ->query(fn (): Builder => $this->rowsQuery())
             ->heading(__('Type Configurations'))
             ->columns([
                 TextColumn::make('matterTypes.name')->label(__('Matter Type'))->listWithLineBreaks()->limitList(20),

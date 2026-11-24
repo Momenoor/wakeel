@@ -118,7 +118,7 @@ class ThemesTest extends TestCase
                     'surfaces' => ['topbar' => ['light' => '#0f172a', 'dark' => '#020617']],
                 ],
             ])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         // The original looks and one per Filament palette, and ours.
         $this->assertSame(count(ManageThemes::starters()) + 1, Theme::count());
@@ -132,12 +132,12 @@ class ThemesTest extends TestCase
         // Your own colour, but not a colour: refused.
         Livewire::test(ManageThemes::class)
             ->callAction('create', ['name' => 'Bad', 'colors' => ['primary' => 'custom'], 'custom_colors' => ['primary' => 'red'], 'radius' => 'md', 'density' => 'normal', 'sidebar' => 'plain'])
-            ->assertHasActionErrors(['custom_colors.primary']);
+            ->assertHasFormErrors(['custom_colors.primary']);
 
         // Edited: the hex comes back as "your own".
         Livewire::test(ManageThemes::class)
             ->mountAction(TestAction::make('edit')->table($theme))
-            ->assertActionDataSet(['colors.secondary' => 'custom', 'custom_colors.secondary' => '#b45309']);
+            ->assertSchemaStateSet(['colors.secondary' => 'custom', 'custom_colors.secondary' => '#b45309']);
 
         Livewire::test(ManageThemes::class)->callAction(TestAction::make('useForOffice')->table($theme));
         $this->assertSame((string) $theme->id, (string) Setting::get(ThemeManager::SETTING));
@@ -189,7 +189,7 @@ class ThemesTest extends TestCase
         $this->assertSame('20rem', $panel->getSidebarWidth());
         $this->assertSame(Width::Full, $panel->getMaxContentWidth());
         $this->assertSame(ThemeMode::Dark, $panel->getDefaultThemeMode());
-        $this->assertTrue($panel->hasDarkModeForced());
+        $this->assertTrue($panel->isDarkModeForced());
         $this->assertSame('5rem', $panel->getBrandLogoHeight());
     }
 

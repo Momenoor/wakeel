@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\MMS\EmailReplySender;
 use App\Services\MMS\MatterReplyCollector;
 use App\Services\MMS\SentFolder;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Mail\Events\MessageSent;
@@ -106,15 +107,15 @@ class EmailReplyTest extends TestCase
     public function test_the_reply_is_sent_under_the_same_thread_and_kept_beside_the_email_it_answers(): void
     {
         Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('reply', $this->email)
+            ->mountAction(TestAction::make('reply')->table($this->email))
             ->assertSet('mountedActions.0.data.sender', 'iflas')
             ->assertSet('mountedActions.0.data.to', ['other@x.ae', 'main@x.ae'])
             ->assertSet('mountedActions.0.data.cc', ['colleague@x.ae', 'cc@x.ae'])
             ->assertSet('mountedActions.0.data.contacts_cc', ['other@x.ae', 'assistant@x.ae'])
             ->assertSet('mountedActions.0.data.subject', 'RE: استفسار عن القضية')
-            ->setTableActionData(['body' => '<p>مرفق ما طلبتم.</p>'.EmailReplySender::quote($this->email, $this->email->body)])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors()
+            ->fillForm(['body' => '<p>مرفق ما طلبتم.</p>'.EmailReplySender::quote($this->email, $this->email->body)])
+            ->callMountedAction()
+            ->assertHasNoFormErrors()
             ->assertNotified(__('The reply is sent'));
 
         $this->assertCount(1, $this->sent);
@@ -152,17 +153,17 @@ class EmailReplyTest extends TestCase
         $this->assertStringEndsWith('<p>نص</p>', $with);
 
         Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('reply', $this->email)
-            ->setTableActionData(['body' => '<p>شكراً.</p>', 'cc' => []])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->mountAction(TestAction::make('reply')->table($this->email))
+            ->fillForm(['body' => '<p>شكراً.</p>', 'cc' => []])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
         $this->assertCount(0, $this->sent[0]->getAttachments());
         $this->assertSame(['assistant@x.ae'], array_map(fn ($a) => $a->getAddress(), $this->sent[0]->getCc()));
 
         // A sent email has no Reply.
         $sent = MatterEmail::query()->where('direction', MatterEmail::SENT)->sole();
         Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->assertTableActionHidden('reply', $sent)
-            ->assertTableActionVisible('reply', $this->email);
+            ->assertActionHidden(TestAction::make('reply')->table($sent))
+            ->assertActionVisible(TestAction::make('reply')->table($this->email));
     }
 }

@@ -20,7 +20,6 @@ use App\Services\MMS\Letters\MinutesSender;
 use App\Services\MMS\Letters\MinutesService;
 use App\Services\MMS\MatterProgressRecorder;
 use App\Services\MMS\SentFolder;
-use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\Exports\ExportColumn;
@@ -198,14 +197,14 @@ class MatterProgressTest extends TestCase
     {
         $page = Livewire::test(ProgressRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class]);
 
-        $page->mountTableAction(CreateAction::class)
+        $page->mountAction(TestAction::make('create')->table())
             // The type's name, until one is written.
             ->set('mountedActions.0.data.type', ProgressType::DOCUMENTS_RECEIVED->value)
             ->assertSet('mountedActions.0.data.title', ProgressType::DOCUMENTS_RECEIVED->getLabel())
             ->set('mountedActions.0.data.title', 'استلام مستندات من المدعي')
             ->set('mountedActions.0.data.happened_at', '2026-10-04 11:00:00')
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $step = $this->matter->progress()->sole();
         $this->assertSame('استلام مستندات من المدعي', $step->title);
@@ -228,7 +227,7 @@ class MatterProgressTest extends TestCase
 
         // A step added in the Progress tab: the page told.
         Livewire::test(ProgressRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->callTableAction(CreateAction::class, data: ['type' => ProgressType::SESSION->value, 'title' => 'جلسة', 'happened_at' => '2026-10-04 10:00:00'])
+            ->callAction(TestAction::make('create')->table(), data: ['type' => ProgressType::SESSION->value, 'title' => 'جلسة', 'happened_at' => '2026-10-04 10:00:00'])
             ->assertDispatched('matter-changed');
 
         // Meanwhile a letter issued: the page, told, counts it — on the tab itself.
@@ -280,7 +279,7 @@ class MatterProgressTest extends TestCase
         // The button on the tab: a file named after the matter, every step shown in it.
         Livewire::test(ProgressRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
             ->callAction(TestAction::make('exportProgress')->table())
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $export = Export::sole();
         $this->assertStringStartsWith('Progress 2026-986 ', $export->file_name);

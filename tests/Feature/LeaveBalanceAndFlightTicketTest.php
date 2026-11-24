@@ -270,7 +270,7 @@ class LeaveBalanceAndFlightTicketTest extends TestCase
         Livewire::test(LeaveBalanceRelationManager::class, $owner)
             ->assertSee(__('Annual leave balance: :days days', ['days' => '10']))
             ->callAction(TestAction::make('adjust')->table(), ['days' => -2.5, 'entry_date' => '2026-10-01', 'note' => 'Correction'])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $this->assertSame(7.5, $this->balances->balance($party->id));
 
@@ -286,7 +286,7 @@ class LeaveBalanceAndFlightTicketTest extends TestCase
 
         Livewire::test(FlightTicketsRelationManager::class, $owner)
             ->callAction(TestAction::make('create')->table(), ['year' => 2026, 'amount' => 1800])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $this->assertSame('1800.00', FlightTicket::where('party_id', $party->id)->sole()->amount);
     }
@@ -303,7 +303,7 @@ class LeaveBalanceAndFlightTicketTest extends TestCase
 
         Livewire::test(FlightTickets::class)
             ->assertCanSeeTableRecords([$ticket])
-            ->callTableAction('markPaid', $ticket, ['paid_at' => '2026-10-02']);
+            ->callAction(TestAction::make('markPaid')->table($ticket), ['paid_at' => '2026-10-02']);
 
         $this->assertTrue($ticket->fresh()->isPaid());
     }
@@ -322,16 +322,16 @@ class LeaveBalanceAndFlightTicketTest extends TestCase
 
         // Only a draft run is offered, and it is chosen already.
         Livewire::test(FlightTickets::class)
-            ->mountTableAction('payWithSalary', $ticket)
+            ->mountAction(TestAction::make('payWithSalary')->table($ticket))
             ->assertFormFieldExists('payroll_run_id', fn ($field): bool => array_keys($field->getOptions()) === [$run->id])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         // On the payslip already generated — and no longer offered.
         $this->assertSame($run->id, $ticket->fresh()->payroll_run_id);
         $this->assertSame('1500.00', $run->payslips()->sole()->flight_ticket_amount);
         Livewire::test(FlightTicketsRelationManager::class, ['ownerRecord' => $party->employeeProfile, 'pageClass' => EditEmployeeProfile::class])
-            ->assertTableActionHidden('payWithSalary', $ticket);
+            ->assertActionHidden(TestAction::make('payWithSalary')->table($ticket));
 
         $this->expectException(RuntimeException::class);
         app(FlightTicketService::class)->addToRun($ticket->fresh(), $run);
@@ -356,7 +356,7 @@ class LeaveBalanceAndFlightTicketTest extends TestCase
 
         Livewire::test(ViewPayrollRun::class, ['record' => $run->getRouteKey()])
             ->callAction('flight_tickets', ['tickets' => [$ticket->id]])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $this->assertSame($run->id, $ticket->fresh()->payroll_run_id);
         $this->assertSame('1500.00', $run->payslips()->sole()->flight_ticket_amount);

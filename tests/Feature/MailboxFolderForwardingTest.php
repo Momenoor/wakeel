@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\MMS\MailboxFolderForwarder;
 use App\Services\MMS\SenderMailer;
 use App\Services\MMS\SentFolder;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Mail\Events\MessageSent;
@@ -141,10 +142,10 @@ class MailboxFolderForwardingTest extends TestCase
 
         Livewire::test(MailboxFolders::class)
             ->assertCanSeeTableRecords([$this->yahoo])
-            ->callTableAction('add', data: ['address' => 'courts.box@yahoo.com', 'name' => 'Courts', 'host' => 'smtp.mail.yahoo.com', 'port' => 465, 'encryption' => 'ssl', 'username' => 'courts.box@yahoo.com', 'password' => 'app-password', 'collects' => false])
-            ->assertHasNoTableActionErrors()
-            ->callTableAction('add', data: ['address' => 'jpa.office@gmail.com', 'name' => 'Gmail', 'host' => 'smtp.gmail.com', 'port' => 465, 'encryption' => 'ssl', 'password' => 'app-password', 'collects' => false])
-            ->assertHasNoTableActionErrors();
+            ->callAction(TestAction::make('add')->table(), ['address' => 'courts.box@yahoo.com', 'name' => 'Courts', 'host' => 'smtp.mail.yahoo.com', 'port' => 465, 'encryption' => 'ssl', 'username' => 'courts.box@yahoo.com', 'password' => 'app-password', 'collects' => false])
+            ->assertHasNoFormErrors()
+            ->callAction(TestAction::make('add')->table(), ['address' => 'jpa.office@gmail.com', 'name' => 'Gmail', 'host' => 'smtp.gmail.com', 'port' => 465, 'encryption' => 'ssl', 'password' => 'app-password', 'collects' => false])
+            ->assertHasNoFormErrors();
 
         $added = MailSender::query()->firstWhere('address', 'courts.box@yahoo.com');
         $this->assertSame([true, false, MailSender::SMTP, 'courtsbox'], [$added->folders_only, $added->sends, $added->driver, $added->key]);
@@ -212,10 +213,10 @@ class MailboxFolderForwardingTest extends TestCase
             ->set('folder', 'Wakeel')
             ->assertSee(['Judgment', 'Hearing notice'])
             // From now on: its newest email the last gone on.
-            ->callTableAction('forwarding', data: ['forward_to' => 'files@jpa.ae', 'existing' => false])
-            ->assertHasNoTableActionErrors()
-            ->callTableAction('forward', '8', ['to' => 'lawyer@jpa.ae'])
-            ->assertHasNoTableActionErrors();
+            ->callAction(TestAction::make('forwarding')->table(), ['forward_to' => 'files@jpa.ae', 'existing' => false])
+            ->assertHasNoFormErrors()
+            ->callAction(TestAction::make('forward')->table('8'), ['to' => 'lawyer@jpa.ae'])
+            ->assertHasNoFormErrors();
 
         $forward = MailboxFolderForward::query()->sole();
         $this->assertSame(['Wakeel', 'files@jpa.ae', 9], [$forward->folder, $forward->forward_to, $forward->last_uid]);

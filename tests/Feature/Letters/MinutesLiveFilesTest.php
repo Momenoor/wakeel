@@ -11,6 +11,7 @@ use App\Models\MatterOneDriveFolder;
 use App\Models\Party;
 use App\Models\User;
 use App\Services\MMS\Letters\MinutesLiveFiles;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -165,17 +166,17 @@ class MinutesLiveFilesTest extends TestCase
         // The matter's folder as a file manager, picking for these minutes: nothing changed or downloaded, a
         // folder opened, a file shown — the page told, to close it and offer Hide the file.
         Livewire::test(MatterOneDriveFiles::class, ['matter' => $this->matter, 'pickForMinutes' => $this->minutes->getKey()])
-            ->assertTableActionHidden('upload')
-            ->assertTableActionHidden('newFolder')
-            ->assertTableActionHidden('download', 'file-id')
-            ->assertTableActionHidden('onedrive', 'file-id')
-            ->assertTableActionHidden('rename', 'file-id')
-            ->assertTableActionHidden('delete', 'file-id')
-            ->assertTableActionVisible('show', 'file-id')
-            ->assertTableActionHidden('show', 'sub-id')
-            ->callTableAction('open', 'sub-id')
+            ->assertActionHidden(TestAction::make('upload')->table())
+            ->assertActionHidden(TestAction::make('newFolder')->table())
+            ->assertActionHidden(TestAction::make('download')->table('file-id'))
+            ->assertActionHidden(TestAction::make('onedrive')->table('file-id'))
+            ->assertActionHidden(TestAction::make('rename')->table('file-id'))
+            ->assertActionHidden(TestAction::make('delete')->table('file-id'))
+            ->assertActionVisible(TestAction::make('show')->table('file-id'))
+            ->assertActionHidden(TestAction::make('show')->table('sub-id'))
+            ->callAction(TestAction::make('open')->table('sub-id'))
             ->assertCanSeeTableRecords(['inner-id'])
-            ->callTableAction('show', 'inner-id')
+            ->callAction(TestAction::make('show')->table('inner-id'))
             ->assertNotified(__('Shown on the live view'))
             ->assertDispatched('live-file-shown');
         $this->assertSame(['folder' => $this->folder->id, 'item' => 'inner-id', 'name' => 'letter.docx'], $this->minutes->fresh()->live_file);

@@ -19,7 +19,7 @@ class IncentiveMetaAdjustmentsOverviewWidget extends TableWidget
 
     protected int|string|array $columnSpan = 'full';
 
-    protected function getTableQuery(): Builder
+    protected function rowsQuery(): Builder
     {
         return IncentiveMetaAdjustment::query();
     }
@@ -27,6 +27,7 @@ class IncentiveMetaAdjustmentsOverviewWidget extends TableWidget
     public function table(Table $table): Table
     {
         return $table
+            ->query(fn (): Builder => $this->rowsQuery())
             ->heading(__('Meta Adjustments'))
             ->columns([
                 TextColumn::make('field_name')->label(__('Field Name'))->searchable()->sortable(),

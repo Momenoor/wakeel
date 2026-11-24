@@ -11,6 +11,7 @@ use App\Models\MatterParty;
 use App\Models\Party;
 use App\Models\User;
 use App\Services\MMS\PartyMerger;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
@@ -87,8 +88,8 @@ class PartyMergeTest extends TestCase
         $twin = Party::factory()->create(['name' => 'أحمد علي', 'phone' => ['0509999999']]);
 
         Livewire::test(ListParties::class)
-            ->callTableBulkAction('merge', [$kept, $twin], ['into' => $kept->id])
-            ->assertHasNoTableBulkActionErrors()
+            ->selectTableRecords([$kept, $twin])->callAction(TestAction::make('merge')->table()->bulk(), ['into' => $kept->id])
+            ->assertHasNoFormErrors()
             ->assertNotified(trans_choice(':count party merged into :into.|:count parties merged into :into.', 1, ['count' => 1, 'into' => 'أحمد']));
         $this->assertNull(Party::find($twin->id));
         $this->assertSame(['0501234567', '0509999999'], $kept->fresh()->phone);

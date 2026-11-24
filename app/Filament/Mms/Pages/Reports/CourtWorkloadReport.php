@@ -64,7 +64,7 @@ class CourtWorkloadReport extends Page implements HasTable
         return __('courts');
     }
 
-    protected function getTableQuery(): Builder
+    protected function rowsQuery(): Builder
     {
         $excluded = FeeType::excludedFromIncentiveValues();
         $placeholders = implode(',', array_fill(0, count($excluded), '?'));
@@ -89,7 +89,7 @@ class CourtWorkloadReport extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(fn () => $this->getTableQuery())
+            ->query(fn () => $this->rowsQuery())
             ->paginated(false)
             ->defaultSort('matters_count', 'desc')
             ->emptyStateHeading(__('No courts'))

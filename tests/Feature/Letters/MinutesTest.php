@@ -92,12 +92,12 @@ class MinutesTest extends TestCase
             'start_datetime' => now()->addDay()->setTime(16, 0), 'end_datetime' => now()->addDay()->setTime(17, 0), 'online_meeting_url' => 'https://teams.microsoft.com/l/abc']);
 
         $this->minutesPage()
-            ->mountTableAction('newMinutes')
+            ->mountAction(TestAction::make('newMinutes')->table())
             // The matter's next meeting, already chosen.
             ->assertSet('mountedActions.0.data.calendar_event_id', $event->id)
-            ->setTableActionData(['questions' => [['text' => 'عن طبيعة العلاقة بين الطرفين؟'], ['text' => 'عن المبالغ المترصدة؟']]])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->fillForm(['questions' => [['text' => 'عن طبيعة العلاقة بين الطرفين؟'], ['text' => 'عن المبالغ المترصدة؟']]])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $minutes = MatterMinutes::sole();
         $this->assertSame(1, $minutes->number);
@@ -105,7 +105,7 @@ class MinutesTest extends TestCase
         $this->assertSame('https://teams.microsoft.com/l/abc', $minutes->meeting_link);
         $this->assertSame(['عن طبيعة العلاقة بين الطرفين؟', 'عن المبالغ المترصدة؟'], array_column($minutes->items, 'text'));
 
-        $this->minutesPage()->callTableAction('newMinutes', data: ['meeting_at' => '2026-10-20 10:00:00']);
+        $this->minutesPage()->callAction(TestAction::make('newMinutes')->table(), ['meeting_at' => '2026-10-20 10:00:00']);
         $this->assertSame([1, 2], MatterMinutes::query()->orderBy('number')->pluck('number')->all());
     }
 
@@ -326,11 +326,11 @@ class MinutesTest extends TestCase
         $this->assertStringContainsString('<p>وأقفل المحضر.</p>', $html);
 
         $this->minutesPage()
-            ->mountTableAction('finalise', $minutes)
+            ->mountAction(TestAction::make('finalise')->table($minutes))
             ->assertSet('mountedActions.0.data.ended_at', fn ($value) => filled($value))
-            ->setTableActionData(['ended_at' => '2026-09-30 17:30:00'])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->fillForm(['ended_at' => '2026-09-30 17:30:00'])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $minutes->refresh();
         $this->assertSame('2026-09-30 17:30', $minutes->ended_at->format('Y-m-d H:i'));
@@ -595,7 +595,7 @@ class MinutesTest extends TestCase
         $defendant = Party::factory()->create(['name' => 'سعيد المدعى عليه']);
         MatterParty::create(['matter_id' => $this->matter->id, 'role' => 'party', 'type' => 'defendant', 'party_id' => $defendant->id]);
 
-        $this->minutesPage()->callTableAction('newMinutes', data: ['meeting_at' => '2026-10-20 10:00:00']);
+        $this->minutesPage()->callAction(TestAction::make('newMinutes')->table(), ['meeting_at' => '2026-10-20 10:00:00']);
         $second = MatterMinutes::query()->latest('id')->first();
 
         $start = array_values($this->recordPage($second)->get('data.attendees'));
@@ -839,7 +839,7 @@ class MinutesTest extends TestCase
             'number' => 1, 'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
 
         // From the minutes tab: to the page.
-        $this->minutesPage()->assertTableActionHasUrl('recordMeeting', RecordMinutes::getUrl(['record' => $this->matter, 'minutes' => $minutes]), $minutes);
+        $this->minutesPage()->assertActionHasUrl(TestAction::make('recordMeeting')->table($minutes), RecordMinutes::getUrl(['record' => $this->matter, 'minutes' => $minutes]));
 
         $page = $this->recordPage($minutes)
             ->assertOk()
@@ -885,7 +885,7 @@ class MinutesTest extends TestCase
         $other->save();
 
         $this->minutesPage()
-            ->mountTableAction('newMinutes')
+            ->mountAction(TestAction::make('newMinutes')->table())
             // The default template, with no letterhead of its own: the default letterhead.
             ->assertSet('mountedActions.0.data.letter_template_id', $template->id)
             ->assertSet('mountedActions.0.data.letterhead_id', $default->id)
@@ -1019,7 +1019,7 @@ class MinutesTest extends TestCase
         $minutes = MatterMinutes::create(['matter_id' => $this->matter->id, 'letter_template_id' => $template->id, 'number' => 1,
             'meeting_at' => '2026-09-30 16:00:00', 'status' => MatterMinutes::DRAFT]);
 
-        $this->minutesPage()->callTableAction('finalise', $minutes)->assertHasNoTableActionErrors();
+        $this->minutesPage()->callAction(TestAction::make('finalise')->table($minutes))->assertHasNoFormErrors();
 
         $minutes->refresh();
         $this->assertTrue($minutes->isFinal());
@@ -1033,7 +1033,7 @@ class MinutesTest extends TestCase
         $this->assertStringContainsString('محضر الخبرة الحسابية', MinutesService::composer($minutes->fresh())->bodyHtml());
 
         // Final: no more recording, until reopened.
-        $this->minutesPage()->assertTableActionHidden('recordMeeting', $minutes)->callTableAction('reopen', $minutes);
+        $this->minutesPage()->assertActionHidden(TestAction::make('recordMeeting')->table($minutes))->callAction(TestAction::make('reopen')->table($minutes));
         $this->assertFalse($minutes->fresh()->isFinal());
     }
 }

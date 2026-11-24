@@ -110,7 +110,7 @@ class EmployeeRequestsTest extends TestCase
         $this->actingAs($this->approver);
         Livewire::test(ListEmployeeRequests::class)
             ->callAction(TestAction::make('approve')->table($request), ['amount' => 2400, 'months' => 8, 'starts_on' => '2027-01-01', 'approved_comment' => 'Over eight months'])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $request->refresh();
         $this->assertSame([RequestStatus::APPROVED, '2400.00', 8, '2027-01-01', $this->approver->id], [$request->status, $request->amount, $request->months, $request->starts_on->toDateString(), $request->approved_by]);
@@ -125,7 +125,7 @@ class EmployeeRequestsTest extends TestCase
         $this->actingAs($this->accountant);
         Livewire::test(ViewEmployeeRequest::class, ['record' => $request->getKey()])
             ->callAction('markPaid', ['paid_on' => '2026-10-22', 'payment_note' => 'Transfer 991'])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $loan = EmployeeLoan::sole();
         $this->assertSame([LoanKind::LOAN, LoanStatus::ACTIVE, '2400.00', 8, $this->party()->id], [$loan->kind, $loan->status, $loan->principal, $loan->months, $loan->party_id]);
@@ -188,7 +188,7 @@ class EmployeeRequestsTest extends TestCase
         $this->actingAs($this->approver);
         Livewire::test(ListEmployeeRequests::class)
             ->callAction(TestAction::make('approve')->table($request), ['letter_template_id' => $template->id, 'addressed_to' => 'Emirates NBD — Deira'])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $certificate = $request->fresh()->certificate();
         $this->assertNotNull($certificate);

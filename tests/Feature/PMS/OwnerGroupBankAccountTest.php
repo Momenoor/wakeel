@@ -94,7 +94,7 @@ class OwnerGroupBankAccountTest extends TestCase
 
         Livewire::test(PropertiesRelationManager::class, ['ownerRecord' => $group, 'pageClass' => EditOwnerGroup::class])
             ->callAction(TestAction::make('add_property')->table(), ['property_id' => $property->id, 'owner_group_bank_account_id' => $account->id])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $property->refresh();
         $this->assertSame($group->id, $property->owner_group_id);

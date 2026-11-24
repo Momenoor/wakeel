@@ -6,6 +6,7 @@ use App\Filament\Mms\Resources\EmployeeProfiles\Pages\ListEmployeeProfiles;
 use App\Models\EmployeeProfile;
 use App\Models\Party;
 use App\Models\User;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
@@ -44,8 +45,8 @@ class EmployeeProfileBulkActionsTest extends TestCase
         $untouched = $this->profile();
 
         Livewire::test(ListEmployeeProfiles::class)
-            ->callTableBulkAction('flight_ticket', [$a, $b], ['flight_ticket_entitled' => true, 'flight_ticket_amount' => 2000])
-            ->assertHasNoTableBulkActionErrors();
+            ->selectTableRecords([$a, $b])->callAction(TestAction::make('flight_ticket')->table()->bulk(), ['flight_ticket_entitled' => true, 'flight_ticket_amount' => 2000])
+            ->assertHasNoFormErrors();
 
         $this->assertTrue($a->fresh()->flight_ticket_entitled);
         $this->assertSame('2000.00', $a->fresh()->flight_ticket_amount);
@@ -54,7 +55,7 @@ class EmployeeProfileBulkActionsTest extends TestCase
 
         // No amount given: each keeps their own.
         Livewire::test(ListEmployeeProfiles::class)
-            ->callTableBulkAction('flight_ticket', [$a], ['flight_ticket_entitled' => true, 'flight_ticket_amount' => null]);
+            ->selectTableRecords([$a])->callAction(TestAction::make('flight_ticket')->table()->bulk(), ['flight_ticket_entitled' => true, 'flight_ticket_amount' => null]);
 
         $this->assertSame('2000.00', $a->fresh()->flight_ticket_amount);
     }
@@ -65,9 +66,9 @@ class EmployeeProfileBulkActionsTest extends TestCase
         $b = $this->profile(['include_in_salary_authorization_form' => true, 'is_eosg_applicable' => true]);
 
         Livewire::test(ListEmployeeProfiles::class)
-            ->callTableBulkAction('salary_form', [$a, $b], ['value' => false])
-            ->callTableBulkAction('eosg', [$a], ['value' => false])
-            ->callTableBulkAction('mark_left', [$b], ['date_of_leaving' => '2026-09-30']);
+            ->selectTableRecords([$a, $b])->callAction(TestAction::make('salary_form')->table()->bulk(), ['value' => false])
+            ->selectTableRecords([$a])->callAction(TestAction::make('eosg')->table()->bulk(), ['value' => false])
+            ->selectTableRecords([$b])->callAction(TestAction::make('mark_left')->table()->bulk(), ['date_of_leaving' => '2026-09-30']);
 
         $this->assertFalse($a->fresh()->include_in_salary_authorization_form);
         $this->assertFalse($b->fresh()->include_in_salary_authorization_form);
@@ -82,7 +83,7 @@ class EmployeeProfileBulkActionsTest extends TestCase
         $keep = $this->profile();
 
         Livewire::test(ListEmployeeProfiles::class)
-            ->callTableBulkAction('delete', [$a]);
+            ->selectTableRecords([$a])->callAction(TestAction::make('delete')->table()->bulk());
 
         $this->assertSoftDeleted($a);
         $this->assertNotSoftDeleted($keep);

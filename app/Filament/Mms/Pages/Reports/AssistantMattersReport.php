@@ -61,7 +61,7 @@ class AssistantMattersReport extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(fn () => $this->getTableQuery())
+            ->query(fn () => $this->rowsQuery())
             ->striped()
             ->extraAttributes(['class' => 'custom-compact-table [&_table]:text-xs'])
             // It used to load every assistant-matter row of every year at
@@ -69,7 +69,7 @@ class AssistantMattersReport extends Page implements HasTable
             // — Print still prints them all (ReportPrintAction).
             ->paginated([25, 50, 100, 'all'])
             ->defaultPaginationPageOption(25)
-            ->deferLoading()
+            ->lazyLoaded()
             ->columns([
 
                 // ── Matter Reference ──────────────────────────────────────
@@ -288,7 +288,7 @@ class AssistantMattersReport extends Page implements HasTable
 
     // ── Query ─────────────────────────────────────────────────────────────────
 
-    protected function getTableQuery(): Builder
+    protected function rowsQuery(): Builder
     {
         return MatterParty::query()
             ->where('matter_party.role', 'expert')

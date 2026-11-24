@@ -17,6 +17,7 @@ use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\MatterOneDriveExplorer;
 use App\Services\MMS\SentFolder;
 use App\Support\RequestMemo;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Filament\Support\Exceptions\Halt;
@@ -139,7 +140,7 @@ class MatterOneDriveFilesTest extends TestCase
             ->assertSee('report.pdf')
             ->assertSee('2 KB');
 
-        $page->callTableAction('open', 'sub-id')
+        $page->callAction(TestAction::make('open')->table('sub-id'))
             ->assertSet('trail', [['id' => 'sub-id', 'name' => '01 المراسلات']])
             ->assertCanSeeTableRecords(['inner-id'])
             ->assertCanNotSeeTableRecords(['file-id']);
@@ -154,13 +155,13 @@ class MatterOneDriveFilesTest extends TestCase
         $this->assertSame(1, $this->listings);
 
         // Browsing, searching, coming back: as kept.
-        $page->callTableAction('open', 'sub-id')->call('goTo', -1)->searchTable('report')->searchTable('');
+        $page->callAction(TestAction::make('open')->table('sub-id'))->call('goTo', -1)->searchTable('report')->searchTable('');
         $this->assertSame(2, $this->listings);
 
         // Refresh: read again — each folder of it.
-        $page->callTableAction('refresh');
+        $page->callAction(TestAction::make('refresh')->table());
         $this->assertSame(3, $this->listings);
-        $page->callTableAction('open', 'sub-id');
+        $page->callAction(TestAction::make('open')->table('sub-id'));
         $this->assertSame(4, $this->listings);
 
         // The matter opened again: afresh.
@@ -175,17 +176,17 @@ class MatterOneDriveFilesTest extends TestCase
         $this->assertSame(0, $this->lookups);
 
         // Read from inside the matter's folder: opened, renamed with no question to OneDrive.
-        $page->callTableAction('open', 'sub-id')->callTableAction('rename', 'inner-id', ['name' => 'x.docx']);
+        $page->callAction(TestAction::make('open')->table('sub-id'))->callAction(TestAction::make('rename')->table('inner-id'), ['name' => 'x.docx']);
         $this->assertSame(0, $this->lookups);
 
         // A download: only its link asked for — not where it is.
-        $page->call('goTo', -1)->callTableAction('download', 'file-id');
+        $page->call('goTo', -1)->callAction(TestAction::make('download')->table('file-id'));
         $this->assertSame(1, $this->lookups);
 
         // One request, the matter read once.
-        $page->mountTableAction('rename', 'file-id')->setTableActionData(['name' => 'y.pdf']);
+        $page->mountAction(TestAction::make('rename')->table('file-id'))->fillForm(['name' => 'y.pdf']);
         DB::enableQueryLog();
-        $page->callMountedTableAction();
+        $page->callMountedAction();
         $this->assertSame(1, collect(DB::getQueryLog())->filter(fn ($q) => preg_match('/from "matters" where "matters"."id" = \?/', $q['query']))->count());
     }
 
@@ -194,13 +195,13 @@ class MatterOneDriveFilesTest extends TestCase
         Storage::fake('local');
 
         $this->page()
-            ->callTableAction('newFolder', data: ['name' => 'جديد'])
+            ->callAction(TestAction::make('newFolder')->table(), ['name' => 'جديد'])
             ->assertDispatched('matter-changed');
     }
 
     public function test_a_file_is_downloaded_by_its_short_lived_link(): void
     {
-        $this->page()->callTableAction('download', 'file-id')->assertRedirect('https://download.od/report.pdf');
+        $this->page()->callAction(TestAction::make('download')->table('file-id'))->assertRedirect('https://download.od/report.pdf');
     }
 
     public function test_files_are_uploaded_and_folders_made_renamed_and_deleted_there(): void
@@ -208,11 +209,11 @@ class MatterOneDriveFilesTest extends TestCase
         Storage::fake('local');
 
         $this->page()
-            ->callTableAction('open', 'sub-id')
+            ->callAction(TestAction::make('open')->table('sub-id'))
             ->callAction('upload', ['files' => [UploadedFile::fake()->create('مذكرة.pdf', 5, 'application/pdf')]])
             ->callAction('newFolder', ['name' => 'من المدعي: 2026'])
-            ->callTableAction('rename', 'inner-id', ['name' => 'letter-2.docx'])
-            ->callTableAction('delete', 'inner-id')
+            ->callAction(TestAction::make('rename')->table('inner-id'), ['name' => 'letter-2.docx'])
+            ->callAction(TestAction::make('delete')->table('inner-id'))
             ->assertHasNoErrors();
 
         $this->assertSame(['PUT', 'POST', 'PATCH', 'DELETE'], array_column($this->changes, 'method'));
@@ -257,11 +258,11 @@ class MatterOneDriveFilesTest extends TestCase
         $this->assertSame([$this->folder->id.'|inner-id'], array_keys($field->getSearchResults('letter')));
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('email', $letter)
-            ->setTableActionData(['sender' => 'iflas', 'onedrive_files' => [$this->folder->id.'|file-id']])
+            ->mountAction(TestAction::make('email')->table($letter))
+            ->fillForm(['sender' => 'iflas', 'onedrive_files' => [$this->folder->id.'|file-id']])
             ->assertMountedActionModalSee('report.pdf')
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $files = collect($sent[0]->getAttachments())->mapWithKeys(fn ($part) => [$part->getFilename() => $part->getBody()]);
         $this->assertSame('%PDF-report', $files['report.pdf']);
@@ -381,7 +382,7 @@ class MatterOneDriveFilesTest extends TestCase
 
         $page = $this->page()
             ->assertSee(__('Failed').' — No OneDrive account')
-            ->assertTableActionHidden('upload');
+            ->assertActionHidden(TestAction::make('upload')->table());
 
         // Made meanwhile (Create folders): shown when asked.
         $pending->update(['status' => MatterOneDriveFolder::CREATED, 'drive_item_id' => 'root-id']);
@@ -402,7 +403,7 @@ class MatterOneDriveFilesTest extends TestCase
         $this->actingAs($user->fresh());
         $this->page()
             ->assertCanSeeTableRecords(['file-id'])
-            ->assertTableActionHidden('upload')
-            ->assertTableActionHidden('delete', 'file-id');
+            ->assertActionHidden(TestAction::make('upload')->table())
+            ->assertActionHidden(TestAction::make('delete')->table('file-id'));
     }
 }

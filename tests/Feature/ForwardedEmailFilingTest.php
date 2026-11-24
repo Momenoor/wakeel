@@ -17,6 +17,7 @@ use App\Services\MMS\ForwardedEmail;
 use App\Services\MMS\ForwardedEmailFiler;
 use App\Services\MMS\MatterReplyCollector;
 use App\Services\MMS\SentFolder;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -307,9 +308,9 @@ class ForwardedEmailFilingTest extends TestCase
         $this->assertSame(['عقد.pdf'], array_column($email->fileLinks(attachmentsOnly: true), 'name'));
 
         Livewire::test(UnfiledEmails::class)
-            ->assertTableActionVisible('attachments', $email)
-            ->assertTableActionHidden('attachments', $bare)
-            ->mountTableAction('attachments', $email)
+            ->assertActionVisible(TestAction::make('attachments')->table($email))
+            ->assertActionHidden(TestAction::make('attachments')->table($bare))
+            ->mountAction(TestAction::make('attachments')->table($email))
             ->assertMountedActionModalSee('عقد.pdf')
             ->assertMountedActionModalDontSee('email.eml');
     }

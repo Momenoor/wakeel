@@ -67,7 +67,7 @@ class TypeProfitabilityReport extends Page implements HasTable
         return __('types');
     }
 
-    protected function getTableQuery(): Builder
+    protected function rowsQuery(): Builder
     {
         $excluded = FeeType::excludedFromIncentiveValues();
         $placeholders = implode(',', array_fill(0, count($excluded), '?'));
@@ -103,7 +103,7 @@ class TypeProfitabilityReport extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(fn () => $this->getTableQuery())
+            ->query(fn () => $this->rowsQuery())
             // 50 rows a page (All for printing — see ReportPrintAction): every row at
             // once made pages of many megabytes, seconds to build.
             ->paginated([25, 50, 100, 'all'])

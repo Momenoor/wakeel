@@ -82,7 +82,7 @@ class RegenerateFromTemplateTest extends TestCase
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
             ->callAction(TestAction::make('regenerateFromTemplate')->table($letter), ['template_letterhead' => true])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $letter->refresh();
         // The new wording and format, with its own data.
@@ -122,7 +122,7 @@ class RegenerateFromTemplateTest extends TestCase
 
         Livewire::test(MinutesRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
             ->callAction(TestAction::make('regenerateFromTemplate')->table($minutes), ['template_letterhead' => false])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $minutes->refresh();
         $this->assertStringContainsString('محضر بالصيغة الجديدة', MinutesService::composer($minutes)->bodyHtml());

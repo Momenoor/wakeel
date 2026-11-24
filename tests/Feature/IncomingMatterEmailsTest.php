@@ -33,6 +33,7 @@ use App\Services\MMS\ReceivedEmailFiling;
 use App\Services\MMS\SentFolder;
 use App\Services\Notifications\NotificationPreferences as Prefs;
 use App\Support\Tolerant;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Factory;
@@ -198,8 +199,8 @@ class IncomingMatterEmailsTest extends TestCase
         // A person chooses.
         Livewire::test(UnfiledEmails::class)
             ->assertCanSeeTableRecords([$email])
-            ->callTableAction('file', $email, ['matter_id' => $this->first->id])
-            ->assertHasNoTableActionErrors();
+            ->callAction(TestAction::make('file')->table($email), ['matter_id' => $this->first->id])
+            ->assertHasNoFormErrors();
 
         $email->refresh();
         $this->assertSame([$this->first->id, MatterEmail::FILED, MatterEmail::BY_HAND], [$email->matter_id, $email->status, $email->matched_by]);
@@ -219,7 +220,7 @@ class IncomingMatterEmailsTest extends TestCase
         $this->collect($this->email());
         $email = MatterEmail::sole();
 
-        Livewire::test(UnfiledEmails::class)->callTableAction('dismiss', $email);
+        Livewire::test(UnfiledEmails::class)->callAction(TestAction::make('dismiss')->table($email));
 
         $this->assertSame(MatterEmail::DISMISSED, $email->refresh()->status);
         $this->assertSame([], Storage::disk('public')->allFiles('email-unfiled'));
@@ -317,7 +318,7 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertSame(1, $assistant->unreadNotifications()->count());
         $otherAdmin = User::factory()->create()->assignRole('super-admin');
 
-        Livewire::test(UnfiledEmails::class)->callTableAction('file', $email, ['matter_id' => $this->first->id]);
+        Livewire::test(UnfiledEmails::class)->callAction(TestAction::make('file')->table($email), ['matter_id' => $this->first->id]);
 
         // The question answered, for everyone; the email on its matter told, about emails.
         $emails = fn (User $user) => TabbedDatabaseNotifications::onlyEmails($user->notifications())
@@ -339,11 +340,11 @@ class IncomingMatterEmailsTest extends TestCase
         Queue::fake();
 
         Livewire::test(UnfiledEmails::class)
-            ->callTableAction('file', $email, ['matter_id' => $this->first->id])
+            ->callAction(TestAction::make('file')->table($email), ['matter_id' => $this->first->id])
             ->assertNotified(__('Being filed on matter :matter: you are told in the bell when it is done.', ['matter' => $this->first->year.'/'.$this->first->number]))
             // Being filed: said so, and not filed twice.
             ->assertSee(__('Being filed…'))
-            ->assertTableActionHidden('file', $email);
+            ->assertActionHidden(TestAction::make('file')->table($email));
         Queue::assertPushed(FileUnfiledEmail::class, 1);
         $this->assertSame(MatterEmail::PENDING, $email->fresh()->status);
 
@@ -361,10 +362,10 @@ class IncomingMatterEmailsTest extends TestCase
         config(['queue.default' => 'database']);
         Queue::fake();
         Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->first, 'pageClass' => ViewMatter::class])
-            ->callTableAction('regenerate', $email)
+            ->callAction(TestAction::make('regenerate')->table($email))
             ->assertNotified(__('Being made again: you are told in the bell when it is done.'))
             ->assertSee(__('PDF being made again…'))
-            ->assertTableActionHidden('regenerate', $email);
+            ->assertActionHidden(TestAction::make('regenerate')->table($email));
         Queue::assertPushed(RegenerateEmail::class, 1);
         $this->assertSame(EmailJob::BUSY, (new FileUnfiledEmail($email->id, $this->second->id, $this->user->id))->start());
     }
@@ -381,8 +382,8 @@ class IncomingMatterEmailsTest extends TestCase
         [$one, $two, $three, $four] = MatterEmail::orderBy('id')->get()->all();
 
         Livewire::test(UnfiledEmails::class)
-            ->callTableBulkAction('fileAll', [$one, $two], ['matter_id' => $this->first->id])
-            ->callTableBulkAction('dismissAll', [$three]);
+            ->selectTableRecords([$one, $two])->callAction(TestAction::make('fileAll')->table()->bulk(), ['matter_id' => $this->first->id])
+            ->selectTableRecords([$three])->callAction(TestAction::make('dismissAll')->table()->bulk());
 
         $this->assertSame([MatterEmail::FILED, MatterEmail::FILED, MatterEmail::DISMISSED], [$one->fresh()->status, $two->fresh()->status, $three->fresh()->status]);
         $this->assertSame([$this->first->id, $this->first->id], [$one->fresh()->matter_id, $two->fresh()->matter_id]);
@@ -390,7 +391,7 @@ class IncomingMatterEmailsTest extends TestCase
         // Made again, each in the background.
         config(['queue.default' => 'database']);
         Queue::fake();
-        Livewire::test(UnfiledEmails::class)->callTableBulkAction('regenerateAll', [$four]);
+        Livewire::test(UnfiledEmails::class)->selectTableRecords([$four])->callAction(TestAction::make('regenerateAll')->table()->bulk());
         Queue::assertPushed(RegenerateEmail::class, 1);
     }
 
@@ -448,7 +449,7 @@ class IncomingMatterEmailsTest extends TestCase
 
         // Filed by hand, and then moved to the other matter: each told.
         $waiting = MatterEmail::where('status', MatterEmail::PENDING)->sole();
-        Livewire::test(UnfiledEmails::class)->callTableAction('file', $waiting, ['matter_id' => $this->first->id]);
+        Livewire::test(UnfiledEmails::class)->callAction(TestAction::make('file')->table($waiting), ['matter_id' => $this->first->id]);
         $both(3);
         app(MatterReplyCollector::class)->move($waiting->fresh(), $this->second, $this->user->id);
         $both(4);
@@ -627,11 +628,11 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertSame('Saved · 2 links to save', (clone $with)->forceFill(['onedrive' => ['attachments' => 2], ...$links])->oneDriveLabel('attachments'));
         $this->assertSame('Not saved · 2 links to save', (clone $with)->forceFill(['onedrive' => ['attachments' => 0], ...$links])->oneDriveLabel('attachments'));
         // The PDF of one that came in opens; its details list the files it came with.
-        $page->assertTableActionVisible('open', $received)
-            ->assertTableActionHidden('open', $sent)
-            ->assertTableActionExists('view', record: $received);
+        $page->assertActionVisible(TestAction::make('open')->table($received))
+            ->assertActionHidden(TestAction::make('open')->table($sent))
+            ->assertActionExists(TestAction::make('view')->table($received));
 
-        $page->mountTableAction('view', $received)
+        $page->mountAction(TestAction::make('view')->table($received))
             ->assertMountedActionModalSee([
                 $received->files[0]['name'].' ('.__('the email as PDF').')',
                 MatterEmail::fileUrl($received->files[0]['path'], $received->files[0]['name']),
@@ -716,7 +717,7 @@ class IncomingMatterEmailsTest extends TestCase
         Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->second, 'pageClass' => ViewMatter::class])
             ->assertTableColumnStateSet('attachments_saved', 'Without attachment, 1 download link', $linked)
             ->assertTableColumnStateSet('attachments_saved', 'Without attachment', $plain)
-            ->mountTableAction('view', $linked)
+            ->mountAction(TestAction::make('view')->table($linked))
             ->assertMountedActionModalSee(['Download links', 'ملف القضية', 'https://drive.google.com/file/d/1AbC/view']);
     }
 
@@ -728,10 +729,10 @@ class IncomingMatterEmailsTest extends TestCase
         [$linked, $plain] = MatterEmail::where('status', MatterEmail::PENDING)->orderBy('id')->get()->all();
 
         Livewire::test(UnfiledEmails::class)
-            ->assertTableActionVisible('downloadLinks', $linked)
-            ->assertTableActionHidden('downloadLinks', $plain)
-            ->assertTableActionHasLabel('downloadLinks', 'Download links (1)', $linked)
-            ->mountTableAction('downloadLinks', $linked)
+            ->assertActionVisible(TestAction::make('downloadLinks')->table($linked))
+            ->assertActionHidden(TestAction::make('downloadLinks')->table($plain))
+            ->assertActionHasLabel(TestAction::make('downloadLinks')->table($linked), 'Download links (1)')
+            ->mountAction(TestAction::make('downloadLinks')->table($linked))
             ->assertMountedActionModalSee(['رابط التحميل', 'https://we.tl/t-XyZ']);
     }
 
@@ -760,7 +761,7 @@ class IncomingMatterEmailsTest extends TestCase
         $held = MatterEmail::where('status', MatterEmail::PENDING)->sole();
         $this->assertSame('source', collect($held->files)->last()['kind']);
         $uploads = count($this->uploads);
-        Livewire::test(UnfiledEmails::class)->callTableAction('file', $held, ['matter_id' => $this->first->id]);
+        Livewire::test(UnfiledEmails::class)->callAction(TestAction::make('file')->table($held), ['matter_id' => $this->first->id]);
 
         $held->refresh();
         $this->assertSame(['pdf' => true, 'eml' => true, 'attachments' => 1], collect($held->onedrive)->except('folder')->all());
@@ -1089,7 +1090,7 @@ class IncomingMatterEmailsTest extends TestCase
         Livewire::test(EmailsRelationManager::class, [
             'ownerRecord' => $this->first,
             'pageClass' => ViewMatter::class,
-        ])->callTableAction('move', $email, ['matter_id' => $this->second->id])->assertHasNoTableActionErrors();
+        ])->callAction(TestAction::make('move')->table($email), ['matter_id' => $this->second->id])->assertHasNoFormErrors();
 
         $email->refresh();
         $this->assertSame([$this->second->id, MatterEmail::BY_HAND], [$email->matter_id, $email->matched_by]);
@@ -1211,7 +1212,7 @@ class IncomingMatterEmailsTest extends TestCase
         // Set aside on the page: the counts follow at once, not on the next visit.
         $page = Livewire::test(UnfiledEmails::class);
         $this->assertEquals(2, $page->instance()->getCachedTabs()[UnfiledEmails::ALL]->getBadge());
-        $page->callTableAction('dismiss', $third);
+        $page->callAction(TestAction::make('dismiss')->table($third));
         $this->assertEquals(1, $page->instance()->getCachedTabs()[UnfiledEmails::ALL]->getBadge());
         $third->refresh();
         // Every mailbox of the list has its tab, with nothing waiting in it too.
@@ -1220,7 +1221,7 @@ class IncomingMatterEmailsTest extends TestCase
         $third->delete();
 
         // Filed by hand on any matter.
-        Livewire::test(UnfiledEmails::class)->callTableAction('file', $email, ['matter_id' => $this->second->id]);
+        Livewire::test(UnfiledEmails::class)->callAction(TestAction::make('file')->table($email), ['matter_id' => $this->second->id]);
         $this->assertSame([$this->second->id, MatterEmail::FILED], [$email->refresh()->matter_id, $email->status]);
 
         // Switched off for the mailbox: a stranger's is left in it again.
@@ -1274,7 +1275,7 @@ class IncomingMatterEmailsTest extends TestCase
 
         // "Ignore sender": theirs set aside, the colleague's left.
         $first = MatterEmail::query()->where('from', 'like', '%News@Shop.com%')->firstOrFail();
-        Livewire::test(UnfiledEmails::class)->callTableAction('ignore', $first);
+        Livewire::test(UnfiledEmails::class)->callAction(TestAction::make('ignore')->table($first));
         $this->assertSame(['news@shop.com'], MatterReplyCollector::ignoredSenders());
         $this->assertSame(['sales@shop.com'], MatterEmail::pending()->pluck('from')->map(fn ($from) => MatterEmail::addressOf($from))->all());
 
@@ -1315,21 +1316,21 @@ class IncomingMatterEmailsTest extends TestCase
             ->removeTableFilters();
 
         // Its details opened: read by me, and I am listed as its reader.
-        $page->mountTableAction('view', $received);
+        $page->mountAction(TestAction::make('view')->table($received));
         $this->assertTrue($received->fresh()->isReadBy($this->user));
         $this->assertNull(EmailsRelationManager::getBadge($this->second, ViewMatter::class));
         Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->second, 'pageClass' => ViewMatter::class])
             ->assertTableColumnStateSet('read_by', [$this->user->name], $received)
             ->assertTableColumnStateSet('read_by', [$this->user->name.' ('.__('sent it').')'], $sent)
             // Unread again, for me alone.
-            ->callTableAction('markUnread', $received);
+            ->callAction(TestAction::make('markUnread')->table($received));
         $this->assertFalse($received->fresh()->isReadBy($this->user));
 
         // The colleague has their own: both unread, till they mark one read or open the other from the list.
         $this->actingAs($colleague);
         $this->assertSame('2', EmailsRelationManager::getBadge($this->second, ViewMatter::class));
         Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->second, 'pageClass' => ViewMatter::class])
-            ->callTableAction('markRead', $sent)
+            ->callAction(TestAction::make('markRead')->table($sent))
             ->call('markEmailRead', $received->id);
         $this->assertNull(EmailsRelationManager::getBadge($this->second, ViewMatter::class));
         $this->assertEqualsCanonicalizing([$colleague->id], $received->fresh()->reads->pluck('user_id')->all());
@@ -1377,7 +1378,7 @@ class IncomingMatterEmailsTest extends TestCase
         // No folder of the PDF's name beside it.
         $this->assertNotContains(pathinfo($email->files[0]['name'], PATHINFO_FILENAME), $made());
         Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->second, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('view', $email)
+            ->mountAction(TestAction::make('view')->table($email))
             ->assertMountedActionModalSee([__('Attachments folder'), '02 المستندات/'.$capacity]);
 
         // From no side: the general attachments folder — named for who sent it.
@@ -1453,7 +1454,7 @@ class IncomingMatterEmailsTest extends TestCase
 
         // Said in its details.
         Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->second, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('view', $email)
+            ->mountAction(TestAction::make('view')->table($email))
             ->assertMountedActionModalSee([__('Also saved as'), 'وارد المدعي/1']);
 
         // The folder renamed: the copy's record follows.
@@ -1482,13 +1483,13 @@ class IncomingMatterEmailsTest extends TestCase
         $new->update(['parent_id' => null]);
         $this->assertSame([$sent->id], $new->fresh()->mayAnswer()->modelKeys());
         Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->second, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('linkReply', $new)
-            ->assertTableActionDataSet(['sent_id' => $sent->id])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->mountAction(TestAction::make('linkReply')->table($new))
+            ->assertSchemaStateSet(['sent_id' => $sent->id])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
         $this->assertSame($sent->id, $new->fresh()->parent_id);
         Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->second, 'pageClass' => ViewMatter::class])
-            ->assertTableActionHidden('linkReply', $new);
+            ->assertActionHidden(TestAction::make('linkReply')->table($new));
     }
 
     public function test_an_email_written_from_outlook_cut_off_half_way_is_kept_again_not_taken_for_a_copy(): void

@@ -46,6 +46,6 @@ class MattersRelationManager extends RelationManager
             ->actions([
                 ViewAction::make(),
             ])
-            ->bulkActions([]);
+            ->toolbarActions([]);
     }
 }

@@ -16,6 +16,7 @@ use App\Models\Court;
 use App\Models\Matter;
 use App\Models\MatterRequest;
 use App\Models\User;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -86,7 +87,7 @@ class GlobalSearchTest extends TestCase
 
         // Opens in the list's view modal, though the list shows upcoming events by default.
         $page = Livewire::test(ListCalendarEvents::class)
-            ->mountTableAction('view', $event->getKey())
+            ->mountAction(TestAction::make('view')->table($event->getKey()))
             ->assertHasNoErrors();
 
         $this->assertTrue($page->instance()->getMountedAction()?->getRecord()?->is($event));

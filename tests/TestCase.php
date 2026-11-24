@@ -39,6 +39,10 @@ abstract class TestCase extends BaseTestCase
         // Attached files go to the private disk: never the real one from a test.
         Storage::fake('attachments');
 
+        // A test that ran the cron link (CronWebhookRunner) left set_time_limit(110) on the whole run: the clock
+        // counts from that call, and a test some minutes later was killed half-way (a full run only).
+        @set_time_limit(0);
+
         $connection = config('database.default');
         $database = config("database.connections.{$connection}.database");
 

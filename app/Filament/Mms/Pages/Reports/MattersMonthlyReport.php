@@ -52,7 +52,7 @@ class MattersMonthlyReport extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(fn () => $this->getTableQuery())
+            ->query(fn () => $this->rowsQuery())
             ->paginated(false)
             ->defaultSort('id', 'desc')
             ->columns([
@@ -174,7 +174,7 @@ class MattersMonthlyReport extends Page implements HasTable
             ]);
     }
 
-    protected function getTableQuery(): Builder
+    protected function rowsQuery(): Builder
     {
         $filters = $this->tableFilters;
         [$receivedFrom, $receivedUntil] = $this->receivedDateRange();

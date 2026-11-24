@@ -79,11 +79,11 @@ class IncentiveAdjustmentTest extends TestCase
             ->callAction(TestAction::make('addAdjustment')->table(), data: [
                 'type' => IncentiveAdjustmentType::ADDITION->value, 'party_id' => $this->assistant->id, 'amount' => 500, 'reason' => 'Above target',
             ])
-            ->assertHasNoActionErrors()
+            ->assertHasNoFormErrors()
             ->callAction(TestAction::make('addAdjustment')->table(), data: [
                 'type' => IncentiveAdjustmentType::DEDUCTION->value, 'party_id' => $this->assistant->id, 'amount' => 300, 'reason' => 'Late file',
             ])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         // Run again: kept as entered.
         $this->calculator->calculate($this->calculation);
@@ -101,7 +101,7 @@ class IncentiveAdjustmentTest extends TestCase
         // Removed: gone from the total.
         $deduction = IncentiveAdjustment::where('type', IncentiveAdjustmentType::DEDUCTION)->sole();
         $line = IncentiveAssistantLine::where('incentive_adjustment_id', $deduction->id)->sole();
-        $this->widget()->callAction(TestAction::make('removeAdjustment')->table($line))->assertHasNoActionErrors();
+        $this->widget()->callAction(TestAction::make('removeAdjustment')->table($line))->assertHasNoFormErrors();
 
         $this->assertSame(2500.0, $this->calculator->payableByParty($this->calculation)[$this->assistant->id]);
         $this->assertSame(1, IncentiveAdjustment::count());
@@ -128,7 +128,7 @@ class IncentiveAdjustmentTest extends TestCase
             ->callAction(TestAction::make('addAdjustmentFor')->table($row), data: [
                 'type' => IncentiveAdjustmentType::DEDUCTION->value, 'amount' => 250, 'reason' => 'Damaged file',
             ])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $adjustment = IncentiveAdjustment::sole();
         $this->assertSame([$this->assistant->id, IncentiveAdjustmentType::DEDUCTION], [$adjustment->party_id, $adjustment->type]);

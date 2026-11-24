@@ -49,9 +49,4 @@ class MattersRelationManager extends RelationManager
             ->toolbarActions([])
             ->emptyStateHeading(__('No matters found for this party'));
     }
-
-    //    public function getTableQuery(): Builder|Relation|null
-    //    {
-    //        return parent::getTableQuery()->where('party_id', $this->ownerRecord->id);
-    //    }
 }

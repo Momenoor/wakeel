@@ -201,7 +201,7 @@ class IncentiveFeeReversalTest extends TestCase
 
         Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])
             ->callAction(TestAction::make('creditNote')->schemaComponent('fees.0', 'infolist'), ['amount' => 1050, 'is_vat_included' => true, 'number' => 'CN-3', 'date' => '2026-06-20'])
-            ->assertHasNoActionErrors()
+            ->assertHasNoFormErrors()
             ->assertSee('CN-3');
 
         $this->assertSame([1000.0, 50.0], [(float) $fee->refresh()->amount, (float) $fee->vat]);

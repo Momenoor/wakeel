@@ -303,7 +303,7 @@ class MatterRequestTest extends TestCase
 
         Livewire::test(ViewMatterRequest::class, ['record' => $request->id])
             ->callAction(ApproveRequestAction::class, data: ['approved_comment' => 'ok', 'attachments' => []])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $this->assertEquals(RequestStatus::APPROVED, $request->fresh()->status);
         $this->assertEquals('2026-05-01', $matter->fresh()->distributed_at->toDateString());
@@ -341,12 +341,12 @@ class MatterRequestTest extends TestCase
         $request->update(['status' => RequestStatus::NEEDS_CHANGES, 'approved_comment' => 'Fix the dates']);
         Livewire::test(ViewMatterRequest::class, ['record' => $request->id])
             ->callAction(ResubmitRequestAction::class, data: ['comment' => 'Fixed', 'attachments' => [UploadedFile::fake()->create('fixed.pdf', 5)]])
-            ->assertHasActionErrors(['attachments']);
+            ->assertHasFormErrors(['attachments']);
         $this->assertSame(RequestStatus::NEEDS_CHANGES, $request->fresh()->status);
 
         Livewire::test(ViewMatterRequest::class, ['record' => $request->id])
             ->callAction(ResubmitRequestAction::class, data: ['comment' => 'Fixed', 'attachments' => [UploadedFile::fake()->create('fixed.doc', 5)]])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
         $this->assertSame(RequestStatus::PENDING, $request->fresh()->status);
 
         // Another kind of request asks for no Word file.

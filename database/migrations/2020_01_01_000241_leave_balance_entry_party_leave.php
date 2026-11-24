@@ -22,6 +22,8 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('leave_balance_entries', function (Blueprint $table) {
+            // The unique index first: SQLite will not drop a column an index still names.
+            $table->dropUnique(['party_leave_id']);
             $table->dropConstrainedForeignId('party_leave_id');
         });
     }

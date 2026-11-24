@@ -12,16 +12,16 @@ use App\Filament\Mms\Resources\Companies\Pages\EditCompany;
 use App\Filament\Mms\Resources\Companies\Pages\ListCompanies;
 use App\Filament\Mms\Resources\Companies\RelationManagers\EmployeesRelationManager;
 use App\Filament\Mms\Resources\Companies\RelationManagers\PayrollRunsRelationManager;
-use App\Filament\Mms\Resources\PayrollRuns\Pages\CreatePayrollRun;
-use App\Filament\Mms\Resources\PayrollRuns\PayrollRunResource;
-use App\Models\PayrollRun;
 use App\Filament\Mms\Resources\EmployeeProfiles\EmployeeProfileResource;
 use App\Filament\Mms\Resources\EmployeeProfiles\Pages\EditEmployeeProfile;
 use App\Filament\Mms\Resources\EmployeeProfiles\Pages\ListEmployeeProfiles;
+use App\Filament\Mms\Resources\PayrollRuns\Pages\CreatePayrollRun;
+use App\Filament\Mms\Resources\PayrollRuns\PayrollRunResource;
 use App\Filament\Support\AttachmentFields;
 use App\Models\Company;
 use App\Models\EmployeeProfile;
 use App\Models\Party;
+use App\Models\PayrollRun;
 use App\Models\User;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
@@ -199,8 +199,8 @@ class EmployeeAndCompanyDocumentsTest extends TestCase
 
         // Several at once from the list, and the list filtered by its sponsor.
         Livewire::test(ListEmployeeProfiles::class)
-            ->callTableBulkAction('sponsor', [$chosen, $person], ['company_id' => $other->getKey()])
-            ->assertHasNoTableBulkActionErrors()
+            ->selectTableRecords([$chosen, $person])->callAction(TestAction::make('sponsor')->table()->bulk(), ['company_id' => $other->getKey()])
+            ->assertHasNoFormErrors()
             ->filterTable('company_id', $other->getKey())
             ->assertCanSeeTableRecords([$chosen, $person])
             ->assertCanNotSeeTableRecords([$typed]);

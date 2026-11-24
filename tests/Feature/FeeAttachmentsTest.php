@@ -63,7 +63,7 @@ class FeeAttachmentsTest extends TestCase
                 'type' => FeeType::cases()[0]->value, 'amount' => 500, 'date' => '2026-02-01', 'description' => 'Second stage',
                 'files' => [$this->pdf()], 'file_category' => Category::TAX_INVOICE->value,
             ])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $fee = $this->matter->fees()->latest('id')->first();
         $file = $fee->ownedAttachments()->sole();
@@ -76,7 +76,7 @@ class FeeAttachmentsTest extends TestCase
             ->callAction(TestAction::make('create_fee')->schemaComponent('feesSection', 'infolist'), data: [
                 'type' => FeeType::cases()[0]->value, 'amount' => 200, 'date' => '2026-02-02', 'files' => [],
             ])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
         $this->assertSame(3, $this->matter->fees()->count());
         $this->assertSame(1, Attachment::count());
     }
@@ -88,7 +88,7 @@ class FeeAttachmentsTest extends TestCase
             ->assertSchemaStateSet(['file_category' => Category::COURT_DECISION->value])
             ->fillForm(['type' => FeeType::cases()[0]->value, 'amount' => 300, 'date' => '2026-02-03', 'files' => [$this->pdf('Decision.pdf')]])
             ->callMountedAction()
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $file = $this->matter->fees()->latest('id')->first()->ownedAttachments()->sole();
         $this->assertSame(Category::COURT_DECISION, $file->category);
@@ -102,7 +102,7 @@ class FeeAttachmentsTest extends TestCase
             ->callAction(TestAction::make('collect_fee')->schemaComponent('fees.0', 'infolist'), data: [
                 'amount' => 400, 'date' => '2026-01-20', 'files' => [$this->pdf('Transfer.pdf')], 'file_category' => Category::BANK_TRANSFER->value,
             ])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $allocation = $this->fee->allocations()->sole();
         $this->assertSame([Allocation::class, Category::BANK_TRANSFER], [$allocation->ownedAttachments()->sole()->attachable_type, $allocation->ownedAttachments()->sole()->category]);
@@ -112,7 +112,7 @@ class FeeAttachmentsTest extends TestCase
     {
         $this->page()
             ->callAction(TestAction::make('attachFeeFiles')->schemaComponent('fees.0', 'infolist'), data: ['files' => [$this->pdf()], 'category' => Category::FEE_INVOICE->value])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $file = $this->fee->ownedAttachments()->sole();
 

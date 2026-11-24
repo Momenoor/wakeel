@@ -11,6 +11,7 @@ use App\Models\Matter;
 use App\Models\User;
 use App\Services\MMS\Calendar\EventMatterLinker;
 use App\Services\MMS\Calendar\UnmatchedEventReferences;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
@@ -103,15 +104,15 @@ class UnmatchedEventReferencesTest extends TestCase
         $event = $this->event('Session 6399/2025');
 
         Livewire::test(UnmatchedEventReferencesWidget::class)
-            ->callTableAction('ignoreReferences', $event, ['ignored' => ['6399/2025']])
-            ->assertHasNoTableActionErrors();
+            ->callAction(TestAction::make('ignoreReferences')->table($event), ['ignored' => ['6399/2025']])
+            ->assertHasNoFormErrors();
 
         $this->assertSame(['6399/2025'], $event->fresh()->ignored_references);
         $this->assertSame([], UnmatchedEventReferences::missing());
 
         // Unticking brings it back.
         Livewire::test(ListCalendarEvents::class)
-            ->callTableAction('ignoreReferences', $event, ['ignored' => []]);
+            ->callAction(TestAction::make('ignoreReferences')->table($event), ['ignored' => []]);
         $this->assertArrayHasKey($event->id, UnmatchedEventReferences::missing());
     }
 
@@ -127,7 +128,7 @@ class UnmatchedEventReferencesTest extends TestCase
         $this->assertEqualsCanonicalizing([$wrong->id, $right->id], $event->matters()->pluck('matters.id')->all());
 
         Livewire::test(ListCalendarEvents::class)
-            ->callTableAction('ignoreReferences', $event, ['ignored' => ['21/2026']]);
+            ->callAction(TestAction::make('ignoreReferences')->table($event), ['ignored' => ['21/2026']]);
 
         $this->assertSame([$right->id], $event->matters()->pluck('matters.id')->all());
 

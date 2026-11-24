@@ -81,7 +81,7 @@ class MatterQualityReport extends Page implements HasTable
         );
     }
 
-    protected function getTableQuery(): Builder
+    protected function rowsQuery(): Builder
     {
         return Matter::query()
             ->visibleTo(auth()->user())
@@ -96,7 +96,7 @@ class MatterQualityReport extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(fn () => $this->getTableQuery())
+            ->query(fn () => $this->rowsQuery())
             // 50 rows a page (All for printing — see ReportPrintAction): every row at
             // once made pages of many megabytes, seconds to build.
             ->paginated([25, 50, 100, 'all'])

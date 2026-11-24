@@ -14,6 +14,7 @@ use App\Models\MinutesDelivery;
 use App\Models\User;
 use App\Services\MMS\Letters\LetterIssuer;
 use BezhanSalleh\FilamentShield\Support\Utils;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
@@ -81,17 +82,17 @@ class SentDeletionGuardTest extends TestCase
 
         $this->actingAs($this->staff());
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->assertTableActionDisabled('deleteLetter', $sent)
-            ->assertTableActionEnabled('deleteLetter', $unsent)
-            ->callTableAction('deleteLetter', $sent)
-            ->callTableAction('deleteLetter', $unsent);
+            ->assertActionDisabled(TestAction::make('deleteLetter')->table($sent))
+            ->assertActionEnabled(TestAction::make('deleteLetter')->table($unsent))
+            ->callAction(TestAction::make('deleteLetter')->table($sent))
+            ->callAction(TestAction::make('deleteLetter')->table($unsent));
         $this->assertModelExists($sent);
         $this->assertModelMissing($unsent);
 
         $this->actingAs($this->superAdmin());
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->assertTableActionEnabled('deleteLetter', $sent)
-            ->callTableAction('deleteLetter', $sent);
+            ->assertActionEnabled(TestAction::make('deleteLetter')->table($sent))
+            ->callAction(TestAction::make('deleteLetter')->table($sent));
         $this->assertModelMissing($sent);
     }
 
@@ -102,16 +103,16 @@ class SentDeletionGuardTest extends TestCase
 
         $this->actingAs($this->staff());
         Livewire::test(MinutesRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->assertTableActionDisabled('deleteMinutes', $sent)
-            ->assertTableActionEnabled('deleteMinutes', $unsent)
-            ->callTableAction('deleteMinutes', $sent)
-            ->callTableAction('deleteMinutes', $unsent);
+            ->assertActionDisabled(TestAction::make('deleteMinutes')->table($sent))
+            ->assertActionEnabled(TestAction::make('deleteMinutes')->table($unsent))
+            ->callAction(TestAction::make('deleteMinutes')->table($sent))
+            ->callAction(TestAction::make('deleteMinutes')->table($unsent));
         $this->assertModelExists($sent);
         $this->assertModelMissing($unsent);
 
         $this->actingAs($this->superAdmin());
         Livewire::test(MinutesRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->callTableAction('deleteMinutes', $sent);
+            ->callAction(TestAction::make('deleteMinutes')->table($sent));
         $this->assertModelMissing($sent);
     }
 }

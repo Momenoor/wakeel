@@ -8,6 +8,7 @@ use App\Filament\Shared\Resources\ErrorReports\Pages\ViewErrorReport;
 use App\Models\ErrorReport;
 use App\Models\User;
 use App\Support\ErrorTracker;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
@@ -93,7 +94,7 @@ class ErrorTrackingTest extends TestCase
             ->searchTable($second->code)
             ->assertCanSeeTableRecords([$second])
             ->assertCanNotSeeTableRecords([$first, $other])
-            ->callTableAction('resolve', $second);
+            ->callAction(TestAction::make('resolve')->table($second));
 
         $this->assertNotNull($first->fresh()->resolved_at);
         $this->assertSame($this->admin->id, $second->fresh()->resolved_by);

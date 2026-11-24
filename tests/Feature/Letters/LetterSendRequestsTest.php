@@ -22,6 +22,7 @@ use App\Services\MMS\Letters\LetterSendRequests;
 use App\Services\MMS\SentFolder;
 use App\Support\CompanyContact;
 use App\Support\RequestMemo;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -108,17 +109,17 @@ class LetterSendRequestsTest extends TestCase
     public function test_an_assistants_letter_is_asked_of_their_administrator_as_it_is_issued(): void
     {
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('issue')
+            ->mountAction(TestAction::make('issue')->table())
             // Email to begin with: something is always asked.
-            ->assertTableActionDataSet(['send_channels' => ['email']])
-            ->setTableActionData([
+            ->assertSchemaStateSet(['send_channels' => ['email']])
+            ->fillForm([
                 'letter_template_id' => $this->template->id,
                 'extra_recipients' => [['name' => 'Court clerk', 'role' => null, 'emails' => ['clerk@court.ae']]],
                 'send_channels' => ['sms', 'whatsapp'],
                 'send_note' => 'Before Thursday',
             ])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $request = LetterSendRequest::sole();
         $this->assertSame(['whatsapp', 'sms'], $request->channels);
@@ -142,10 +143,10 @@ class LetterSendRequestsTest extends TestCase
         $this->actingAs(User::factory()->create()->assignRole(config('filament-shield.super_admin.name', 'super_admin')));
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('issue')
-            ->setTableActionData(['letter_template_id' => $this->template->id, 'extra_recipients' => [['name' => 'Court clerk', 'role' => null, 'emails' => ['clerk@court.ae']]]])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->mountAction(TestAction::make('issue')->table())
+            ->fillForm(['letter_template_id' => $this->template->id, 'extra_recipients' => [['name' => 'Court clerk', 'role' => null, 'emails' => ['clerk@court.ae']]]])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $this->assertSame([1, 0], [MatterLetter::count(), LetterSendRequest::count()]);
         $this->assertSame([], $this->whatsapp);
@@ -165,7 +166,7 @@ class LetterSendRequestsTest extends TestCase
         $this->actingAs($this->admin->assignRole(config('filament-shield.super_admin.name', 'super_admin')));
         RequestMemo::flush();
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('toSend', $letter)
+            ->mountAction(TestAction::make('toSend')->table($letter))
             // The window shows the SMS to copy and the recipients' numbers.
             ->tap(function ($component) use ($request): void {
                 $html = html_entity_decode($component->instance()->getMountedTableActionForm()->toHtml());
@@ -175,9 +176,9 @@ class LetterSendRequestsTest extends TestCase
             })
             // The ways asked for, to tick.
             ->assertFormFieldExists('sent', 'mountedActionSchema0', fn ($field): bool => array_keys($field->getOptions()) === ['email', 'sms'])
-            ->setTableActionData(['sent' => ['sms']])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->fillForm(['sent' => ['sms']])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $request->refresh();
         $this->assertSame([['email'], ['sms'], true], [$request->pendingChannels(), $request->doneChannels(), $request->isOpen()]);
@@ -220,11 +221,11 @@ class LetterSendRequestsTest extends TestCase
         app(LetterSendRequests::class)->ask($letter, ['email'], $this->assistant);
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('editLetter', $letter)
-            ->assertTableActionDataSet(['send_channels' => ['email']])
-            ->setTableActionData(['send_channels' => ['email', 'sms'], 'send_sms_text' => 'Your letter is ready.'])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->mountAction(TestAction::make('editLetter')->table($letter))
+            ->assertSchemaStateSet(['send_channels' => ['email']])
+            ->fillForm(['send_channels' => ['email', 'sms'], 'send_sms_text' => 'Your letter is ready.'])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $request = LetterSendRequest::sole();
         $this->assertSame([['email', 'sms'], 'Your letter is ready.'], [$request->channels, $request->sms_text]);
@@ -246,7 +247,7 @@ class LetterSendRequestsTest extends TestCase
         Livewire::test(LettersToSendWidget::class)
             ->assertCanSeeTableRecords([$request])
             ->assertSee('986/2026')
-            ->callTableAction('toSend', $request, ['sent' => ['whatsapp']]);
+            ->callAction(TestAction::make('toSend')->table($request), ['sent' => ['whatsapp']]);
 
         // Sent: off the list, and the widget with it.
         $this->assertFalse($request->fresh()->isOpen());
@@ -270,7 +271,7 @@ class LetterSendRequestsTest extends TestCase
         $manager = fn () => Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class]);
 
         // No template for letters yet: nothing to send with.
-        $manager()->assertTableActionHidden('whatsapp', $letter);
+        $manager()->assertActionHidden(TestAction::make('whatsapp')->table($letter));
 
         WhatsAppTemplate::create(['name' => 'Letter', 'purpose' => WhatsAppTemplate::LETTER, 'meta_name' => 'letter_pdf', 'language' => 'ar', 'header' => 'document',
             'body' => '{{recipient}} {{reference}}', 'is_active' => true, 'is_default' => true,
@@ -280,9 +281,9 @@ class LetterSendRequestsTest extends TestCase
 
         $this->actingAs($this->admin->assignRole(config('filament-shield.super_admin.name', 'super_admin')));
         $manager()
-            ->assertTableActionVisible('whatsapp', $letter)
-            ->callTableAction('whatsapp', $letter)
-            ->assertHasNoTableActionErrors();
+            ->assertActionVisible(TestAction::make('whatsapp')->table($letter))
+            ->callAction(TestAction::make('whatsapp')->table($letter))
+            ->assertHasNoFormErrors();
 
         $sent = collect($this->whatsapp)->firstWhere('template.name', 'letter_pdf');
         $this->assertSame('971507654321', $sent['to']);

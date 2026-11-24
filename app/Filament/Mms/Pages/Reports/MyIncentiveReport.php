@@ -176,14 +176,14 @@ class MyIncentiveReport extends Page implements HasTable
 
     public function shareTotal(): float
     {
-        return (float) $this->getTableQuery()->sum('share_amount');
+        return (float) $this->rowsQuery()->sum('share_amount');
     }
 
     public function netTotal(): float
     {
         $extra = $this->periodTotals();
 
-        return max(0.0, (float) $this->getTableQuery()->sum('total_amount') - (float) ($extra?->fixed_deduction ?? 0));
+        return max(0.0, (float) $this->rowsQuery()->sum('total_amount') - (float) ($extra?->fixed_deduction ?? 0));
     }
 
     /**
@@ -358,7 +358,7 @@ class MyIncentiveReport extends Page implements HasTable
             ->color($color);
     }
 
-    protected function getTableQuery(): Builder
+    protected function rowsQuery(): Builder
     {
         $partyId = $this->partyId();
         $calculationId = $this->selectedCalculationId();
@@ -380,7 +380,7 @@ class MyIncentiveReport extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(fn () => $this->getTableQuery())
+            ->query(fn () => $this->rowsQuery())
             ->paginated(false)
             ->defaultSort('share_amount', 'desc')
             ->emptyStateHeading(__('Nothing to show yet'))
@@ -499,7 +499,7 @@ class MyIncentiveReport extends Page implements HasTable
                         ->mapWithKeys(fn (IncentiveCalculation $c) => [$c->id => $c->name])
                         ->all())
                     ->default(fn () => $this->availableCalculations()->first()?->id)
-                    // The calculation is applied in getTableQuery(), which needs
+                    // The calculation is applied in rowsQuery(), which needs
                     // it to build the per-matter totals as well; this closure
                     // only has to stop Filament applying its own `calculation`
                     // column filter on top.

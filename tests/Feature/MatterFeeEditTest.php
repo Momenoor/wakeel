@@ -59,16 +59,16 @@ class MatterFeeEditTest extends TestCase
     {
         $this->page()
             ->mountAction($this->action('editFee'))
-            ->assertActionDataSet(fn (array $data) => str_starts_with((string) $data['date'], '2026-01-10') && $data['description'] === 'Old')
+            ->assertSchemaStateSet(fn (array $data) => str_starts_with((string) $data['date'], '2026-01-10') && $data['description'] === 'Old')
             ->fillForm(['amount' => 1500, 'date' => '2026-03-05', 'description' => null])
             ->callMountedAction()
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $this->fee->refresh();
         $this->assertSame([1500.0, '2026-03-05', null], [(float) $this->fee->amount, $this->fee->date->toDateString(), $this->fee->description]);
 
         // No date given: today's, not an error.
-        $this->page()->callAction($this->action('editFee'), ['amount' => 1500, 'date' => null, 'description' => null])->assertHasNoActionErrors();
+        $this->page()->callAction($this->action('editFee'), ['amount' => 1500, 'date' => null, 'description' => null])->assertHasNoFormErrors();
         $this->assertSame(today()->toDateString(), $this->fee->refresh()->date->toDateString());
     }
 
@@ -78,8 +78,8 @@ class MatterFeeEditTest extends TestCase
         $this->assertSame($enteredBy->id, $this->fee->user_id);
 
         $this->actingAs(User::factory()->create());
-        $this->page()->callAction($this->action('editFee'), ['amount' => 1200, 'date' => '2026-01-10', 'description' => 'Changed'])->assertHasNoActionErrors();
-        $this->page()->callAction($this->action('collect_fee'), ['amount' => 100, 'date' => '2026-02-01', 'description' => null])->assertHasNoActionErrors();
+        $this->page()->callAction($this->action('editFee'), ['amount' => 1200, 'date' => '2026-01-10', 'description' => 'Changed'])->assertHasNoFormErrors();
+        $this->page()->callAction($this->action('collect_fee'), ['amount' => 100, 'date' => '2026-02-01', 'description' => null])->assertHasNoFormErrors();
 
         $this->assertSame($enteredBy->id, $this->fee->refresh()->user_id);
     }
@@ -102,7 +102,7 @@ class MatterFeeEditTest extends TestCase
         $this->assertSame($later->id, $this->fee->refresh()->user_id);
 
         // From the page, as a person would.
-        Livewire::test(FeeDataMaintenance::class)->callAction('restoreEnteredBy')->assertHasNoActionErrors();
+        Livewire::test(FeeDataMaintenance::class)->callAction('restoreEnteredBy')->assertHasNoFormErrors();
 
         $this->assertSame([$enteredBy->id, $later->id], [$this->fee->refresh()->user_id, $imported->refresh()->user_id]);
         $log = Storage::disk('local')->get(collect(Storage::disk('local')->files(FeeFixLog::DIRECTORY))->first(fn (string $file): bool => str_contains($file, 'entered-by-applied')));
@@ -115,7 +115,7 @@ class MatterFeeEditTest extends TestCase
     {
         $this->page()
             ->callAction($this->action('collect_fee'), ['amount' => 400, 'date' => '2026-01-02', 'description' => null])
-            ->assertHasNoActionErrors()
+            ->assertHasNoFormErrors()
             ->assertNotified(__("The fee's date was updated"));
 
         $this->assertSame('2026-01-02', $this->fee->refresh()->date->toDateString());
@@ -132,7 +132,7 @@ class MatterFeeEditTest extends TestCase
 
         $this->page()
             ->callAction($this->action('collect_fee'), ['amount' => 1000, 'date' => '2026-01-20', 'description' => null])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $this->assertSame(1000.0, (float) $this->fee->allocations()->sum('amount'));
         $this->assertSame(MatterCollectionStatus::PAID, Matter::withTrashed()->find($this->matter->id)->collection_status);

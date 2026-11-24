@@ -19,6 +19,7 @@ use App\Models\User;
 use App\Services\MMS\MatterOneDriveFolders;
 use App\Services\MMS\OneDriveClient;
 use App\Services\MMS\PeriodicReports;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
@@ -96,8 +97,8 @@ class PeriodicReportTest extends TestCase
         $held = $this->matter->progress()->create(['type' => ProgressType::MEETING_HELD, 'title' => 'محضر 1', 'happened_at' => now(), 'source_type' => $minutes->getMorphClass(), 'source_id' => $minutes->id]);
 
         $this->tab()
-            ->callTableBulkAction('addToReport', [$claim, $letter, $byHand, $held], ['report' => 'new'])
-            ->assertHasNoTableBulkActionErrors();
+            ->selectTableRecords([$claim, $letter, $byHand, $held])->callAction(TestAction::make('addToReport')->table()->bulk(), ['report' => 'new'])
+            ->assertHasNoFormErrors();
 
         $report = $this->matter->periodicReports()->sole();
         $this->assertSame([1, '05 التقرير/تقرير دوري رقم 1'], [$report->number, $report->folder]);
@@ -119,7 +120,7 @@ class PeriodicReportTest extends TestCase
         $this->tab()->assertCanSeeTableRecords([$later])->assertCanNotSeeTableRecords([$claim, $byHand]);
 
         // The next one numbered after it.
-        $this->tab()->callTableBulkAction('addToReport', [$later], ['report' => 'new']);
+        $this->tab()->selectTableRecords([$later])->callAction(TestAction::make('addToReport')->table()->bulk(), ['report' => 'new']);
         $this->assertSame([1, 2], $this->matter->periodicReports()->orderBy('number')->pluck('number')->all());
     }
 
@@ -131,8 +132,8 @@ class PeriodicReportTest extends TestCase
 
         $this->tab()
             ->filterTable('periodic_report_id', $report->id)
-            ->callTableBulkAction('removeFromReport', [$claim])
-            ->assertHasNoTableBulkActionErrors();
+            ->selectTableRecords([$claim])->callAction(TestAction::make('removeFromReport')->table()->bulk())
+            ->assertHasNoFormErrors();
 
         $this->assertNull($claim->fresh()->periodic_report_id);
         $this->assertSame($report->id, $other->fresh()->periodic_report_id);

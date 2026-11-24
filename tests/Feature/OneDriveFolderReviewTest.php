@@ -222,7 +222,7 @@ class OneDriveFolderReviewTest extends TestCase
         Livewire::test(OneDriveSettings::class)
             ->assertActionVisible(TestAction::make('link')->table($review))
             ->callAction(TestAction::make('link')->table($review), ['folder' => 'f2'])
-            ->assertHasNoActionErrors()
+            ->assertHasNoFormErrors()
             ->assertNotified();
 
         // Linked under its own name; nothing renamed or made.

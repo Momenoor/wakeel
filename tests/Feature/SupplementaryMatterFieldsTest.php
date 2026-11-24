@@ -3,11 +3,14 @@
 namespace Tests\Feature;
 
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
+use App\Filament\Mms\Resources\Types\Pages\EditType;
 use App\Filament\Mms\Resources\Types\RelationManagers\FieldDefinitionsRelationManager;
+use App\Filament\Support\CustomFieldInput;
 use App\Models\Matter;
 use App\Models\MatterFieldDefinition;
 use App\Models\Type;
 use App\Models\User;
+use App\Services\MMS\BulkMailPlaceholders;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -93,7 +96,7 @@ class SupplementaryMatterFieldsTest extends TestCase
                 'level' => $this->parent->level?->value ?? 'first_instance',
                 'custom_fields' => ['Phase' => 'p', 'Stage' => 'b', 'المرحلة' => 'مرحلة ثالثة'],
             ])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $this->assertSame('مرحلة ثالثة', Matter::where('parent_id', $this->parent->id)->sole()->custom_fields['المرحلة']);
     }
@@ -113,7 +116,7 @@ class SupplementaryMatterFieldsTest extends TestCase
                 'custom_fields' => ['Stage' => 'b', 'المرحلة' => 'مرحلة ثالثة', 'Case phase' => 'third', 'مرحلة القضية' => 'ثالثة'],
             ])
             ->callMountedAction()
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $this->assertEquals(['المرحلة' => 'مرحلة ثالثة', 'Case phase' => 'third', 'مرحلة القضية' => 'ثالثة'], collect(Matter::where('parent_id', $this->parent->id)->sole()->custom_fields)->only(['المرحلة', 'Case phase', 'مرحلة القضية'])->all());
     }
@@ -134,7 +137,7 @@ class SupplementaryMatterFieldsTest extends TestCase
             $page->set('mountedActions.0.data.'.$path, $value);
         }
 
-        $page->callMountedAction()->assertHasNoActionErrors();
+        $page->callMountedAction()->assertHasNoFormErrors();
         $this->assertSame('مرحلة ثالثة', Matter::where('parent_id', $this->parent->id)->sole()->custom_fields['المرحلة']);
     }
 
@@ -160,7 +163,7 @@ class SupplementaryMatterFieldsTest extends TestCase
             $page->set('mountedActions.0.data.'.$path, $value);
         }
 
-        $page->callMountedAction()->assertHasNoActionErrors();
+        $page->callMountedAction()->assertHasNoFormErrors();
         $this->assertSame('Third', Matter::where('parent_id', $this->parent->id)->sole()->custom_fields['المرحلة']);
     }
 
@@ -187,7 +190,7 @@ class SupplementaryMatterFieldsTest extends TestCase
         // Left as it was: the option it means (Second), not an error.
         $page->assertSchemaStateSet(['custom_fields' => fn ($state) => ($state['المرحلة'] ?? null) === 'Second'], 'mountedActionSchema0')
             ->callMountedAction()
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
         $this->assertSame('Second', Matter::where('parent_id', $this->parent->id)->sole()->custom_fields['المرحلة']);
     }
 
@@ -204,7 +207,7 @@ class SupplementaryMatterFieldsTest extends TestCase
         $unknown = Matter::factory()->create(['type_id' => $this->type->id, 'custom_fields' => ['المرحلة' => 'Fourth']]);
 
         // The label, whichever way it was saved — not the key.
-        $placeholder = fn (Matter $m): string => \App\Services\MMS\BulkMailPlaceholders::forMatter($m->fresh())['matter.custom.المرحلة'];
+        $placeholder = fn (Matter $m): string => BulkMailPlaceholders::forMatter($m->fresh())['matter.custom.المرحلة'];
         $this->assertSame('مرحلة ثالثة', $placeholder($byKey));
         $this->assertSame('مرحلة ثانية', $placeholder($byLabel));
         $this->assertSame('Fourth', $placeholder($unknown));
@@ -225,7 +228,7 @@ class SupplementaryMatterFieldsTest extends TestCase
         // The fields are drawn after the form was filled: each is given its place, empty, once.
         $fields = $this->type->fieldDefinitions()->get();
         $set = null;
-        $components = \App\Filament\Support\CustomFieldInput::components($fields, ['Phase' => 'p1'], function (array $slots) use (&$set): void {
+        $components = CustomFieldInput::components($fields, ['Phase' => 'p1'], function (array $slots) use (&$set): void {
             $set = $slots;
         });
 
@@ -234,7 +237,7 @@ class SupplementaryMatterFieldsTest extends TestCase
 
         // Nothing missing: nothing set.
         $set = null;
-        \App\Filament\Support\CustomFieldInput::components($fields, ['Phase' => null, 'Stage' => 'a', 'Notes' => ''], function (array $slots) use (&$set): void {
+        CustomFieldInput::components($fields, ['Phase' => null, 'Stage' => 'a', 'Notes' => ''], function (array $slots) use (&$set): void {
             $set = $slots;
         });
         $this->assertNull($set);
@@ -265,10 +268,10 @@ class SupplementaryMatterFieldsTest extends TestCase
     {
         $field = MatterFieldDefinition::where('label', 'Notes')->sole();
 
-        Livewire::test(FieldDefinitionsRelationManager::class, ['ownerRecord' => $this->type, 'pageClass' => \App\Filament\Mms\Resources\Types\Pages\EditType::class])
+        Livewire::test(FieldDefinitionsRelationManager::class, ['ownerRecord' => $this->type, 'pageClass' => EditType::class])
             ->assertTableColumnExists('show_in_supplementary')
-            ->callTableAction('edit', $field, ['label' => 'Notes', 'type' => 'text_input', 'show_in_supplementary' => true])
-            ->assertHasNoTableActionErrors();
+            ->callAction(TestAction::make('edit')->table($field), ['label' => 'Notes', 'type' => 'text_input', 'show_in_supplementary' => true])
+            ->assertHasNoFormErrors();
 
         $this->assertTrue($field->fresh()->show_in_supplementary);
     }

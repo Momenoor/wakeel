@@ -37,6 +37,7 @@ use App\Services\MMS\SentFolder;
 use App\Support\EditorHtml;
 use App\Support\EmailGrouping;
 use App\Support\InterfaceFont;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -197,22 +198,22 @@ class LetterBuilderTest extends TestCase
         $candidateIds = array_keys(LetterComposer::candidates($this->matter));
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('issue')
-            ->setTableActionData(['letter_template_id' => $this->template->id])
+            ->mountAction(TestAction::make('issue')->table())
+            ->fillForm(['letter_template_id' => $this->template->id])
             // Meeting fields filled from the next calendar event.
-            ->assertTableActionDataSet([
+            ->assertSchemaStateSet([
                 'inputs.meeting_date' => now()->addDays(3)->toDateString(),
                 'inputs.meeting_time' => '11:00',
                 'inputs.meeting_link' => 'https://teams.example/xyz',
             ])
-            ->setTableActionData([
+            ->fillForm([
                 'recipients' => [$candidateIds[0]],
                 'extra_recipients' => [['name' => 'Court clerk', 'role' => null, 'emails' => ['clerk@court.ae']]],
                 'inputs.documents' => [$this->items[2]],
                 'extra.documents' => "سطر أول\nسطر ثان",
             ])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $letter = MatterLetter::sole();
         $this->assertSame('JPA/2026/986/1', $letter->reference);
@@ -226,16 +227,16 @@ class LetterBuilderTest extends TestCase
         $candidateIds = array_keys(LetterComposer::candidates($this->matter));
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('issue')
-            ->setTableActionData(['letter_template_id' => $this->template->id])
-            ->setTableActionData([
+            ->mountAction(TestAction::make('issue')->table())
+            ->fillForm(['letter_template_id' => $this->template->id])
+            ->fillForm([
                 'recipients' => [$candidateIds[0]],
                 'extra_recipients' => [['name' => 'Court clerk', 'role' => null, 'emails' => ['clerk@court.ae']]],
                 'inputs.documents' => [$this->items[2]],
                 'separately' => true,
             ])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors()
+            ->callMountedAction()
+            ->assertHasNoFormErrors()
             ->assertNotified(__(':count letters issued, one for each recipient', ['count' => 2]));
 
         $letters = MatterLetter::with('recipients')->orderBy('id')->get();
@@ -262,15 +263,15 @@ class LetterBuilderTest extends TestCase
         $candidateIds = array_keys(LetterComposer::candidates($this->matter));
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('issue')
-            ->setTableActionData(['letter_template_id' => $this->template->id])
-            ->setTableActionData([
+            ->mountAction(TestAction::make('issue')->table())
+            ->fillForm(['letter_template_id' => $this->template->id])
+            ->fillForm([
                 'recipients' => [$candidateIds[0]],
                 'inputs.documents' => [$this->items[2]],
                 'attention' => 'خالد محمد',
             ])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $letter = MatterLetter::sole();
         $this->assertSame('خالد محمد', $letter->attention);
@@ -285,7 +286,7 @@ class LetterBuilderTest extends TestCase
         $candidateIds = array_keys(LetterComposer::candidates($this->matter));
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->callTableAction('editLetter', $letter, [
+            ->callAction(TestAction::make('editLetter')->table($letter), [
                 'letter_date' => '2026-10-02',
                 'letterhead_id' => $letter->letterhead_id,
                 'attention' => 'Ahmed Ali',
@@ -295,7 +296,7 @@ class LetterBuilderTest extends TestCase
                     ['name' => 'Court clerk', 'role' => 'Clerk', 'emails' => []],
                 ],
             ])
-            ->assertHasNoTableActionErrors();
+            ->assertHasNoFormErrors();
 
         $letter->refresh();
         $this->assertSame('JPA/2026/986/1', $letter->reference);
@@ -320,7 +321,7 @@ class LetterBuilderTest extends TestCase
         ];
 
         $page = Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class]);
-        $page->mountTableAction('editLetter', $letter)
+        $page->mountAction(TestAction::make('editLetter')->table($letter))
             ->assertSet('mountedActions.0.data.recipients', $expected['recipients'])
             ->assertSet('mountedActions.0.data.extra_recipients', fn ($rows) => array_values($rows) == $expected['extra_recipients'])
             // The matter's parties to tick, as when issuing; no "separate letters" here.
@@ -329,7 +330,7 @@ class LetterBuilderTest extends TestCase
 
         // The same from the preview's Edit.
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('preview', $letter)
+            ->mountAction(TestAction::make('preview')->table($letter))
             ->callAction('editFromPreview')
             ->assertSet('mountedActions.0.name', 'editLetter')
             ->assertSet('mountedActions.0.data.recipients', $expected['recipients']);
@@ -341,14 +342,14 @@ class LetterBuilderTest extends TestCase
         $letter = app(LetterIssuer::class)->issue($this->template, $this->matter, [$candidates[0]], []);
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('editLetter', $letter)
+            ->mountAction(TestAction::make('editLetter')->table($letter))
             // The wording as issued, placeholders and all, to change — as the editor reads it.
-            ->assertTableActionDataSet(['body' => EditorHtml::fromTiptap($letter->body, true)])
-            ->setTableActionData([
+            ->assertSchemaStateSet(['body' => EditorHtml::fromTiptap($letter->body, true)])
+            ->fillForm([
                 'body' => '<p>{{recipients}}</p><p>نص معدّل للدعوى رقم <span data-type="mergeTag" data-id="matter.number">matter.number</span>.</p>',
             ])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $letter->refresh();
         $this->assertSame('<p>{{recipients}}</p><p>نص معدّل للدعوى رقم {{matter.number}}.</p>', $letter->body);
@@ -367,22 +368,22 @@ class LetterBuilderTest extends TestCase
         ]);
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('editLetter', $letter)
+            ->mountAction(TestAction::make('editLetter')->table($letter))
             // The same fields as when issuing: the list's library items ticked again, its own line as an extra line.
-            ->assertTableActionDataSet([
+            ->assertSchemaStateSet([
                 'inputs.meeting_date' => '2026-09-30',
                 'inputs.meeting_link' => 'https://teams.example/abc',
                 'inputs.documents' => [$this->items[0]],
                 'extra.documents' => 'سطر إضافي.',
             ])
             ->assertMountedActionModalSee(['Letter details', 'المستندات'])
-            ->setTableActionData([
+            ->fillForm([
                 'inputs.meeting_time' => '14:30',
                 'inputs.documents' => [$this->items[1], $this->items[2]],
                 'extra.documents' => "بند جديد.\n",
             ])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $letter->refresh();
         $this->assertSame('14:30', $letter->inputs['meeting_time']);
@@ -398,19 +399,19 @@ class LetterBuilderTest extends TestCase
         $candidateIds = array_keys(LetterComposer::candidates($this->matter));
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('write')
-            ->assertTableActionDataSet(['body' => LettersRelationManager::freeLetterBody(true)])
-            ->setTableActionData(['locale' => 'en'])
+            ->mountAction(TestAction::make('write')->table())
+            ->assertSchemaStateSet(['body' => LettersRelationManager::freeLetterBody(true)])
+            ->fillForm(['locale' => 'en'])
             // Untouched wording follows the language.
-            ->assertTableActionDataSet(['body' => LettersRelationManager::freeLetterBody(false)])
-            ->setTableActionData([
+            ->assertSchemaStateSet(['body' => LettersRelationManager::freeLetterBody(false)])
+            ->fillForm([
                 'subject' => 'Documents requested',
                 'recipients' => [$candidateIds[0]],
                 'attention' => 'Ahmed Ali',
                 'body' => '<p>{{recipients}}</p><p>Subject: {{subject}}</p><p>Please send the documents for case {{matter.number}}.</p><p>{{signature}}</p>',
             ])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $letter = MatterLetter::sole();
         $this->assertNull($letter->letter_template_id);
@@ -443,20 +444,20 @@ class LetterBuilderTest extends TestCase
         $candidateIds = array_keys(LetterComposer::candidates($this->matter));
 
         $page = Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('write')
-            ->setTableActionData(['subject' => 'طلب مستندات', 'recipients' => [$candidateIds[0]]])
+            ->mountAction(TestAction::make('write')->table())
+            ->fillForm(['subject' => 'طلب مستندات', 'recipients' => [$candidateIds[0]]])
             // Issue and send by email.
-            ->callMountedTableAction(['send' => true])
-            ->assertHasNoTableActionErrors();
+            ->callMountedAction(['send' => true])
+            ->assertHasNoFormErrors();
 
         $letter = MatterLetter::sole();
         // On to the letter's own Send by email screen — how to send, CC, files, OneDrive.
         $page->assertSet('mountedActions.0.name', 'email')
             ->assertSet('mountedActions.0.context.recordKey', (string) $letter->id)
             ->assertSet('mountedActions.0.data.grouping', EmailGrouping::ALL)
-            ->setTableActionData(['sender' => 'iflas'])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->fillForm(['sender' => 'iflas'])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         // The party with its representative: all in one email, the default.
         $this->assertSame(['mona@example.com', 'a@law.ae', 'b@law.ae'], array_map(fn ($a) => $a->getAddress(), $sent[0]->getTo()));
@@ -470,8 +471,8 @@ class LetterBuilderTest extends TestCase
         $letter = app(LetterIssuer::class)->issue($this->template, $this->matter, [array_values(LetterComposer::candidates($this->matter))[0]], []);
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->assertTableActionVisible('deleteLetter', $letter)
-            ->callTableAction('deleteLetter', $letter);
+            ->assertActionVisible(TestAction::make('deleteLetter')->table($letter))
+            ->callAction(TestAction::make('deleteLetter')->table($letter));
 
         $this->assertModelMissing($letter);
         $this->assertSame(0, $letter->recipients()->count());
@@ -482,7 +483,7 @@ class LetterBuilderTest extends TestCase
         $letter = app(LetterIssuer::class)->issue($this->template, $this->matter, [array_values(LetterComposer::candidates($this->matter))[0]], []);
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('preview', $letter)
+            ->mountAction(TestAction::make('preview')->table($letter))
             ->assertMountedActionModalSeeHtml([route('letters.pdf', $letter), '<iframe']);
     }
 
@@ -491,11 +492,11 @@ class LetterBuilderTest extends TestCase
         // Left unset, the checkboxes would share one true/false value —
         // ticking one would tick them all.
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('issue')
-            ->setTableActionData(['letter_template_id' => $this->template->id])
-            ->assertTableActionDataSet(['inputs.documents' => []])
-            ->setTableActionData(['inputs.documents' => [$this->items[1]]])
-            ->assertTableActionDataSet(['inputs.documents' => [$this->items[1]]]);
+            ->mountAction(TestAction::make('issue')->table())
+            ->fillForm(['letter_template_id' => $this->template->id])
+            ->assertSchemaStateSet(['inputs.documents' => []])
+            ->fillForm(['inputs.documents' => [$this->items[1]]])
+            ->assertSchemaStateSet(['inputs.documents' => [$this->items[1]]]);
     }
 
     /**
@@ -532,8 +533,8 @@ class LetterBuilderTest extends TestCase
         ['matter' => $matter, 'ids' => $ids] = $this->representedMatter();
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $matter, 'pageClass' => ViewMatter::class])
-            ->callTableAction('issue', data: ['letter_template_id' => $this->template->id, 'recipients' => [$ids['mona'], $ids['company']], 'inputs' => ['documents' => [$this->items[0]]]])
-            ->assertHasNoTableActionErrors();
+            ->callAction(TestAction::make('issue')->table(), ['letter_template_id' => $this->template->id, 'recipients' => [$ids['mona'], $ids['company']], 'inputs' => ['documents' => [$this->items[0]]]])
+            ->assertHasNoFormErrors();
 
         $letter = MatterLetter::sole();
         $html = LetterIssuer::composerFor($letter)->values()['recipients'];
@@ -551,16 +552,16 @@ class LetterBuilderTest extends TestCase
         ['matter' => $matter, 'ids' => $ids] = $this->representedMatter();
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('issue')
-            ->setTableActionData(['letter_template_id' => $this->template->id])
-            ->setTableActionData([
+            ->mountAction(TestAction::make('issue')->table())
+            ->fillForm(['letter_template_id' => $this->template->id])
+            ->fillForm([
                 // A representative ticked as well as their party is not added twice.
                 'recipients' => [$ids['mona'], $ids['sara'], $ids['company'], MatterParty::query()->where('parent_id', $ids['mona'])->value('id')],
                 'name_representatives' => [$ids['mona'], $ids['sara'], $ids['company']],
                 'inputs.documents' => [$this->items[0]],
             ])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $letter = MatterLetter::sole();
         $this->assertSame(['منى أحمد', 'سارة علي', 'شركة ألفا'], $letter->recipients()->pluck('name')->all());
@@ -584,7 +585,7 @@ class LetterBuilderTest extends TestCase
 
         // Edit brings the switches back as they were.
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('editLetter', $letter)
+            ->mountAction(TestAction::make('editLetter')->table($letter))
             ->assertSet('mountedActions.0.data.name_representatives', [$ids['mona'], $ids['sara'], $ids['company']]);
     }
 
@@ -619,7 +620,7 @@ class LetterBuilderTest extends TestCase
         // An empty label is no label to Filament: it showed the field's
         // name, "Recipients", in English.
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('issue')
+            ->mountAction(TestAction::make('issue')->table())
             ->assertMountedActionModalDontSee('Recipients')
             ->assertMountedActionModalSee(__('Recipients'));
     }
@@ -630,16 +631,16 @@ class LetterBuilderTest extends TestCase
         $english = LetterTemplate::create(['name' => 'Notice', 'slug' => 'notice-en', 'locale' => 'en', 'category' => 'letter', 'subject' => 'Notice', 'body' => '<p>{{recipients}}</p>']);
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->callTableAction('issue', data: ['letter_template_id' => $english->id, 'recipients' => $candidateIds])
-            ->assertHasNoTableActionErrors();
+            ->callAction(TestAction::make('issue')->table(), ['letter_template_id' => $english->id, 'recipients' => $candidateIds])
+            ->assertHasNoFormErrors();
 
         // The representative ticked too goes with the plaintiff, not on their own.
         $this->assertSame(['Plaintiff'], MatterLetter::sole()->recipients()->pluck('role')->all());
 
         // And an Arabic letter, in Arabic.
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->callTableAction('issue', data: ['letter_template_id' => $this->template->id, 'recipients' => $candidateIds, 'inputs' => ['documents' => [$this->items[0]]]])
-            ->assertHasNoTableActionErrors();
+            ->callAction(TestAction::make('issue')->table(), ['letter_template_id' => $this->template->id, 'recipients' => $candidateIds, 'inputs' => ['documents' => [$this->items[0]]]])
+            ->assertHasNoFormErrors();
 
         $this->assertSame(['المدعي'], MatterLetter::query()->latest('id')->first()->recipients()->pluck('role')->all());
     }
@@ -740,7 +741,7 @@ class LetterBuilderTest extends TestCase
         // And in the issue form of a liquidation matter.
         $this->matter->update(['type_id' => $liquidation->id]);
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter->fresh(), 'pageClass' => ViewMatter::class])
-            ->mountTableAction('issue')
+            ->mountAction(TestAction::make('issue')->table())
             ->assertFormFieldExists('letter_template_id', 'mountedActionSchema0', fn ($field) => array_keys($field->getOptions()) == [$this->template->id, $forLiquidation->id]
                 || array_keys($field->getOptions()) == [$forLiquidation->id, $this->template->id]);
     }
@@ -957,17 +958,17 @@ class LetterBuilderTest extends TestCase
             }
         });
         $table = Livewire::test(ListTypes::class);
-        $table->callTableBulkAction('assignLetters', [$first, $second], ['templates' => [$this->template->id], 'mode' => 'add'])
-            ->assertHasNoTableBulkActionErrors();
+        $table->selectTableRecords([$first, $second])->callAction(TestAction::make('assignLetters')->table()->bulk(), ['templates' => [$this->template->id], 'mode' => 'add'])
+            ->assertHasNoFormErrors();
         $this->assertSame(1, $inserts);
 
         $this->assertEqualsCanonicalizing([$other->id, $this->template->id], $first->letterTemplates()->pluck('letter_templates.id')->all());
         $this->assertSame([$this->template->id], $second->letterTemplates()->pluck('letter_templates.id')->all());
 
-        $table->callTableBulkAction('assignLetters', [$first], ['templates' => [$this->template->id], 'mode' => 'replace']);
+        $table->selectTableRecords([$first])->callAction(TestAction::make('assignLetters')->table()->bulk(), ['templates' => [$this->template->id], 'mode' => 'replace']);
         $this->assertSame([$this->template->id], $first->letterTemplates()->pluck('letter_templates.id')->all());
 
-        $table->callTableBulkAction('assignLetters', [$first, $second], ['templates' => [$this->template->id], 'mode' => 'remove']);
+        $table->selectTableRecords([$first, $second])->callAction(TestAction::make('assignLetters')->table()->bulk(), ['templates' => [$this->template->id], 'mode' => 'remove']);
         $this->assertSame(0, $this->template->types()->count());
     }
 
@@ -996,8 +997,8 @@ class LetterBuilderTest extends TestCase
         // Set for several types at once, from a common pair.
         $appeal = Type::factory()->create();
         Livewire::test(ListTypes::class)
-            ->callTableBulkAction('setCapacities', [$appeal], ['party_capacities' => ['plaintiff' => 'المستأنف', 'defendant' => 'المستأنف ضده', 'implicate-litigant' => '']])
-            ->assertHasNoTableBulkActionErrors();
+            ->selectTableRecords([$appeal])->callAction(TestAction::make('setCapacities')->table()->bulk(), ['party_capacities' => ['plaintiff' => 'المستأنف', 'defendant' => 'المستأنف ضده', 'implicate-litigant' => '']])
+            ->assertHasNoFormErrors();
         $this->assertSame('المستأنف ضده', $appeal->fresh()->capacity('defendant'));
         $this->assertNull($appeal->fresh()->capacity('implicate-litigant'));
     }
@@ -1015,7 +1016,7 @@ class LetterBuilderTest extends TestCase
                     'bold' => [UploadedFile::fake()->createWithContent('calibrib.ttf', $ttf)],
                 ],
             ])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $font = LetterFont::sole();
         $this->assertSame(['R', 'B'], array_keys($font->pdfFiles()));
@@ -1023,7 +1024,7 @@ class LetterBuilderTest extends TestCase
         // A font the PDF can't draw (PostScript outlines): refused.
         Livewire::test(ManageLetterFonts::class)
             ->callAction('create', ['name' => 'Bad', 'files' => ['regular' => [UploadedFile::fake()->createWithContent('bad.ttf', (string) file_get_contents(public_path('fonts/AED.ttf')))]]])
-            ->assertHasActionErrors();
+            ->assertHasFormErrors();
         $this->assertSame(1, LetterFont::count());
 
         $template = $this->template->replicate();
@@ -1087,8 +1088,8 @@ class LetterBuilderTest extends TestCase
         $this->template->update(['letter_font_id' => $outfit->id]);
 
         // The system's font, then deleted.
-        Livewire::test(ManageLetterFonts::class)->callTableAction('useForEnglish', $outfit);
-        Livewire::test(ManageLetterFonts::class)->callTableAction('delete', $outfit);
+        Livewire::test(ManageLetterFonts::class)->callAction(TestAction::make('useForEnglish')->table($outfit));
+        Livewire::test(ManageLetterFonts::class)->callAction(TestAction::make('delete')->table($outfit));
         Setting::clearCache();
 
         $this->assertModelMissing($outfit);
@@ -1114,7 +1115,7 @@ class LetterBuilderTest extends TestCase
         $this->assertSame('', InterfaceFont::css());
 
         // English alone: all its letters in it (Calibri has the Arabic ones).
-        Livewire::test(ManageLetterFonts::class)->callTableAction('useForEnglish', $calibri)->assertHasNoTableActionErrors();
+        Livewire::test(ManageLetterFonts::class)->callAction(TestAction::make('useForEnglish')->table($calibri))->assertHasNoFormErrors();
         Setting::clearCache();
         $css = InterfaceFont::css();
         $this->assertStringContainsString("src: local('Calibri'), url('".route('letter-fonts.file', ['font' => $calibri, 'weight' => 'regular', 'v' => $calibri->updated_at->timestamp])."')", $css);
@@ -1124,7 +1125,7 @@ class LetterBuilderTest extends TestCase
 
         // With an Arabic font: each letter in the font for its script, as
         // Boutros.css does.
-        Livewire::test(ManageLetterFonts::class)->callTableAction('useForArabic', $arabic)->assertHasNoTableActionErrors();
+        Livewire::test(ManageLetterFonts::class)->callAction(TestAction::make('useForArabic')->table($arabic))->assertHasNoFormErrors();
         Setting::clearCache();
         $css = InterfaceFont::css();
         $this->assertMatchesRegularExpression("~local\('Calibri'\)[^}]*unicode-range: U\+0000-05FF~", $css);
@@ -1145,7 +1146,7 @@ class LetterBuilderTest extends TestCase
         $this->actingAs(User::factory()->create()->assignRole(Role::firstOrCreate(['name' => config('filament-shield.super_admin.name', 'super_admin'), 'guard_name' => 'web'])));
 
         // Back to the standard fonts.
-        Livewire::test(ManageLetterFonts::class)->callTableAction('standardSystemFont');
+        Livewire::test(ManageLetterFonts::class)->callAction(TestAction::make('standardSystemFont')->table());
         Setting::clearCache();
         $this->assertSame('', InterfaceFont::css());
     }
@@ -1167,7 +1168,7 @@ class LetterBuilderTest extends TestCase
         // Calibri by default — Arabic included — whatever the template's fonts.
         $this->assertMatchesRegularExpression('~<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" [^>]*w:cs="Calibri"~', $words());
 
-        Livewire::test(ManageLetterFonts::class)->callTableAction('wordFont', data: ['font' => 'standard'])->assertHasNoTableActionErrors();
+        Livewire::test(ManageLetterFonts::class)->callAction(TestAction::make('wordFont')->table(), ['font' => 'standard'])->assertHasNoFormErrors();
         Setting::clearCache();
         $this->assertStringContainsString('w:ascii="'.LetterDocx::FONT.'"', $words());
     }

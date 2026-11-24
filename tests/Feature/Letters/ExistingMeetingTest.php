@@ -17,7 +17,9 @@ use App\Models\User;
 use App\Services\MMS\Letters\LetterComposer;
 use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterMeeting;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\Select;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
@@ -85,12 +87,13 @@ class ExistingMeetingTest extends TestCase
         $candidateIds = array_keys(LetterComposer::candidates($this->matter));
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('issue')
-            ->setTableActionData(['letter_template_id' => $this->template->id])
-            ->assertMountedActionModalSee('اجتماع مباشر')
-            ->setTableActionData(['recipients' => $candidateIds, 'inputs.meeting_date' => now()->addDays(3)->format('Y-m-d'), 'inputs.meeting_time' => '10:00', 'existing_event_id' => $event->id])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->mountAction(TestAction::make('issue')->table())
+            ->fillForm(['letter_template_id' => $this->template->id])
+            // Offered in the meeting field (its options are fetched when it opens, not written into the page: Filament 5.12).
+            ->assertFormFieldExists('existing_event_id', fn (Select $field): bool => str_contains((string) ($field->getOptions()[$event->id] ?? ''), 'اجتماع مباشر'))
+            ->fillForm(['recipients' => $candidateIds, 'inputs.meeting_date' => now()->addDays(3)->format('Y-m-d'), 'inputs.meeting_time' => '10:00', 'existing_event_id' => $event->id])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         // No new meeting, no call to Outlook: the existing one's link is in the letter.
         $this->assertSame(1, CalendarEvent::count());
@@ -104,10 +107,10 @@ class ExistingMeetingTest extends TestCase
         $candidateIds = array_keys(LetterComposer::candidates($this->matter));
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('issue')
-            ->setTableActionData(['letter_template_id' => $this->template->id])
-            ->setTableActionData(['recipients' => $candidateIds, 'existing_event_id' => $other->id])
-            ->callMountedTableAction();
+            ->mountAction(TestAction::make('issue')->table())
+            ->fillForm(['letter_template_id' => $this->template->id])
+            ->fillForm(['recipients' => $candidateIds, 'existing_event_id' => $other->id])
+            ->callMountedAction();
 
         $this->assertStringNotContainsString('other', (string) (MatterLetter::first()?->inputs['meeting_link'] ?? ''));
     }
@@ -172,10 +175,10 @@ class ExistingMeetingTest extends TestCase
         $day = now()->addDays(3)->format('Y-m-d');
 
         $page = Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('issue')
-            ->setTableActionData(['letter_template_id' => $this->template->id])
-            ->setTableActionData(['recipients' => $candidateIds, 'create_meeting' => true, 'inputs.meeting_date' => $day, 'inputs.meeting_time' => '10:30', 'meeting_minutes' => 60])
-            ->callMountedTableAction();
+            ->mountAction(TestAction::make('issue')->table())
+            ->fillForm(['letter_template_id' => $this->template->id])
+            ->fillForm(['recipients' => $candidateIds, 'create_meeting' => true, 'inputs.meeting_date' => $day, 'inputs.meeting_time' => '10:30', 'meeting_minutes' => 60])
+            ->callMountedAction();
 
         // Nothing made, nothing sent, no letter: the action now asks.
         $this->assertSame(1, CalendarEvent::count());
@@ -187,10 +190,10 @@ class ExistingMeetingTest extends TestCase
 
         // After the meeting ends: no question (it goes on to make the meeting — Outlook is called).
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('issue')
-            ->setTableActionData(['letter_template_id' => $this->template->id])
-            ->setTableActionData(['recipients' => $candidateIds, 'create_meeting' => true, 'inputs.meeting_date' => $day, 'inputs.meeting_time' => '11:00', 'meeting_minutes' => 60])
-            ->callMountedTableAction();
+            ->mountAction(TestAction::make('issue')->table())
+            ->fillForm(['letter_template_id' => $this->template->id])
+            ->fillForm(['recipients' => $candidateIds, 'create_meeting' => true, 'inputs.meeting_date' => $day, 'inputs.meeting_time' => '11:00', 'meeting_minutes' => 60])
+            ->callMountedAction();
         Http::assertSent(fn ($request) => str_contains($request->url(), 'microsoft'));
     }
 
@@ -221,10 +224,10 @@ class ExistingMeetingTest extends TestCase
         $this->assertSame('meeting_link', $fields['url']);
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('issue')
-            ->setTableActionData(['letter_template_id' => $this->template->id])
-            ->setTableActionData(['inputs.letter_date' => '2026-01-05'])
-            ->setTableActionData(['existing_event_id' => $event->id])
+            ->mountAction(TestAction::make('issue')->table())
+            ->fillForm(['letter_template_id' => $this->template->id])
+            ->fillForm(['inputs.letter_date' => '2026-01-05'])
+            ->fillForm(['existing_event_id' => $event->id])
             ->assertSet('mountedActions.0.data.inputs.letter_date', '2026-01-05');
 
         // A date field named for the meeting (its label) is the meeting's.

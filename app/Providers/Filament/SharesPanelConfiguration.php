@@ -176,7 +176,7 @@ trait SharesPanelConfiguration
             ->databaseNotifications(livewireComponent: TabbedDatabaseNotifications::class)
             // With Pusher, new notifications arrive live (NotificationsUpdated),
             // so polling is only a slow safety net.
-            ->databaseNotificationsPolling(fn (): ?string => Live::viaPusher() ? null : '10s')
+            ->databaseNotificationsPollingInterval(fn (): ?string => Live::viaPusher() ? null : '10s')
             ->databaseTransactions()
             // Ctrl+K anywhere. Only resources that declare
             // $isGloballySearchable themselves are searched — the rest

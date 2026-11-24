@@ -60,7 +60,7 @@ class MatterExpensesTest extends TestCase
             ->assertFormFieldHidden('is_vat_included')
             ->assertFormFieldHidden('is_vat_exempt')
             ->callMountedAction()
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
         $fee = $this->matter->fees()->sole();
         $this->assertSame([2000.0, 0.0, 2000.0], [(float) $fee->amount, (float) $fee->vat, $fee->total]);
         // Passed on, not the office's fee: no credit note on it.
@@ -80,7 +80,7 @@ class MatterExpensesTest extends TestCase
         // Paid out first: the court fee, its receipt with it.
         $this->page()->callAction(TestAction::make('addExpense')->schemaComponent('expensesSection', 'infolist'), [
             'amount' => 1800, 'date' => '2026-06-03', 'payee' => 'Dubai Courts', 'description' => 'Court fee',
-        ])->assertHasNoActionErrors();
+        ])->assertHasNoFormErrors();
 
         $expense = MatterExpense::sole();
         $this->assertSame([1800.0, 'Dubai Courts', 'Court fee', auth()->id()], [(float) $expense->amount, $expense->payee, $expense->description, $expense->user_id]);
@@ -102,7 +102,7 @@ class MatterExpensesTest extends TestCase
 
         // Changed, then deleted.
         $this->page()->callAction(TestAction::make('editExpense')->schemaComponent('expenses.0', 'infolist'), ['amount' => 2000, 'date' => '2026-06-03', 'payee' => 'Dubai Courts', 'description' => 'Court fee'])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
         $this->assertSame(0.0, $this->matter->fresh()->expensesSummary()['balance']);
 
         $this->page()->callAction(TestAction::make('deleteExpense')->schemaComponent('expenses.0', 'infolist'));

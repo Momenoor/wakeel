@@ -71,7 +71,8 @@ class BulkMailCampaign extends Model
     /** Why the system paused it, in words — null when a person paused it, or it is not paused. */
     public function pausedReasonLabel(): ?string
     {
-        return filled($this->paused_reason) ? __('bulk_mail.paused_reasons.'.$this->paused_reason) : null;
+        // The whole list, then the reason: a key put together here is one no check of the translations can see.
+        return filled($this->paused_reason) ? (__('bulk_mail.paused_reasons')[$this->paused_reason] ?? (string) $this->paused_reason) : null;
     }
 
     public function uniqueIds(): array

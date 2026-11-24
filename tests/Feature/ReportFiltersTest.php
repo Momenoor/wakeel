@@ -30,7 +30,7 @@ use Tests\TestCase;
 /**
  * Every report filter, exercised through the real Livewire component.
  *
- * Testing getTableQuery() in isolation — which is all the reports had — cannot
+ * Testing rowsQuery() in isolation — which is all the reports had — cannot
  * see a filter at all, and that blind spot hid a whole class of failure:
  * Filament runs each filter's ->query() closure inside a nested
  * `where(function ($query) { ... })` group, and Laravel copies only the wheres

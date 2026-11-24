@@ -74,7 +74,7 @@ class MatterExpensesReport extends Page implements HasTable
         return '(SELECT COALESCE(SUM(e.amount), 0) FROM matter_expenses e WHERE e.matter_id = matters.id)';
     }
 
-    protected function getTableQuery(): Builder
+    protected function rowsQuery(): Builder
     {
         $type = FeeType::MATTER_EXPENSES->value;
 
@@ -94,7 +94,7 @@ class MatterExpensesReport extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(fn () => $this->getTableQuery())
+            ->query(fn () => $this->rowsQuery())
             ->paginated([25, 50, 100, 'all'])
             ->defaultPaginationPageOption(50)
             ->defaultSort('expenses_balance')

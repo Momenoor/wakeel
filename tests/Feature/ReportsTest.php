@@ -32,7 +32,7 @@ class ReportsTest extends TestCase
 
     private function tableQuery(object $page): Builder
     {
-        return (new ReflectionMethod($page, 'getTableQuery'))->invoke($page);
+        return (new ReflectionMethod($page, 'rowsQuery'))->invoke($page);
     }
 
     // ── Fee Collection & Aging ───────────────────────────────────────────────

@@ -114,18 +114,27 @@ return [
         'use_shared_signature_stamp' => 'استخدام تواقيع وأختام المكتب',
         'manage_shared_signature_stamp' => 'إدارة تواقيع وأختام المكتب',
         'use_split_pdf' => 'تقسيم ملفات PDF إلى أجزاء',
+        'use_merge_pdf' => 'دمج ملفات PDF',
+        'use_compress_pdf' => 'ضغط ملفات PDF',
+        'view_error_reports' => 'تتبّع الأخطاء',
+        'view_mailbox_folders' => 'مجلدات البريد',
+        'view_mailbox_folder_emails' => 'رسائل مجلدات البريد',
+        'view_letters_to_send_widget' => 'خطابات مطلوب إرسالها',
 
         // Matter — scope.
         'view_own' => 'عرض ملفاته فقط',
         'view_administered' => 'عرض قضايا المساعدين الذين يتابعهم فقط',
         'view_trashed' => 'عرض المحذوفات',
+        // Matter — two fields only some may change on an existing matter.
+        'update_difficulty' => 'تعديل صعوبة القضية',
+        'update_office_work' => 'تعديل «مباشرة من المكتب»',
         'export' => 'تصدير',
         'import' => 'استيراد',
 
         // Matter — reports.
-        'initial_report' => 'التقرير الأولي',
+        'initial_report' => 'التقرير المبدئي',
         'final_report' => 'التقرير النهائي',
-        'update_initial_report_date' => 'تعديل تاريخ التقرير الأولي',
+        'update_initial_report_date' => 'تعديل تاريخ التقرير المبدئي',
         'update_final_report_date' => 'تعديل تاريخ التقرير النهائي',
         'bulk_update_final_report_date' => 'تعديل جماعي لتاريخ التقرير النهائي',
 

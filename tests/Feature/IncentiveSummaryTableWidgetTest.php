@@ -18,6 +18,7 @@ use App\Models\Party;
 use App\Models\Type;
 use App\Models\User;
 use App\Services\MMS\IncentiveCalculatorService;
+use Filament\Actions\Testing\TestAction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Permission;
@@ -100,8 +101,8 @@ class IncentiveSummaryTableWidgetTest extends TestCase
         )->where('party_id', $assistant->id)->first();
 
         Livewire::test(IncentiveSummaryTableWidget::class, ['calculationId' => $calc->id])
-            ->callTableAction('editPercentage', $assistantLine, data: ['percentage_override' => 15])
-            ->assertHasNoTableActionErrors();
+            ->callAction(TestAction::make('editPercentage')->table($assistantLine), ['percentage_override' => 15])
+            ->assertHasNoFormErrors();
 
         // Regression: the action must reapply the calculation immediately —
         // share_amount/total_amount are cached columns that previously
@@ -134,11 +135,11 @@ class IncentiveSummaryTableWidgetTest extends TestCase
         )->where('party_id', $assistant->id)->first();
 
         Livewire::test(IncentiveSummaryTableWidget::class, ['calculationId' => $calc->id])
-            ->callTableAction('addDeduction', $assistantLine, data: [
+            ->callAction(TestAction::make('addDeduction')->table($assistantLine), [
                 'fixed_deduction' => 30,
                 'fixed_deduction_reason' => 'Advance recovery',
             ])
-            ->assertHasNoTableActionErrors();
+            ->assertHasNoFormErrors();
 
         $extra = IncentiveAssistantExtra::where('incentive_calculation_id', $calc->id)
             ->where('party_id', $assistant->id)
@@ -241,8 +242,8 @@ class IncentiveSummaryTableWidgetTest extends TestCase
         )->first();
 
         Livewire::test(IncentiveSummaryTableWidget::class, ['calculationId' => $calc->id])
-            ->callTableAction('deleteMatter', $rowToDelete)
-            ->assertHasNoTableActionErrors();
+            ->callAction(TestAction::make('deleteMatter')->table($rowToDelete))
+            ->assertHasNoFormErrors();
 
         $this->assertFalse(IncentiveLine::where('incentive_calculation_id', $calc->id)->where('matter_id', $matterA->id)->exists());
         $this->assertTrue(IncentiveLine::where('incentive_calculation_id', $calc->id)->where('matter_id', $matterB->id)->exists());
@@ -267,7 +268,7 @@ class IncentiveSummaryTableWidgetTest extends TestCase
         // security property is the same: nothing may be written.
         try {
             Livewire::test(IncentiveSummaryTableWidget::class, ['calculationId' => $calc->id])
-                ->callTableAction('editPercentage', $assistantLine, data: ['percentage_override' => 90]);
+                ->callAction(TestAction::make('editPercentage')->table($assistantLine), ['percentage_override' => 90]);
         } catch (HttpException $e) {
             $this->assertSame(403, $e->getStatusCode());
         }

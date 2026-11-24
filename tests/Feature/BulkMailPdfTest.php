@@ -11,12 +11,14 @@ use App\Models\BulkMailCampaign;
 use App\Models\BulkMailRecipient;
 use App\Models\User;
 use App\Services\MMS\BulkMailService;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
+use Tests\Support\MailSenders;
 use Tests\TestCase;
 use ZipArchive;
 
@@ -32,7 +34,7 @@ class BulkMailPdfTest extends TestCase
 
         Storage::fake('public');
 
-        \Tests\Support\MailSenders::add('test', [
+        MailSenders::add('test', [
             'username' => 'sender@example.com',
             'address' => 'sender@example.com',
             'name' => 'Test Sender',
@@ -147,10 +149,10 @@ class BulkMailPdfTest extends TestCase
             'pageClass' => ViewBulkMailCampaign::class,
         ]);
 
-        $table->callTableAction('downloadAllPdfs')->assertFileDownloaded('creditors-notice-'.now()->format('Y-m-d').'.zip');
+        $table->callAction(TestAction::make('downloadAllPdfs')->table())->assertFileDownloaded('creditors-notice-'.now()->format('Y-m-d').'.zip');
 
-        $table->assertTableActionVisible('resend', $failed)
-            ->callTableAction('resend', $failed);
+        $table->assertActionVisible(TestAction::make('resend')->table($failed))
+            ->callAction(TestAction::make('resend')->table($failed));
 
         $this->assertSame(BulkMailRecipientStatus::Pending, $failed->fresh()->status);
         $this->assertSame(0, $failed->fresh()->attempt_count);
@@ -173,7 +175,7 @@ class BulkMailPdfTest extends TestCase
         Livewire::test(RecipientsRelationManager::class, [
             'ownerRecord' => $this->campaign,
             'pageClass' => ViewBulkMailCampaign::class,
-        ])->callTableAction('regeneratePdfs')->assertNotified();
+        ])->callAction(TestAction::make('regeneratePdfs')->table())->assertNotified();
 
         // Deleted at once; made again after the page answers.
         $this->assertNull($alpha->fresh()->pdf_path);

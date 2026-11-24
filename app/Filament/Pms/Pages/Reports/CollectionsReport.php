@@ -30,7 +30,7 @@ class CollectionsReport extends PmsReport
         return __('Collections');
     }
 
-    protected function getTableQuery(): Builder
+    protected function rowsQuery(): Builder
     {
         [$group, $property] = $this->portfolio();
         $range = $this->tableFilters['due_between'] ?? [];
@@ -59,7 +59,7 @@ class CollectionsReport extends PmsReport
     public function table(Table $table): Table
     {
         return $this->report($table)
-            ->query(fn () => $this->getTableQuery())
+            ->query(fn () => $this->rowsQuery())
             ->defaultSort('period', 'desc')
             ->columns([
                 TextColumn::make('period')
@@ -112,7 +112,7 @@ class CollectionsReport extends PmsReport
                     ->summarize(Sum::make()->label('')->aed()),
             ])
             ->filters([
-                // Applied inside getTableQuery(): the rows are months, built
+                // Applied inside rowsQuery(): the rows are months, built
                 // from the filtered instalments.
                 ...$this->portfolioFilters(null),
                 ReportDateRangeFilter::make(

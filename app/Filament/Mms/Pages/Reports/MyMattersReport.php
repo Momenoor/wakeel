@@ -71,7 +71,7 @@ class MyMattersReport extends Page implements HasTable
         return static::canAccess();
     }
 
-    protected function getTableQuery(): Builder
+    protected function rowsQuery(): Builder
     {
         return Matter::query()
             ->with(['court', 'type', 'assistantsOnly.party'])
@@ -83,7 +83,7 @@ class MyMattersReport extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(fn () => $this->getTableQuery())
+            ->query(fn () => $this->rowsQuery())
             ->paginated(false)
             ->defaultSort('next_session_date', 'asc')
             ->emptyStateHeading(__('Nothing assigned to you'))
@@ -125,7 +125,7 @@ class MyMattersReport extends Page implements HasTable
                     // matter closed two years ago kept climbing and sat there
                     // permanently red.
                     // getAttribute, not ->days_open: the age is a select alias
-                    // added by getTableQuery(), not a column on the model.
+                    // added by rowsQuery(), not a column on the model.
                     ->state(fn (Matter $record) => $record->final_report_at === null
                         ? (int) $record->getAttribute('days_open')
                         : null)

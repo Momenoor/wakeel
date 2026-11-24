@@ -34,6 +34,7 @@ use App\Services\MMS\SentEmailArchive;
 use App\Services\MMS\SentFolder;
 use App\Services\Notifications\NotificationPreferences as Prefs;
 use App\Support\Dates;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -658,8 +659,8 @@ class MatterRepliesTest extends TestCase
         // On the campaign's recipients: the reply, and a way to open it.
         Livewire::test(RecipientsRelationManager::class, ['ownerRecord' => $campaign, 'pageClass' => ViewBulkMailCampaign::class])
             ->assertTableColumnStateSet('reply', $reply->at, $recipient)
-            ->assertTableActionVisible('replies', $recipient)
-            ->mountTableAction('replies', $recipient)
+            ->assertActionVisible(TestAction::make('replies')->table($recipient))
+            ->mountAction(TestAction::make('replies')->table($recipient))
             ->assertMountedActionModalSee('كشف.xlsx');
     }
 
@@ -710,7 +711,7 @@ class MatterRepliesTest extends TestCase
 
         // From the matter's Progress tab: now, not at the next round.
         Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->callTableAction('collectReplies')
+            ->callAction(TestAction::make('collectReplies')->table())
             ->assertNotified(__('Checking for emails'));
         // Read on the queue: what came of it in the notifications of whoever asked.
         $this->assertContains(trans_choice('No new replies.|:count new reply kept.|:count new replies kept.', 1, ['count' => 1]), auth()->user()->notifications()->get()->pluck('data.title')->all());
@@ -753,7 +754,7 @@ class MatterRepliesTest extends TestCase
         $this->uploads = [];
 
         Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->callTableAction('regenerate', $email)
+            ->callAction(TestAction::make('regenerate')->table($email))
             ->assertNotified(__('Made again'));
 
         // The wrongly named copy gone; the file in OneDrive under its name.
@@ -774,7 +775,7 @@ class MatterRepliesTest extends TestCase
         // Gone from the mailbox: said so.
         $this->inbox = [];
         Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->callTableAction('regenerate', $email)
+            ->callAction(TestAction::make('regenerate')->table($email))
             ->assertNotified(__('The email could not be made again'));
     }
 
@@ -816,7 +817,7 @@ class MatterRepliesTest extends TestCase
         $this->assertSame('<ul style="list-style: disc; padding-inline-start: 1.1rem; margin: 0;"><li>One</li><li><b>Two</b></li></ul>', $html);
 
         Livewire::test(EmailsRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
-            ->callTableAction('collectReplies')
+            ->callAction(TestAction::make('collectReplies')->table())
             ->assertNotified(__('Checking for emails'));
         // Read on the queue: what came of it in the notifications of whoever asked.
         $this->assertContains(trans_choice('No new replies.|:count new reply kept.|:count new replies kept.', 1, ['count' => 1]), auth()->user()->notifications()->get()->pluck('data.title')->all());

@@ -192,7 +192,7 @@ class CalendarEventCreationTest extends TestCase
             ->set('mountedActions.0.data.end_datetime', '2026-10-20 11:00:00')
             ->set('mountedActions.0.data.sync_to_outlook', false)
             ->callMountedAction()
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $event = CalendarEvent::sole();
         $this->assertSame($matter->id, $event->matter_id);

@@ -111,7 +111,7 @@ final class Favorites
             return NavigationItem::make($exact ? $exact->getLabel() : $favorite['label'])
                 ->url(url($url))
                 ->icon($icon)
-                ->isActiveWhen(fn (): bool => $current === $url || (! str_contains($url, '?') && $currentPath === $url));
+                ->activeWhen(fn (): bool => $current === $url || (! str_contains($url, '?') && $currentPath === $url));
         }, $favorites);
     }
 

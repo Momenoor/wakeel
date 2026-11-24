@@ -25,6 +25,16 @@ class PayrollRunsRelationManager extends RelationManager
         return __('Payroll Runs');
     }
 
+    public static function getModelLabel(): string
+    {
+        return __('Payroll Run');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('Payroll Runs');
+    }
+
     public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
     {
         return PayrollRunResource::canAccess() && PayrollRunResource::canViewAny();

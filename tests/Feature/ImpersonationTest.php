@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Lab404\Impersonate\Services\ImpersonateManager;
@@ -39,12 +40,12 @@ class ImpersonationTest extends TestCase
 
         app()->setLocale('en');
         Livewire::test(ListUsers::class)
-            ->assertTableActionVisible('impersonate', $other)
-            ->assertTableActionHasLabel('impersonate', 'Impersonate User', $other);
+            ->assertActionVisible(TestAction::make('impersonate')->table($other))
+            ->assertActionHasLabel(TestAction::make('impersonate')->table($other), 'Impersonate User');
 
         app()->setLocale('ar');
         Livewire::test(ListUsers::class)
-            ->assertTableActionHasLabel('impersonate', 'تقمص مستخدم', $other);
+            ->assertActionHasLabel(TestAction::make('impersonate')->table($other), 'تقمص مستخدم');
     }
 
     public function test_the_plugins_roles_labels_follow_the_language_too(): void
@@ -66,7 +67,7 @@ class ImpersonationTest extends TestCase
         $other = User::factory()->create();
         $this->actingAs($this->admin);
 
-        Livewire::test(ListUsers::class)->callTableAction('impersonate', $other);
+        Livewire::test(ListUsers::class)->callAction(TestAction::make('impersonate')->table($other));
 
         $this->assertTrue(app(ImpersonateManager::class)->isImpersonating());
         $this->assertTrue(auth()->user()->is($other));

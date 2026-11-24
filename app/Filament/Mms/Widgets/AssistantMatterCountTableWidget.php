@@ -42,7 +42,7 @@ class AssistantMatterCountTableWidget extends TableWidget
         $this->resetPage();
     }
 
-    protected function getTableQuery(): Builder
+    protected function rowsQuery(): Builder
     {
         // Start with the base relationship
         return MatterParty::query()
@@ -64,6 +64,7 @@ class AssistantMatterCountTableWidget extends TableWidget
     public function table(Table $table): Table
     {
         return $table
+            ->query(fn (): Builder => $this->rowsQuery())
             ->paginated(false)
             // Add a dynamic heading so the user knows why the table changed
             ->heading(fn () => $this->selectedAssistantName

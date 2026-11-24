@@ -66,7 +66,7 @@ class AssistantPerformanceReport extends Page implements HasTable
         return __('assistants');
     }
 
-    protected function getTableQuery(): Builder
+    protected function rowsQuery(): Builder
     {
         $excluded = FeeType::excludedFromIncentiveValues();
         $placeholders = implode(',', array_fill(0, count($excluded), '?'));
@@ -117,7 +117,7 @@ class AssistantPerformanceReport extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(fn () => $this->getTableQuery())
+            ->query(fn () => $this->rowsQuery())
             ->paginated(false)
             ->defaultSort('matters_total', 'desc')
             ->emptyStateHeading(__('No assistants'))

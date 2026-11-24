@@ -183,12 +183,12 @@ class DatabaseBackupTest extends TestCase
 
         Livewire::test(SystemUpdates::class)
             ->callAction(TestAction::make('restoreDatabase')->schemaComponent('database-backups', 'content'), ['from' => 'server', 'backup' => $name, 'password' => 'wrong', 'confirm' => 'restore'])
-            ->assertHasActionErrors(['password', 'confirm']);
+            ->assertHasFormErrors(['password', 'confirm']);
         $this->assertNull(app(BackupStore::class)->state(DatabaseRestore::STATE));
 
         Livewire::test(SystemUpdates::class)
             ->callAction(TestAction::make('restoreDatabase')->schemaComponent('database-backups', 'content'), ['from' => 'server', 'backup' => $name, 'password' => 'secret-pass', 'confirm' => 'RESTORE'])
-            ->assertHasNoActionErrors()
+            ->assertHasNoFormErrors()
             ->assertRedirectContains('/system-restore/');
 
         // Its page: by its key only, no login needed.

@@ -118,7 +118,7 @@ class OneDriveFolderLinkTest extends TestCase
 
         Livewire::test(ViewMatter::class, ['record' => $this->matter->getRouteKey()])
             ->callAction(TestAction::make('linkOneDriveFolder')->schemaComponent('matter-onedrive', 'infolist'), ['party_id' => $this->assistant->id, 'drive_item_id' => 'old'])
-            ->assertHasNoActionErrors()
+            ->assertHasNoFormErrors()
             ->assertNotified(__('":name" linked to this matter.', ['name' => 'شركة المهاد ق 986 لسنة 2026']));
 
         $this->assertSame('شركة المهاد ق 986 لسنة 2026', MatterOneDriveFolder::sole()->folder_name);

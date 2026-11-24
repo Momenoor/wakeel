@@ -155,12 +155,12 @@ class MatterContactsTest extends TestCase
         $tab = Livewire::test(MatterContacts::class, ['matter' => $this->matter])
             ->assertSee('MMMM')
             ->assertSee('xxx@xxx.ae')
-            ->callTableAction('otherEmails', 'p:'.$this->mmmm->id, ['emails' => ['ccc@ccc.ae', 'new@mmm-legal.ae']])
-            ->assertHasNoTableActionErrors();
+            ->callAction(TestAction::make('otherEmails')->table('p:'.$this->mmmm->id), ['emails' => ['ccc@ccc.ae', 'new@mmm-legal.ae']])
+            ->assertHasNoFormErrors();
 
         $this->assertEqualsCanonicalizing(['ccc@ccc.ae', 'new@mmm-legal.ae'], $this->matter->contacts()->pluck('email')->all());
         $this->assertEqualsCanonicalizing(['ccc@ccc.ae', 'new@mmm-legal.ae'], MatterContact::copiedFor($this->matter->id, ['mmm@mmm.ae']));
-        $tab->callTableAction('export')->assertFileDownloaded();
+        $tab->callAction(TestAction::make('export')->table())->assertFileDownloaded();
     }
 
     public function test_a_partys_name_phones_and_emails_are_edited_there_on_the_party(): void
@@ -168,17 +168,17 @@ class MatterContactsTest extends TestCase
         Party::factory()->create(['name' => 'Taken']);
 
         $tab = Livewire::test(MatterContacts::class, ['matter' => $this->matter])
-            ->assertTableActionVisible('edit', 'p:'.$this->mmmm->id)
-            ->mountTableAction('edit', 'p:'.$this->mmmm->id)
-            ->assertTableActionDataSet(['name' => 'MMMM', 'phone' => ['0501112222'], 'email' => ['mmm@mmm.ae']])
+            ->assertActionVisible(TestAction::make('edit')->table('p:'.$this->mmmm->id))
+            ->mountAction(TestAction::make('edit')->table('p:'.$this->mmmm->id))
+            ->assertSchemaStateSet(['name' => 'MMMM', 'phone' => ['0501112222'], 'email' => ['mmm@mmm.ae']])
             // Another party's name; not a UAE number.
-            ->setTableActionData(['name' => 'Taken', 'phone' => ['123']])
-            ->callMountedTableAction()
-            ->assertHasTableActionErrors(['name', 'phone.0']);
+            ->fillForm(['name' => 'Taken', 'phone' => ['123']])
+            ->callMountedAction()
+            ->assertHasFormErrors(['name', 'phone.0']);
 
-        $tab->setTableActionData(['name' => 'MMMM Legal', 'phone' => ['0501112222', '0559998888'], 'email' => ['info@mmm.ae']])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors()
+        $tab->fillForm(['name' => 'MMMM Legal', 'phone' => ['0501112222', '0559998888'], 'email' => ['info@mmm.ae']])
+            ->callMountedAction()
+            ->assertHasNoFormErrors()
             // Drawn again as the matter's page tells it.
             ->dispatch(MatterEvents::CHANGED)
             ->assertSee('MMMM Legal')
@@ -194,12 +194,12 @@ class MatterContactsTest extends TestCase
         $parties = Party::count();
 
         Livewire::test(MatterContacts::class, ['matter' => $this->matter])
-            ->mountTableAction('edit', 'e:other@other.ae')
-            ->assertTableActionDataSet(['name' => 'Other@other.ae', 'capacity' => '', 'phone' => []])
+            ->mountAction(TestAction::make('edit')->table('e:other@other.ae'))
+            ->assertSchemaStateSet(['name' => 'Other@other.ae', 'capacity' => '', 'phone' => []])
             // A phone anywhere in the world.
-            ->setTableActionData(['name' => 'Other Legal LLP', 'capacity' => 'Creditor', 'phone' => ['+44 20 7946 0000']])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors()
+            ->fillForm(['name' => 'Other Legal LLP', 'capacity' => 'Creditor', 'phone' => ['+44 20 7946 0000']])
+            ->callMountedAction()
+            ->assertHasNoFormErrors()
             ->dispatch(MatterEvents::CHANGED)
             ->assertSee('Other Legal LLP')
             ->assertSee('Creditor');
@@ -235,9 +235,9 @@ class MatterContactsTest extends TestCase
         $gone = $campaign->recipients()->create(['email' => ['gone@x.ae'], 'name' => 'Gone', 'status' => 'pending']);
 
         Livewire::test(RecipientsRelationManager::class, ['ownerRecord' => $campaign, 'pageClass' => ViewBulkMailCampaign::class])
-            ->callTableAction('edit', $wrong, ['email' => ['right@x.ae'], 'name' => 'Right'])
-            ->assertHasNoTableActionErrors()
-            ->callTableAction('delete', $gone);
+            ->callAction(TestAction::make('edit')->table($wrong), ['email' => ['right@x.ae'], 'name' => 'Right'])
+            ->assertHasNoFormErrors()
+            ->callAction(TestAction::make('delete')->table($gone));
 
         $this->assertSame(['right@x.ae'], $wrong->refresh()->email);
         $this->assertModelMissing($gone);

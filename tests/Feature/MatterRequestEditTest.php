@@ -65,7 +65,7 @@ class MatterRequestEditTest extends TestCase
                 'comment' => 'Corrected',
                 'new_difficulty' => MatterDifficulty::MEDIUM->value,
             ])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $request->refresh();
         $this->assertSame($assistant->id, $request->request_by);
@@ -91,9 +91,9 @@ class MatterRequestEditTest extends TestCase
             ->test(ViewMatterRequest::class, ['record' => $request->getKey()])
             ->mountAction(EditRequestAction::getDefaultName())
             ->assertFormFieldHidden('new_difficulty')
-            ->setActionData(['approved_by' => $other->id, 'approved_comment' => 'Approved as asked'])
+            ->fillForm(['approved_by' => $other->id, 'approved_comment' => 'Approved as asked'])
             ->callMountedAction()
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $request->refresh();
         $this->assertSame($other->id, $request->approved_by);
@@ -124,7 +124,7 @@ class MatterRequestEditTest extends TestCase
         Livewire::actingAs($this->admin)
             ->test(ViewMatterRequest::class, ['record' => $request->getKey()])
             ->callAction(EditRequestAction::getDefaultName(), ['status' => RequestStatus::APPROVED->value])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $request->refresh();
         $this->assertSame(RequestStatus::APPROVED, $request->status);
@@ -137,7 +137,7 @@ class MatterRequestEditTest extends TestCase
         Livewire::actingAs($this->admin)
             ->test(ViewMatterRequest::class, ['record' => $request->getKey()])
             ->callAction(EditRequestAction::getDefaultName(), ['status' => RequestStatus::REJECTED->value, 'approved_comment' => 'Approved by mistake'])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $this->assertSame(RequestStatus::REJECTED, $request->fresh()->status);
         $this->assertSame('Approved by mistake', $request->fresh()->approved_comment);

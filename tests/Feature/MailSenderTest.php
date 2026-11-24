@@ -8,6 +8,7 @@ use App\Models\MailSender;
 use App\Models\User;
 use App\Services\MMS\SenderMailer;
 use App\Services\MMS\SentFolder;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Mail\Events\MessageSent;
@@ -155,7 +156,7 @@ class MailSenderTest extends TestCase
                 'key' => 'noreply',
                 'is_active' => true,
             ])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         $sender = MailSender::sole();
         $this->assertSame(MailSender::MICROSOFT, $sender->driver);
@@ -163,11 +164,11 @@ class MailSenderTest extends TestCase
         // A code already used is refused.
         Livewire::test(ManageMailSenders::class)
             ->callAction('create', ['driver' => MailSender::MICROSOFT, 'address' => 'i@x.com', 'name' => 'X', 'key' => 'noreply'])
-            ->assertHasActionErrors(['key']);
+            ->assertHasFormErrors(['key']);
 
         config(['mail.mailers.microsoft-graph.transport' => 'array']);
         Livewire::test(ManageMailSenders::class)
-            ->callTableAction('test', $sender, ['to' => 'me@example.com'])
+            ->callAction(TestAction::make('test')->table($sender), ['to' => 'me@example.com'])
             ->assertNotified(__('Test email sent to :to', ['to' => 'me@example.com']));
 
         $this->assertSame('noreply@jpaemirates.com', $this->sent[0]->message->getFrom()[0]->getAddress());

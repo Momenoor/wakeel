@@ -21,6 +21,7 @@ use App\Services\MMS\Letters\LetterIssuer;
 use App\Services\MMS\Letters\LetterMailer;
 use App\Services\MMS\SentFolder;
 use App\Support\EmailGrouping;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -289,14 +290,14 @@ class LetterEmailTest extends TestCase
     public function test_sending_from_the_matter_page(): void
     {
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->letter->matter, 'pageClass' => ViewMatter::class])
-            ->callTableAction('email', $this->letter, [
+            ->callAction(TestAction::make('email')->table($this->letter), [
                 'sender' => 'iflas',
                 'mode' => LetterMailer::ATTACHMENT,
                 'formats' => ['pdf'],
                 'recipients' => [$this->letter->recipients->first()->id],
                 'grouping' => EmailGrouping::ALL,
             ])
-            ->assertHasNoTableActionErrors();
+            ->assertHasNoFormErrors();
 
         $this->assertCount(1, $this->sent);
         $this->assertSame(['mona@example.com'], array_map(fn ($a) => $a->getAddress(), $this->sent[0]->getTo()));
@@ -338,16 +339,16 @@ class LetterEmailTest extends TestCase
         Storage::fake('local');
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('email', $this->letter)
+            ->mountAction(TestAction::make('email')->table($this->letter))
             ->assertSet('mountedActions.0.data.cc', ['sara@jpa.ae', 'omar@partner.ae'])
-            ->setTableActionData([
+            ->fillForm([
                 'sender' => 'iflas',
                 'recipients' => [$this->letter->recipients->first()->id],
                 'attachments' => [UploadedFile::fake()->create('statement.pdf', 12, 'application/pdf')],
             ])
             ->assertMountedActionModalSee('statement.pdf')
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $email = $this->sent[0];
         $this->assertSame(['sara@jpa.ae', 'omar@partner.ae'], array_map(fn ($a) => $a->getAddress(), $email->getCc()));
@@ -358,12 +359,12 @@ class LetterEmailTest extends TestCase
         // System Settings chooses who is copied in, for every letter.
         Setting::set('letter_cc_expert_types', ['certified', 'external-assistant'], 'general');
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('email', $this->letter)
+            ->mountAction(TestAction::make('email')->table($this->letter))
             ->assertSet('mountedActions.0.data.cc', ['omar@partner.ae', 'reda@jpa.ae']);
 
         Setting::set('letter_cc_expert_types', [], 'general');
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('email', $this->letter)
+            ->mountAction(TestAction::make('email')->table($this->letter))
             ->assertSet('mountedActions.0.data.cc', []);
     }
 
@@ -372,18 +373,18 @@ class LetterEmailTest extends TestCase
         $default = EmailTemplate::create(['name' => 'Default', 'is_default' => true, 'subject' => 'عام', 'body' => '<p>عام</p>']);
         $own = EmailTemplate::create(['name' => 'Own', 'subject' => 'خاص {{reference}}', 'body' => '<p>خاص</p>']);
         $page = fn () => Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->letter->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('email', $this->letter);
+            ->mountAction(TestAction::make('email')->table($this->letter));
 
-        $page()->assertTableActionDataSet(['email_template_id' => $default->id, 'subject' => 'عام']);
+        $page()->assertSchemaStateSet(['email_template_id' => $default->id, 'subject' => 'عام']);
 
         $this->letter->template->update(['email_template_id' => $own->id]);
         $this->letter->refresh();
-        $page()->assertTableActionDataSet(['email_template_id' => $own->id, 'subject' => 'خاص JPA/2026/986/1']);
+        $page()->assertSchemaStateSet(['email_template_id' => $own->id, 'subject' => 'خاص JPA/2026/986/1']);
 
         // Switched off: back to the default.
         $own->update(['is_active' => false]);
         $this->letter->refresh();
-        $page()->assertTableActionDataSet(['email_template_id' => $default->id]);
+        $page()->assertSchemaStateSet(['email_template_id' => $default->id]);
     }
 
     public function test_the_email_is_previewed_and_can_be_changed_for_this_send_only(): void
@@ -396,23 +397,23 @@ class LetterEmailTest extends TestCase
         $mona = $this->letter->recipients->first();
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->letter->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('email', $this->letter)
-            ->setTableActionData(['sender' => 'iflas', 'email_template_id' => $template->id, 'recipients' => [$mona->id], 'grouping' => EmailGrouping::BY_PARTY])
+            ->mountAction(TestAction::make('email')->table($this->letter))
+            ->fillForm(['sender' => 'iflas', 'email_template_id' => $template->id, 'recipients' => [$mona->id], 'grouping' => EmailGrouping::BY_PARTY])
             // Starts from the template, the letter's details filled in; each
             // recipient's name still to come.
-            ->assertTableActionDataSet([
+            ->assertSchemaStateSet([
                 'subject' => 'خطابنا JPA/2026/986/1',
                 'body' => '<p>السادة/ {{recipient.name}}</p><p>مرفق الخطاب JPA/2026/986/1.</p>',
             ])
             // The preview: as it goes to the first recipient.
             ->assertMountedActionModalSee(['السادة/ منى أحمد', 'mona@example.com'])
-            ->setTableActionData([
+            ->fillForm([
                 'subject' => 'خطاب عاجل',
                 'body' => '<p>السادة/ {{recipient.name}}</p><p>نص لهذه المرة فقط.</p>',
             ])
             ->assertMountedActionModalSee('نص لهذه المرة فقط.')
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors();
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
 
         $this->assertCount(1, $this->sent);
         $this->assertSame('خطاب عاجل', $this->sent[0]->getSubject());
@@ -436,9 +437,9 @@ class LetterEmailTest extends TestCase
         MailSender::where('key', 'iflas')->first()->update(['signature' => '<div id="Signature"><p>Best Regards <b>JPA Iflas</b></p></div>']);
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->letter->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('email', $this->letter)
-            ->setTableActionData(['mode' => LetterMailer::BODY, 'sender' => 'iflas'])
-            ->assertTableActionDataSet(['subject' => 'JPA/2026/986/1 — إشعار الدعوى رقم 986/2026'])
+            ->mountAction(TestAction::make('email')->table($this->letter))
+            ->fillForm(['mode' => LetterMailer::BODY, 'sender' => 'iflas'])
+            ->assertSchemaStateSet(['subject' => 'JPA/2026/986/1 — إشعار الدعوى رقم 986/2026'])
             ->assertMountedActionModalSee('نص الخطاب.')
             // The mailbox's signature, as it will go; not the letter's own picture.
             ->assertMountedActionModalSeeHtml('Best Regards')
@@ -476,7 +477,7 @@ class LetterEmailTest extends TestCase
         $finance = EmailTemplate::create(['name' => 'Finance', 'subject' => '{{reference}}', 'body' => '<p>…</p>', 'cc' => ['finance@jpa.ae']]);
 
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->letter->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('email', $this->letter)
+            ->mountAction(TestAction::make('email')->table($this->letter))
             ->assertSet('mountedActions.0.data.email_template_id', $legal->id)
             ->assertSet('mountedActions.0.data.cc', ['legal@jpa.ae'])
             // One typed by hand stays; the template's own follows the template.
@@ -517,10 +518,10 @@ class LetterEmailTest extends TestCase
     public function test_the_send_screen_asks_whom_it_goes_to_unless_copy_addresses_are_given(): void
     {
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->letter->matter, 'pageClass' => ViewMatter::class])
-            ->mountTableAction('email', $this->letter)
-            ->setTableActionData(['recipients' => [], 'cc' => []])
-            ->callMountedTableAction()
-            ->assertHasTableActionErrors(['recipients' => 'required']);
+            ->mountAction(TestAction::make('email')->table($this->letter))
+            ->fillForm(['recipients' => [], 'cc' => []])
+            ->callMountedAction()
+            ->assertHasFormErrors(['recipients' => 'required']);
     }
 
     public function test_an_address_the_server_refuses_does_not_stop_the_others_and_is_named(): void

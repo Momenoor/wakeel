@@ -156,7 +156,7 @@ class LeaseResourceTest extends TestCase
                 'target_renewal_date' => now()->toDateString(),
                 'market_average_rent' => 100000,
             ])
-            ->assertHasNoActionErrors();
+            ->assertHasNoFormErrors();
 
         // A what-if, not a mutation — the lease's own rent is untouched.
         $this->assertSame('80000.00', $lease->fresh()->total_base_rent);
