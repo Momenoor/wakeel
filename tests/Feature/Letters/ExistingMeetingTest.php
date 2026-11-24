@@ -101,6 +101,42 @@ class ExistingMeetingTest extends TestCase
         $this->assertSame(self::URL, MatterLetter::sole()->inputs['meeting_link']);
     }
 
+    public function test_a_letter_issued_before_its_meeting_takes_the_link_on_edit(): void
+    {
+        $candidateIds = array_keys(LetterComposer::candidates($this->matter));
+        $page = fn () => Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class]);
+
+        // Issued with no meeting yet: no link in it.
+        $page()->mountAction(TestAction::make('issue')->table())
+            ->fillForm(['letter_template_id' => $this->template->id])
+            ->fillForm(['recipients' => $candidateIds, 'inputs.meeting_date' => now()->addDays(3)->format('Y-m-d'), 'inputs.meeting_time' => '10:00'])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
+        $letter = MatterLetter::sole();
+        $this->assertStringNotContainsString(self::URL, (string) $letter->rendered_html);
+
+        // The meeting made since, with its Teams link: taken from the calendar on Edit.
+        $event = $this->event(['start_datetime' => now()->addDays(4)->setTime(11, 30), 'end_datetime' => now()->addDays(4)->setTime(12, 30)]);
+        $page()->mountAction(TestAction::make('editLetter')->table($letter))
+            ->assertFormFieldExists('relink_event_id', fn (Select $field): bool => array_key_exists($event->id, $field->getOptions()))
+            ->fillForm(['relink_event_id' => $event->id])
+            ->assertSchemaStateSet(['meeting_link' => self::URL, 'inputs.meeting_link' => self::URL, 'inputs.meeting_time' => '11:30'])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
+
+        $letter->refresh();
+        $this->assertSame(self::URL, $letter->inputs['meeting_link']);
+        $this->assertSame(self::URL, $letter->inputs[LetterComposer::MEETING_LINK]);
+        $this->assertSame($event->start_datetime->format('Y-m-d H:i'), $letter->inputs[LetterComposer::MEETING_START]);
+
+        // Or typed: the letter's link fields left as they were given it too.
+        $page()->mountAction(TestAction::make('editLetter')->table($letter))
+            ->fillForm(['meeting_link' => 'https://teams.microsoft.com/l/meetup-join/new'])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
+        $this->assertSame('https://teams.microsoft.com/l/meetup-join/new', $letter->fresh()->inputs['meeting_link']);
+    }
+
     public function test_a_meeting_of_another_matter_cannot_be_used(): void
     {
         $other = CalendarEvent::create(['matter_id' => Matter::factory()->create()->id, 'title' => 'قضية أخرى', 'type' => 'single', 'start_datetime' => now()->addDays(4), 'online_meeting_url' => 'https://teams.example/other']);

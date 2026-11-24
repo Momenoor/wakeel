@@ -507,6 +507,9 @@ class LettersRelationManager extends RelationManager
                 // The template's fields as filled in when it was issued.
                 ...self::inputsState($record),
                 ...LetterSendFields::editState($record),
+                // The meeting link it carries ({{meeting.link}}), to put right or take from a meeting made since.
+                'meeting_link' => self::meetingLinkOf($record),
+                'relink_event_id' => null,
             ])
             ->schema(fn (MatterLetter $record): array => [
                 Section::make()
@@ -524,6 +527,46 @@ class LettersRelationManager extends RelationManager
                     ->visible($record->template !== null)
                     ->schema($this->inputFields($record->matter, $record->template, withMeeting: false))
                     ->columns(2),
+                // A letter about a meeting: its link, put right — or taken from a meeting on the matter's calendar
+                // made (or given its Teams link) after the letter was issued.
+                Section::make(__('Meeting link'))
+                    ->visible(self::aboutAMeeting($record))
+                    ->columns(2)
+                    ->schema([
+                        Select::make('relink_event_id')
+                            ->label(__('Take the link of a meeting on the calendar'))
+                            ->helperText(__('Current and upcoming meetings on this matter that have a Teams link. Its link, date and time go in the letter.'))
+                            ->options(fn (): array => self::meetingsWithLinks($record->matter))
+                            ->placeholder(__('None — keep or type the link'))
+                            ->live()
+                            ->afterStateUpdated(function ($state, Set $set) use ($record): void {
+                                $event = filled($state) ? CalendarEvent::find($state) : null;
+
+                                if (! $event) {
+                                    return;
+                                }
+
+                                $fields = LetterMeeting::fields($record->template) ?? ['links' => []];
+                                $set('meeting_link', (string) $event->online_meeting_url);
+
+                                // The letter's own link, date and time fields too.
+                                foreach ($fields['links'] as $key) {
+                                    $set('inputs.'.$key, (string) $event->online_meeting_url);
+                                }
+                                foreach (['date' => 'Y-m-d', 'time' => 'H:i'] as $part => $format) {
+                                    if (filled($fields[$part] ?? null)) {
+                                        $set('inputs.'.$fields[$part], $event->start_datetime->format($format));
+                                    }
+                                }
+                            })
+                            ->columnSpanFull(),
+                        TextInput::make('meeting_link')
+                            ->label(__('Meeting link'))
+                            ->url()
+                            ->helperText(__('Goes where the letter has :placeholder.', ['placeholder' => '{'.'{meeting.link}'.'}']))
+                            ->extraInputAttributes(['dir' => 'ltr'])
+                            ->columnSpanFull(),
+                    ]),
                 Section::make(__('The letter'))
                     ->description(__('Changes here are for this letter only — the template stays as it is.'))
                     ->collapsible()
@@ -544,8 +587,9 @@ class LettersRelationManager extends RelationManager
                     filled($data['letterhead_id'] ?? null) ? Letterhead::find($data['letterhead_id']) : null,
                     $data['attention'] ?? null,
                     $data['body'] ?? null,
-                    // The fields filled in again, over those the form has no place for (a meeting's link and time).
-                    $record->template ? [...($record->inputs ?? []), ...self::inputsFrom($data)] : null,
+                    // The fields filled in again, over those the form has no place for (a meeting's time) — and the
+                    // meeting link, changed or taken from a meeting on the calendar.
+                    $record->template || self::aboutAMeeting($record) ? self::relinked($record, [...($record->inputs ?? []), ...self::inputsFrom($data)], $data) : null,
                 );
 
                 // The ways it should be sent, asked of the administrator (again when they changed).
@@ -1203,6 +1247,80 @@ class LettersRelationManager extends RelationManager
         request()->attributes->set($key, $meetings);
 
         return $meetings;
+    }
+
+    /**
+     * The matter's meetings on the calendar that have a Teams link, on now or still to come — with minutes or not:
+     * id => "date time — title", the nearest first. A letter's link is taken from one (Edit).
+     *
+     * @return array<int, string>
+     */
+    public static function meetingsWithLinks(Matter $matter): array
+    {
+        return once(fn (): array => CalendarEvent::query()
+            ->where(fn ($query) => $query->where('matter_id', $matter->getKey())
+                ->orWhereHas('matters', fn ($q) => $q->whereKey($matter->getKey())))
+            ->whereNotNull('online_meeting_url')
+            ->where('online_meeting_url', '!=', '')
+            ->whereRaw('COALESCE(end_datetime, start_datetime) >= ?', [now()])
+            ->orderBy('start_datetime')
+            ->limit(30)
+            ->get()
+            ->mapWithKeys(fn (CalendarEvent $event) => [$event->getKey() => $event->start_datetime->format(Dates::dateTimeFormat()).' — '.$event->title])
+            ->all());
+    }
+
+    /** A letter about a meeting: its template has a link field or the meeting's placeholders, or its text has. */
+    private static function aboutAMeeting(MatterLetter $letter): bool
+    {
+        return LetterMeeting::fields($letter->template) !== null || LetterMeeting::usesMeetingLink((string) $letter->body);
+    }
+
+    /** The meeting link a letter carries: the one made with it ({{meeting.link}}), else its first link field's. */
+    private static function meetingLinkOf(MatterLetter $letter): ?string
+    {
+        $inputs = (array) ($letter->inputs ?? []);
+        $first = (LetterMeeting::fields($letter->template)['links'] ?? [])[0] ?? null;
+
+        return ($inputs[LetterComposer::MEETING_LINK] ?? null) ?: ($first !== null ? ($inputs[$first] ?? null) : null);
+    }
+
+    /**
+     * The letter's fields with its meeting link as the Edit form left it: {{meeting.link}} and every link field of
+     * the template given it when it changed — and, taken from a meeting on the calendar, that meeting's time.
+     *
+     * @param  array<string, mixed>  $inputs
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private static function relinked(MatterLetter $letter, array $inputs, array $data): array
+    {
+        if (! self::aboutAMeeting($letter)) {
+            return $inputs;
+        }
+
+        $link = trim((string) ($data['meeting_link'] ?? ''));
+        $event = filled($data['relink_event_id'] ?? null)
+            ? CalendarEvent::query()->whereKey($data['relink_event_id'])->whereIn('id', array_keys(self::meetingsWithLinks($letter->matter)))->first()
+            : null;
+
+        if ($event) {
+            $inputs[LetterComposer::MEETING_START] = $event->start_datetime->format('Y-m-d H:i');
+            $link = $link !== '' ? $link : (string) $event->online_meeting_url;
+        }
+
+        if ($link !== (string) self::meetingLinkOf($letter)) {
+            $inputs[LetterComposer::MEETING_LINK] = $link;
+
+            // The template's link fields left as they were: given the new link too.
+            foreach (LetterMeeting::fields($letter->template)['links'] ?? [] as $key) {
+                if (($inputs[$key] ?? null) === (($letter->inputs ?? [])[$key] ?? null)) {
+                    $inputs[$key] = $link;
+                }
+            }
+        }
+
+        return $inputs;
     }
 
     /**

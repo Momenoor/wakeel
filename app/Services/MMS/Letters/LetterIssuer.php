@@ -123,7 +123,8 @@ class LetterIssuer
                 'letterhead_id' => $letterhead?->getKey() ?? $letter->letterhead_id,
                 'attention' => filled($attention) ? trim($attention) : null,
                 ...(filled(strip_tags((string) $body)) || str_contains((string) $body, 'customBlock') ? ['body' => SignatureLayouts::freeze(LetterComposer::normalizeMergeTags((string) $body))] : []),
-                ...($inputs !== null && $letter->template ? ['inputs' => $this->freezeItems($letter->template, $inputs)] : []),
+                // A letter of no template keeps its meeting link ({{meeting.link}}) too.
+                ...($inputs !== null ? ['inputs' => $letter->template ? $this->freezeItems($letter->template, $inputs) : $inputs] : []),
             ]);
 
             $letter->recipients()->delete();

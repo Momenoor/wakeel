@@ -5637,5 +5637,9 @@
     "The folders were already right.": "المجلدات سليمة بالفعل.",
     "The matter's folders fixed": "تم إصلاح مجلدات القضية",
     "The matter has no folder made in OneDrive yet: use \"Create folders\".": "لم يُنشأ للقضية مجلد في OneDrive بعد: استخدم «إنشاء المجلدات».",
-    "\":name\" is shared with another matter of the case: its name is kept.": "«:name» مشترك مع قضية أخرى من الدعوى نفسها: يبقى اسمه كما هو."
+    "\":name\" is shared with another matter of the case: its name is kept.": "«:name» مشترك مع قضية أخرى من الدعوى نفسها: يبقى اسمه كما هو.",
+    "Take the link of a meeting on the calendar": "أخذ رابط اجتماع من التقويم",
+    "Current and upcoming meetings on this matter that have a Teams link. Its link, date and time go in the letter.": "الاجتماعات الحالية والقادمة لهذه القضية التي لها رابط Teams. يوضع رابطها وتاريخها ووقتها في الخطاب.",
+    "None — keep or type the link": "لا شيء — أبقِ الرابط أو اكتبه",
+    "Goes where the letter has :placeholder.": "يوضع حيث يحتوي الخطاب على :placeholder."
 }
