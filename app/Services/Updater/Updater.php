@@ -291,10 +291,18 @@ class Updater
         }
 
         // A frontend built on the server leaves new, untracked hashed files
-        // in public/build; one that the release also ships would make git
-        // refuse the checkout rather than overwrite it.
-        if (is_dir(base_path('public/build'))) {
-            $this->git(['clean', '-f', '-q', '--', 'public/build']);
+        // in public/build, and a `composer update` run there publishes a
+        // newer Filament's new scripts into public/js and public/css
+        // (filament:upgrade); one that the release also ships would make git
+        // refuse the checkout rather than overwrite it. The next step
+        // publishes again whatever the release's packages need.
+        $published = array_values(array_filter(
+            ['public/build', 'public/js', 'public/css', 'public/fonts'],
+            fn (string $dir): bool => is_dir(base_path($dir)),
+        ));
+
+        if ($published !== []) {
+            $this->git(['clean', '-f', '-q', '--', ...$published]);
         }
 
         // The release's .htaccess replaces the server's, except for the

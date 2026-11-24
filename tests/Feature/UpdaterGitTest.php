@@ -64,6 +64,7 @@ class UpdaterGitTest extends TestCase
         File::put($work.'/composer.lock', "lock v2\n");
         File::put($work.'/public/build/manifest.json', "manifest v2\n");
         File::put($work.'/public/build/assets/app-2.js', "release build\n");
+        File::put($work.'/public/js/js-field.js', "release script\n");
         $this->declareVersion($work, '1.1.0');
         $this->commitAndTag($work, 'v1.1.0');
 
@@ -85,6 +86,9 @@ class UpdaterGitTest extends TestCase
         File::put($this->site.'/public/build/manifest.json', "manifest built on the server\n");
         File::ensureDirectoryExists($this->site.'/public/build/assets');
         File::put($this->site.'/public/build/assets/app-2.js', "built on the server\n");
+        // A `composer update` run there: a newer Filament published a new script of its own, which the
+        // release ships too (the update to v3.17.43 stopped on js-field.js).
+        File::put($this->site.'/public/js/js-field.js', "published on the server\n");
 
         $this->originalBasePath = $this->app->basePath();
         $this->app->setBasePath($this->site);
@@ -153,6 +157,7 @@ class UpdaterGitTest extends TestCase
         $this->assertSame("lock v2\n", str_replace("\r\n", "\n", File::get($this->site.'/composer.lock')));
         $this->assertSame("manifest v2\n", str_replace("\r\n", "\n", File::get($this->site.'/public/build/manifest.json')));
         $this->assertSame("release build\n", str_replace("\r\n", "\n", File::get($this->site.'/public/build/assets/app-2.js')));
+        $this->assertSame("release script\n", str_replace("\r\n", "\n", File::get($this->site.'/public/js/js-field.js')));
     }
 
     /**
