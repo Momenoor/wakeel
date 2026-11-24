@@ -233,6 +233,9 @@ class LetterSendFields
                 ->descriptions(collect($done)->map(fn (array $entry): string => Dates::dateTime($entry['at'] ?? null))->all())
                 // Done is done: not taken back from here.
                 ->disableOptionWhen(fn (string $value): bool => isset($done[$value]))
+                // Those done stay ticked, so every way asked for is a value it may have: Filament 5.12 checks the
+                // ticked ones against the options still open only, and refused the save ("not in the allowed list").
+                ->in(fn (CheckboxList $component): array => array_keys($component->getOptions()))
                 ->columns(3),
         ];
     }

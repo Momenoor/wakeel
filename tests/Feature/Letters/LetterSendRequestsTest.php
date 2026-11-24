@@ -185,8 +185,19 @@ class LetterSendRequestsTest extends TestCase
         $this->assertSame($this->admin->id, $request->done['sms']['by']);
         $this->assertSame(0, $this->bells($this->assistant, NotificationType::LETTER_SENT_FOR_ME));
 
-        // The last way done: closed, and the assistant told.
-        $requests->done($request, LetterSendChannel::EMAIL, $this->admin);
+        // Opened again: SMS done stays ticked (and can't be unticked), the next way ticked beside it is saved —
+        // Filament 5.12 had refused the done one as "not in the allowed list".
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->mountAction(TestAction::make('toSend')->table($letter))
+            ->assertSchemaStateSet(['sent' => ['sms']])
+            ->fillForm(['sent' => ['sms', 'email']])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
+        $this->assertSame([['email', 'sms'], false], [$request->fresh()->doneChannels(), $request->fresh()->isOpen()]);
+        $this->assertSame(1, $this->bells($this->assistant, NotificationType::LETTER_SENT_FOR_ME));
+
+        // The last way done: closed, and the assistant told (once).
+        $requests->done($request->fresh(), LetterSendChannel::EMAIL, $this->admin);
         $this->assertFalse($request->fresh()->isOpen());
         $this->assertSame(1, $this->bells($this->assistant, NotificationType::LETTER_SENT_FOR_ME));
 
