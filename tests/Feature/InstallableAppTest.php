@@ -33,6 +33,11 @@ class InstallableAppTest extends TestCase
         $this->assertSame(['192x192 any', '512x512 any', '512x512 maskable'], $sizes);
         $this->assertStringContainsString('?v='.AppIconController::version(), $manifest['icons'][0]['src']);
 
+        // No ".png" in the icons' addresses: a web server answering those itself gave 404, and Edge would not install.
+        foreach ($manifest['icons'] as $icon) {
+            $this->assertStringNotContainsString('.png', $icon['src']);
+        }
+
         $this->assertSame([route('filament.mms.pages.chat'), route('filament.mms.resources.matters.index')], array_column($manifest['shortcuts'], 'url'));
     }
 
@@ -55,6 +60,10 @@ class InstallableAppTest extends TestCase
         }
 
         $this->get('/app-icon/64-any.png')->assertNotFound();
+        $this->get('/app-icon/64-any')->assertNotFound();
+
+        // The old address, in a manifest a browser kept, still answers.
+        $this->get('/app-icon/192-any.png')->assertOk()->assertHeader('Content-Type', 'image/png');
 
         // No icon or logo to draw from: the icon's own address.
         Setting::set(Branding::FAVICON, null);

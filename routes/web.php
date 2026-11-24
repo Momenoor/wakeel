@@ -122,7 +122,11 @@ Route::view('/terms', 'legal.terms')->name('legal.terms');
 // Wakeel installed as an app (AppManifestController), with its icons; and the page it shows with no connection
 // (kept by the service worker, public/push-sw.js).
 Route::get('/manifest.webmanifest', AppManifestController::class)->name('manifest');
-Route::get('/app-icon/{size}-{purpose}.png', AppIconController::class)->whereNumber('size')->whereIn('purpose', ['any', 'maskable'])->name('app-icon');
+// The icons' address has no ".png": a web server that answers *.png addresses itself, from the files in public/,
+// gave 404 for them before Laravel saw them - Edge then refused to install the app. The old address is kept for
+// a manifest a browser still has.
+Route::get('/app-icon/{size}-{purpose}', AppIconController::class)->whereNumber('size')->whereIn('purpose', ['any', 'maskable'])->name('app-icon');
+Route::get('/app-icon/{size}-{purpose}.png', AppIconController::class)->whereNumber('size')->whereIn('purpose', ['any', 'maskable'])->name('app-icon.png');
 Route::view('/offline', 'offline')->name('offline');
 
 if (config('modules.mms')) {
