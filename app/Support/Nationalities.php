@@ -226,7 +226,8 @@ final class Nationalities
     {
         $arabic = app()->getLocale() === 'ar';
         $options = array_map(fn (array $names): string => $names[$arabic ? 1 : 0], self::ALL);
-        asort($options, SORT_LOCALE_STRING);
+        // The language's own alphabetical order (SORT_LOCALE_STRING is deprecated from PHP 8.6).
+        (new \Collator($arabic ? 'ar' : 'en'))->asort($options);
 
         return $options;
     }
