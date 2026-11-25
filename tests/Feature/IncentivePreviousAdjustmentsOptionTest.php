@@ -148,7 +148,7 @@ class IncentivePreviousAdjustmentsOptionTest extends TestCase
             ->call('create')
             ->assertHasNoFormErrors();
 
-        $june = IncentiveCalculation::sole(fn ($query) => $query->where('name', 'June'));
+        $june = IncentiveCalculation::where('name', 'June')->sole();
         $this->assertFalse($june->appliesPreviousAdjustments());
         $this->assertTrue($june->isDraft());
     }
