@@ -71,7 +71,7 @@ class UserForm extends PluginUserForm
                     ->label(__('Which emails'))
                     ->options([0 => __('Only those about a matter'), 1 => __('Every email')])
                     ->descriptions([
-                        0 => __('The rest are left unread in the mailbox.'),
+                        0 => __('The rest are left unread in the mailbox. From someone on no matter, only one that writes a matter\'s number.'),
                         1 => __('Those that cannot be told wait in their own Unfiled emails, for them alone, to file or set aside.'),
                     ])
                     ->default(0)

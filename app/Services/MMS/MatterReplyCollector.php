@@ -353,6 +353,7 @@ class MatterReplyCollector
         };
         $progress = ['reached' => null, 'stopped' => false];
         $keepAll = self::keepsAll($senderKey);
+        $byName = self::guessesByName($senderKey);
         $filing = self::isFilingInbox($senderKey);
         $ignored = self::ignoredSenders();
         // The emails sent from our other mailboxes, read once — only when one is not answered from this one's.
@@ -471,7 +472,7 @@ class MatterReplyCollector
                     continue;
                 }
 
-                $match = $this->matcher->match($from, (string) ($message['subject'] ?? ''), $message['body']);
+                $match = $this->matcher->match($from, (string) ($message['subject'] ?? ''), $message['body'], $byName);
 
                 if ($match['matter'] !== null && ($matterId === null || $match['matter'] === $matterId)) {
                     $this->keepIncoming(Matter::findOrFail($match['matter']), $message, $id, $senderKey, $match['by']);
@@ -511,9 +512,50 @@ class MatterReplyCollector
     {
         $senders = SenderMailer::all();
 
-        return $senderKey !== null
-            ? (bool) ($senders[$senderKey]['keep_all'] ?? false)
-            : collect($senders)->contains(fn (array $sender): bool => (bool) ($sender['keep_all'] ?? false));
+        if ($senderKey === null) {
+            return collect(array_keys($senders))->contains(fn ($key): bool => self::keepsAll((string) $key));
+        }
+
+        $sender = $senders[$senderKey] ?? null;
+        if ($sender === null) {
+            return false;
+        }
+
+        // Someone's own mailbox added in Mail senders as a shared one too (before it was theirs, say): read
+        // under either, it keeps what its owner chose on their page (Users → Edit), never more.
+        return (bool) ((self::ownTwin($senderKey) ?? $sender)['keep_all'] ?? false);
+    }
+
+    /**
+     * The user's own mailbox (read and filed) that this shared one of Mail senders also is — the same address —
+     * or null.
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function ownTwin(?string $senderKey): ?array
+    {
+        $senders = SenderMailer::all();
+        $sender = $senderKey !== null ? ($senders[$senderKey] ?? null) : null;
+        $address = mb_strtolower(trim((string) ($sender['address'] ?? '')));
+
+        if ($sender === null || ($sender['owner'] ?? null) !== null || $address === '') {
+            return null;
+        }
+
+        return collect($senders)->first(fn (array $other): bool => ($other['owner'] ?? null) !== null && ($other['collects'] ?? false)
+            && mb_strtolower(trim((string) ($other['address'] ?? ''))) === $address);
+    }
+
+    /**
+     * Whether an email from someone on no matter may be kept for a party's name (or email address) written in
+     * it. Not from someone's own mailbox set to keep only what is about a matter: there, all sorts of email
+     * names a company or a person that is a party somewhere, and only a matter's number says it is about one.
+     */
+    public static function guessesByName(?string $senderKey): bool
+    {
+        $own = SenderMailer::ownerOf($senderKey) !== null || self::ownTwin($senderKey) !== null;
+
+        return ! $own || self::keepsAll($senderKey);
     }
 
     /** Whether this is the filing mailbox (Mail senders): what the office forwards to it is filed as its original. */

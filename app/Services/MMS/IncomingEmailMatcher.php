@@ -45,11 +45,12 @@ class IncomingEmailMatcher
 
     /**
      * matter: when certain; else candidates for a person to choose from —
-     * none: not a matter's email.
+     * none: not a matter's email. $byName false: from someone on no matter, only a matter's number counts —
+     * not a party's name or address written in it (someone's own mailbox, kept to what is about a matter).
      *
      * @return array{matter: ?int, candidates: list<int>, by: ?string}
      */
-    public function match(string $from, string $subject, Closure|string $body): array
+    public function match(string $from, string $subject, Closure|string $body, bool $byName = true): array
     {
         $none = ['matter' => null, 'candidates' => [], 'by' => null];
         $parties = $this->partiesWith($from);
@@ -59,11 +60,11 @@ class IncomingEmailMatcher
         // those (not when so many share it that it says nothing).
         if ($parties === []) {
             $plain = self::plain($body instanceof Closure ? (string) $body() : $body);
-            $steps = [
+            $steps = array_filter([
                 MatterEmail::BY_SUBJECT => fn (): array => self::numbered($subject),
                 MatterEmail::BY_BODY => fn (): array => self::numbered($plain),
-                MatterEmail::BY_PARTY_NAME => fn (): array => self::mentioned($subject.' '.$plain),
-            ];
+                MatterEmail::BY_PARTY_NAME => $byName ? fn (): array => self::mentioned($subject.' '.$plain) : null,
+            ]);
 
             foreach ($steps as $by => $find) {
                 $found = $find();

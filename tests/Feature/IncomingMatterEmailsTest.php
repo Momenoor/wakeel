@@ -1248,6 +1248,59 @@ class IncomingMatterEmailsTest extends TestCase
         $this->assertSame(['iflas'], MatterEmail::query()->pluck('sender_key')->all());
     }
 
+    public function test_someones_own_mailbox_set_to_only_matters_keeps_no_strangers_email_for_a_party_named_in_it(): void
+    {
+        $momen = User::factory()->create(['email' => 'momen@jpa.ae']);
+        $momen->update(['mailbox_reads' => true, 'mailbox_keeps_all' => false]);
+        $own = (string) MailSender::query()->where('user_id', $momen->id)->value('key');
+        $collector = app(MatterReplyCollector::class);
+        $to = ['to' => ['momen@jpa.ae']];
+
+        // A newsletter naming a company that is a party somewhere: left in the mailbox.
+        $collector->handle([$this->email(['from' => 'news@bank.ae', 'subject' => 'عروض', 'body' => '<p>شركة المهاد للتجارة</p>', 'message_id' => '<news@bank.ae>', ...$to])], collect(), $own);
+        $this->assertSame(0, MatterEmail::count());
+
+        // One writing a matter's number still is about it; a party's own email still is too.
+        $collector->handle([
+            $this->email(['from' => 'clerk@court.ae', 'subject' => 'بخصوص 986/2026', 'message_id' => '<clerk@court.ae>', ...$to]),
+            $this->email(['subject' => 'مستندات 987/2026', ...$to]),
+        ], collect(), $own);
+        $this->assertEqualsCanonicalizing([$this->first->id, $this->second->id], MatterEmail::query()->pluck('matter_id')->map(fn ($id) => (int) $id)->all());
+
+        // Set to every email: the name is enough again (and a stranger's waits for them in Unfiled emails).
+        $momen->update(['mailbox_keeps_all' => true]);
+        $collector->handle([$this->email(['from' => 'news@bank.ae', 'subject' => 'عروض', 'body' => '<p>شركة المهاد للتجارة</p>', 'message_id' => '<news2@bank.ae>', ...$to])], collect(), $own);
+        $this->assertSame($this->first->id, (int) MatterEmail::query()->where('message_id', '<news2@bank.ae>')->value('matter_id'));
+
+        // The office's shared mailboxes keep naming a matter by its party's name, as before.
+        $this->collect($this->email(['from' => 'clerk2@court.ae', 'subject' => 'إخطار', 'body' => '<p>مؤسسة النخيل</p>', 'message_id' => '<clerk2@court.ae>']));
+        $this->assertSame($this->second->id, (int) MatterEmail::query()->where('message_id', '<clerk2@court.ae>')->value('matter_id'));
+    }
+
+    public function test_someones_own_mailbox_added_as_a_shared_one_too_keeps_only_what_they_chose(): void
+    {
+        // Added in Mail senders to keep every email, before it was theirs; then theirs, set to only matters.
+        MailSenders::add('momen-shared', ['address' => 'Momen@jpa.ae', 'keep_all_inbox' => true]);
+        $momen = User::factory()->create(['email' => 'momen@jpa.ae']);
+        $momen->update(['mailbox_reads' => true, 'mailbox_keeps_all' => false]);
+
+        $this->assertFalse(MatterReplyCollector::keepsAll('momen-shared'));
+        app(MatterReplyCollector::class)->handle([
+            $this->email(['from' => 'stranger@gmail.com', 'message_id' => '<stranger@gmail.com>', 'to' => ['momen@jpa.ae']]),
+            $this->email(['from' => 'news@bank.ae', 'subject' => 'عروض', 'body' => '<p>شركة المهاد للتجارة</p>', 'message_id' => '<news@bank.ae>', 'to' => ['momen@jpa.ae']]),
+        ], collect(), 'momen-shared');
+        $this->assertSame(0, MatterEmail::count());
+
+        // Their choice to keep every email holds there too; a shared mailbox of its own address alone keeps its own.
+        $momen->update(['mailbox_keeps_all' => true]);
+        $this->assertTrue(MatterReplyCollector::keepsAll('momen-shared'));
+        $momen->update(['mailbox_reads' => false]);
+        $this->assertTrue(MatterReplyCollector::keepsAll('momen-shared'));
+        MailSender::query()->where('key', 'momen-shared')->update(['keep_all_inbox' => false]);
+        \App\Services\MMS\SenderMailer::forget();
+        $this->assertFalse(MatterReplyCollector::keepsAll('momen-shared'));
+    }
+
     public function test_where_the_one_switch_was_on_every_mailbox_starts_on(): void
     {
         MailSenders::add('second');

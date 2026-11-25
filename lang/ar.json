@@ -4538,6 +4538,7 @@
     "Only those about a matter": "المتعلقة بالقضايا فقط",
     "Every email": "كل الرسائل",
     "The rest are left unread in the mailbox.": "يبقى الباقي غير مقروء في الصندوق.",
+    "The rest are left unread in the mailbox. From someone on no matter, only one that writes a matter's number.": "يبقى الباقي غير مقروء في الصندوق. وممن ليس طرفاً في أي قضية: ما يذكر رقم قضية فقط.",
     "Those that cannot be told wait in their own Unfiled emails, for them alone, to file or set aside.": "ما لم تُعرف قضيته ينتظر في \"البريد غير المصنّف\" الخاص به وحده، ليلحقه بقضية أو يستبعده.",
     "Collecting emails": "جمع الرسائل",
     "Every mailbox set to be read — the shared ones and each user's own — is read every few minutes by the scheduled tasks (Settings → Integrations): replies and emails about a matter are filed on it.": "يُقرأ كل صندوق مضبوط للقراءة — المشتركة وصندوق كل مستخدم — كل بضع دقائق عبر المهام المجدولة (الإعدادات ← التكاملات): تُلحق الردود والرسائل المتعلقة بقضية بها.",
