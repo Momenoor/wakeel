@@ -5,6 +5,7 @@ namespace App\Services\MMS\Letters;
 use App\Models\CalendarEvent;
 use App\Models\LetterTemplate;
 use App\Models\Matter;
+use App\Services\MMS\Calendar\EventTitle;
 use App\Services\MMS\OutlookCalendarService;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -93,7 +94,8 @@ class LetterMeeting
 
         $start = Carbon::instance($start);
         $end = $start->copy()->addMinutes(max(15, $minutes));
-        $title = trim(($template->name ?: $template->subject).' — '.$matter->reference, ' —');
+        // As every single event's title (EventTitle): the matter, its court, type and assistant.
+        $title = EventTitle::for($matter);
 
         $event = CalendarEvent::create([
             'matter_id' => $matter->getKey(),

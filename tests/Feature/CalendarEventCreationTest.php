@@ -174,7 +174,7 @@ class CalendarEventCreationTest extends TestCase
             ->assertFormFieldExists('matter_id', fn ($field) => $field->getSearchResults('639/2025') === [$matter->id => $label]
                 && $field->getOptionLabel() === $label)
             // Picking it fills the title.
-            ->assertSet('mountedActions.0.data.title', '2025/639 — محكمة دبي — عمالي');
+            ->assertSet('mountedActions.0.data.title', '639/2025 - محكمة دبي - عمالي');
     }
 
     public function test_an_event_is_made_from_the_matter_page_with_the_matter_filled_in_and_linked(): void
@@ -186,7 +186,7 @@ class CalendarEventCreationTest extends TestCase
         Livewire::test(ViewMatter::class, ['record' => $matter->getRouteKey()])
             ->mountAction('createCalendarEvent')
             ->assertSet('mountedActions.0.data.matter_id', $matter->id)
-            ->assertSet('mountedActions.0.data.title', '2025/639 — محكمة دبي — عمالي')
+            ->assertSet('mountedActions.0.data.title', '639/2025 - محكمة دبي - عمالي')
             ->assertSet('mountedActions.0.data.location', 'Microsoft Teams - محكمة دبي')
             ->set('mountedActions.0.data.start_datetime', '2026-10-20 10:00:00')
             ->set('mountedActions.0.data.end_datetime', '2026-10-20 11:00:00')
@@ -196,7 +196,7 @@ class CalendarEventCreationTest extends TestCase
 
         $event = CalendarEvent::sole();
         $this->assertSame($matter->id, $event->matter_id);
-        $this->assertSame('2025/639 — محكمة دبي — عمالي', $event->title);
+        $this->assertSame('639/2025 - محكمة دبي - عمالي', $event->title);
         $this->assertContains($matter->id, $event->matters()->pluck('matters.id')->all());
         // The matter's next session date follows, as ticked by default.
         $this->assertSame('2026-10-20', $matter->fresh()->next_session_date?->format('Y-m-d'));

@@ -128,6 +128,8 @@ class LetterMeetingTest extends TestCase
         $this->assertTrue($event->synced_to_outlook);
         $this->assertSame('outlook-1', $event->outlook_event_id);
         $this->assertSame(self::JOIN_URL, $event->online_meeting_url);
+        // Named as every single event is (EventTitle): the matter's number first.
+        $this->assertStringStartsWith('1957/2026', $event->title);
 
         $letter = MatterLetter::sole();
         $this->assertSame(self::JOIN_URL, $letter->inputs['meeting_link']);

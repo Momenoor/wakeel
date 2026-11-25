@@ -9,6 +9,7 @@ use App\Models\CalendarEvent;
 use App\Models\Matter;
 use App\Models\Setting;
 use App\Services\MMS\Calendar\EventMatterLinker;
+use App\Services\MMS\Calendar\EventTitle;
 use App\Services\MMS\OutlookCalendarService;
 use App\Support\MatterSearch;
 use Carbon\Carbon;
@@ -276,8 +277,8 @@ class CalendarEventForm
     }
 
     /**
-     * An event's title from its matters, as made and as their choice changes: one matter "2025/639 — court —
-     * type"; several — or a bulk event's (court sessions together), one or more — "639/2025, 640/2025 (court)
+     * An event's title from its matters, as made and as their choice changes: one matter "639/2025 - court - type -
+     * (assistant's initials)" (EventTitle); several — or a bulk event's (court sessions together), one or more — "639/2025, 640/2025 (court)
      * (type) (جلسات المحكمة)". Null with none: the title is left as it is.
      *
      * @param  Collection<int, Matter>  $matters  their court and type loaded
@@ -289,9 +290,7 @@ class CalendarEventForm
         }
 
         if ($matters->count() === 1 && ! $sessions) {
-            $matter = $matters->first();
-
-            return $matter->year.'/'.$matter->number.' — '.($matter->court?->name ?? '').' — '.($matter->type?->name ?? '');
+            return EventTitle::for($matters->first());
         }
 
         $names = fn (string $of): string => $matters->map(fn (Matter $matter): ?string => $matter->{$of}?->name)->filter()->unique()->join('، ');
