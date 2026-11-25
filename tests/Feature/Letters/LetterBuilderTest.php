@@ -778,6 +778,18 @@ class LetterBuilderTest extends TestCase
         $this->get(route('letters.pdf', $letter))->assertForbidden();
     }
 
+    public function test_a_letter_prints_at_its_real_size(): void
+    {
+        $letter = app(LetterIssuer::class)->issue($this->template, $this->matter, [], []);
+
+        // The browser's PDF viewer is told not to shrink it to the printable area.
+        $pdf = $this->get(route('letters.pdf', $letter))->assertSuccessful()->getContent();
+        $this->assertMatchesRegularExpression('#/ViewerPreferences\s*<<[^>]*/PrintScaling /None#', $pdf);
+
+        // The same for an Arabic letter, and every other PDF on a letterhead.
+        $this->assertStringContainsString('NoPrintScaling', LetterPdf::mpdf(Letterhead::fallback(), true)->DisplayPreferences);
+    }
+
     public function test_the_letterhead_designer(): void
     {
         $letterhead = Letterhead::create(['name' => 'Main', 'elements' => Letterhead::defaultElements()]);

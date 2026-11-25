@@ -53,7 +53,7 @@ class LetterPdf
         $fontDirs = (new ConfigVariables)->getDefaults()['fontDir'];
         $fontData = (new FontVariables)->getDefaults()['fontdata'];
 
-        return new Mpdf([
+        $mpdf = new Mpdf([
             'mode' => 'utf-8',
             // Always UTF-8: a charset named in pasted text is not the page's (see EmailPdf).
             'allow_charset_conversion' => false,
@@ -83,6 +83,13 @@ class LetterPdf
             'autoLangToFont' => $arabicKey !== $default,
             'languageToFont' => new ArabicInBoutros($arabicKey),
         ]);
+
+        // Printed at its real size: the PDF tells the browser's viewer not
+        // to shrink it to the printer's printable area (Chrome and Edge
+        // otherwise start the print at "Fit to printable area", about 95%).
+        $mpdf->SetDisplayPreferences('/NoPrintScaling');
+
+        return $mpdf;
     }
 
     /**
