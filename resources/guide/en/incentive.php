@@ -28,6 +28,7 @@ return [
             'steps' => [
                 ['text' => 'Click "New Incentive Calculation".', 'shot' => 'create-1'],
                 ['text' => 'Enter the "Calculation Name" (for example: Incentive calculation - November 2026), set the "Period Start" and "Period End", and add any "Notes".', 'shot' => 'create-2-filled'],
+                ['text' => 'Leave "Apply adjustments from previous periods in this calculation" on to settle here what is waiting from earlier periods (a paid incentive taken back or added because its fee was deleted, corrected or credited after its calculation was finalized). Turn it off to keep them pending: they are not applied in this calculation, and the next calculation that has it on applies them. Under it, the number waiting now and their net effect.', 'shot' => 'create-2-filled'],
                 ['text' => 'Click "Create". The calculation\'s page opens with the status "Draft".', 'shot' => 'create-3-done'],
             ],
         ],

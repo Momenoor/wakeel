@@ -20,6 +20,10 @@ class IncentiveCalculationInfolist
                     TextEntry::make('period_start')->label(__('Period Start'))->date(),
                     TextEntry::make('period_end')->label(__('Period End'))->date(),
                     TextEntry::make('finalized_at')->label(__('Finalized At'))->dateTime()->placeholder(__('Not finalized yet')),
+                    TextEntry::make('apply_previous_adjustments')->label(__('Adjustments from previous periods'))
+                        ->badge()
+                        ->color(fn ($state) => $state ? 'success' : 'gray')
+                        ->formatStateUsing(fn ($state) => $state ? __('Applied in this calculation') : __('Kept pending for an upcoming calculation')),
                     TextEntry::make('creator.name')->label(__('Created By')),
                     TextEntry::make('notes')->label(__('Notes'))->placeholder('—')->columnSpanFull(),
                 ])->columns(3),

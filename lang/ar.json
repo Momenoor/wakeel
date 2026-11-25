@@ -5641,5 +5641,12 @@
     "Take the link of a meeting on the calendar": "أخذ رابط اجتماع من التقويم",
     "Current and upcoming meetings on this matter that have a Teams link. Its link, date and time go in the letter.": "الاجتماعات الحالية والقادمة لهذه القضية التي لها رابط Teams. يوضع رابطها وتاريخها ووقتها في الخطاب.",
     "None — keep or type the link": "لا شيء — أبقِ الرابط أو اكتبه",
-    "Goes where the letter has :placeholder.": "يوضع حيث يحتوي الخطاب على :placeholder."
+    "Goes where the letter has :placeholder.": "يوضع حيث يحتوي الخطاب على :placeholder.",
+    "Apply adjustments from previous periods in this calculation": "تطبيق تسويات الفترات السابقة في هذا الحساب",
+    "Nothing is waiting from previous periods now.": "لا توجد تسويات معلّقة من فترات سابقة حالياً.",
+    ":count adjustment(s) from previous periods waiting, a net :amount on the assistants' incentive.": "تسويات معلّقة من فترات سابقة: :count، صافي أثرها :amount على حوافز المساعدين.",
+    "Off: they are kept pending, not applied here, and are applied in the next calculation that has this on.": "عند الإيقاف: تبقى معلّقة ولا تُطبّق هنا، وتُطبّق في أول حساب قادم يكون فيه هذا الخيار مفعّلاً.",
+    "Adjustments from previous periods": "تسويات الفترات السابقة",
+    "Applied in this calculation": "مطبّقة في هذا الحساب",
+    "Kept pending for an upcoming calculation": "معلّقة لحساب قادم"
 }

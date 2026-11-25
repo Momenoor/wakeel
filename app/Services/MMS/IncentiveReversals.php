@@ -5,6 +5,7 @@ namespace App\Services\MMS;
 use App\Models\Fee;
 use App\Models\FeeCreditNote;
 use App\Models\IncentiveAssistantLine;
+use App\Models\IncentiveCalculation;
 use App\Models\IncentiveLine;
 use App\Models\IncentiveReversal;
 use Illuminate\Database\Eloquent\Builder;
@@ -166,19 +167,31 @@ class IncentiveReversals
     }
 
     /**
+     * Waiting to be settled: recorded after their calculation was finalized and not in any calculation yet.
+     *
+     * @return Builder<IncentiveReversal>
+     */
+    public static function pending(): Builder
+    {
+        return IncentiveReversal::query()->whereNull('applied_calculation_id')->whereNotNull('matter_id');
+    }
+
+    /**
      * Taken back in a calculation being run: those not taken back yet (or already in this one, rebuilt), one
      * negative line per assistant under one line per paid fee. A draft deleted gives them back (its id emptied).
+     * A calculation set to keep them pending for an upcoming one (apply_previous_adjustments off) takes none, and
+     * gives back any it had: they wait, untouched, for the next calculation run that settles them.
      */
     public function apply(Model $calculation): void
     {
         IncentiveLine::query()->where('incentive_calculation_id', $calculation->getKey())->where('is_reversal', true)->delete();
         IncentiveReversal::query()->where('applied_calculation_id', $calculation->getKey())->update(['applied_calculation_id' => null]);
 
-        $pending = IncentiveReversal::query()
-            ->whereNull('applied_calculation_id')
-            ->whereNotNull('matter_id')
-            ->orderBy('id')
-            ->get();
+        if ($calculation instanceof IncentiveCalculation && ! $calculation->appliesPreviousAdjustments()) {
+            return;
+        }
+
+        $pending = self::pending()->orderBy('id')->get();
 
         // One line per paid fee and per change of it (deleted, each correction, each credit note): an assistant once on each.
         foreach ($pending->groupBy(fn (IncentiveReversal $reversal): string => implode('-', [

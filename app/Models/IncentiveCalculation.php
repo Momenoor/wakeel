@@ -17,6 +17,7 @@ class IncentiveCalculation extends Model
         'period_start',
         'period_end',
         'status',
+        'apply_previous_adjustments',
         'notes',
         'created_by',
         'finalized_at',
@@ -26,6 +27,11 @@ class IncentiveCalculation extends Model
         'period_start' => 'date',
         'period_end' => 'date',
         'finalized_at' => 'datetime',
+        'apply_previous_adjustments' => 'boolean',
+    ];
+
+    protected $attributes = [
+        'apply_previous_adjustments' => true,
     ];
 
     public function getActivitylogOptions(): LogOptions
@@ -53,6 +59,12 @@ class IncentiveCalculation extends Model
     public function adjustments(): HasMany
     {
         return $this->hasMany(IncentiveAdjustment::class);
+    }
+
+    /** Whether what is waiting from previous periods (IncentiveReversals) is settled in it, or left for an upcoming one. */
+    public function appliesPreviousAdjustments(): bool
+    {
+        return (bool) ($this->apply_previous_adjustments ?? true);
     }
 
     public function isDraft(): bool
