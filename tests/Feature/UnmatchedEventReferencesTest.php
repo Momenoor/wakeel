@@ -186,7 +186,7 @@ class UnmatchedEventReferencesTest extends TestCase
 
         // Fixed from elsewhere while the dashboard is open: no empty table left.
         Matter::factory()->create(['number' => 3153, 'year' => 2026]);
-        $widget->call('$refresh')->assertDontSee(__('Events with a matter number not in the system'));
+        $widget->call('$refresh')->assertOk()->assertDontSee(__('Events with a matter number not in the system'));
 
         // An event gone without model events (cache still lists it): hidden too.
         Matter::query()->delete();

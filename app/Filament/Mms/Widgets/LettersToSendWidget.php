@@ -10,6 +10,7 @@ use App\Services\MMS\Letters\LetterSendRequests;
 use App\Support\Dates;
 use App\Support\RequestMemo;
 use Filament\Actions\Action;
+use Filament\Support\Components\Attributes\Unexposed;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget;
@@ -32,9 +33,20 @@ class LettersToSendWidget extends TableWidget
 
     protected int|string|array $columnSpan = 'full';
 
+    /** On the dashboard only while there are some. */
     public static function canView(): bool
     {
         return self::hasAny();
+    }
+
+    /**
+     * Once on a dashboard, not refused when the last one is sent (Filament asks canView() again on every request
+     * to it): its redraw was answered 403, failing the dashboard's other requests sent with it. render() hides it.
+     */
+    #[Unexposed]
+    public function bootCanAuthorizeAccess(): void
+    {
+        abort_unless(auth()->check(), 403);
     }
 
     /** Nothing left on the dashboard once the last one is sent from here. */

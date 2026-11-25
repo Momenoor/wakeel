@@ -10,6 +10,7 @@ use App\Services\MMS\Calendar\UnmatchedEventReferences;
 use App\Support\Dates;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
+use Filament\Support\Components\Attributes\Unexposed;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget;
@@ -38,6 +39,17 @@ class UnmatchedEventReferencesWidget extends TableWidget
     public static function canView(): bool
     {
         return static::shieldCanView() && self::hasEvents();
+    }
+
+    /**
+     * Once on a dashboard, not refused when the last event is sorted out (Filament asks canView() again on every
+     * request to it): its redraw was answered 403, failing the dashboard's other requests sent with it. render()
+     * hides it; who may see it at all is still asked.
+     */
+    #[Unexposed]
+    public function bootCanAuthorizeAccess(): void
+    {
+        abort_unless(static::shieldCanView(), 403);
     }
 
     /**

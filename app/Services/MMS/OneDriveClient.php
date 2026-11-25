@@ -9,6 +9,7 @@ use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Sleep;
 use Psr\Http\Message\StreamInterface;
 use RuntimeException;
 use Throwable;
@@ -523,15 +524,37 @@ class OneDriveClient
         return ['id' => (string) $response->json('id'), 'webUrl' => (string) $response->json('webUrl')];
     }
 
+    /** How many times a request Microsoft 365 turns back for now (429 too many requests, 503) is made before it fails. */
+    private const TRIES = 3;
+
+    /** The longest Microsoft 365's Retry-After is waited for; asked to wait longer, the request fails and a later run tries. */
+    private const WAIT_SECONDS = 10;
+
     private function request(string $method, string $uri, array $body = [], bool $allow409 = false, bool $allow404 = false): Response
     {
-        $http = Http::withToken($this->token())->acceptJson()->timeout(20);
-        $response = match ($method) {
-            'get' => $http->get(self::GRAPH.$uri),
-            'delete' => $http->delete(self::GRAPH.$uri),
-            'patch' => $http->patch(self::GRAPH.$uri, $body),
-            default => $http->post(self::GRAPH.$uri, $body),
-        };
+        // Turned back for now (429, 503 — several folders asked at once, childrenOfMany()): asked again after the
+        // wait Microsoft 365 names (Retry-After), a couple of times, not failed at once.
+        for ($try = 1; ; $try++) {
+            $http = Http::withToken($this->token())->acceptJson()->timeout(20);
+            $response = match ($method) {
+                'get' => $http->get(self::GRAPH.$uri),
+                'delete' => $http->delete(self::GRAPH.$uri),
+                'patch' => $http->patch(self::GRAPH.$uri, $body),
+                default => $http->post(self::GRAPH.$uri, $body),
+            };
+
+            if (! in_array($response->status(), [429, 503], true) || $try >= self::TRIES) {
+                break;
+            }
+
+            $wait = max(1, (int) $response->header('Retry-After'));
+
+            if ($wait > self::WAIT_SECONDS) {
+                break;
+            }
+
+            Sleep::for($wait)->seconds();
+        }
 
         if ($response->successful() || ($allow409 && $response->status() === 409) || ($allow404 && $response->status() === 404)) {
             return $response;
@@ -541,7 +564,10 @@ class OneDriveClient
         $message = $response->json('error.message') ?: $response->body();
 
         if ($response->status() === 404) {
-            throw new OneDriveNotFound(__('OneDrive not found for this account. Check the email on the assistant\'s profile, and that they have signed in to OneDrive at least once.').' '.$message, $response->json('error.code'));
+            // A file or folder not there (renamed, moved or deleted by hand) is not "no OneDrive for this account".
+            throw new OneDriveNotFound(($response->json('error.code') === 'itemNotFound'
+                ? __('The folder or file is no longer in OneDrive: renamed, moved or deleted there.')
+                : __('OneDrive not found for this account. Check the email on the assistant\'s profile, and that they have signed in to OneDrive at least once.')).' '.$message, $response->json('error.code'));
         }
 
         throw new RuntimeException(match ($response->status()) {

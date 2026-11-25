@@ -29,7 +29,11 @@ class ClientErrorController extends Controller
         $name = Str::limit('browser: '.$data['name'], 190, '');
         $page = '/'.ltrim((string) (parse_url((string) ($data['page'] ?? ''), PHP_URL_PATH) ?? ''), '/');
 
-        Log::warning('A background request failed in the browser', ['status' => $data['status'], 'request' => $data['name'], 'page' => $page, 'user' => $request->user()?->getKey()]);
+        // No answer at all (status 0: the phone locked, the line dropped, Pusher lost) is the user's connection, not
+        // a fault of the server: kept with the Performance page's samples, not a warning in the log.
+        if ((int) $data['status'] !== 0) {
+            Log::warning('A background request failed in the browser', ['status' => $data['status'], 'request' => $data['name'], 'page' => $page, 'user' => $request->user()?->getKey()]);
+        }
 
         PerformanceSample::create([
             'user_id' => $request->user()?->getKey(),

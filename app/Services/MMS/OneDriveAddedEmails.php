@@ -8,6 +8,7 @@ use App\Models\MatterEmail;
 use App\Models\MatterOneDriveFile;
 use App\Models\MatterOneDriveFolder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -25,6 +26,9 @@ class OneDriveAddedEmails
 
     /** A file bigger than this is not read. */
     private const MAX_BYTES = 40 * 1024 * 1024;
+
+    /** A folder's same failure is logged once in this many hours. */
+    private const LOGGED_HOURS = 20;
 
     /** Folders asked of OneDrive at once. */
     private const AT_ONCE = 20;
@@ -154,7 +158,13 @@ class OneDriveAddedEmails
             }
         } catch (Throwable $e) {
             $errors[] = $first->folder_name.': '.$e->getMessage();
-            Log::warning('Emails added in OneDrive not read: '.$e->getMessage(), ['folder' => $first->getKey()]);
+
+            // The same failure of a folder logged once a day, not on every run that reaches it: a matter's folder
+            // gone from OneDrive (the daily folder check, OneDriveFolderCheck, tells the matter's people), an
+            // account with no OneDrive, Microsoft 365 still throttling after its waits.
+            if (Cache::add('onedrive-added-emails-failed:'.$first->getKey().':'.md5($e->getMessage()), true, now()->addHours(self::LOGGED_HOURS))) {
+                Log::warning('Emails added in OneDrive not read: '.$e->getMessage(), ['folder' => $first->getKey()]);
+            }
         }
 
         MatterOneDriveFolder::query()->whereKey($group->pluck('id')->all())->update(['emails_read_at' => now()]);

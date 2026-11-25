@@ -266,6 +266,24 @@ class LetterSendRequestsTest extends TestCase
         $this->assertFalse(LettersToSendWidget::canView());
     }
 
+    public function test_the_widget_still_open_on_a_dashboard_redraws_empty_once_the_last_is_sent_elsewhere(): void
+    {
+        $request = app(LetterSendRequests::class)->ask($this->letter(), ['whatsapp'], $this->assistant);
+
+        $this->actingAs($this->admin);
+        RequestMemo::flush();
+        $widget = Livewire::test(LettersToSendWidget::class)->assertCanSeeTableRecords([$request]);
+
+        // Sent from another screen (or by someone else) while this dashboard is open: its next redraw
+        // was refused (403), and the dashboard's other requests sent with it failed too.
+        LetterSendRequest::query()->delete();
+        RequestMemo::flush();
+
+        $widget->call('$refresh')
+            ->assertOk()
+            ->assertDontSee(__('Letters to send'));
+    }
+
     public function test_a_letter_with_no_template_sms_gets_a_line_naming_it(): void
     {
         $this->template->update(['sms_template' => null]);
