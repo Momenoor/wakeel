@@ -4,6 +4,7 @@ namespace App\Filament\Mms\Resources\Incentive\IncentiveCalculations\Schemas;
 
 use App\Models\IncentiveCalculation;
 use App\Services\MMS\IncentiveReversals;
+use App\Services\MMS\MarketingCommissions;
 use App\Support\Currency;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Textarea;
@@ -40,6 +41,13 @@ class IncentiveCalculationForm
                             ->default(true)
                             ->disabled(fn (?IncentiveCalculation $record): bool => $record !== null && ! $record->isDraft())
                             ->columnSpanFull(),
+                        // Staff marketers' commissions (MarketingCommissions): paid here, or kept pending for an upcoming calculation.
+                        Toggle::make('apply_marketing_commissions')
+                            ->label(__('Pay marketing commissions in this calculation'))
+                            ->helperText(fn (?IncentiveCalculation $record): string => self::marketingCommissionsHelp($record))
+                            ->default(true)
+                            ->disabled(fn (?IncentiveCalculation $record): bool => $record !== null && ! $record->isDraft())
+                            ->columnSpanFull(),
                         Textarea::make('notes')
                             ->label(__('Notes'))
                             ->rows(3)
@@ -63,5 +71,22 @@ class IncentiveCalculationForm
             ]);
 
         return $now.' '.__('Off: they are kept pending, not applied here, and are applied in the next calculation that has this on.');
+    }
+
+    /** The staff marketers' commissions not paid yet, and what turning the option off does with them. */
+    private static function marketingCommissionsHelp(?IncentiveCalculation $record): string
+    {
+        $waiting = MarketingCommissions::pending()
+            ->when($record, fn ($query) => $query->orWhere(fn ($query) => $query->staff()->where('incentive_calculation_id', $record->getKey())))
+            ->get(['amount']);
+
+        $now = $waiting->isEmpty()
+            ? __('No marketing commission is waiting to be paid now.')
+            : __(':count marketing commission(s) waiting to be paid, :amount in all (those dated up to the period\'s end are paid in it).', [
+                'count' => $waiting->count(),
+                'amount' => Currency::text((float) $waiting->sum('amount')),
+            ]);
+
+        return $now.' '.__('Off: they are kept pending, not paid here, and are paid in the next calculation that has this on.');
     }
 }

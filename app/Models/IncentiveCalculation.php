@@ -18,6 +18,7 @@ class IncentiveCalculation extends Model
         'period_end',
         'status',
         'apply_previous_adjustments',
+        'apply_marketing_commissions',
         'notes',
         'created_by',
         'finalized_at',
@@ -28,10 +29,12 @@ class IncentiveCalculation extends Model
         'period_end' => 'date',
         'finalized_at' => 'datetime',
         'apply_previous_adjustments' => 'boolean',
+        'apply_marketing_commissions' => 'boolean',
     ];
 
     protected $attributes = [
         'apply_previous_adjustments' => true,
+        'apply_marketing_commissions' => true,
     ];
 
     public function getActivitylogOptions(): LogOptions
@@ -65,6 +68,12 @@ class IncentiveCalculation extends Model
     public function appliesPreviousAdjustments(): bool
     {
         return (bool) ($this->apply_previous_adjustments ?? true);
+    }
+
+    /** Whether its staff marketers' commissions (MarketingCommissions) are paid in it, or left for an upcoming one. */
+    public function appliesMarketingCommissions(): bool
+    {
+        return (bool) ($this->apply_marketing_commissions ?? true);
     }
 
     public function isDraft(): bool

@@ -5649,5 +5649,10 @@
     "Off: they are kept pending, not applied here, and are applied in the next calculation that has this on.": "عند الإيقاف: تبقى معلّقة ولا تُطبّق هنا، وتُطبّق في أول حساب قادم يكون فيه هذا الخيار مفعّلاً.",
     "Adjustments from previous periods": "تسويات الفترات السابقة",
     "Applied in this calculation": "مطبّقة في هذا الحساب",
-    "Kept pending for an upcoming calculation": "معلّقة لحساب قادم"
+    "Kept pending for an upcoming calculation": "معلّقة لحساب قادم",
+    "Pay marketing commissions in this calculation": "صرف عمولات التسويق في هذا الحساب",
+    "No marketing commission is waiting to be paid now.": "لا توجد عمولات تسويق بانتظار الصرف حالياً.",
+    ":count marketing commission(s) waiting to be paid, :amount in all (those dated up to the period's end are paid in it).": "عمولات تسويق بانتظار الصرف: :count، بإجمالي :amount (تُصرف في الحساب ما كان تاريخها حتى نهاية الفترة).",
+    "Off: they are kept pending, not paid here, and are paid in the next calculation that has this on.": "عند الإيقاف: تبقى معلّقة ولا تُصرف هنا، وتُصرف في أول حساب قادم يكون فيه هذا الخيار مفعّلاً.",
+    "Paid in this calculation": "مصروفة في هذا الحساب"
 }

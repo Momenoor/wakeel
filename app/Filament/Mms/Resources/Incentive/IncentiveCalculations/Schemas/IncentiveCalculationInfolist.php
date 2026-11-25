@@ -24,6 +24,10 @@ class IncentiveCalculationInfolist
                         ->badge()
                         ->color(fn ($state) => $state ? 'success' : 'gray')
                         ->formatStateUsing(fn ($state) => $state ? __('Applied in this calculation') : __('Kept pending for an upcoming calculation')),
+                    TextEntry::make('apply_marketing_commissions')->label(__('Marketing commissions'))
+                        ->badge()
+                        ->color(fn ($state) => $state ? 'success' : 'gray')
+                        ->formatStateUsing(fn ($state) => $state ? __('Paid in this calculation') : __('Kept pending for an upcoming calculation')),
                     TextEntry::make('creator.name')->label(__('Created By')),
                     TextEntry::make('notes')->label(__('Notes'))->placeholder('—')->columnSpanFull(),
                 ])->columns(3),

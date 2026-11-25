@@ -6,6 +6,7 @@ use App\Enums\FeeType;
 use App\Models\Allocation;
 use App\Models\Fee;
 use App\Models\IncentiveAssistantLine;
+use App\Models\IncentiveCalculation;
 use App\Models\IncentiveLine;
 use App\Models\MarketingCommission;
 use App\Models\Matter;
@@ -14,6 +15,7 @@ use App\Models\Setting;
 use App\Support\ActivityLog;
 use App\Support\Currency;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Throwable;
@@ -218,9 +220,21 @@ class MarketingCommissions
     }
 
     /**
+     * Staff marketers' commissions not paid in any calculation yet.
+     *
+     * @return Builder<MarketingCommission>
+     */
+    public static function pending(): Builder
+    {
+        return MarketingCommission::query()->staff()->whereNull('incentive_calculation_id');
+    }
+
+    /**
      * A calculation run: its staff marketers' commissions — those of its period not paid in another calculation —
      * one line of the marketer's own for each matter (what each payment or change on it added, together), rebuilt
-     * every run. A draft deleted gives them back (its id emptied).
+     * every run. A draft deleted gives them back (its id emptied). A calculation set to keep them pending for an
+     * upcoming one (apply_marketing_commissions off) takes none, and gives back any it had: the next calculation run
+     * that pays them takes them, once.
      */
     public function apply(Model $calculation): void
     {
@@ -228,8 +242,11 @@ class MarketingCommissions
             IncentiveLine::query()->where('incentive_calculation_id', $calculation->getKey())->where('is_marketing', true)->delete();
             MarketingCommission::query()->where('incentive_calculation_id', $calculation->getKey())->update(['incentive_calculation_id' => null]);
 
-            $pending = MarketingCommission::query()->staff()
-                ->whereNull('incentive_calculation_id')
+            if ($calculation instanceof IncentiveCalculation && ! $calculation->appliesMarketingCommissions()) {
+                return;
+            }
+
+            $pending = self::pending()
                 ->whereDate('date', '<=', $calculation->period_end)
                 ->orderBy('id')
                 ->get();
