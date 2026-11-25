@@ -97,16 +97,9 @@ class LetterMeeting
         // As every single event's title (EventTitle): the matter, its court, type and assistant.
         $title = EventTitle::for($matter);
 
-        $event = CalendarEvent::create([
-            'matter_id' => $matter->getKey(),
-            'title' => $title,
-            'start_datetime' => $start,
-            'end_datetime' => $end,
-            'type' => 'single',
-            'is_teams_meeting' => true,
-            'created_by' => $userId,
-        ]);
-
+        // Outlook first, the calendar after: no database row (nor connection) is held open while Microsoft
+        // answers — seconds each, several calls. Held, MySQL could drop the idle connection ("server has gone
+        // away") and the event's own clean-up failed with it, hiding why.
         try {
             $outlookEvent = $this->outlook->createEvent([
                 'title' => $title,
@@ -130,19 +123,20 @@ class LetterMeeting
                 throw new RuntimeException(__('Outlook made the event but gave no Teams link: is Teams enabled for this mailbox?'));
             }
 
-            $event->update([
+            // Saved in one go, with its Outlook id and link.
+            $event = CalendarEvent::create([
+                'matter_id' => $matter->getKey(),
+                'title' => $title,
+                'start_datetime' => $start,
+                'end_datetime' => $end,
+                'type' => 'single',
+                'is_teams_meeting' => true,
+                'created_by' => $userId,
                 'outlook_event_id' => $outlookEvent['id'] ?? null,
                 'synced_to_outlook' => true,
                 'online_meeting_url' => $joinUrl,
             ]);
-
-            // Recording by itself, its co-organizers — with the link, which may have come a moment after the event.
-            $this->outlook->prepare($event);
-
-            return $event;
         } catch (Throwable $e) {
-            $event->forceDelete();
-
             // Nor in Outlook: a meeting no letter invites to.
             if (filled($outlookEvent['id'] ?? null)) {
                 rescue(fn () => $this->outlook->deleteEvent($outlookEvent['id']), report: false);
@@ -150,5 +144,11 @@ class LetterMeeting
 
             throw $e instanceof RuntimeException ? $e : new RuntimeException($e->getMessage(), previous: $e);
         }
+
+        // Recording by itself, its co-organizers: never keeps the meeting from being made (prepareMeeting() logs a
+        // refusal; calendar:ready-teams asks again).
+        rescue(fn () => $this->outlook->prepare($event), report: true);
+
+        return $event;
     }
 }

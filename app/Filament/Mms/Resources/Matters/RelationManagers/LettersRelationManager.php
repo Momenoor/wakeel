@@ -857,6 +857,10 @@ class LettersRelationManager extends RelationManager
             ])
             // …or issued and then sent: the Send by email screen for it.
             ->extraModalFooterActions(fn (Action $action): array => [self::issueAndSendButton($action)])
+            // Outside the panel's transaction: its Teams meeting is made with Microsoft (several calls, seconds each), and a
+            // connection held in a transaction meanwhile could be dropped by MySQL ("server has gone away"), never
+            // reconnected. The letter's own writes are a transaction of their own (LetterIssuer).
+            ->databaseTransaction(false)
             ->action(fn (array $data, Action $action, array $arguments) => $this->issueOrStop($data, $action, ! empty($arguments['send'])))
             ->tap(fn (Action $action) => OverlapConfirmation::configure($action, __('Write a letter'), __('Issue'), '7xl'));
     }
@@ -882,6 +886,10 @@ class LettersRelationManager extends RelationManager
             ->schema(fn () => $this->issueForm($this->getOwnerRecord()))
             // …or issued and then sent: the Send by email screen for it.
             ->extraModalFooterActions(fn (Action $action): array => [self::issueAndSendButton($action)])
+            // Outside the panel's transaction: its Teams meeting is made with Microsoft (several calls, seconds each), and a
+            // connection held in a transaction meanwhile could be dropped by MySQL ("server has gone away"), never
+            // reconnected. The letter's own writes are a transaction of their own (LetterIssuer).
+            ->databaseTransaction(false)
             ->action(fn (array $data, Action $action, array $arguments) => $this->issueOrStop($data, $action, ! empty($arguments['send'])))
             ->tap(fn (Action $action) => OverlapConfirmation::configure($action, __('Issue letter'), __('Issue'), '7xl'));
     }
@@ -1465,10 +1473,19 @@ class LettersRelationManager extends RelationManager
             ? array_map(fn (array $recipient): array => [$recipient], $recipients)
             : [$recipients];
 
-        $letters = array_map(
-            fn (array $group): MatterLetter => $issuer->issue($template, $matter, $group, $inputs, $date, $letterhead, auth()->id(), $data['attention'] ?? null),
-            $groups,
-        );
+        try {
+            $letters = array_map(
+                fn (array $group): MatterLetter => $issuer->issue($template, $matter, $group, $inputs, $date, $letterhead, auth()->id(), $data['attention'] ?? null),
+                $groups,
+            );
+        } catch (\Throwable $e) {
+            // Not issued: nor the meeting made for it, here or in Outlook (CalendarEventObserver::deleted()).
+            if (isset($event)) {
+                rescue(fn () => $event->forceDelete(), report: true);
+            }
+
+            throw $e;
+        }
 
         // Uses the meeting's link, but no meeting was made: say so.
         if (! isset($meetingLink) && LetterMeeting::usesMeetingLink((string) $template->body)) {
