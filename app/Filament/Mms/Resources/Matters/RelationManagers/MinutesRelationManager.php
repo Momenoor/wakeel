@@ -137,6 +137,11 @@ class MinutesRelationManager extends RelationManager
                     ->url(fn (MatterMinutes $record) => route('minutes.live', $record), shouldOpenInNewTab: true),
                 $this->previewAction(),
                 $this->sendAction(),
+                Action::make('print')
+                    ->label(__('Print'))
+                    ->icon('heroicon-o-printer')
+                    ->color('gray')
+                    ->url(fn (MatterMinutes $record) => route('minutes.print', $record), shouldOpenInNewTab: true),
                 Action::make('pdf')
                     ->label('PDF')
                     ->icon('heroicon-o-document-arrow-down')

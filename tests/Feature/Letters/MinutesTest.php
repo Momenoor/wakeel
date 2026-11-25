@@ -195,6 +195,10 @@ class MinutesTest extends TestCase
 
         $this->get(route('minutes.pdf', $minutes))->assertOk()->assertHeader('Content-Type', 'application/pdf');
         $this->get(route('minutes.docx', $minutes))->assertOk();
+        // Printed at 100% on A4: its PDF drawn on a page of its own size.
+        $this->get(route('minutes.print', $minutes))->assertOk()
+            ->assertSee('data-pdf="'.route('minutes.pdf', $minutes).'"', false)
+            ->assertSee('letter-print-', false);
     }
 
     public function test_what_is_typed_shows_on_the_live_view(): void

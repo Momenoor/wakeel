@@ -20,6 +20,8 @@ export default defineConfig({
                 'resources/js/pdf-compressor/image-worker.js',
                 'resources/js/signature-pad-field.js',
                 'resources/js/rich-text-field.js',
+                // Letters and minutes printed at 100% (letters.print).
+                'resources/js/letter-print.js',
             ],
             refresh: true,
         }),

@@ -5654,5 +5654,7 @@
     "No marketing commission is waiting to be paid now.": "لا توجد عمولات تسويق بانتظار الصرف حالياً.",
     ":count marketing commission(s) waiting to be paid, :amount in all (those dated up to the period's end are paid in it).": "عمولات تسويق بانتظار الصرف: :count، بإجمالي :amount (تُصرف في الحساب ما كان تاريخها حتى نهاية الفترة).",
     "Off: they are kept pending, not paid here, and are paid in the next calculation that has this on.": "عند الإيقاف: تبقى معلّقة ولا تُصرف هنا، وتُصرف في أول حساب قادم يكون فيه هذا الخيار مفعّلاً.",
-    "Paid in this calculation": "مصروفة في هذا الحساب"
+    "Paid in this calculation": "مصروفة في هذا الحساب",
+    "Preparing the letter for printing…": "جارٍ تجهيز الخطاب للطباعة…",
+    "The letter could not be prepared for printing. Open the PDF instead.": "تعذّر تجهيز الخطاب للطباعة. افتح ملف PDF بدلاً من ذلك."
 }

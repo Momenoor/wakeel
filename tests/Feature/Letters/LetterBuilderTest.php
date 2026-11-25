@@ -790,6 +790,23 @@ class LetterBuilderTest extends TestCase
         $this->assertStringContainsString('NoPrintScaling', LetterPdf::mpdf(Letterhead::fallback(), true)->DisplayPreferences);
     }
 
+    public function test_a_letter_prints_at_100_percent_in_any_browser(): void
+    {
+        $letter = app(LetterIssuer::class)->issue($this->template, $this->matter, [], []);
+
+        // Its own print page: the PDF's pages drawn at their real size, A4 with no margins, then printed.
+        $this->get(route('letters.print', $letter))->assertSuccessful()
+            ->assertSee('data-pdf="'.route('letters.pdf', $letter).'"', false)
+            ->assertSee('letter-print-', false);
+
+        // The letters' Print opens it.
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $this->matter, 'pageClass' => ViewMatter::class])
+            ->assertActionHasUrl(TestAction::make('print')->table($letter), route('letters.print', $letter));
+
+        $this->actingAs(User::factory()->create());
+        $this->get(route('letters.print', $letter))->assertForbidden();
+    }
+
     public function test_the_letterhead_designer(): void
     {
         $letterhead = Letterhead::create(['name' => 'Main', 'elements' => Letterhead::defaultElements()]);

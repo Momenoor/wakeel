@@ -77,6 +77,13 @@ Route::middleware('auth')->group(function () {
         ]);
     })->name('letters.pdf');
 
+    // Printed at 100% on its paper in any browser — not shrunk to the printable area as a PDF viewer does.
+    Route::get('letters/{letter}/print', function (MatterLetter $letter) {
+        abort_unless($letter->matter !== null && auth()->user()->can('view', $letter->matter), 403);
+
+        return view('letters.print', ['pdf' => route('letters.pdf', $letter), 'title' => LetterIssuer::fileName($letter)]);
+    })->name('letters.print');
+
     Route::get('letters/{letter}/docx', function (MatterLetter $letter) {
         abort_unless($letter->matter !== null && auth()->user()->can('view', $letter->matter), 403);
 
@@ -96,6 +103,12 @@ Route::middleware('auth')->group(function () {
             'Content-Disposition' => HeaderUtils::makeDisposition('inline', MinutesService::fileName($minutes).'.pdf', 'minutes-'.$minutes->getKey().'.pdf'),
         ]);
     })->name('minutes.pdf');
+
+    Route::get('minutes/{minutes}/print', function (MatterMinutes $minutes) {
+        abort_unless(auth()->user()->can('view', $minutes->matter), 403);
+
+        return view('letters.print', ['pdf' => route('minutes.pdf', $minutes), 'title' => MinutesService::fileName($minutes)]);
+    })->name('minutes.print');
 
     Route::get('minutes/{minutes}/docx', function (MatterMinutes $minutes) {
         abort_unless(auth()->user()->can('view', $minutes->matter), 403);

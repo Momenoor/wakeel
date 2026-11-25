@@ -256,5 +256,31 @@
     "imports": [
       "_drawing-hXHplTkP.js"
     ]
+  },
+  "resources/js/letter-print.js": {
+    "file": "assets/letter-print-BRL92G3z.js",
+    "name": "letter-print",
+    "src": "resources/js/letter-print.js",
+    "isEntry": true,
+    "assets": [
+      "assets/jbig2-CgUnd2ou.wasm",
+      "assets/openjpeg-CS7joWBh.wasm",
+      "assets/qcms_bg-CUfpE_h9.wasm",
+      "assets/FoxitDingbats-BaQLufoW.pfb",
+      "assets/FoxitFixed-Dyd5Nipw.pfb",
+      "assets/FoxitFixedBold-D5TuYRwj.pfb",
+      "assets/FoxitFixedBoldItalic-BqlXQ_Yv.pfb",
+      "assets/FoxitFixedItalic-DqjQkmbS.pfb",
+      "assets/FoxitSerif-qbgiDIe-.pfb",
+      "assets/FoxitSerifBold-DZZ4CclT.pfb",
+      "assets/FoxitSerifBoldItalic-DSQtwd_X.pfb",
+      "assets/FoxitSerifItalic-CQs5lx9Y.pfb",
+      "assets/FoxitSymbol-BVtbc20u.pfb",
+      "assets/LiberationSans-Bold-BPt4bU5Z.ttf",
+      "assets/LiberationSans-BoldItalic-Bj53-jFw.ttf",
+      "assets/LiberationSans-Italic-5QhGB3P9.ttf",
+      "assets/LiberationSans-Regular-cbskN6YR.ttf",
+      "assets/pdf.worker.min-wgc6bjNh.mjs"
+    ]
   }
 }

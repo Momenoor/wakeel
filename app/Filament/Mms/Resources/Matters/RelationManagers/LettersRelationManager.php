@@ -128,6 +128,11 @@ class LettersRelationManager extends RelationManager
             ])
             ->recordActions([
                 $this->previewAction(),
+                Action::make('print')
+                    ->label(__('Print'))
+                    ->icon('heroicon-o-printer')
+                    ->color('gray')
+                    ->url(fn (MatterLetter $record) => route('letters.print', $record), shouldOpenInNewTab: true),
                 Action::make('pdf')
                     ->label('PDF')
                     ->icon('heroicon-o-document-arrow-down')
@@ -425,10 +430,11 @@ class LettersRelationManager extends RelationManager
             ->modalSubmitAction(false)
             ->modalCancelActionLabel(__('Close'))
             ->extraModalFooterActions(fn (MatterLetter $record): array => [
+                // At 100% on A4 in any browser: a PDF viewer would shrink it to the printable area.
                 Action::make('printPdf')
-                    ->label(__('Open to print'))
+                    ->label(__('Print'))
                     ->icon('heroicon-o-printer')
-                    ->url(route('letters.pdf', $record), shouldOpenInNewTab: true),
+                    ->url(route('letters.print', $record), shouldOpenInNewTab: true),
                 Action::make('downloadWord')
                     ->label('Word')
                     ->icon('heroicon-o-document-text')
