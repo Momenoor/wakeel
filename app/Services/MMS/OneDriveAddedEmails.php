@@ -7,6 +7,7 @@ use App\Models\MatterContact;
 use App\Models\MatterEmail;
 use App\Models\MatterOneDriveFile;
 use App\Models\MatterOneDriveFolder;
+use App\Support\ErrorTracker;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -165,6 +166,11 @@ class OneDriveAddedEmails
             if (Cache::add('onedrive-added-emails-failed:'.$first->getKey().':'.md5($e->getMessage()), true, now()->addHours(self::LOGGED_HOURS))) {
                 Log::warning('Emails added in OneDrive not read: '.$e->getMessage(), ['folder' => $first->getKey()]);
             }
+            self::track('Emails added in OneDrive not read: '.$e->getMessage(), $e, [
+                'folder' => $first->getKey(),
+                'folder_name' => $first->folder_name,
+                'matters' => $matters->map(fn (Matter $matter): string => $matter->year.'/'.$matter->number)->implode(', '),
+            ]);
         }
 
         MatterOneDriveFolder::query()->whereKey($group->pluck('id')->all())->update(['emails_read_at' => now()]);
@@ -268,6 +274,32 @@ class OneDriveAddedEmails
     }
 
     /**
+     * A failure reading a matter's OneDrive on Settings → Error tracking, as a warning. Microsoft 365 turning the
+     * system back for now (429 too many requests, 503) is one warning whichever matter it happened on — it is
+     * about the system, not the matter; any other failure (a folder not found, a file that would not read) one
+     * for each matter or folder, so it is clear which ones to look at. Seen again, it is counted, not added.
+     *
+     * @param  array<string, mixed>  $context
+     */
+    public static function track(string $message, Throwable $e, array $context): void
+    {
+        $status = match (true) {
+            $e instanceof OneDriveNotFound => 404,
+            preg_match('/(?:Microsoft Graph|OneDrive|refused access \()\s*(\d{3})/', $e->getMessage(), $m) === 1 => (int) $m[1],
+            default => null,
+        };
+        $throttled = in_array($status, [429, 503], true);
+
+        ErrorTracker::warning(
+            'OneDrive emails not read',
+            $message,
+            $context + ['error' => $e::class],
+            groupBy: ($status ?? 'other').'|'.($throttled ? 'everywhere' : ($context['folder'] ?? $context['matter'] ?? '')),
+            status: $status,
+        );
+    }
+
+    /**
      * One file: read, and added to the matter unless it has it. Whether it was added.
      *
      * @param  array{id: string, name: string, size: ?int, path: string, folder: string}  $file
@@ -320,6 +352,7 @@ class OneDriveAddedEmails
             return true;
         } catch (Throwable $e) {
             Log::warning('Email added in OneDrive not read: '.$e->getMessage(), ['matter' => $matter->getKey(), 'file' => $file['path']]);
+            self::track('Email added in OneDrive not read: '.$e->getMessage(), $e, ['matter' => $matter->getKey(), 'matter_number' => $matter->year.'/'.$matter->number, 'file' => $file['path']]);
             $note(MatterOneDriveFile::FAILED, null, $e->getMessage());
 
             return false;

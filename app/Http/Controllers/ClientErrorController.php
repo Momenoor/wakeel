@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\PerformanceSample;
+use App\Support\ErrorTracker;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
@@ -13,7 +14,9 @@ use Illuminate\Support\Str;
  * "Error while loading the page": an error answer, or none at all (the
  * connection dropped, the server gone) which never reaches the server's
  * own records. Kept with the Performance page's samples (status 0: no
- * answer) and in the log, so the report says what failed, where and when.
+ * answer), in the log, and on Settings → Error tracking as a warning (the
+ * same request failing on the same page again counted, not a new row), so
+ * the report says what failed, where and when.
  */
 class ClientErrorController extends Controller
 {
@@ -35,6 +38,15 @@ class ClientErrorController extends Controller
             Log::warning('A background request failed in the browser', ['status' => $data['status'], 'request' => $data['name'], 'page' => $page, 'user' => $request->user()?->getKey()]);
         }
 
+        ErrorTracker::warning(
+            'Browser request failed',
+            'A background request failed in the browser ('.self::statusText((int) $data['status']).'): '.$data['name'].' on '.$page,
+            ['status' => (int) $data['status'], 'request' => $data['name'], 'page' => $page, 'ms' => $data['ms'] ?? null],
+            groupBy: $data['status'].'|'.$data['name'].'|'.ErrorTracker::normalise($page),
+            status: (int) $data['status'] ?: null,
+            request: $request,
+        );
+
         PerformanceSample::create([
             'user_id' => $request->user()?->getKey(),
             'method' => 'CLIENT',
@@ -49,5 +61,11 @@ class ClientErrorController extends Controller
         ]);
 
         return response()->noContent();
+    }
+
+    /** "500", "403", or "no answer" for 0: the connection dropped, the server gone. */
+    private static function statusText(int $status): string
+    {
+        return $status === 0 ? 'no answer' : (string) $status;
     }
 }

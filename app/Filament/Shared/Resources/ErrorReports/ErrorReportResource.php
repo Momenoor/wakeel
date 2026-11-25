@@ -133,7 +133,8 @@ class ErrorReportResource extends Resource
             ->with(['user', 'resolvedBy'])
             ->select('error_reports.*')
             ->selectSub(
-                DB::table('error_reports as same')->selectRaw('count(*)')->whereColumn('same.fingerprint', 'error_reports.fingerprint'),
+                // A warning seen again is counted on its row (times); an error is a row each time.
+                DB::table('error_reports as same')->selectRaw('coalesce(sum(same.times), 0)')->whereColumn('same.fingerprint', 'error_reports.fingerprint'),
                 'occurrences',
             );
     }
@@ -152,7 +153,9 @@ class ErrorReportResource extends Resource
                 TextColumn::make('created_at')
                     ->label(__('When'))
                     ->dateTime(Dates::dateTimeFormat())
-                    ->description(fn (ErrorReport $record): ?string => $record->created_at?->diffForHumans())
+                    ->description(fn (ErrorReport $record): ?string => $record->isWarning() && $record->times > 1
+                        ? __('Last seen :when', ['when' => $record->lastSeen()?->diffForHumans()])
+                        : $record->created_at?->diffForHumans())
                     ->sortable(),
                 TextColumn::make('user.name')
                     ->label(__('User'))
@@ -160,7 +163,9 @@ class ErrorReportResource extends Resource
                     ->searchable(),
                 TextColumn::make('message')
                     ->label(__('Error'))
-                    ->description(fn (ErrorReport $record): string => class_basename($record->exception).' — '.$record->file.':'.$record->line)
+                    ->description(fn (ErrorReport $record): string => $record->isWarning()
+                        ? __('Warning').' — '.$record->exception
+                        : class_basename($record->exception).' — '.$record->file.':'.$record->line)
                     ->limit(90)
                     ->wrap()
                     ->searchable(['message', 'exception', 'file']),
@@ -191,6 +196,7 @@ class ErrorReportResource extends Resource
                     ->trueLabel(__('Resolved'))
                     ->falseLabel(__('Unresolved'))
                     ->default(false),
+                SelectFilter::make('level')->label(__('Kind'))->options(['error' => __('Errors'), 'warning' => __('Warnings')]),
                 SelectFilter::make('source')->label(__('Source'))->options(self::sources()),
                 SelectFilter::make('user_id')->label(__('User'))->relationship('user', 'name')->searchable()->preload(),
                 Filter::make('today')->label(__('Today'))->query(fn (Builder $query) => $query->where('created_at', '>=', today())),
@@ -232,7 +238,7 @@ class ErrorReportResource extends Resource
                         ->color(fn (ErrorReport $record): string => $record->resolved_at ? 'success' : 'danger'),
                     TextEntry::make('message')->label(__('Message'))->columnSpanFull()->extraAttributes($mono),
                     TextEntry::make('exception')->label(__('Kind'))->extraAttributes(['dir' => 'ltr']),
-                    TextEntry::make('file')->label(__('Where'))->state(fn (ErrorReport $record): string => $record->file.':'.$record->line)->columnSpan(2)->extraAttributes(['dir' => 'ltr']),
+                    TextEntry::make('file')->label(__('Where'))->state(fn (ErrorReport $record): ?string => $record->file ? $record->file.':'.$record->line : null)->placeholder('—')->columnSpan(2)->extraAttributes(['dir' => 'ltr']),
                     TextEntry::make('occurrences')
                         ->label(__('Times this error happened'))
                         ->state(fn (ErrorReport $record): string => self::occurrences($record)),
@@ -316,6 +322,7 @@ class ErrorReportResource extends Resource
             'queue' => __('Background work'),
             'scheduler' => __('A scheduled task'),
             'console' => __('A command'),
+            'browser' => __('The browser'),
         ];
     }
 
@@ -323,7 +330,7 @@ class ErrorReportResource extends Resource
     private static function occurrences(ErrorReport $record): string
     {
         $same = ErrorReport::query()->where('fingerprint', $record->fingerprint)
-            ->selectRaw('count(*) as times, min(created_at) as first_at, max(created_at) as last_at')
+            ->selectRaw('sum(times) as times, min(created_at) as first_at, max(coalesce(last_seen_at, created_at)) as last_at')
             ->toBase()->first();
 
         if ((int) $same->times <= 1) {

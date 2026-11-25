@@ -79,6 +79,93 @@ final class ErrorTracker
         }
     }
 
+    /**
+     * A warning — something that failed without an exception reaching Laravel: a background request the browser
+     * saw fail, a matter's OneDrive that could not be read. Kept on the same screen, but the same warning again
+     * is not another row: the one still unresolved counts it and says when it was last seen. "The same" is the
+     * same kind, the same message with its numbers and ids taken out (another matter's id, another page's), and
+     * the same $groupBy (what makes two otherwise alike warnings different, such as the status a request got).
+     * Resolved and then seen again, it is a new row. Logged as before by the caller; recording never throws.
+     *
+     * @param  array<string, mixed>  $context  what it was about: kept as "What was sent" (the latest time's)
+     */
+    public static function warning(string $kind, string $message, array $context = [], ?string $groupBy = null, ?int $status = null, ?Request $request = null): ?ErrorReport
+    {
+        if (self::$recording) {
+            return null;
+        }
+
+        self::$recording = true;
+
+        try {
+            $fingerprint = sha1('warning|'.$kind.'|'.self::normalise($message).'|'.$groupBy);
+            $where = $request !== null ? self::browser($request) : self::console();
+            $now = now();
+
+            $existing = ErrorReport::query()->unresolved()->where('fingerprint', $fingerprint)->latest('id')->first();
+
+            if ($existing !== null) {
+                $existing->forceFill([
+                    'times' => $existing->times + 1,
+                    'last_seen_at' => $now,
+                    // The latest time's message, page, user and context: what to look at now.
+                    'message' => Str::limit($message, 5000),
+                    'input' => self::input($context),
+                    ...array_filter($where, fn ($value): bool => $value !== null),
+                ])->save();
+
+                return $existing;
+            }
+
+            return ErrorReport::create([
+                'code' => self::newCode(),
+                'fingerprint' => $fingerprint,
+                'level' => 'warning',
+                'times' => 1,
+                'last_seen_at' => $now,
+                'status' => $status,
+                'exception' => Str::limit($kind, 250, ''),
+                'message' => Str::limit($message, 5000),
+                'input' => self::input($context),
+                'app_version' => Str::limit(AppUpdate::currentVersion(), 30, ''),
+                ...$where,
+            ]);
+        } catch (Throwable) {
+            return null;
+        } finally {
+            self::$recording = false;
+        }
+    }
+
+    /** "Not read for matter 1234: item 01ABC… not found" and the same for matter 99 read alike. */
+    public static function normalise(string $message): string
+    {
+        $message = preg_replace('/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i', '#', $message) ?? $message;
+        // Graph's item ids (01ABCDEF…), request ids and dates: any run of letters and digits with a digit in it.
+        $message = preg_replace('/\b(?=[A-Za-z0-9!_-]*\d)[A-Za-z0-9!_-]{6,}\b/', '#', $message) ?? $message;
+
+        return trim((string) preg_replace('/\d+/', '#', $message));
+    }
+
+    /**
+     * Who saw a failure in the browser, and on which page.
+     *
+     * @return array<string, mixed>
+     */
+    private static function browser(Request $request): array
+    {
+        return [
+            'source' => 'browser',
+            'method' => $request->method(),
+            // The page the browser was on, as it said; else the page that sent it.
+            'url' => Str::limit((string) ($request->input('page') ?: $request->headers->get('referer', '')), 2000, '') ?: null,
+            'route' => null,
+            'user_id' => $request->user()?->getKey(),
+            'ip' => $request->ip(),
+            'user_agent' => Str::limit((string) $request->userAgent(), 490, ''),
+        ];
+    }
+
     /** The code to show for this request's error — once: the next request's is its own. */
     public static function takeCode(): ?string
     {

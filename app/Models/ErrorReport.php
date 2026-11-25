@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -25,6 +26,8 @@ class ErrorReport extends Model
         'input' => 'array',
         'created_at' => 'datetime',
         'resolved_at' => 'datetime',
+        'last_seen_at' => 'datetime',
+        'times' => 'integer',
     ];
 
     /**
@@ -51,10 +54,26 @@ class ErrorReport extends Model
         $query->whereNull('resolved_at');
     }
 
-    /** Older than KEEP_DAYS: deleted (daily, by the scheduler). */
+    /** Not seen for KEEP_DAYS: deleted (daily, by the scheduler) — a warning still being seen is kept. */
     public static function prune(): int
     {
-        return static::query()->where('created_at', '<', now()->subDays(self::KEEP_DAYS))->delete();
+        $before = now()->subDays(self::KEEP_DAYS);
+
+        return static::query()
+            ->where('created_at', '<', $before)
+            ->where(fn (Builder $query) => $query->whereNull('last_seen_at')->orWhere('last_seen_at', '<', $before))
+            ->delete();
+    }
+
+    public function isWarning(): bool
+    {
+        return $this->level === 'warning';
+    }
+
+    /** When it was last seen: a warning counted again, or when it happened. */
+    public function lastSeen(): ?CarbonInterface
+    {
+        return $this->last_seen_at ?? $this->created_at;
     }
 
     /** This error and every other time it happened (the same fingerprint) marked dealt with, or not. */

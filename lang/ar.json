@@ -5657,5 +5657,10 @@
     "Off: they are kept pending, not paid here, and are paid in the next calculation that has this on.": "عند الإيقاف: تبقى معلّقة ولا تُصرف هنا، وتُصرف في أول حساب قادم يكون فيه هذا الخيار مفعّلاً.",
     "Paid in this calculation": "مصروفة في هذا الحساب",
     "Preparing the letter for printing…": "جارٍ تجهيز الخطاب للطباعة…",
-    "The letter could not be prepared for printing. Open the PDF instead.": "تعذّر تجهيز الخطاب للطباعة. افتح ملف PDF بدلاً من ذلك."
+    "The letter could not be prepared for printing. Open the PDF instead.": "تعذّر تجهيز الخطاب للطباعة. افتح ملف PDF بدلاً من ذلك.",
+    "Last seen :when": "آخر مرة :when",
+    "Errors": "أخطاء",
+    "Warnings": "تحذيرات",
+    "The browser": "المتصفح",
+    "Export unresolved as Markdown": "تصدير غير المحلول بصيغة Markdown"
 }

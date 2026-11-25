@@ -44,6 +44,7 @@ class ReadMatterEmailsAddedInOneDrive implements ShouldQueue
                 : Notification::make()->success()->title($title)->body(__('Matter :matter — :count emails.', ['matter' => $label, 'count' => $result['added']]));
         } catch (Throwable $e) {
             Log::warning('Emails added in OneDrive not read for matter '.$this->matterId.': '.$e->getMessage());
+            OneDriveAddedEmails::track('Emails added in OneDrive not read for matter '.$label.': '.$e->getMessage(), $e, ['matter' => $this->matterId, 'matter_number' => $label]);
             $notification = Notification::make()->danger()->title(__('OneDrive could not be read'))->body($label.': '.$e->getMessage());
         }
 
