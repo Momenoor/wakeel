@@ -1270,11 +1270,11 @@ class IncomingMatterEmailsTest extends TestCase
         // Set to every email: the name is enough again (and a stranger's waits for them in Unfiled emails).
         $momen->update(['mailbox_keeps_all' => true]);
         $collector->handle([$this->email(['from' => 'news@bank.ae', 'subject' => 'عروض', 'body' => '<p>شركة المهاد للتجارة</p>', 'message_id' => '<news2@bank.ae>', ...$to])], collect(), $own);
-        $this->assertSame($this->first->id, (int) MatterEmail::query()->where('message_id', '<news2@bank.ae>')->value('matter_id'));
+        $this->assertSame($this->first->id, (int) MatterEmail::query()->where('message_id', 'news2@bank.ae')->value('matter_id'));
 
         // The office's shared mailboxes keep naming a matter by its party's name, as before.
         $this->collect($this->email(['from' => 'clerk2@court.ae', 'subject' => 'إخطار', 'body' => '<p>مؤسسة النخيل</p>', 'message_id' => '<clerk2@court.ae>']));
-        $this->assertSame($this->second->id, (int) MatterEmail::query()->where('message_id', '<clerk2@court.ae>')->value('matter_id'));
+        $this->assertSame($this->second->id, (int) MatterEmail::query()->where('message_id', 'clerk2@court.ae')->value('matter_id'));
     }
 
     public function test_someones_own_mailbox_added_as_a_shared_one_too_keeps_only_what_they_chose(): void
