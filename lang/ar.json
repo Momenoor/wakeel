@@ -3782,7 +3782,7 @@
     "e.g. Documents received from the plaintiff": "مثال: استلام مستندات من المدعي",
     "Letters issued and sent, meetings and their minutes, emails to the parties and the reports appear here by themselves; add any other step by hand.": "تظهر هنا تلقائياً الخطابات الصادرة والمرسلة، والاجتماعات ومحاضرها، والرسائل إلى الأطراف، والتقارير؛ وأضف أي خطوة أخرى يدوياً.",
     "Copied in on letter and minutes emails": "نسخة من رسائل الخطابات والمحاضر",
-    "The matter's experts of these kinds are put in CC whenever a letter or minutes are sent by email; the sender can still remove them. None ticked: no one. On a committee matter, every member of the committee is put in CC.": "يُضاف خبراء القضية من هذه الأنواع في النسخة (CC) كلما أُرسل خطاب أو محضر بالبريد الإلكتروني، ويمكن للمرسل حذفهم. إن لم يُحدد أي نوع: لا أحد. في قضايا اللجان يُضاف جميع أعضاء اللجنة في النسخة.",
+    "The matter's experts of these kinds are put in CC whenever a letter or minutes are sent by email; the sender can still remove them. None ticked: no one.": "يُضاف خبراء القضية من هذه الأنواع في النسخة (CC) كلما أُرسل خطاب أو محضر بالبريد الإلكتروني، ويمكن للمرسل حذفهم. إن لم يُحدد أي نوع: لا أحد.",
     "Copied in on each email. The matter's experts chosen in System Settings are put here; remove any you don't want.": "نسخة في كل رسالة. يُضاف هنا خبراء القضية المحددون في إعدادات النظام؛ احذف من لا تريده.",
     "How to send": "طريقة الإرسال",
     "Separately, to each one": "منفصلة، لكل شخص",

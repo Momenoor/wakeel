@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Enums\LetterStatus;
-use App\Enums\MatterCommissiong;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -113,16 +112,13 @@ class MatterLetter extends Model
     /**
      * The emails of the matter's experts copied in on its letters and
      * minutes — the kinds ticked in Settings → Letters & emails (the assistants, unless
-     * changed); on a committee matter, every member of the committee, whatever is
-     * ticked — from their party, or the account they sign in with.
+     * changed) — from their party, or the account they sign in with.
      *
      * @return list<string>
      */
     public static function ccEmails(?Matter $matter): array
     {
-        $types = $matter?->commissioning === MatterCommissiong::COMMITTEE
-            ? array_keys(Party::expertTypeOptions())
-            : self::ccExpertTypes();
+        $types = self::ccExpertTypes();
 
         if (! $matter || $types === []) {
             return [];

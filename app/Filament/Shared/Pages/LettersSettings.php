@@ -87,7 +87,7 @@ class LettersSettings extends SettingsFormPage
                         ->options(fn () => Party::expertTypeOptions())
                         ->default(MatterLetter::DEFAULT_CC_EXPERT_TYPES)
                         ->columns(2)
-                        ->helperText(__('The matter\'s experts of these kinds are put in CC whenever a letter or minutes are sent by email; the sender can still remove them. None ticked: no one. On a committee matter, every member of the committee is put in CC.'))
+                        ->helperText(__('The matter\'s experts of these kinds are put in CC whenever a letter or minutes are sent by email; the sender can still remove them. None ticked: no one.'))
                         ->columnSpanFull(),
                 ]),
 
