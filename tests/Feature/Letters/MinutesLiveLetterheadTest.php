@@ -206,9 +206,9 @@ class MinutesLiveLetterheadTest extends TestCase
         $this->assertStringContainsString('autosize="1"', $html);
         // Three to a row: four names, two rows.
         $this->assertSame(2, substr_count($html, '<tr>'));
-        $this->assertSame(4, substr_count($html, 'padding: 4mm 2mm;'));
-        $this->assertSame(4, substr_count($html, 'margin-top: 15mm;'));
-        $this->assertStringContainsString('التوقيع: '.str_repeat('.', 30), $html);
+        $this->assertSame(4, substr_count($html, 'padding: 2.5mm 2mm;'));
+        $this->assertSame(4, substr_count($html, 'margin-top: 10mm;'));
+        $this->assertStringContainsString('التوقيع: '.str_repeat('.', 25), $html);
         $this->assertStringNotContainsString('margin-top: 5mm;', $html);
     }
 

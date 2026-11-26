@@ -343,9 +343,9 @@ class MinutesTest extends TestCase
         // The PDF's text box: its table of names, each over a line to sign on.
         $box = (new \ReflectionMethod(LetterPdf::class, 'element'))->invoke(new LetterPdf($composer), $letterhead->elements[0], $letterhead, true);
         $this->assertStringContainsString('الحضور: <table', $box);
-        $this->assertStringContainsString('<strong>الأستاذ/ محمد عبد المقصود</strong></div><div style="margin-top: 15mm;">التوقيع: '.str_repeat('.', 30).'</div>', $box);
-        // Room to sign: each row 4mm above and below.
-        $this->assertStringContainsString('padding: 4mm 2mm;', $box);
+        $this->assertStringContainsString('<strong>الأستاذ/ محمد عبد المقصود</strong></div><div style="margin-top: 10mm;">التوقيع: '.str_repeat('.', 25).'</div>', $box);
+        // Room to sign: each row 2.5mm above and below.
+        $this->assertStringContainsString('padding: 2.5mm 2mm;', $box);
         $this->assertStringContainsString('الأستاذة/ نضال قرشي', $box);
         $this->assertStringNotContainsString('غائبة', $box);
         // The rest of the box stays text.
