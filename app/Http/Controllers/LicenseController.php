@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\License;
+use App\Services\Installer\EnvironmentFileWriter;
 use App\Services\License\LicenseClient;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 /**
@@ -29,7 +31,7 @@ class LicenseController extends Controller
             'license_key' => ['required', 'string'],
         ]);
 
-        $fingerprint = config('license.installation_id') ?: License::current()?->fingerprint;
+        $fingerprint = config('license.installation_id') ?: License::current()?->fingerprint ?: $this->newInstallationId();
         $result = $client->activate($data['license_key'], (string) $fingerprint, config('app.url'));
 
         if (! $result['valid']) {
@@ -49,5 +51,21 @@ class LicenseController extends Controller
         );
 
         return redirect('/');
+    }
+
+    /**
+     * This installation's identity, made now when it has none: no INSTALLATION_ID in `.env` (the
+     * installer's License step skipped, or `.env` written by hand) and no license recorded. Without one
+     * the license server turns the key down as "invalid_request" — a fingerprint is required. Written to
+     * `.env` as the installer does, and kept on the license row, which later check-ins read it from.
+     */
+    private function newInstallationId(): string
+    {
+        $id = (string) Str::uuid();
+
+        app(EnvironmentFileWriter::class)->set(['INSTALLATION_ID' => $id]);
+        config(['license.installation_id' => $id]);
+
+        return $id;
     }
 }
