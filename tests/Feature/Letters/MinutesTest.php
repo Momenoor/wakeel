@@ -274,9 +274,12 @@ class MinutesTest extends TestCase
         config(['broadcasting.default' => 'reverb']);
         $this->withoutDefer();
 
-        // The bar: saved every two seconds, each change sent a moment after it is typed, a failed save in red.
+        // The bar: saved every two seconds; any change to the form (typed, a switch, a row) looked for every 300 ms and sent once it rests, a failed save in red.
         $page = $this->recordPage($minutes)
-            ->assertSee('document.addEventListener(type, this.onInput)', false)
+            ->assertSee('this.watcher = setInterval(() => this.watch(), 300)', false)
+            // The form's state, not keys: a switch or a row added is no key pressed.
+            ->assertSee("JSON.stringify(\$wire.get('data'))", false)
+            ->assertSee('Date.now() - this.pendingSince >= 1000', false)
             ->assertSee('setInterval(() => this.save(), 2000)', false)
             ->assertSee("second: '2-digit'", false)
             ->assertSee('Not saved — check your connection');
@@ -293,6 +296,13 @@ class MinutesTest extends TestCase
         $this->assertStringContainsString('<strong>ج:</strong> يكتب الآن', $this->getJson(route('minutes.live.feed', $minutes))->json('html'));
         $this->get(route('minutes.live', $minutes))->assertSee('يكتب الآن');
 
+        // A switch, no key pressed: the question taken off the live view at once, still not saved.
+        $items[0]['live'] = false;
+        $page->set('data.items', $items)->call('previewMinutes');
+        $this->assertStringNotContainsString('عن طبيعة العلاقة بين الطرفين؟', $this->getJson(route('minutes.live.feed', $minutes))->json('html'));
+        $this->assertTrue($minutes->fresh()->items[0]['live'] ?? true);
+        $items[0]['live'] = true;
+
         // Saved from anywhere: the saved text is the newest, the draft gone.
         $minutes->fresh()->update(['items' => [['type' => 'question', 'text' => 'عن طبيعة العلاقة بين الطرفين؟', 'answer' => 'محفوظ']]]);
         $html = $this->getJson(route('minutes.live.feed', $minutes))->json('html');
@@ -302,7 +312,7 @@ class MinutesTest extends TestCase
         // Without Pusher, nothing sent as it is typed: the viewers ask for what was saved.
         config(['broadcasting.default' => 'log']);
         Event::fake([MinutesLiveUpdated::class]);
-        $page = $this->recordPage($minutes->fresh())->assertDontSee('document.addEventListener(type, this.onInput)', false);
+        $page = $this->recordPage($minutes->fresh())->assertDontSee('this.watcher = setInterval(() => this.watch(), 300)', false);
         $items[0]['answer'] = 'بلا بث';
         $page->set('data.items', $items)->call('previewMinutes');
         Event::assertNotDispatched(MinutesLiveUpdated::class);

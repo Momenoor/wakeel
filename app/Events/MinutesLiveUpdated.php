@@ -30,8 +30,11 @@ class MinutesLiveUpdated implements ShouldBroadcastNow
     /** Seconds between the Record the meeting page's saves, when something changed. */
     public const AUTOSAVE = 2;
 
-    /** Milliseconds after a key is pressed that what's typed goes to the live view (unsaved): a pause, not each key. */
+    /** Milliseconds a change to the form rests before it goes to the live view (unsaved): a pause, not each key. */
     public const PREVIEW_DELAY = 300;
+
+    /** Milliseconds at most a change waits while typing goes on without a pause. */
+    public const PREVIEW_MAX_WAIT = 1000;
 
     public function __construct(public int $minutesId) {}
 

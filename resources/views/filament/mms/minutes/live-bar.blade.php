@@ -2,8 +2,12 @@
     At the top of the Record the meeting page: what's typed is saved every two
     seconds when it changed (RecordMinutes::autosaveMinutes, which doesn't
     redraw the page) so the live view the attendees watch keeps up. With
-    Pusher, it is on the live view sooner still: a moment after a key is
-    pressed (RecordMinutes::previewMinutes), before it is saved.
+    Pusher, it is on the live view sooner still, before it is saved
+    (RecordMinutes::previewMinutes): any change to the form — typed, a
+    switch (attended, shown on the live view), a choice, a row added or
+    taken off — once it has rested a moment (PREVIEW_DELAY), and while
+    typing on and on, at least every PREVIEW_MAX_WAIT. The form's state is
+    looked at, not keys: a switch or a row is no key pressed.
 
     A save that failed (no connection, signed out, the server) says so, in
     red, until one goes through: what's typed is still on this page, and
@@ -17,39 +21,45 @@
         saved: null,
         previewing: false,
         previewed: null,
-        previewTimer: null,
+        // The state last looked at, and since when it differs from what the live view has.
+        seen: null,
+        pendingSince: null,
+        watcher: null,
         timer: null,
         // What's on the page, to tell whether it changed since it was last sent.
         state() {
             return JSON.stringify($wire.get('data'));
         },
         init() {
-            this.saved = this.previewed = this.state();
+            this.saved = this.previewed = this.seen = this.state();
             this.timer = setInterval(() => this.save(), {{ \App\Events\MinutesLiveUpdated::AUTOSAVE * 1000 }});
             @if ($preview ?? false)
-                this.onInput = () => {
-                    clearTimeout(this.previewTimer);
-                    this.previewTimer = setTimeout(() => this.preview(), {{ \App\Events\MinutesLiveUpdated::PREVIEW_DELAY }});
-                };
-                ['input', 'change'].forEach((type) => document.addEventListener(type, this.onInput));
+                this.watcher = setInterval(() => this.watch(), {{ \App\Events\MinutesLiveUpdated::PREVIEW_DELAY }});
             @endif
         },
         destroy() {
             clearInterval(this.timer);
-            clearTimeout(this.previewTimer);
-            if (this.onInput) {
-                ['input', 'change'].forEach((type) => document.removeEventListener(type, this.onInput));
+            clearInterval(this.watcher);
+        },
+        // Changed and then left alone a moment, or changing for long: on the live view.
+        watch() {
+            const state = this.state();
+            if (state === this.previewed) { this.seen = state; this.pendingSince = null; return; }
+            this.pendingSince ??= Date.now();
+            const rested = state === this.seen;
+            this.seen = state;
+            if (rested || Date.now() - this.pendingSince >= {{ \App\Events\MinutesLiveUpdated::PREVIEW_MAX_WAIT }}) {
+                this.preview(state);
             }
         },
-        async preview() {
-            const state = this.state();
-            if (state === this.previewed) { return; }
-            // One at a time: typed meanwhile, sent once this one is answered.
-            if (this.previewing) { this.onInput(); return; }
+        async preview(state) {
+            // One at a time: changed meanwhile, sent on a next look once this one is answered.
+            if (this.previewing) { return; }
             this.previewing = true;
             try {
                 await $wire.previewMinutes();
                 this.previewed = state;
+                this.pendingSince = null;
             } catch (e) {
                 // The save every two seconds still carries it — and says so if it fails too.
             } finally {
