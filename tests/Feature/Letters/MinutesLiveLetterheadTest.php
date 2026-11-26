@@ -204,12 +204,14 @@ class MinutesLiveLetterheadTest extends TestCase
         $html = MinutesService::composer($minutes->fresh())->bodyHtml();
 
         $this->assertStringContainsString('autosize="1"', $html);
-        // Three to a row: four names, two rows.
-        $this->assertSame(2, substr_count($html, '<tr>'));
-        $this->assertSame(4, substr_count($html, 'padding: 2.5mm 2mm;'));
-        $this->assertSame(4, substr_count($html, 'margin-top: 10mm;'));
-        $this->assertStringContainsString('التوقيع: '.str_repeat('.', 25), $html);
-        $this->assertStringNotContainsString('margin-top: 5mm;', $html);
+        // Three to a row: four names, two rows of names, each over a row of lines to sign on.
+        $this->assertSame(4, substr_count($html, '<tr>'));
+        $this->assertSame(4, substr_count($html, '<strong>'));
+        // Room to sign as a row's height, the line at its foot: the PDF and Word keep a row's height,
+        // not a margin inside a cell (it printed with no room at all).
+        $this->assertSame(6, substr_count($html, 'height: 13mm; padding: 0 2mm 2.5mm 2mm; vertical-align: bottom;'));
+        $this->assertSame(4, substr_count($html, 'التوقيع: '.str_repeat('.', 25)));
+        $this->assertStringNotContainsString('margin-top', $html);
     }
 
     public function test_a_question_switched_off_is_not_in_the_live_view_but_stays_in_the_minutes(): void

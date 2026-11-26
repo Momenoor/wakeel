@@ -45,6 +45,9 @@ class LetterComposer
     /** {{minutes.signatures}}: in a letterhead text box (every page), drawn as its table. */
     public const SIGNATURES = 'minutes.signatures';
 
+    /** The cell of an attendee's line to sign on, under their name (signaturesHtml()). */
+    private const SIGNATURE_LINE_STYLE = 'height: 13mm; padding: 0 2mm 2.5mm 2mm; vertical-align: bottom;';
+
     /** Where a letter keeps the Teams meeting made when it was issued ({{meeting.link}}). */
     public const MEETING_LINK = '__meeting_link';
 
@@ -949,13 +952,16 @@ class LetterComposer
         $font = $size ? ' font-size: '.$size.'pt;' : '';
 
         // autosize: the PDF would otherwise shrink the text to fit the row.
-        // Room to sign: 10mm under the name, a line of 25 dots, 2.5mm above and below each row — the PDF and
-        // the Word copy alike (both read the same styles).
+        // Room to sign: each three names over a row of their own lines, 13mm high with the line at its
+        // foot (about 8mm clear above it) — a row's height, which the PDF and the Word copy both keep;
+        // a margin inside a cell neither does. The lines level across the row, a name on two lines or not.
+        $cell = fn (string $style, string $content = '') => '<td style="width: 33.3%; border: 0; text-align: center; '.$style.$font.'">'.$content.'</td>';
+
         return '<table autosize="1" style="width: 100%; border-collapse: collapse;'.$font.'">'
-            .collect($names)->chunk(3)->map(fn ($row) => '<tr>'.$row->map(fn (string $name) => '<td style="width: 33.3%; border: 0; padding: 2.5mm 2mm; text-align: center; vertical-align: top;'.$font.'">'
-                .'<div><strong>'.e($name).'</strong></div>'
-                .'<div style="margin-top: 10mm;">'.$sign.str_repeat('.', 25).'</div>'
-                .'</td>')->implode('').str_repeat('<td style="width: 33.3%; border: 0;"></td>', 3 - $row->count()).'</tr>')->implode('')
+            .collect($names)->chunk(3)->map(fn ($row) => '<tr>'.$row->map(fn (string $name) => $cell('padding: 2.5mm 2mm 0 2mm; vertical-align: top;', '<strong>'.e($name).'</strong>'))->implode('')
+                .str_repeat($cell('padding: 2.5mm 2mm 0 2mm; vertical-align: top;'), 3 - $row->count()).'</tr>'
+                .'<tr>'.$row->map(fn () => $cell(self::SIGNATURE_LINE_STYLE, $sign.str_repeat('.', 25)))->implode('')
+                .str_repeat($cell(self::SIGNATURE_LINE_STYLE), 3 - $row->count()).'</tr>')->implode('')
             .'</table>';
     }
 
