@@ -3,6 +3,7 @@
 namespace Tests\Feature\Letters;
 
 use App\Enums\LetterStatus;
+use App\Enums\MatterCommissiong;
 use App\Filament\Mms\Resources\EmailTemplates\EmailTemplateResource;
 use App\Filament\Mms\Resources\Matters\Pages\ViewMatter;
 use App\Filament\Mms\Resources\Matters\RelationManagers\LettersRelationManager;
@@ -366,6 +367,37 @@ class LetterEmailTest extends TestCase
         Livewire::test(LettersRelationManager::class, ['ownerRecord' => $matter, 'pageClass' => ViewMatter::class])
             ->mountAction(TestAction::make('email')->table($this->letter))
             ->assertSet('mountedActions.0.data.cc', []);
+    }
+
+    public function test_on_a_committee_matter_every_member_of_the_committee_is_copied_in(): void
+    {
+        $matter = $this->letter->matter;
+        $expert = fn (string $type, array $party) => MatterParty::create([
+            'matter_id' => $matter->id, 'role' => 'expert', 'type' => $type,
+            'party_id' => Party::factory()->create($party)->id,
+        ]);
+        $expert('certified', ['name' => 'Reda', 'email' => ['reda@jpa.ae']]);
+        $expert('assistant', ['name' => 'سارة', 'email' => ['sara@jpa.ae']]);
+        $expert('external', ['name' => 'Khalid', 'email' => ['khalid@partner.ae']]);
+        $expert('external-assistant', ['name' => 'Omar', 'email' => ['omar@partner.ae']]);
+        // Settings copy no one in — a committee's members are all copied in all the same.
+        Setting::set('letter_cc_expert_types', [], 'general');
+
+        // Not a committee matter: as Settings say.
+        $this->assertSame([], MatterLetter::ccEmails($matter));
+
+        $matter->update(['commissioning' => MatterCommissiong::COMMITTEE]);
+        $members = ['reda@jpa.ae', 'sara@jpa.ae', 'khalid@partner.ae', 'omar@partner.ae'];
+        $this->assertSame($members, MatterLetter::ccEmails($matter->fresh()));
+
+        Livewire::test(LettersRelationManager::class, ['ownerRecord' => $matter->fresh(), 'pageClass' => ViewMatter::class])
+            ->mountAction(TestAction::make('email')->table($this->letter))
+            ->assertSet('mountedActions.0.data.cc', $members)
+            ->fillForm(['sender' => 'iflas', 'recipients' => [$this->letter->recipients->first()->id]])
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
+
+        $this->assertSame($members, array_map(fn ($a) => $a->getAddress(), $this->sent[0]->getCc()));
     }
 
     public function test_a_letter_starts_with_its_templates_own_covering_email(): void
