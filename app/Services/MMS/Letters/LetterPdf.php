@@ -187,6 +187,7 @@ class LetterPdf
             }
 
             $this->write($mpdf, $this->html($letterhead, $rtl), $rtl);
+            self::drawBackgrounds($mpdf, $letterhead->file($letterhead->first_page_background), $letterhead->file($letterhead->other_pages_background));
 
             // The last page: written right after its text instead (see
             // html()), so not at its foot as well.
@@ -338,6 +339,35 @@ class LetterPdf
         $mpdf->y = $top + $height + 2;
     }
 
+    /**
+     * The letterhead's image behind each page, drawn as a picture the page's exact size (the first page's
+     * on page 1, the other pages' — or the first's — on the rest). A CSS page background would be drawn
+     * by mPDF as a tiling pattern, which some viewers and printers size on their own (the letterhead came
+     * out at about 90% while the text was at 100%); a picture is placed like the text, so both print at
+     * the same scale. Drawn first on each page, under everything else.
+     */
+    public static function drawBackgrounds(Mpdf $mpdf, ?string $first, ?string $rest = null): void
+    {
+        $rest ??= $first;
+        $placeholder = '___BACKGROUND___PATTERNS'.$mpdf->uniqstr;
+        $drawn = [];
+
+        foreach (array_keys($mpdf->pages) as $page) {
+            $file = $page === 1 ? $first : $rest;
+
+            if ($file === null) {
+                continue;
+            }
+
+            // Positioned and sized only: nothing is written to the page by this call.
+            $drawn[$file] ??= ($mpdf->Image($file, 0, 0, $mpdf->w, $mpdf->h, '', '', false, false) ?: [])['OUTPUT'] ?? '';
+
+            if ($drawn[$file] !== '' && str_contains($mpdf->pages[$page], $placeholder)) {
+                $mpdf->pages[$page] = str_replace($placeholder, "\n".$drawn[$file]."\n".$placeholder, $mpdf->pages[$page]);
+            }
+        }
+    }
+
     public function save(string $path): string
     {
         if (! is_dir(dirname($path))) {
@@ -351,13 +381,7 @@ class LetterPdf
 
     private function html(Letterhead $letterhead, bool $rtl): string
     {
-        $first = $letterhead->file($letterhead->first_page_background);
-        $rest = $letterhead->file($letterhead->other_pages_background) ?? $first;
         $elements = $this->composer->elements();
-
-        $background = fn (?string $file) => $file
-            ? 'background: url("'.$file.'") no-repeat 0 0; background-image-resize: 6;'
-            : '';
 
         // Each page's own margins: the first page's, and the other pages'.
         $margins = fn (float $top, float $right, float $bottom, float $left): string => "margin-top: {$top}mm; margin-right: {$right}mm; margin-bottom: {$bottom}mm; margin-left: {$left}mm;";
@@ -368,8 +392,9 @@ class LetterPdf
         $flowHtml = $flow->map(fn ($element) => $this->flowing($element, $rtl))->implode('');
         $footer = fn (float $bottom) => $flowHtml !== '' ? ' footer: html_letterAfterText; margin-footer: '.$bottom.'mm;' : '';
 
-        $css = '@page { '.$background($rest).' header: html_letterRest;'.$footer($other['bottom']).' '.$margins($other['top'], $other['right'], $other['bottom'], $other['left']).' }'
-            .'@page :first { '.$background($first).' header: html_letterFirst;'.$footer((float) $letterhead->margin_bottom).' '.$margins((float) $letterhead->margin_top, (float) $letterhead->margin_right, (float) $letterhead->margin_bottom, (float) $letterhead->margin_left).' }'
+        // The letterhead's image is drawn behind each page afterwards (drawBackgrounds()), not as a CSS background.
+        $css = '@page { header: html_letterRest;'.$footer($other['bottom']).' '.$margins($other['top'], $other['right'], $other['bottom'], $other['left']).' }'
+            .'@page :first { header: html_letterFirst;'.$footer((float) $letterhead->margin_bottom).' '.$margins((float) $letterhead->margin_top, (float) $letterhead->margin_right, (float) $letterhead->margin_bottom, (float) $letterhead->margin_left).' }'
             .'body { font-family: '.($this->font()?->pdfKey() ?? self::FONT).'; font-size: 12pt; line-height: 1.55; text-align: justify; }'
             .'p { margin: 0 0 6pt 0; }'
             .'ol, ul { margin: 0 0 6pt 0; padding-'.($rtl ? 'right' : 'left').': 18pt; }'
