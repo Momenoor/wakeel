@@ -3,6 +3,7 @@
 namespace Tests\Feature\Letters;
 
 use App\Enums\LetterTemplateCategories;
+use App\Events\MinutesLiveUpdated;
 use App\Filament\Mms\Resources\LetterTemplates\Pages\EditLetterTemplate;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\Pages\RecordMinutes;
@@ -31,6 +32,7 @@ use Filament\Forms\Components\Select;
 use Filament\Schemas\Components\Wizard;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
@@ -257,6 +259,62 @@ class MinutesTest extends TestCase
         $this->actingAs(User::factory()->create());
         $this->get(route('minutes.live', $minutes))->assertForbidden();
         $this->get(route('minutes.live.feed', $minutes))->assertForbidden();
+    }
+
+    public function test_what_is_typed_is_on_the_live_view_at_once_before_it_is_saved(): void
+    {
+        $minutes = MatterMinutes::create([
+            'matter_id' => $this->matter->id,
+            'letter_template_id' => LetterTemplate::query()->where('category', 'minutes')->value('id'),
+            'number' => 1,
+            'meeting_at' => '2026-09-30 16:00:00',
+            'items' => [['type' => 'question', 'text' => 'عن طبيعة العلاقة بين الطرفين؟', 'answer' => null]],
+            'status' => MatterMinutes::DRAFT,
+        ]);
+        config(['broadcasting.default' => 'reverb']);
+        $this->withoutDefer();
+
+        // The bar: saved every two seconds, each change sent a moment after it is typed, a failed save in red.
+        $page = $this->recordPage($minutes)
+            ->assertSee('document.addEventListener(type, this.onInput)', false)
+            ->assertSee('setInterval(() => this.save(), 2000)', false)
+            ->assertSee("second: '2-digit'", false)
+            ->assertSee('Not saved — check your connection');
+
+        Event::fake([MinutesLiveUpdated::class]);
+        $items = array_values($page->get('data.items'));
+        $items[0]['answer'] = 'يكتب الآن';
+        $page->set('data.items', $items)->call('previewMinutes');
+
+        // Not saved: the database has it as it was …
+        $this->assertNull($minutes->fresh()->items[0]['answer']);
+        // … the viewers are told, and read it as it is typed.
+        Event::assertDispatched(MinutesLiveUpdated::class, fn ($event) => $event->minutesId === $minutes->id && $event->broadcastOn()->name === 'private-minutes.'.$minutes->id);
+        $this->assertStringContainsString('<strong>ج:</strong> يكتب الآن', $this->getJson(route('minutes.live.feed', $minutes))->json('html'));
+        $this->get(route('minutes.live', $minutes))->assertSee('يكتب الآن');
+
+        // Saved from anywhere: the saved text is the newest, the draft gone.
+        $minutes->fresh()->update(['items' => [['type' => 'question', 'text' => 'عن طبيعة العلاقة بين الطرفين؟', 'answer' => 'محفوظ']]]);
+        $html = $this->getJson(route('minutes.live.feed', $minutes))->json('html');
+        $this->assertStringContainsString('<strong>ج:</strong> محفوظ', $html);
+        $this->assertStringNotContainsString('يكتب الآن', $html);
+
+        // Without Pusher, nothing sent as it is typed: the viewers ask for what was saved.
+        config(['broadcasting.default' => 'log']);
+        Event::fake([MinutesLiveUpdated::class]);
+        $page = $this->recordPage($minutes->fresh())->assertDontSee('document.addEventListener(type, this.onInput)', false);
+        $items[0]['answer'] = 'بلا بث';
+        $page->set('data.items', $items)->call('previewMinutes');
+        Event::assertNotDispatched(MinutesLiveUpdated::class);
+        $this->assertStringNotContainsString('بلا بث', $this->getJson(route('minutes.live.feed', $minutes))->json('html'));
+
+        // Finalised: nothing more previewed.
+        config(['broadcasting.default' => 'reverb']);
+        $minutes->update(['status' => MatterMinutes::FINAL]);
+        $page = $this->recordPage($minutes->fresh());
+        $items[0]['answer'] = 'بعد الاعتماد';
+        $page->set('data.items', $items)->call('previewMinutes');
+        $this->assertStringNotContainsString('بعد الاعتماد', $this->getJson(route('minutes.live.feed', $minutes))->json('html'));
     }
 
     public function test_the_attendees_sign_at_the_foot_of_every_page(): void

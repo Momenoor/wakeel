@@ -114,4 +114,9 @@ return [
 
     'prefix' => env('CACHE_PREFIX', Str::slug((string) env('APP_NAME', 'laravel')).'-cache-'),
 
+    // Where the minutes being typed wait for the live view until the autosave writes them
+    // (MinutesService::previewRecorded): the server's own disk, not the database, a write every
+    // few keystrokes. Several servers behind one address: one they share (redis).
+    'minutes_live_drafts' => env('CACHE_MINUTES_LIVE_DRAFTS_STORE', 'file'),
+
 ];

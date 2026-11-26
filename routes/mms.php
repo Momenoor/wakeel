@@ -124,7 +124,7 @@ Route::middleware('auth')->group(function () {
     Route::get('minutes/{minutes}/live', function (MatterMinutes $minutes) {
         abort_unless(auth()->user()->can('view', $minutes->matter), 403);
 
-        $html = MinutesService::liveHtml($minutes);
+        $html = MinutesService::liveFeedHtml($minutes);
 
         return view('minutes.live', [
             'title' => MinutesService::fileName($minutes),
@@ -159,7 +159,8 @@ Route::middleware('auth')->group(function () {
     Route::get('minutes/{minutes}/live/feed', function (MatterMinutes $minutes) {
         abort_unless(auth()->user()->can('view', $minutes->matter), 403);
 
-        $html = MinutesService::liveHtml($minutes);
+        // What's being typed, before the autosave writes it.
+        $html = MinutesService::liveFeedHtml($minutes);
 
         return response()->json([
             'version' => md5($html),

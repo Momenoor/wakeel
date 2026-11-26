@@ -2,6 +2,7 @@
 
 namespace App\Filament\Mms\Resources\Matters\Pages;
 
+use App\Events\MinutesLiveUpdated;
 use App\Filament\Mms\Resources\Matters\MatterResource;
 use App\Filament\Mms\Resources\Matters\Schemas\MinutesRecordForm;
 use App\Filament\Schemas\Components\WizardWithSave;
@@ -94,7 +95,7 @@ class RecordMinutes extends Page
             ->statePath('data')
             ->components([
                 // Saved as it's typed, for the live view the attendees watch.
-                View::make('filament.mms.minutes.live-bar')->viewData(['url' => route('minutes.live', $minutes)]),
+                View::make('filament.mms.minutes.live-bar')->viewData(['url' => route('minutes.live', $minutes), 'preview' => MinutesLiveUpdated::broadcasting()]),
                 // Save beside Next: what's typed kept without going on.
                 WizardWithSave::make(MinutesRecordForm::steps($minutes))
                     ->skippable()
@@ -209,6 +210,25 @@ class RecordMinutes extends Page
         }
 
         MinutesService::saveRecorded($minutes, (array) $this->data);
+    }
+
+    /**
+     * What's being typed, on the live view at once (a moment after a key is
+     * pressed) — not saved: the autosave writes it a second or two later.
+     * Only with Pusher (or Reverb): without, the viewers ask every five
+     * seconds for what was saved.
+     */
+    public function previewMinutes(): void
+    {
+        $this->skipRender();
+
+        $minutes = $this->minutes();
+
+        if (! MinutesLiveUpdated::broadcasting() || $minutes->isFinal() || ! auth()->user()?->can('update', $this->getRecord())) {
+            return;
+        }
+
+        MinutesService::previewRecorded($minutes, (array) $this->data);
     }
 
     /** The file manager in Show a file on the live view showed one: closed, and Hide the file offered. */

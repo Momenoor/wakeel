@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Events\MinutesLiveUpdated;
+use App\Services\MMS\Letters\MinutesService;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -36,7 +37,11 @@ class MatterMinutes extends Model
         // The live view the attendees watch refreshes on it.
         // Only a save that changed something (updated does not fire for none).
         static::created(fn (self $minutes) => MinutesLiveUpdated::announce($minutes->getKey()));
-        static::updated(fn (self $minutes) => MinutesLiveUpdated::announce($minutes->getKey()));
+        // Saved, from anywhere: what's being typed (MinutesService::previewRecorded) is in it, or older.
+        static::updated(function (self $minutes): void {
+            MinutesService::forgetDraft($minutes);
+            MinutesLiveUpdated::announce($minutes->getKey());
+        });
     }
 
     public const DRAFT = 'draft';

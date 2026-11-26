@@ -2,6 +2,7 @@
 
 namespace App\Services\MMS\Letters;
 
+use App\Events\MinutesLiveUpdated;
 use App\Models\Letterhead;
 use App\Models\LetterTemplate;
 use App\Models\MatterMinutes;
@@ -13,6 +14,8 @@ use App\Support\EditorFonts;
 use App\Support\FileName;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
+use Illuminate\Contracts\Cache\Repository;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -92,7 +95,18 @@ class MinutesService
      */
     public static function saveRecorded(MatterMinutes $minutes, array $data): void
     {
-        $minutes->update([
+        $minutes->update(self::recordedAttributes($minutes, $data));
+    }
+
+    /**
+     * What saveRecorded() writes, from what's on the Record the meeting page.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private static function recordedAttributes(MatterMinutes $minutes, array $data): array
+    {
+        return [
             'meeting_at' => filled($data['meeting_at'] ?? null) ? Carbon::parse($data['meeting_at']) : $minutes->meeting_at,
             'meeting_link' => $data['meeting_link'] ?? null,
             'attendees' => array_values(array_map(fn (array $a): array => [
@@ -119,7 +133,51 @@ class MinutesService
             'inputs' => (array) ($data['inputs'] ?? $minutes->inputs ?? []),
             'opening' => array_key_exists('opening', $data) ? (string) $data['opening'] : $minutes->opening,
             'closing' => array_key_exists('closing', $data) ? (string) $data['closing'] : $minutes->closing,
-        ]);
+        ];
+    }
+
+    /** Seconds an unsaved draft is shown on the live view: the autosave is meant to have caught up long before. */
+    public const DRAFT_SECONDS = 120;
+
+    /**
+     * What's being typed, on the live view at once — before the autosave
+     * writes it (every two seconds): the text as it would be, kept apart
+     * (the file cache, not the database) for the viewers to ask for, and
+     * the viewers told over Pusher. A save of the minutes, from anywhere,
+     * clears it (MatterMinutes): from then the saved text is the newest.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public static function previewRecorded(MatterMinutes $minutes, array $data): void
+    {
+        $draft = (clone $minutes)->fill(self::recordedAttributes($minutes, $data));
+
+        self::drafts()->put(self::draftKey($minutes), self::liveHtml($draft), self::DRAFT_SECONDS);
+        MinutesLiveUpdated::announce((int) $minutes->getKey());
+    }
+
+    /** What the live view shows: what's being typed if not saved yet, else what was saved. */
+    public static function liveFeedHtml(MatterMinutes $minutes): string
+    {
+        $draft = $minutes->isFinal() ? null : self::drafts()->get(self::draftKey($minutes));
+
+        return is_string($draft) ? $draft : self::liveHtml($minutes);
+    }
+
+    public static function forgetDraft(MatterMinutes $minutes): void
+    {
+        self::drafts()->forget(self::draftKey($minutes));
+    }
+
+    /** On the server's own disk (cache.minutes_live_drafts): a draft every few keystrokes is not a write to the database. */
+    private static function drafts(): Repository
+    {
+        return Cache::store(config('cache.minutes_live_drafts', 'file'));
+    }
+
+    private static function draftKey(MatterMinutes $minutes): string
+    {
+        return 'minutes-live-draft.'.$minutes->getKey();
     }
 
     /**
