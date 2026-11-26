@@ -949,10 +949,12 @@ class LetterComposer
         $font = $size ? ' font-size: '.$size.'pt;' : '';
 
         // autosize: the PDF would otherwise shrink the text to fit the row.
+        // Room to sign: 15mm under the name, a long line, 4mm above and below each row — the PDF and
+        // the Word copy alike (both read the same styles).
         return '<table autosize="1" style="width: 100%; border-collapse: collapse;'.$font.'">'
-            .collect($names)->chunk(3)->map(fn ($row) => '<tr>'.$row->map(fn (string $name) => '<td style="width: 33.3%; border: 0; padding: 1mm 2mm; text-align: center; vertical-align: top;'.$font.'">'
+            .collect($names)->chunk(3)->map(fn ($row) => '<tr>'.$row->map(fn (string $name) => '<td style="width: 33.3%; border: 0; padding: 4mm 2mm; text-align: center; vertical-align: top;'.$font.'">'
                 .'<div><strong>'.e($name).'</strong></div>'
-                .'<div style="margin-top: 5mm;">'.$sign.'....................</div>'
+                .'<div style="margin-top: 15mm;">'.$sign.str_repeat('.', 30).'</div>'
                 .'</td>')->implode('').str_repeat('<td style="width: 33.3%; border: 0;"></td>', 3 - $row->count()).'</tr>')->implode('')
             .'</table>';
     }

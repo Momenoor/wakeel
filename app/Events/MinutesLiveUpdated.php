@@ -8,8 +8,10 @@ use Illuminate\Foundation\Events\Dispatchable;
 
 /**
  * The minutes changed — typed in the meeting (the autosave), finalised or
- * reopened. The live view the attendees watch asks for the new text on it,
- * over Pusher, instead of every viewer asking every two seconds. Sent
+ * reopened, an attendee or a question changed, a file shown or hidden. The
+ * live view the attendees watch asks for the new text on it, over Pusher
+ * (or Reverb), at once — and asks by itself only once a minute, a safety
+ * net (POLL_LIVE). Without either it asks every five seconds (POLL). Sent
  * once the save has been answered (no queue worker to count on, and the
  * one typing does not wait on Pusher) and without the text: a message
  * each save, a request only from those watching.
@@ -17,6 +19,12 @@ use Illuminate\Foundation\Events\Dispatchable;
 class MinutesLiveUpdated implements ShouldBroadcastNow
 {
     use Dispatchable;
+
+    /** Seconds between the live view's own asks while Pusher is connected: only what a lost message missed. */
+    public const POLL_LIVE = 60;
+
+    /** Seconds between them without Pusher (or while it is not connected): no faster, a shared server's limit. */
+    public const POLL = 5;
 
     public function __construct(public int $minutesId) {}
 

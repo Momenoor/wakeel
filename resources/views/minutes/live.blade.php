@@ -115,6 +115,8 @@
     <script>
         const layout = @js($layout);
         const echoConfig = @js($echo);
+        // Milliseconds between the page's own asks: with Pusher connected a safety net, else the only way.
+        const pollEvery = { live: @js($poll['live'] * 1000), fallback: @js($poll['fallback'] * 1000) };
         const pagesEl = document.getElementById('pages');
         let version = @js($version);
         let zoom = null;     // set by A+ / A−; until then, as wide as the screen allows
@@ -409,26 +411,46 @@
         applyZoom();
         paginate(@js($html));
         followFile(@js($shown));
-        // Pusher: the text is asked for when it changes; the poll is a slow safety net.
-        // Without it, every two seconds.
-        // Finalised, nothing more is typed: once a minute is enough.
+        // Pusher (or Reverb): the text is asked for when it changes; the poll is a slow safety net.
+        // Without it, or while it is not connected, every five seconds.
+        // Finalised, nothing more is typed: once a minute is enough. Not while the tab is in the
+        // background: as soon as it is back.
         let live = false;
-        const wait = () => (live ? 20000 : (final ? 60000 : 2000));
-        const tick = () => { if (stopped) { return; } refresh(); setTimeout(tick, wait()); };
+        const wait = () => (live || final ? Math.max(pollEvery.live, pollEvery.fallback) : pollEvery.fallback);
+        const tick = () => { if (stopped) { return; } if (! document.hidden) { refresh(); } setTimeout(tick, wait()); };
         setTimeout(tick, wait());
+        document.addEventListener('visibilitychange', () => { if (! document.hidden) { refresh(); } });
 
         if (echoConfig && echoConfig.key) {
             const script = document.createElement('script');
             script.src = 'https://js.pusher.com/8.4.0/pusher.min.js';
             script.onload = () => {
                 try {
-                    const pusher = new Pusher(echoConfig.key, {
-                        cluster: echoConfig.cluster,
-                        forceTLS: true,
+                    const options = {
+                        forceTLS: echoConfig.forceTLS !== false,
                         channelAuthorization: { endpoint: echoConfig.authEndpoint, headers: { 'X-CSRF-TOKEN': @js(csrf_token()), 'Accept': 'application/json' } },
+                    };
+                    // Reverb speaks Pusher's protocol, on the office's own server.
+                    if (echoConfig.broadcaster === 'reverb') {
+                        Object.assign(options, { cluster: '', wsHost: echoConfig.wsHost, wsPort: echoConfig.wsPort, wssPort: echoConfig.wssPort, enabledTransports: echoConfig.enabledTransports, disableStats: true });
+                    } else {
+                        options.cluster = echoConfig.cluster;
+                    }
+                    const pusher = new Pusher(echoConfig.key, options);
+                    const channel = pusher.subscribe('private-' + @js($channel));
+                    let subscribed = false;
+                    let lost = false;
+                    const connected = () => { live = subscribed && pusher.connection.state === 'connected'; };
+                    channel.bind('pusher:subscription_succeeded', () => { subscribed = true; connected(); });
+                    // Not allowed to listen: the poll every five seconds goes on.
+                    channel.bind('pusher:subscription_error', () => { subscribed = false; connected(); });
+                    channel.bind('minutes.updated', () => refresh());
+                    pusher.connection.bind('state_change', (states) => {
+                        if (['unavailable', 'failed', 'disconnected'].includes(states.current)) { lost = true; }
+                        connected();
+                        // Back after being lost (a phone that slept): what was sent meanwhile never came.
+                        if (states.current === 'connected' && lost) { lost = false; refresh(); }
                     });
-                    pusher.connection.bind('state_change', (states) => { live = states.current === 'connected'; });
-                    pusher.subscribe('private-' + @js($channel)).bind('minutes.updated', () => refresh());
                 } catch (e) {
                     live = false;
                 }

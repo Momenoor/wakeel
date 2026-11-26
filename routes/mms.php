@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\BulkMailRecipientStatus;
+use App\Events\MinutesLiveUpdated;
 use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\BulkMailController;
 use App\Http\Controllers\EmployeeRequestEmailActionController;
@@ -132,7 +133,9 @@ Route::middleware('auth')->group(function () {
             'version' => md5($html),
             'feed' => route('minutes.live.feed', $minutes),
             // Pusher, when set up: the page then asks for the text only when it changes.
-            'echo' => config('filament.broadcasting.echo.broadcaster') === 'pusher' ? config('filament.broadcasting.echo') : null,
+            'echo' => in_array(config('filament.broadcasting.echo.broadcaster'), ['pusher', 'reverb'], true) ? config('filament.broadcasting.echo') : null,
+            // Seconds between its own asks: a safety net with Pusher, the only way without.
+            'poll' => ['live' => MinutesLiveUpdated::POLL_LIVE, 'fallback' => MinutesLiveUpdated::POLL],
             'channel' => 'minutes.'.$minutes->getKey(),
             'layout' => MinutesService::liveLayout($minutes),
             'rtl' => (($minutes->template?->locale) ?: 'ar') !== 'en',
