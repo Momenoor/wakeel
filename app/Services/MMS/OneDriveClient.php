@@ -156,6 +156,17 @@ class OneDriveClient
             $folderIds,
         ));
 
+        // Some turned back for now (429, 503: too many at once): the wait Microsoft 365 names, once for all of
+        // them, before they are asked again one at a time — not each asked again at once, and turned back again.
+        $wait = collect($responses)
+            ->filter(fn ($response): bool => $response instanceof Response && in_array($response->status(), [429, 503], true))
+            ->map(fn (Response $response): int => max(1, (int) $response->header('Retry-After')))
+            ->max();
+
+        if ($wait !== null) {
+            Sleep::for(min($wait, self::WAIT_SECONDS))->seconds();
+        }
+
         $listings = [];
         foreach ($folderIds as $id) {
             $response = $responses[$id] ?? null;

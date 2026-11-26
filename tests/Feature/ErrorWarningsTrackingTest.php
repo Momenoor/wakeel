@@ -58,9 +58,9 @@ class ErrorWarningsTrackingTest extends TestCase
         $this->assertStringContainsString('/mms/matters/345/edit', $warning->url);
         $this->assertTrue($warning->last_seen_at->gt($warning->created_at));
 
-        // Another status, or no answer at all: another warning.
+        // Another status, or no answer after a long wait: another warning.
         $this->postJson(route('client-errors.store'), ['status' => 403, 'name' => 'matters.edit-matter@save', 'page' => 'https://wakeel.test/mms/matters/12/edit'])->assertNoContent();
-        $this->postJson(route('client-errors.store'), ['status' => 0, 'name' => 'matters.edit-matter@save', 'page' => 'https://wakeel.test/mms/matters/12/edit'])->assertNoContent();
+        $this->postJson(route('client-errors.store'), ['status' => 0, 'name' => 'matters.edit-matter@save', 'page' => 'https://wakeel.test/mms/matters/12/edit', 'ms' => 30000])->assertNoContent();
 
         $this->assertSame(3, ErrorReport::query()->count());
         $this->assertStringContainsString('(no answer)', ErrorReport::query()->latest('id')->first()->message);

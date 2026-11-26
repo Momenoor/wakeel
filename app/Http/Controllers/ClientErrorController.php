@@ -20,6 +20,9 @@ use Illuminate\Support\Str;
  */
 class ClientErrorController extends Controller
 {
+    /** No answer after waiting this long (milliseconds) is the server not answering, not the line dropping. */
+    public const HUNG_MS = 20_000;
+
     public function store(Request $request): Response
     {
         $data = $request->validate([
@@ -38,14 +41,20 @@ class ClientErrorController extends Controller
             Log::warning('A background request failed in the browser', ['status' => $data['status'], 'request' => $data['name'], 'page' => $page, 'user' => $request->user()?->getKey()]);
         }
 
-        ErrorTracker::warning(
-            'Browser request failed',
-            'A background request failed in the browser ('.self::statusText((int) $data['status']).'): '.$data['name'].' on '.$page,
-            ['status' => (int) $data['status'], 'request' => $data['name'], 'page' => $page, 'ms' => $data['ms'] ?? null],
-            groupBy: $data['status'].'|'.$data['name'].'|'.ErrorTracker::normalise($page),
-            status: (int) $data['status'] ?: null,
-            request: $request,
-        );
+        // On Settings → Error tracking: an error the server answered (a 500, a 403), or no answer after the
+        // browser waited a long time (the server hung). No answer at once (a page closed or put to sleep
+        // mid-request, the line or Pusher dropped for a moment) is the user's connection, and the next check
+        // seconds later goes through: on the Performance page only, not a warning to look into.
+        if ((int) $data['status'] !== 0 || (int) ($data['ms'] ?? 0) >= self::HUNG_MS) {
+            ErrorTracker::warning(
+                'Browser request failed',
+                'A background request failed in the browser ('.self::statusText((int) $data['status']).'): '.$data['name'].' on '.$page,
+                ['status' => (int) $data['status'], 'request' => $data['name'], 'page' => $page, 'ms' => $data['ms'] ?? null],
+                groupBy: $data['status'].'|'.$data['name'].'|'.ErrorTracker::normalise($page),
+                status: (int) $data['status'] ?: null,
+                request: $request,
+            );
+        }
 
         PerformanceSample::create([
             'user_id' => $request->user()?->getKey(),

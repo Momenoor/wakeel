@@ -34,6 +34,18 @@ class OneDriveAddedEmails
     /** Folders asked of OneDrive at once. */
     private const AT_ONCE = 20;
 
+    /**
+     * Microsoft 365 throttling (429, 503) for this long without a folder read in between is a warning; shorter, it
+     * passes by itself (the folder is read first the next run) and is not one to look into.
+     */
+    public const THROTTLED_WARN_MINUTES = 120;
+
+    /** Since when Microsoft 365 has been throttling the reading (a timestamp), until a folder is read again. */
+    private const THROTTLED_SINCE = 'onedrive-added-emails-throttled-since';
+
+    /** The last folder read was turned back by Microsoft 365 (429, 503): the run stops. */
+    private bool $throttled = false;
+
     /** A creditors' folder's placeholders that are an email's, not the matter's: where the folders of its own begin. */
     private const EMAIL_PLACEHOLDERS = '/\{\{\s*(creditor|side|day|month|year|date|time|kind|party|subject)\s*\}\}/iu';
 
@@ -57,6 +69,8 @@ class OneDriveAddedEmails
             return $result;
         }
 
+        $this->throttled = false;
+
         foreach ($this->folders() as $group) {
             if ($deadline !== null && $result['folders'] > 0 && microtime(true) >= $deadline) {
                 $result['stopped'] = true;
@@ -66,6 +80,14 @@ class OneDriveAddedEmails
 
             $result['added'] += $this->readGroup($group, null, $deadline, $result['errors']);
             $result['folders']++;
+
+            // Microsoft 365 turning the system back even after its waits: the rest of the folders wait for the
+            // next run (half an hour), not asked now and turned back too.
+            if ($this->throttled) {
+                $result['stopped'] = true;
+
+                break;
+            }
         }
 
         return $result;
@@ -157,8 +179,33 @@ class OneDriveAddedEmails
 
                 $added += $this->readFile($this->matterOf($matters, $file['path']), $user, $file, $row, $userId) ? 1 : 0;
             }
+            Cache::forget(self::THROTTLED_SINCE);
         } catch (Throwable $e) {
             $errors[] = $first->folder_name.': '.$e->getMessage();
+
+            // Throttled by Microsoft 365 after its waits: for now, not about this folder. It is not marked read
+            // (it is first again the next run) and the run stops; a warning only once it has lasted.
+            if (in_array(self::statusOf($e), [429, 503], true)) {
+                $this->throttled = true;
+                $since = (int) Cache::get(self::THROTTLED_SINCE, 0);
+
+                if ($since === 0) {
+                    Cache::put(self::THROTTLED_SINCE, $since = now()->getTimestamp(), now()->addDay());
+                }
+
+                if (now()->getTimestamp() - $since >= self::THROTTLED_WARN_MINUTES * 60) {
+                    if (Cache::add('onedrive-added-emails-throttled-logged', true, now()->addHours(self::LOGGED_HOURS))) {
+                        Log::warning('Emails added in OneDrive not read: '.$e->getMessage(), ['folder' => $first->getKey(), 'throttled_since' => date(DATE_ATOM, $since)]);
+                    }
+                    self::track('Emails added in OneDrive not read: '.$e->getMessage(), $e, [
+                        'folder' => $first->getKey(),
+                        'folder_name' => $first->folder_name,
+                        'throttled_since' => date(DATE_ATOM, $since),
+                    ]);
+                }
+
+                return $added;
+            }
 
             // The same failure of a folder logged once a day, not on every run that reaches it: a matter's folder
             // gone from OneDrive (the daily folder check, OneDriveFolderCheck, tells the matter's people), an
@@ -283,11 +330,7 @@ class OneDriveAddedEmails
      */
     public static function track(string $message, Throwable $e, array $context): void
     {
-        $status = match (true) {
-            $e instanceof OneDriveNotFound => 404,
-            preg_match('/(?:Microsoft Graph|OneDrive|refused access \()\s*(\d{3})/', $e->getMessage(), $m) === 1 => (int) $m[1],
-            default => null,
-        };
+        $status = self::statusOf($e);
         $throttled = in_array($status, [429, 503], true);
 
         ErrorTracker::warning(
@@ -297,6 +340,16 @@ class OneDriveAddedEmails
             groupBy: ($status ?? 'other').'|'.($throttled ? 'everywhere' : ($context['folder'] ?? $context['matter'] ?? '')),
             status: $status,
         );
+    }
+
+    /** The HTTP status Microsoft 365 answered with, as the failure tells it: 404, 429, 503… */
+    private static function statusOf(Throwable $e): ?int
+    {
+        return match (true) {
+            $e instanceof OneDriveNotFound => 404,
+            preg_match('/(?:Microsoft Graph|OneDrive|refused access \()\s*(\d{3})/', $e->getMessage(), $m) === 1 => (int) $m[1],
+            default => null,
+        };
     }
 
     /**
