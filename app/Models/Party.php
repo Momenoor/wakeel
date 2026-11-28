@@ -9,6 +9,7 @@ use App\Support\PartyNames;
 use App\Support\RequestMemo;
 use App\Support\Sql;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -95,10 +96,14 @@ class Party extends Model
      * Kept tidy (no stray spaces or tabs), with its key for finding a duplicate (PartyNames): however it is set,
      * an import's quiet save too.
      */
-    public function setNameAttribute(?string $value): void
+    protected function name(): Attribute
     {
-        $this->attributes['name'] = $value === null ? null : PartyNames::tidy($value);
-        $this->attributes['name_key'] = $value === null ? null : PartyNames::key($value);
+        return Attribute::make(
+            set: fn (?string $value): array => [
+                'name' => $value === null ? null : PartyNames::tidy($value),
+                'name_key' => $value === null ? null : PartyNames::key($value),
+            ],
+        );
     }
 
     /**
