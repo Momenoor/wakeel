@@ -141,9 +141,19 @@ class Party extends Model
         'email' => 'array',
     ];
 
-    public function getRoleAttribute($value)
+    protected function role(): Attribute
     {
-        $roles = json_decode($value, true) ?? [];
+        return Attribute::make(get: fn ($value): array => self::roleForForm($value));
+    }
+
+    /**
+     * Its roles as the form holds them ({role: [...], type: [...], field}), from the list of objects kept.
+     *
+     * @return array{role: list<string>, type: list<string>, field: ?string}|array<string, mixed>
+     */
+    private static function roleForForm(mixed $value): array
+    {
+        $roles = is_array($value) ? $value : (json_decode((string) $value, true) ?? []);
 
         // If it's already in the form format (nested with 'role', 'type', 'field')
         if (isset($roles['role'])) {

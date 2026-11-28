@@ -526,40 +526,30 @@ class Matter extends Model implements AttachmentOwner
      */
     // Add this at the top of the class — a plain PHP property, invisible to Eloquent
 
-    public function getIndexedPartiesAttribute()
+    protected function indexedParties(): Attribute
     {
-        if (isset($this->_cache['indexedParties'])) {
-            return $this->_cache['indexedParties'];
-        }
-
-        $relation = $this->relationLoaded('mainPartiesOnly')
-            ? $this->mainPartiesOnly
-            : $this->mainPartiesOnly()->with('party', 'representatives.party')->get();
-
-        $result = $relation
-            ->groupBy('type')
-            ->flatMap(function ($group) {
-                return $group->values()->map(function ($mp, $i) {
-                    $mp->role_index = $i + 1;
-
-                    return $mp;
-                });
-            });
-
-        $this->_cache['indexedParties'] = $result;
-
-        return $result;
+        return Attribute::make(get: fn () => $this->indexed('indexedParties', 'mainPartiesOnly', ['party', 'representatives.party']));
     }
 
-    public function getIndexedExpertsAttribute()
+    protected function indexedExperts(): Attribute
     {
-        if (isset($this->_cache['indexedExperts'])) {
-            return $this->_cache['indexedExperts'];
+        return Attribute::make(get: fn () => $this->indexed('indexedExperts', 'expertsOnly', ['party']));
+    }
+
+    /**
+     * The rows of a relation numbered within their type (Plaintiff #1, #2 …), worked out once a request.
+     *
+     * @param  list<string>  $with
+     */
+    private function indexed(string $cache, string $relationName, array $with)
+    {
+        if (isset($this->_cache[$cache])) {
+            return $this->_cache[$cache];
         }
 
-        $relation = $this->relationLoaded('expertsOnly')
-            ? $this->expertsOnly
-            : $this->expertsOnly()->with('party')->get();
+        $relation = $this->relationLoaded($relationName)
+            ? $this->{$relationName}
+            : $this->{$relationName}()->with($with)->get();
 
         $result = $relation
             ->groupBy('type')
@@ -571,7 +561,7 @@ class Matter extends Model implements AttachmentOwner
                 });
             });
 
-        $this->_cache['indexedExperts'] = $result;
+        $this->_cache[$cache] = $result;
 
         return $result;
     }
@@ -719,9 +709,9 @@ class Matter extends Model implements AttachmentOwner
         return "{$this->number}/{$this->year}";
     }
 
-    public function getReferenceAttribute(): string
+    protected function reference(): Attribute
     {
-        return $this->getReference();
+        return Attribute::make(get: fn (): string => $this->getReference());
     }
 
     /**

@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\AttachmentCategory;
 use App\Models\Concerns\HasAttachments;
 use App\Models\Contracts\AttachmentOwner;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
@@ -56,9 +57,9 @@ class FeeCreditNote extends Model implements AttachmentOwner
     }
 
     /** What it comes to, VAT included. */
-    public function getTotalAttribute(): float
+    protected function total(): Attribute
     {
-        return round((float) $this->basic + (float) $this->vat, 2);
+        return Attribute::make(get: fn (): float => round((float) $this->basic + (float) $this->vat, 2));
     }
 
     public function fee(): BelongsTo

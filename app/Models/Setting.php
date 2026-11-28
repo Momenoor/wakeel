@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\MMS\SenderMailer;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
@@ -305,9 +306,9 @@ class Setting extends Model
     /**
      * Accessor for casted value.
      */
-    public function getCastedValueAttribute(): mixed
+    protected function castedValue(): Attribute
     {
-        return static::castValue($this->value, $this->type);
+        return Attribute::make(get: fn (): mixed => static::castValue($this->value, $this->type));
     }
 
     /**

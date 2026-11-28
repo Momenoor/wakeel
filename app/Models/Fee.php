@@ -12,6 +12,7 @@ use App\Services\MMS\FeeChangeNotifier;
 use App\Services\MMS\IncentiveReversals;
 use App\Services\MMS\MarketingCommissions;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -174,24 +175,25 @@ class Fee extends Model implements AttachmentOwner
         return $this->hasMany(FeeCreditNote::class);
     }
 
-    public function getTotalAllocatedAttribute(): float
+    /** What its payments allocated to it come to ($fee->total_allocated). */
+    protected function totalAllocated(): Attribute
     {
-        return (float) $this->allocations()->sum('amount');
+        return Attribute::make(get: fn (): float => (float) $this->allocations()->sum('amount'));
     }
 
     /**
      * What it comes to, VAT included: its basic amount and its VAT — what is billed and collected. (A query of
      * fees naming a sum "total" is read through this by pluck(): name it otherwise.)
      */
-    public function getTotalAttribute(): float
+    protected function total(): Attribute
     {
-        return round((float) $this->amount + (float) $this->vat, 2);
+        return Attribute::make(get: fn (): float => round((float) $this->amount + (float) $this->vat, 2));
     }
 
     /** Its amount as entered: the total when entered VAT included, else the basic (App\Filament\Support\FeeVatFields). */
-    public function getEnteredAmountAttribute(): float
+    protected function enteredAmount(): Attribute
     {
-        return self::entered((float) $this->amount, (float) $this->vat, (bool) $this->is_vat_included);
+        return Attribute::make(get: fn (): float => self::entered((float) $this->amount, (float) $this->vat, (bool) $this->is_vat_included));
     }
 
     /** An amount as entered, from its basic and VAT: their total when entered VAT included, else the basic. */
@@ -235,9 +237,10 @@ class Fee extends Model implements AttachmentOwner
             : "COALESCE({$table}.amount / NULLIF(".self::totalSql($table).', 0), 1)';
     }
 
-    public function getBalanceAttribute(): float
+    /** What is left to collect ($fee->balance): its total less what is allocated to it. */
+    protected function balance(): Attribute
     {
-        return (float) ($this->total - $this->total_allocated);
+        return Attribute::make(get: fn (): float => (float) ($this->total - $this->total_allocated));
     }
 
     /**
