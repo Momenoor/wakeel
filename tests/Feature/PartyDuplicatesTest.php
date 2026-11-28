@@ -41,6 +41,14 @@ class PartyDuplicatesTest extends TestCase
         $this->assertSame(PartyNames::key('أحمد عبد الله'), PartyNames::key('احمد عبدالله'));
         $this->assertSame(PartyNames::key('Emirates Steel LLC'), PartyNames::key('emirates  steel'));
         $this->assertSame(PartyNames::key('مُحَمَّد'), PartyNames::key('محمد'));
+        // The company's form written out, as its letters are.
+        $this->assertSame('الدار العقاريه', PartyNames::key('الدار العقارية شركة مساهمة عامة'));
+        $this->assertSame('الدار العقاريه', PartyNames::key('الدار العقارية (مساهمة عامة)'));
+        $this->assertSame('النور للتجاره', PartyNames::key('النور للتجارة شركة ذات مسؤولية محدودة'));
+        $this->assertSame('النور للتجاره', PartyNames::key('النور للتجارة - شركة ذات مسئولية محدودة'));
+        $this->assertSame('النور للتجاره', PartyNames::key('النور للتجارة ذات المسؤولية المحدودة'));
+        // "شركة" stays where it is not the form's.
+        $this->assertSame('شركه النور', PartyNames::key('شركة النور ذ.م.م'));
 
         $this->assertTrue(PartyNames::close(PartyNames::key('شركة النور للتجارة العامة'), PartyNames::key('شركة النور للتجاره العامه')));
         $this->assertTrue(PartyNames::close(PartyNames::key('شركة النور للتجارة'), PartyNames::key('شركة النورر للتجارة')));

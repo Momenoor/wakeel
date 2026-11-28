@@ -24,7 +24,9 @@ final class PartyNames
         $key = strtr($key, ['أ' => 'ا', 'إ' => 'ا', 'آ' => 'ا', 'ٱ' => 'ا', 'ة' => 'ه', 'ى' => 'ي', 'ؤ' => 'و', 'ئ' => 'ي']);
         // Punctuation as a space.
         $key = (string) preg_replace('/[^\p{L}\p{N}]+/u', ' ', $key);
-        // The company's form ("ذ م م", "ش م ع", "LLC" …) says nothing of which company.
+        // The company's form ("ذ م م", "ش م ع", "LLC" …) says nothing of which company: written out too ("شركة
+        // مساهمة عامة", "شركة ذات مسؤولية محدودة" or "مسئولية", hamza on either seat), "شركة" with it or not.
+        $key = (string) preg_replace('/(?<!\S)(شركه )?(مساهمه عامه|ذات (?:ال)?مس[وي]وليه (?:ال)?محدوده)(?!\S)/u', ' ', $key);
         $key = (string) preg_replace('/(?<!\S)(ذ م م|ذمم|ش م ع|ش م خ|ش ذ م م|م د م ح|llc|l l c|fze|fzco|fzc|fz llc|ltd|limited|pjsc|psc|co|company)(?!\S)/u', ' ', $key);
         $key = trim((string) preg_replace('/\s+/u', ' ', $key));
         // "عبد الله" and "عبدالله", "ابو بكر" and "ابوبكر".
