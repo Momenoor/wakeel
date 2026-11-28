@@ -80,7 +80,9 @@ class ContactMapTest extends TestCase
         // A bank, and one of its people with their position there.
         $bank = $this->entity('Test Bank');
         $this->assertSame('bank', $bank->entity_kind);
-        $this->assertSame(['021111111'], $bank->phone);
+        // Its own number and its contacts', and their emails: its full information.
+        $this->assertSame(['021111111', '0501111111'], $bank->phone);
+        $this->assertSame(['salem@testbank.ae'], $bank->email);
         $this->assertSame('أبوظبي', $bank->address);
         $salem = $bank->contacts()->sole();
         $this->assertSame(['سالم أحمد', 'Head of Litigation', ['salem@testbank.ae'], ['0501111111'], 'أبوظبي'],
@@ -93,6 +95,8 @@ class ContactMapTest extends TestCase
         $mona = $court->contacts()->where('name', 'منى خالد')->sole();
         $this->assertSame('أمين سر', $mona->title);
         $this->assertSame(['mona@court.test', 'mona2@court.test'], $mona->email);
+        $this->assertSame(['065555555'], $court->phone);
+        $this->assertSame(['mona@court.test', 'mona2@court.test'], $court->email);
         $this->assertSame(['800990'], $this->entity('هيئة الاختبار')->phone);
 
         // Again: nothing doubled.
@@ -109,8 +113,8 @@ class ContactMapTest extends TestCase
         $bank->refresh();
         $this->assertSame(['party', 'external'], $bank->role['role']);
         $this->assertSame('bank', $bank->entity_kind);
-        $this->assertSame(['old@testbank.ae'], $bank->email);
-        $this->assertSame(['021111111'], $bank->phone);
+        $this->assertSame(['old@testbank.ae', 'salem@testbank.ae'], $bank->email);
+        $this->assertSame(['021111111', '0501111111'], $bank->phone);
         $this->assertSame(1, Party::query()->where('name', 'Test Bank')->count());
         $this->assertTrue($bank->contacts()->where('name', 'سالم أحمد')->exists());
     }

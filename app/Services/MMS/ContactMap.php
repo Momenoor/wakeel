@@ -16,6 +16,8 @@ use RuntimeException;
  * {entity, name?, title?, kind?, city?, phones[], emails[]}, a card with no name the entity's own — uploaded on the
  * Parties page ("Import contact map") or given to `php artisan parties:import-contact-map {path}`.
  *
+ * An entity carries all its cards' phones and emails, its contacts' included; a contact, its own.
+ *
  * Run again it adds nothing twice: an entity is found by its name (a party there already of that name, of whatever
  * role, is made an external entity too), a contact by its name under its entity; their phones and emails take any
  * new ones.
@@ -68,6 +70,11 @@ class ContactMap
                     }
 
                     $this->addDetails($target, (array) ($record['phones'] ?? []), (array) ($record['emails'] ?? []));
+
+                    // The entity has all of them too: its full information on its own page, a contact's as well.
+                    if ($target !== $entity) {
+                        $this->addDetails($entity, (array) ($record['phones'] ?? []), (array) ($record['emails'] ?? []));
+                    }
                 }
             });
         });
