@@ -118,7 +118,8 @@ class ContactMapTest extends TestCase
     public function test_the_map_is_imported_from_a_file_on_the_parties_page(): void
     {
         Storage::fake('local');
-        $file = UploadedFile::fake()->createWithContent('contact_map.json', json_encode($this->cards()));
+        // Whatever type the browser names it (here none it knows).
+        $file = UploadedFile::fake()->createWithContent('contact_map.json', json_encode($this->cards()))->mimeType('application/octet-stream');
 
         Livewire::test(ListParties::class)
             ->callAction('importContactMap', ['file' => $file])

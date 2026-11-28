@@ -42,7 +42,8 @@ class ListParties extends ListRecords
                         ->label(__('Contact map'))
                         ->disk('local')
                         ->directory('contact-maps')
-                        ->acceptedFileTypes(['application/json', 'text/plain'])
+                        // Any type: browsers name a .json file's type differently (or not at all); a file that is not a map is said so on import.
+                        ->maxSize(10240)
                         ->required(),
                 ])
                 ->action(function (array $data): void {
