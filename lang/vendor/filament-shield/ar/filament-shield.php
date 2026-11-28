@@ -194,6 +194,7 @@ return [
         'view_deductions_reconciliation_report' => 'مطابقة الخصومات',
         'view_fee_collection_aging_report' => 'تحصيل الأتعاب والتقادم',
         'view_fee_data_maintenance' => 'صيانة بيانات الأتعاب',
+        'view_party_duplicates_maintenance' => 'الأطراف المكررة',
         'view_flight_tickets' => 'تذاكر السفر',
         'view_unfiled_emails' => 'رسائل بلا قضية',
         'view_fix_matters_difficulty' => 'تصحيح صعوبة القضايا',
