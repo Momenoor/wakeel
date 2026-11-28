@@ -119,6 +119,26 @@ class ContactMapTest extends TestCase
         $this->assertTrue($bank->contacts()->where('name', 'سالم أحمد')->exists());
     }
 
+    public function test_every_name_is_in_arabic_and_english_and_an_english_named_one_takes_its_arabic(): void
+    {
+        // As an earlier import left them: the bank and its officer by their English names only.
+        $old = Party::factory()->create(['name' => 'Sample Bank', 'name_en' => null, 'role' => ['role' => ['external']], 'email' => ['info@samplebank.test'], 'phone' => []]);
+        $officer = Party::factory()->create(['name' => 'John Smith', 'name_en' => null, 'parent_id' => $old->id, 'role' => ['role' => ['external']], 'email' => ['john@samplebank.test'], 'phone' => []]);
+
+        $made = app(ContactMap::class)->import([
+            ['entity' => 'البنك النموذجي', 'entity_en' => 'Sample Bank', 'name' => 'جون سميث', 'name_en' => 'John Smith', 'kind' => 'bank', 'phones' => [], 'emails' => ['john@samplebank.test']],
+            ['entity' => 'البنك النموذجي', 'entity_en' => 'Sample Bank', 'name' => 'سارة علي', 'name_en' => 'Sara Ali', 'kind' => 'bank', 'phones' => [], 'emails' => []],
+            ['entity' => 'هيئة نموذجية', 'entity_en' => 'Sample Authority', 'name' => null, 'kind' => 'government', 'phones' => [], 'emails' => []],
+        ]);
+
+        $this->assertSame(['entities' => 1, 'contacts' => 1], $made);
+        $this->assertSame(['البنك النموذجي', 'Sample Bank'], [$old->refresh()->name, $old->name_en]);
+        $this->assertSame(['جون سميث', 'John Smith'], [$officer->refresh()->name, $officer->name_en]);
+        $this->assertSame('Sara Ali', $old->contacts()->where('name', 'سارة علي')->sole()->name_en);
+        $this->assertSame('Sample Authority', $this->entity('هيئة نموذجية')->name_en);
+        $this->assertSame(1, Party::query()->whereNull('parent_id')->where('name_en', 'Sample Bank')->count());
+    }
+
     public function test_the_map_is_imported_from_a_file_on_the_parties_page(): void
     {
         Storage::fake('local');

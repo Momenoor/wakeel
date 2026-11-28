@@ -3,6 +3,7 @@
 namespace App\Services\MMS;
 
 use App\Models\Party;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -13,7 +14,7 @@ use RuntimeException;
  * recipient or copied in on its email (LettersRelationManager, EmailSendFields::ccEntity()).
  *
  * The list itself is not in the code (people's phones and emails): a JSON file of its cards — each
- * {entity, name?, title?, kind?, city?, phones[], emails[]}, a card with no name the entity's own — uploaded on the
+ * {entity, entity_en?, name?, name_en?, title?, kind?, city?, phones[], emails[]} (each name in Arabic and English), a card with no name the entity's own — uploaded on the
  * Parties page ("Import contact map") or given to `php artisan parties:import-contact-map {path}`.
  *
  * An entity carries all its cards' phones and emails, its contacts' included; a contact, its own.
@@ -59,11 +60,11 @@ class ContactMap
                         continue;
                     }
 
-                    $entity = $entities[$name] ??= $this->entity($name, $made);
+                    $entity = $entities[$name] ??= $this->entity($name, $this->english($record['entity_en'] ?? null), $made);
                     $this->fill($entity, $record['kind'] ?? null, $record['city'] ?? null, $record['title'] ?? null);
 
                     $contact = trim((string) ($record['name'] ?? ''));
-                    $target = $contact === '' ? $entity : $this->contact($entity, $contact, $made);
+                    $target = $contact === '' ? $entity : $this->contact($entity, $contact, $this->english($record['name_en'] ?? null), $made);
 
                     if ($target !== $entity) {
                         $this->fill($target, $record['kind'] ?? null, $record['city'] ?? null, $record['title'] ?? null);
@@ -82,40 +83,80 @@ class ContactMap
         return $made;
     }
 
-    /** The entity of that name: the party there already (made an external entity), else a new one. */
-    private function entity(string $name, array &$made): Party
+    private function english(mixed $name): ?string
     {
-        $party = Party::query()->whereNull('parent_id')->where('name', $name)->orderBy('id')->first();
+        return trim((string) $name) ?: null;
+    }
+
+    /**
+     * The entity of that name: the party there already by its name in either language (made an external entity,
+     * and named in both), else a new one.
+     */
+    private function entity(string $name, ?string $english, array &$made): Party
+    {
+        $party = $this->named(Party::query()->whereNull('parent_id'), $name, $english);
 
         if (! $party) {
             $made['entities']++;
 
-            return $this->create($name, null);
+            return $this->create($name, $english, null);
         }
 
         $this->makeExternal($party);
+        $this->rename($party, $name, $english);
 
         return $party;
     }
 
-    private function contact(Party $entity, string $name, array &$made): Party
+    private function contact(Party $entity, string $name, ?string $english, array &$made): Party
     {
-        $party = Party::query()->where('parent_id', $entity->getKey())->where('name', $name)->orderBy('id')->first();
+        $party = $this->named(Party::query()->where('parent_id', $entity->getKey()), $name, $english);
 
         if ($party) {
             $this->makeExternal($party);
+            $this->rename($party, $name, $english);
 
             return $party;
         }
 
         $made['contacts']++;
 
-        return $this->create($name, $entity->getKey());
+        return $this->create($name, $english, $entity->getKey());
     }
 
-    private function create(string $name, ?int $parentId): Party
+    /**
+     * The party of that name, or of its English name (as an earlier import named an English one: "ADCB").
+     *
+     * @param  Builder<Party>  $query
+     */
+    private function named(Builder $query, string $name, ?string $english): ?Party
     {
-        $party = new Party(['name' => $name, 'parent_id' => $parentId]);
+        return $query
+            ->where(fn (Builder $q) => $q->whereIn('name', array_filter([$name, $english]))->when($english, fn (Builder $q) => $q->orWhere('name_en', $english)))
+            ->orderByRaw('case when name = ? then 0 else 1 end', [$name])
+            ->orderBy('id')
+            ->first();
+    }
+
+    /** Named in both: its name in the map's (Arabic) where it had the English one, its English name where it had none. */
+    private function rename(Party $party, string $name, ?string $english): void
+    {
+        if ($english !== null && $party->name === $english && $name !== $english) {
+            $party->name = $name;
+        }
+
+        if ($english !== null && blank($party->name_en)) {
+            $party->name_en = $english;
+        }
+
+        if ($party->isDirty()) {
+            $party->save();
+        }
+    }
+
+    private function create(string $name, ?string $english, ?int $parentId): Party
+    {
+        $party = new Party(['name' => $name, 'name_en' => $english, 'parent_id' => $parentId]);
         $party->role = [['role' => 'external']];
         $party->phone = [];
         $party->email = [];
