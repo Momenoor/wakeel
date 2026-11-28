@@ -8,6 +8,7 @@ use App\Models\MailSender;
 use App\Models\Matter;
 use App\Models\MatterContact;
 use App\Models\MatterLetter;
+use App\Models\Party;
 use App\Models\Setting;
 use App\Services\MMS\Letters\SharedAttachments;
 use App\Services\MMS\MatterContactsExport;
@@ -97,6 +98,38 @@ final class EmailSendFields
             ->splitKeys(['Tab', ' ', ',', 'Enter'])
             ->nestedRecursiveRules(['email'])
             ->live();
+    }
+
+    /**
+     * Copy in an external entity, or one of its contacts (a court's secretary, a bank's litigation officer): its
+     * emails added to the CC above (withEntityCc()). Only those with an email are offered.
+     */
+    public static function ccEntity(): Select
+    {
+        return Select::make('cc_entity')
+            ->label(__('Copy in an external entity'))
+            ->placeholder(__('A court, bank or government body, or one of its contacts'))
+            ->options(fn (): array => Party::externalOptions(withEmail: true))
+            ->searchable()
+            ->dehydrated(false)
+            ->live()
+            ->afterStateUpdated(function ($state, Get $get, Set $set): void {
+                $set('cc', self::withEntityCc((array) ($get('cc') ?? []), $state));
+                $set('cc_entity', null);
+            });
+    }
+
+    /**
+     * The CC with the emails of the external entity or contact picked added (those not there already).
+     *
+     * @param  list<string>  $cc
+     * @return list<string>
+     */
+    public static function withEntityCc(array $cc, mixed $partyId): array
+    {
+        $party = filled($partyId) ? Party::query()->withRole('external')->find($partyId) : null;
+
+        return $party ? Addresses::emails([...$cc, ...(array) $party->email]) : array_values($cc);
     }
 
     /**

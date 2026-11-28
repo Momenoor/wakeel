@@ -423,6 +423,7 @@ class MinutesRelationManager extends RelationManager
                     ->schema([
                         EmailSendFields::sender(),
                         EmailSendFields::grouping(),
+                        EmailSendFields::ccEntity(),
                         EmailSendFields::cc(),
                         EmailSendFields::contactsCc($record->matter, ...self::reached(MinutesSender::recipients($record))),
                         // The matter's other contacts, to send the minutes to as well.

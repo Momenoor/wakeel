@@ -30,6 +30,16 @@ class PartiesTable
                     ->label(__('Name'))
                     ->description(fn (Party $record): ?string => $record->name_en)
                     ->searchable(['name', 'name_en']),
+                // A contact's title, and the entity it belongs to.
+                TextColumn::make('title')
+                    ->label(__('Position or department'))
+                    ->wrap()
+                    ->searchable()
+                    ->toggleable(),
+                TextColumn::make('parent.name')
+                    ->label(__('Belongs to'))
+                    ->searchable()
+                    ->toggleable(),
                 TextColumn::make('phone')
                     ->label(__('Phone'))
                     ->badge()
@@ -94,6 +104,17 @@ class PartiesTable
                                 $query->orWhere(fn (Builder $q) => $q->withRole($role));
                             }
                         }),
+                    )),
+                // External entities of a kind (courts, banks …), with their contacts.
+                SelectFilter::make('entity_kind')
+                    ->label(__('Kind of entity'))
+                    ->options(Party::entityKindOptions())
+                    ->multiple()
+                    ->query(fn (Builder $query, array $data) => $query->when(
+                        $data['values'] ?? [],
+                        fn (Builder $query, array $kinds) => $query->where(fn (Builder $q) => $q
+                            ->whereIn('entity_kind', $kinds)
+                            ->orWhereHas('parent', fn (Builder $p) => $p->whereIn('entity_kind', $kinds))),
                     )),
                 // Experts of any of the chosen types.
                 SelectFilter::make('sub_role')

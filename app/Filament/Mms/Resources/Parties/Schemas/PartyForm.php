@@ -7,6 +7,7 @@ use App\Filament\Support\ContactFields;
 use App\Filament\Support\EnglishNameField;
 use App\Models\ExpertiseArea;
 use App\Models\Party;
+use Closure;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
@@ -69,6 +70,11 @@ class PartyForm
                     ->relationship('parent', 'name', fn ($query, $record) => $query->when($record, fn ($q) => $q->whereKeyNot($record->getKey())))
                     ->searchable()
                     ->placeholder('—'),
+                // A contact's title at the entity it belongs to (a court's secretary, a bank's head of litigation).
+                TextInput::make('title')
+                    ->label(__('Position or department'))
+                    ->helperText(__('Their title or department at the entity they belong to.'))
+                    ->maxLength(255),
             ]);
     }
 
@@ -167,7 +173,7 @@ class PartyForm
             ->icon('heroicon-o-phone')
             ->columnSpan(1)
             ->schema([
-                self::phone(),
+                self::phone(fn (Get $get): bool => ! in_array('external', (array) ($get('role.role') ?? []), true)),
                 ContactFields::email()
                     ->placeholder(__('Enter email addresses separated by comma')),
                 TextInput::make('fax')
@@ -178,15 +184,20 @@ class PartyForm
             ]);
     }
 
-    /** A party's phones: UAE numbers, mobile or landline (a matter's contacts are edited with it too). */
-    public static function phone(): TagsInput
+    /**
+     * A party's phones: UAE numbers, mobile or landline (a matter's contacts are edited with it too). An external
+     * entity's are as they are: a toll-free 800 or 600 number, one abroad.
+     *
+     * @param  bool|Closure  $uae  whether the UAE pattern is asked of them
+     */
+    public static function phone(bool|Closure $uae = true): TagsInput
     {
         return ContactFields::phone()
             ->nestedRecursiveRules([
                 'min:9',
                 'max:10',
                 'starts_with:050,052,053,054,055,056,057,058,02,03,04,06,07,08,09',
-            ]);
+            ], $uae);
     }
 
     private static function roles(): Section
@@ -204,6 +215,11 @@ class PartyForm
                     ->columns(4)
                     ->columnSpanFull()
                     ->live(),
+                Select::make('entity_kind')
+                    ->label(__('Kind of entity'))
+                    ->options(Party::entityKindOptions())
+                    ->visible(fn (Get $get): bool => in_array('external', (array) ($get('role.role') ?? []), true))
+                    ->columnSpanFull(),
                 CheckboxList::make('role.type')
                     ->label(__('Expert Type'))
                     ->options(Party::expertTypeOptions())

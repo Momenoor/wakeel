@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Services\Translation\EnglishNames;
 use App\Services\WhatsAppService;
+use App\Support\Addresses;
 use App\Support\RequestMemo;
 use App\Support\Sql;
 use Illuminate\Database\Eloquent\Builder;
@@ -66,6 +67,8 @@ class Party extends Model
         'name',
         'legal_name',
         'name_en',
+        'title',
+        'entity_kind',
         'phone',
         'fax',
         'address',
@@ -252,6 +255,77 @@ class Party extends Model
     public function parent(): BelongsTo
     {
         return $this->belongsTo(Party::class, 'parent_id');
+    }
+
+    /** An external entity's contacts: the people and offices there (ContactMap), each a party under it. */
+    public function contacts(): HasMany
+    {
+        return $this->hasMany(Party::class, 'parent_id');
+    }
+
+    /**
+     * The kinds of external entity.
+     *
+     * @return array<string, string>
+     */
+    public static function entityKindOptions(): array
+    {
+        return [
+            'judicial' => __('Court or judicial department'),
+            'bank' => __('Bank'),
+            'government' => __('Government body'),
+            'company' => __('Company'),
+        ];
+    }
+
+    /**
+     * The external entities and their contacts to pick from: an entity by its name, a contact as
+     * "name — title (entity)". Only those with an email, when asked (copying one in).
+     *
+     * @return array<int, string>
+     */
+    public static function externalOptions(bool $withEmail = false): array
+    {
+        return static::query()
+            ->withRole('external')
+            ->with('parent:id,name')
+            ->orderBy('name')
+            ->get(['id', 'name', 'title', 'parent_id', 'email'])
+            ->when($withEmail, fn ($parties) => $parties->filter(fn (Party $p): bool => array_filter((array) $p->email) !== []))
+            ->mapWithKeys(fn (Party $p): array => [$p->getKey() => $p->externalLabel()])
+            ->all();
+    }
+
+    /** "name — title (entity)" for a contact; an entity's name for an entity. */
+    public function externalLabel(): string
+    {
+        $parent = $this->parent_id ? $this->parent?->name : null;
+
+        return $this->name
+            .(filled($this->title) ? ' — '.$this->title : '')
+            .(filled($parent) ? ' ('.$parent.')' : '');
+    }
+
+    /**
+     * A letter's recipient for an external entity or one of its contacts picked: a contact's letter is to its
+     * entity, reaching the contact's emails and phones (the entity's, when the contact has none).
+     *
+     * @return array{name: string, role: null, emails: list<string>, phones: list<string>, party_id: int, entity: Party}
+     */
+    public function asLetterRecipient(): array
+    {
+        $entity = $this->parent_id && $this->parent ? $this->parent : $this;
+        $emails = array_values(array_filter((array) $this->email)) ?: array_values(array_filter((array) $entity->email));
+        $phones = array_values(array_filter((array) $this->phone)) ?: array_values(array_filter((array) $entity->phone));
+
+        return [
+            'name' => (string) $entity->name,
+            'role' => null,
+            'emails' => Addresses::emails($emails),
+            'phones' => $phones,
+            'party_id' => (int) $entity->getKey(),
+            'entity' => $entity,
+        ];
     }
 
     public function representatives(): HasMany

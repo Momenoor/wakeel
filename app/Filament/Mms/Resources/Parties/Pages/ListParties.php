@@ -5,12 +5,18 @@ namespace App\Filament\Mms\Resources\Parties\Pages;
 use App\Filament\Mms\Imports\PartyImporter;
 use App\Filament\Mms\Resources\Parties\PartyResource;
 use App\Models\Party;
+use App\Services\MMS\ContactMap;
 use App\Support\ScreenPermissions;
+use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Actions\ImportAction;
+use Filament\Forms\Components\FileUpload;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Storage;
+use RuntimeException;
 
 class ListParties extends ListRecords
 {
@@ -23,6 +29,40 @@ class ListParties extends ListRecords
             ImportAction::make()
                 ->importer(PartyImporter::class)
                 ->visible(fn (): bool => auth()->user()?->can('create', Party::class) ?? false),
+            // The shared contact map (courts, banks, government bodies, companies): external entities with
+            // their contacts under them (ContactMap). The file is read, then deleted.
+            Action::make('importContactMap')
+                ->label(__('Import contact map'))
+                ->icon('heroicon-o-building-library')
+                ->color('gray')
+                ->visible(fn (): bool => auth()->user()?->can('create', Party::class) ?? false)
+                ->modalDescription(__('A contact map file (JSON): each body becomes an external entity, its people and offices its contacts. Imported again, nothing is doubled.'))
+                ->schema([
+                    FileUpload::make('file')
+                        ->label(__('Contact map'))
+                        ->disk('local')
+                        ->directory('contact-maps')
+                        ->acceptedFileTypes(['application/json', 'text/plain'])
+                        ->required(),
+                ])
+                ->action(function (array $data): void {
+                    $path = (string) $data['file'];
+
+                    try {
+                        $made = app(ContactMap::class)->importFile(Storage::disk('local')->path($path));
+                    } catch (RuntimeException $e) {
+                        Notification::make()->danger()->title($e->getMessage())->send();
+
+                        return;
+                    } finally {
+                        Storage::disk('local')->delete($path);
+                    }
+
+                    Notification::make()->success()
+                        ->title(__('Contact map imported'))
+                        ->body(__(':entities new external entities, :contacts new contacts.', $made))
+                        ->send();
+                }),
             CreateAction::make(),
         ];
     }

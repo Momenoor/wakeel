@@ -251,6 +251,7 @@ class EmailsRelationManager extends RelationManager
                                 ->splitKeys(['Tab', ' ', ',', 'Enter'])
                                 ->nestedRecursiveRules(['email'])
                                 ->required(),
+                            EmailSendFields::ccEntity(),
                             EmailSendFields::cc(),
                             // The other addresses they brought in, to copy in or not.
                             EmailSendFields::contactsCc($this->getOwnerRecord(), EmailReplySender::to($record), EmailReplySender::partyIds($record)),

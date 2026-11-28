@@ -6,6 +6,7 @@ use App\Filament\Mms\Resources\Parties\Pages\CreateParty;
 use App\Filament\Mms\Resources\Parties\Pages\EditParty;
 use App\Filament\Mms\Resources\Parties\Pages\ListParties;
 use App\Filament\Mms\Resources\Parties\Pages\ViewParty;
+use App\Filament\Mms\Resources\Parties\RelationManagers\ContactsRelationManager;
 use App\Filament\Mms\Resources\Parties\RelationManagers\ExpertRegistrationsRelationManager;
 use App\Filament\Mms\Resources\Parties\RelationManagers\MattersRelationManager;
 use App\Filament\Mms\Resources\Parties\Schemas\PartyForm;
@@ -108,6 +109,7 @@ class PartyResource extends Resource
         return [
             MattersRelationManager::class,
             ExpertRegistrationsRelationManager::class,
+            ContactsRelationManager::class,
         ];
     }
 

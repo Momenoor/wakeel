@@ -238,6 +238,7 @@ class LettersRelationManager extends RelationManager
                         ->descriptions($record->recipients->mapWithKeys(fn ($r) => [$r->id => collect($r->addressed())->map(fn (array $a): string => trim($a['name'].' <'.$a['email'].'>', ' <>'))->implode(' · ') ?: __('No email')]))
                         ->bulkToggleable()
                         ->live(),
+                    EmailSendFields::ccEntity(),
                     EmailSendFields::cc(),
                     EmailSendFields::contactsCc($record->matter, ...self::reached($record)),
                     // The matter's other contacts, to send the letter to as well.
@@ -644,11 +645,14 @@ class LettersRelationManager extends RelationManager
                     ->visible(fn (Get $get): bool => collect($candidates)->only(array_map('intval', $get('recipients') ?? []))->contains(fn (array $c): bool => $c['representatives'] !== []))
                     ->default([])
                     ->columns(2),
-                // Police, central bank …: added with their emails and phones.
+                // Police, central bank, a court …: added with their emails and phones. One of an entity's contacts
+                // (the court's secretary, the bank's litigation officer): the letter is to the entity, reaching
+                // the contact (Party::asLetterRecipient()).
                 Select::make('external_entity')
                     ->label(__('Add an external entity'))
                     ->placeholder(__('Police, central bank …'))
-                    ->options(fn (): array => Party::query()->withRole('external')->orderBy('name')->pluck('name', 'id')->all())
+                    ->helperText(__('An entity, or one of its contacts: the letter is to the entity, its email to the contact.'))
+                    ->options(fn (): array => Party::externalOptions())
                     ->searchable()
                     ->dehydrated(false)
                     ->live()
@@ -656,23 +660,28 @@ class LettersRelationManager extends RelationManager
                         $party = filled($state) ? Party::query()->withRole('external')->find($state) : null;
                         $set('external_entity', null);
 
-                        if (! $party || collect($get('extra_recipients') ?? [])->contains(fn ($r) => (int) ($r['party_id'] ?? 0) === $party->getKey())) {
+                        if (! $party) {
                             return;
                         }
 
-                        $set('extra_recipients', [
-                            ...($get('extra_recipients') ?? []),
-                            (string) Str::uuid() => [
-                                'name' => $party->name,
-                                'role' => null,
-                                'emails' => Addresses::emails((array) $party->email),
-                                'phones' => array_values(array_filter((array) $party->phone)),
-                                'party_id' => $party->getKey(),
-                            ],
-                        ]);
+                        ['entity' => $entity] = $recipient = $party->asLetterRecipient();
+                        unset($recipient['entity']);
+                        $rows = $get('extra_recipients') ?? [];
+                        // The entity there already: the contact's addresses added to its row.
+                        $at = collect($rows)->search(fn ($r): bool => (int) ($r['party_id'] ?? 0) === $entity->getKey());
+
+                        if ($at !== false) {
+                            $rows[$at]['emails'] = Addresses::emails([...($rows[$at]['emails'] ?? []), ...$recipient['emails']]);
+                            $rows[$at]['phones'] = array_values(array_unique([...($rows[$at]['phones'] ?? []), ...$recipient['phones']]));
+                            $set('extra_recipients', $rows);
+
+                            return;
+                        }
+
+                        $set('extra_recipients', [...$rows, (string) Str::uuid() => $recipient]);
 
                         if ($onEntity) {
-                            $onEntity($party, $get, $set);
+                            $onEntity($entity, $get, $set);
                         }
                     }),
                 Repeater::make('extra_recipients')

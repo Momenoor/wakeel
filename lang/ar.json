@@ -5663,5 +5663,20 @@
     "Errors": "أخطاء",
     "Warnings": "تحذيرات",
     "The browser": "المتصفح",
-    "Export unresolved as Markdown": "تصدير غير المحلول بصيغة Markdown"
+    "Export unresolved as Markdown": "تصدير غير المحلول بصيغة Markdown",
+    "Position or department": "المسمى / الإدارة",
+    "Their title or department at the entity they belong to.": "مسماه أو إدارته في الجهة التي يتبعها.",
+    "Kind of entity": "نوع الجهة",
+    "Court or judicial department": "جهة قضائية",
+    "Government body": "جهة حكومية",
+    "Contact person": "جهة اتصال",
+    "Copy in an external entity": "نسخة إلى جهة خارجية",
+    "A court, bank or government body, or one of its contacts": "جهة قضائية أو بنك أو جهة حكومية، أو إحدى جهات الاتصال فيها",
+    "An entity, or one of its contacts: the letter is to the entity, its email to the contact.": "جهة، أو إحدى جهات الاتصال فيها: يوجَّه الخطاب إلى الجهة، ويُرسل بريده إلى جهة الاتصال.",
+    "Import contact map": "استيراد خريطة جهات الاتصال",
+    "Contact map": "خريطة جهات الاتصال",
+    "A contact map file (JSON): each body becomes an external entity, its people and offices its contacts. Imported again, nothing is doubled.": "ملف خريطة جهات الاتصال (JSON): تصبح كل جهة جهةً خارجية، والأشخاص والمكاتب فيها جهات اتصال لها. لا يتكرر شيء عند الاستيراد مرة أخرى.",
+    "Contact map imported": "تم استيراد خريطة جهات الاتصال",
+    ":entities new external entities, :contacts new contacts.": ":entities جهة خارجية جديدة، و:contacts جهة اتصال جديدة.",
+    "That file is not a contact map: a JSON list of cards was expected.": "هذا الملف ليس خريطة جهات اتصال: المتوقع قائمة بطاقات بصيغة JSON."
 }
