@@ -44,6 +44,9 @@ class PartiesTable
                     ->label(__('Phone'))
                     ->badge()
                     ->listWithLineBreaks()
+                    // An entity may have dozens (its contacts' too): five, the rest on a click.
+                    ->limitList(5)
+                    ->expandableLimitedList()
                     ->searchable(),
                 TextColumn::make('fax')
                     ->label(__('Fax'))
@@ -52,6 +55,8 @@ class PartiesTable
                     ->label(__('Email address'))
                     ->badge()
                     ->listWithLineBreaks()
+                    ->limitList(5)
+                    ->expandableLimitedList()
                     ->searchable(),
                 TextColumn::make('role')
                     ->label(__('Role'))

@@ -139,6 +139,19 @@ class ContactMapTest extends TestCase
         $this->assertSame(1, Party::query()->whereNull('parent_id')->where('name_en', 'Sample Bank')->count());
     }
 
+    public function test_phones_and_emails_are_listed_five_at_most_the_rest_on_a_click(): void
+    {
+        $bank = Party::factory()->create(['name' => 'Model Bank', 'role' => ['role' => ['external']], 'email' => [], 'phone' => []]);
+
+        foreach ([Livewire::test(ListParties::class), Livewire::test(ContactsRelationManager::class, ['ownerRecord' => $bank, 'pageClass' => EditParty::class])] as $page) {
+            foreach (['phone', 'email'] as $name) {
+                $column = $page->instance()->getTable()->getColumn($name);
+                $this->assertSame(5, $column->getListLimit());
+                $this->assertTrue($column->isLimitedListExpandable());
+            }
+        }
+    }
+
     public function test_the_map_is_imported_from_a_file_on_the_parties_page(): void
     {
         Storage::fake('local');

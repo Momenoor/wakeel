@@ -70,8 +70,8 @@ class ContactsRelationManager extends RelationManager
             ->columns([
                 TextColumn::make('name')->label(__('Name'))->searchable(),
                 TextColumn::make('title')->label(__('Position or department'))->wrap()->searchable(),
-                TextColumn::make('phone')->label(__('Phone'))->badge()->listWithLineBreaks(),
-                TextColumn::make('email')->label(__('Email'))->badge()->listWithLineBreaks()->searchable(),
+                TextColumn::make('phone')->label(__('Phone'))->badge()->listWithLineBreaks()->limitList(5)->expandableLimitedList(),
+                TextColumn::make('email')->label(__('Email'))->badge()->listWithLineBreaks()->limitList(5)->expandableLimitedList()->searchable(),
             ])
             ->headerActions([
                 // An external entity too, where the entity is.
