@@ -3,12 +3,14 @@
 namespace App\Console\Commands;
 
 use App\Models\Party;
+use App\Services\MMS\PartyMerger;
 use Illuminate\Console\Command;
 
 /**
  * The parties entered more than once — the same name however typed (PartyNames::key()), at the same level — as a
  * CSV to review and give back to parties:merge-plan: each group's party kept first ("keep": one with a user
- * account, else an English name, else the most phones and emails, else the oldest), the others "merge"; "skip"
+ * account, else an English name, else the most phones and emails, else the oldest) with the name it will have
+ * ("final_name": the fullest of theirs), the others "merge"; "skip"
  * where it may be two people of one name (a one-word name, or two user accounts) and "check" says why to look.
  */
 class FindDuplicateParties extends Command
@@ -30,14 +32,17 @@ class FindDuplicateParties extends Command
 
         $out = fopen((string) $this->argument('file'), 'w');
         fwrite($out, "\u{FEFF}");
-        fputcsv($out, ['group', 'action', 'id', 'name', 'name_en', 'roles', 'belongs_to', 'phones', 'emails', 'user_account', 'created', 'check'], escape: '');
+        fputcsv($out, ['group', 'action', 'id', 'name', 'final_name', 'name_en', 'roles', 'belongs_to', 'phones', 'emails', 'user_account', 'created', 'check'], escape: '');
 
         foreach ($groups as $i => $group) {
             $keep = $group->sortBy(fn (Party $p): array => [blank($p->user_id), blank($p->name_en), -(count(Party::values($p->phone)) + count(Party::values($p->email))), $p->id])->first();
             $accounts = $group->pluck('user_id')->filter()->unique()->count();
-            $words = count(explode(' ', (string) $keep->name_key));
+            // Its words as written, a company's form among them: "سبيكون ش.ذ.م.م" is a company, "مدين" may be anyone.
+            $words = $group->max(fn (Party $p): int => count(explode(' ', (string) $p->name)));
             $reasons = array_filter([$words <= 1 ? 'one-word name' : null, $accounts > 1 ? 'two user accounts' : null]);
             $action = $reasons === [] ? 'merge' : 'skip';
+            // What the kept party is named after the merge: the fullest of theirs (to change here, on its row).
+            $final = PartyMerger::fullest($group->pluck('name')->all());
 
             foreach ($group->sortBy(fn (Party $p): array => [$p->isNot($keep), $p->id]) as $party) {
                 fputcsv($out, [
@@ -45,6 +50,7 @@ class FindDuplicateParties extends Command
                     $party->is($keep) ? 'keep' : $action,
                     $party->id,
                     $party->name,
+                    $party->is($keep) ? $final : '',
                     $party->name_en,
                     $party->roleLabel(),
                     $party->parent_id,

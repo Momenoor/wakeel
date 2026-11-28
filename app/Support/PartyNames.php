@@ -24,10 +24,12 @@ final class PartyNames
         $key = strtr($key, ['أ' => 'ا', 'إ' => 'ا', 'آ' => 'ا', 'ٱ' => 'ا', 'ة' => 'ه', 'ى' => 'ي', 'ؤ' => 'و', 'ئ' => 'ي']);
         // Punctuation as a space.
         $key = (string) preg_replace('/[^\p{L}\p{N}]+/u', ' ', $key);
-        // The company's form ("ذ م م", "ش م ع", "LLC" …) says nothing of which company: written out too ("شركة
-        // مساهمة عامة", "شركة ذات مسؤولية محدودة" or "مسئولية", hamza on either seat), "شركة" with it or not.
-        $key = (string) preg_replace('/(?<!\S)(شركه )?(مساهمه عامه|ذات (?:ال)?مس[وي]وليه (?:ال)?محدوده)(?!\S)/u', ' ', $key);
-        $key = (string) preg_replace('/(?<!\S)(ذ م م|ذمم|ش م ع|ش م خ|ش ذ م م|م د م ح|llc|l l c|fze|fzco|fzc|fz llc|ltd|limited|pjsc|psc|co|company)(?!\S)/u', ' ', $key);
+        // The company's form says nothing of which company, however written — "ش.ذ.م.م", "ش ذ م م", "ذ.م.م",
+        // "شركة ذات مسؤولية محدودة" or "مسئولية" (or "سؤولية", "المسؤولية المحدودة"), "شركة مساهمة عامة" or
+        // "خاصة", "ش.م.ع", "ش.م.خ", "LLC", "PJSC" … — with "شركة" before it or not.
+        $key = (string) preg_replace('/(?<!\S)(?:شركه )?(?:مساهمه (?:عامه|خاصه)|ذات (?:ال)?م?س[وي]?و?ليه (?:ال)?محدوده|(?:ذات )?الشخص الواحد|شخص واحد)(?!\S)/u', ' ', $key);
+        $key = (string) preg_replace('/(?<!\S)(?:شركه )?(?:ش ذ م م|ش ذمم|ذ م م|ذمم|ش م ع|ش م خ|ش ش و|م د م ح|ش م ح)(?!\S)/u', ' ', $key);
+        $key = (string) preg_replace('/(?<!\S)(?:limited liability company|public joint stock company|private joint stock company|joint stock company|fz llc|fz co|f z e|fze|fzco|fzc|l l c|llc|p j s c|pjsc|p s c|psc|ltd|limited|company|co)(?!\S)/u', ' ', $key);
         $key = trim((string) preg_replace('/\s+/u', ' ', $key));
         // "عبد الله" and "عبدالله", "ابو بكر" and "ابوبكر".
         $key = (string) preg_replace('/(?<!\S)(عبد|ابو) (?=\S)/u', '$1', $key);

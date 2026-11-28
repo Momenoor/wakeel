@@ -90,8 +90,10 @@ class PartyMergeTest extends TestCase
         Livewire::test(ListParties::class)
             ->selectTableRecords([$kept, $twin])->callAction(TestAction::make('merge')->table()->bulk(), ['into' => $kept->id])
             ->assertHasNoFormErrors()
-            ->assertNotified(trans_choice(':count party merged into :into.|:count parties merged into :into.', 1, ['count' => 1, 'into' => 'أحمد']));
+            // Named in full after: the newer party's fuller name.
+            ->assertNotified(trans_choice(':count party merged into :into.|:count parties merged into :into.', 1, ['count' => 1, 'into' => 'أحمد علي']));
         $this->assertNull(Party::find($twin->id));
+        $this->assertSame('أحمد علي', $kept->fresh()->name);
         $this->assertSame(['0501234567', '0509999999'], $kept->fresh()->phone);
 
         // The command: the first id kept, the rest merged into it.

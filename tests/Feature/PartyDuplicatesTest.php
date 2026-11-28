@@ -47,6 +47,16 @@ class PartyDuplicatesTest extends TestCase
         $this->assertSame('النور للتجاره', PartyNames::key('النور للتجارة شركة ذات مسؤولية محدودة'));
         $this->assertSame('النور للتجاره', PartyNames::key('النور للتجارة - شركة ذات مسئولية محدودة'));
         $this->assertSame('النور للتجاره', PartyNames::key('النور للتجارة ذات المسؤولية المحدودة'));
+        // Every way the forms are written, one key.
+        foreach (['النور للتجارة ش ذ م م', 'النور للتجارة ش.ذ.م.م', 'النور للتجارة ذ م م', 'النور للتجارة ذ.م.م', 'النور للتجارة شركة ذ.م.م',
+            'النور للتجارة شركة ذات مسئولية محدودة', 'النور للتجارة ذات مسئولية محدودة', 'النور للتجارة ذات سؤولية محدودة',
+            'النور للتجارة LLC', 'النور للتجارة L.L.C', 'النور للتجارة - شركة الشخص الواحد ذ.م.م', 'النور للتجارة Limited Liability Company'] as $name) {
+            $this->assertSame('النور للتجاره', PartyNames::key($name), $name);
+        }
+        foreach (['الدار العقارية ش م ع', 'الدار العقارية ش.م.ع', 'الدار العقارية شركة مساهمة عامة', 'الدار العقارية PJSC', 'الدار العقارية P.J.S.C',
+            'الدار العقارية مساهمة خاصة', 'الدار العقارية ش.م.خ'] as $name) {
+            $this->assertSame('الدار العقاريه', PartyNames::key($name), $name);
+        }
         // "شركة" stays where it is not the form's.
         $this->assertSame('شركه النور', PartyNames::key('شركة النور ذ.م.م'));
 

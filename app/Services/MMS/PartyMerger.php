@@ -5,6 +5,7 @@ namespace App\Services\MMS;
 use App\Models\MatterMinutes;
 use App\Models\Party;
 use App\Models\Setting;
+use App\Support\PartyNames;
 use App\Support\RequestMemo;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
@@ -76,6 +77,10 @@ final class PartyMerger
 
             // On a matter twice in the same capacity now: once.
             $moved['matter_party (doubled)'] = -$this->dedupeMatterParties($intoId);
+
+            // The kept party named in full: the fullest of their names (the company's form written with it, a
+            // name given in full), the newer party's too.
+            $into->name = self::fullest([$into->name, ...$from->pluck('name')->all()]);
 
             // The kept party: phones and emails combined, a user account it has none of.
             $into->phone = self::combined(Party::values($into->phone), $from->flatMap(fn (Party $party): array => Party::values($party->phone))->all(), fn (string $v): string => (string) preg_replace('/\D+/', '', $v));
@@ -234,6 +239,20 @@ final class PartyMerger
         }
 
         return $removed;
+    }
+
+    /**
+     * The fullest of the names: the one with the most to it (letters and digits, not spaces or marks: a stray "?" is no fuller), the first of those as long.
+     *
+     * @param  list<?string>  $names
+     */
+    public static function fullest(array $names): string
+    {
+        return (string) collect($names)
+            ->map(fn (?string $name): string => PartyNames::tidy($name))
+            ->filter()
+            ->sortByDesc(fn (string $name): int => mb_strlen((string) preg_replace('/[^\p{L}\p{N}]+/u', '', $name)))
+            ->first();
     }
 
     /**

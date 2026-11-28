@@ -6,17 +6,18 @@ use App\Models\Party;
 use App\Services\MMS\PartyMerger;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use OpenSpout\Reader\XLSX\Reader as XlsxReader;
 use Throwable;
 
 /**
- * Duplicates merged from a reviewed list: a CSV with a "group", an "action" ("keep" the one kept, "merge" each merged
+ * Duplicates merged from a reviewed list: an Excel workbook or a CSV with a "group", an "action" ("keep" the one kept, "merge" each merged
  * into it, anything else left alone) and the party's "id" on each row (more columns are read past). Without --apply
  * it says what it would do; with it, each group is merged (PartyMerger) and every reference to a party is checked
  * afterwards (dangling()): none may point at a party no longer there.
  */
 class MergePartiesPlan extends Command
 {
-    protected $signature = 'parties:merge-plan {file : The reviewed CSV} {--apply : Merge them; otherwise only say what would be done}';
+    protected $signature = 'parties:merge-plan {file : The reviewed list: an Excel workbook (.xlsx) or a CSV} {--apply : Merge them; otherwise only say what would be done}';
 
     protected $description = 'Merge duplicate parties as a reviewed CSV says (group, action keep/merge, id), then check that nothing points at a party that is gone';
 
@@ -33,7 +34,7 @@ class MergePartiesPlan extends Command
         $merged = 0;
         $skipped = 0;
 
-        foreach ($groups as $group => ['keep' => $keep, 'merge' => $merge]) {
+        foreach ($groups as $group => ['keep' => $keep, 'merge' => $merge, 'name' => $name]) {
             $into = count($keep) === 1 ? Party::query()->find($keep[0]) : null;
             $from = Party::query()->findMany($merge)->reject(fn (Party $party): bool => $into !== null && $party->is($into));
 
@@ -44,7 +45,8 @@ class MergePartiesPlan extends Command
                 continue;
             }
 
-            $this->line("Group {$group}: #{$into->getKey()} {$into->name} ← ".$from->map(fn (Party $p): string => "#{$p->getKey()} {$p->name}")->implode(', '));
+            $this->line("Group {$group}: #{$into->getKey()} {$into->name} ← ".$from->map(fn (Party $p): string => "#{$p->getKey()} {$p->name}")->implode(', ')
+                .' → '.($name ?: PartyMerger::fullest([$into->name, ...$from->pluck('name')->all()])));
 
             if (! $this->option('apply')) {
                 continue;
@@ -53,6 +55,11 @@ class MergePartiesPlan extends Command
             try {
                 $merger->merge($into, $from);
                 $merged += $from->count();
+
+                // The name the list gives it, when it gives one; else the fullest of theirs (PartyMerger).
+                if (filled($name)) {
+                    $into->refresh()->update(['name' => $name]);
+                }
             } catch (Throwable $e) {
                 $this->error("Group {$group}: not merged — {$e->getMessage()}");
                 $skipped++;
@@ -83,29 +90,21 @@ class MergePartiesPlan extends Command
     /**
      * The groups of the list: in each, the ids kept and the ids merged.
      *
-     * @return array<string, array{keep: list<int>, merge: list<int>}>|null
+     * @return array<string, array{keep: list<int>, merge: list<int>, name: ?string}>|null name: the kept party's "final_name", when the list has the column
      */
     public static function groups(string $path): ?array
     {
-        $handle = @fopen($path, 'r');
-
-        if ($handle === false) {
-            return null;
-        }
-
-        $header = fgetcsv($handle, escape: '');
-        $header = array_map(fn ($h): string => mb_strtolower(trim((string) preg_replace('/^\x{FEFF}/u', '', (string) $h))), (array) $header);
+        $rows = self::rows($path);
+        $header = $rows === null ? [] : array_map(fn ($h): string => mb_strtolower(trim((string) preg_replace('/^\x{FEFF}/u', '', (string) $h))), (array) array_shift($rows));
         $at = array_flip($header);
 
         if (! isset($at['group'], $at['action'], $at['id'])) {
-            fclose($handle);
-
             return null;
         }
 
         $groups = [];
 
-        while (($row = fgetcsv($handle, escape: '')) !== false) {
+        foreach ($rows as $row) {
             $group = trim((string) ($row[$at['group']] ?? ''));
             $action = mb_strtolower(trim((string) ($row[$at['action']] ?? '')));
             $id = (int) ($row[$at['id']] ?? 0);
@@ -114,13 +113,56 @@ class MergePartiesPlan extends Command
                 continue;
             }
 
-            $groups[$group] ??= ['keep' => [], 'merge' => []];
+            $groups[$group] ??= ['keep' => [], 'merge' => [], 'name' => null];
             $groups[$group][$action][] = $id;
+
+            if ($action === 'keep' && isset($at['final_name']) && filled($final = trim((string) ($row[$at['final_name']] ?? '')))) {
+                $groups[$group]['name'] = $final;
+            }
+        }
+
+        return $groups;
+    }
+
+    /**
+     * The list's rows, the header first: from an Excel workbook (its first sheet) or a CSV.
+     *
+     * @return list<list<mixed>>|null
+     */
+    private static function rows(string $path): ?array
+    {
+        if (! is_file($path)) {
+            return null;
+        }
+
+        if (strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'xlsx') {
+            $reader = new XlsxReader;
+            $reader->open($path);
+            $rows = [];
+
+            foreach ($reader->getSheetIterator() as $sheet) {
+                foreach ($sheet->getRowIterator() as $row) {
+                    $rows[] = $row->toArray();
+                }
+
+                break;
+            }
+
+            $reader->close();
+
+            return $rows;
+        }
+
+        $handle = fopen($path, 'r');
+        $rows = [];
+
+        while (($row = fgetcsv($handle, escape: '')) !== false) {
+            $rows[] = $row;
         }
 
         fclose($handle);
 
-        return $groups;
+        return $rows;
     }
 
     /**

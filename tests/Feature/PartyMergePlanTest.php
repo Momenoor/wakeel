@@ -73,6 +73,25 @@ class PartyMergePlanTest extends TestCase
         $this->assertSame($a1->id, MatterMinutes::query()->sole()->attendees[0]['party_id']);
     }
 
+    public function test_the_party_kept_takes_the_fullest_name_or_the_one_the_list_gives(): void
+    {
+        $kept = Party::factory()->create(['name' => 'النور للتجارة', 'email' => [], 'phone' => []]);
+        $newer = Party::factory()->create(['name' => 'النور للتجارة ش.ذ.م.م', 'email' => [], 'phone' => []]);
+
+        app(PartyMerger::class)->merge($kept, [$newer]);
+        $this->assertSame('النور للتجارة ش.ذ.م.م', $kept->refresh()->name);
+
+        $a = Party::factory()->create(['name' => 'الأمل ذ.م.م', 'email' => [], 'phone' => []]);
+        $b = Party::factory()->create(['name' => 'الأمل ش.ذ.م.م', 'email' => [], 'phone' => []]);
+        $csv = tempnam(sys_get_temp_dir(), 'plan');
+        file_put_contents($csv, "group,action,id,final_name\n1,keep,{$a->id},الأمل شركة ذات مسؤولية محدودة\n1,merge,{$b->id},\n");
+        $this->artisan('parties:merge-plan', ['file' => $csv, '--apply' => true])->assertSuccessful();
+        @unlink($csv);
+
+        $this->assertSame('الأمل شركة ذات مسؤولية محدودة', $a->refresh()->name);
+        $this->assertNull(Party::query()->find($b->id));
+    }
+
     public function test_a_reference_to_a_party_gone_is_found(): void
     {
         $party = Party::factory()->create(['email' => [], 'phone' => []]);
