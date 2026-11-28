@@ -3,6 +3,7 @@
 namespace App\Services\MMS;
 
 use App\Models\Party;
+use App\Support\PartyNames;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -132,8 +133,8 @@ class ContactMap
     private function named(Builder $query, string $name, ?string $english): ?Party
     {
         return $query
-            ->where(fn (Builder $q) => $q->whereIn('name', array_filter([$name, $english]))->when($english, fn (Builder $q) => $q->orWhere('name_en', $english)))
-            ->orderByRaw('case when name = ? then 0 else 1 end', [$name])
+            ->where(fn (Builder $q) => $q->whereIn('name_key', array_filter([PartyNames::key($name), PartyNames::key($english)]))->when($english, fn (Builder $q) => $q->orWhere('name_en', $english)))
+            ->orderByRaw('case when name_key = ? then 0 else 1 end', [PartyNames::key($name)])
             ->orderBy('id')
             ->first();
     }
@@ -141,7 +142,7 @@ class ContactMap
     /** Named in both: its name in the map's (Arabic) where it had the English one, its English name where it had none. */
     private function rename(Party $party, string $name, ?string $english): void
     {
-        if ($english !== null && $party->name === $english && $name !== $english) {
+        if ($english !== null && PartyNames::key($party->name) === PartyNames::key($english) && $name !== $english) {
             $party->name = $name;
         }
 

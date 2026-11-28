@@ -3,6 +3,7 @@
 namespace App\Filament\Mms\Imports;
 
 use App\Models\Party;
+use App\Support\PartyNames;
 use Filament\Actions\Imports\Exceptions\RowImportFailedException;
 use Filament\Actions\Imports\ImportColumn;
 use Filament\Actions\Imports\Importer;
@@ -93,7 +94,10 @@ class PartyImporter extends Importer
     /** One of that name: updated; else a new one. */
     public function resolveRecord(): Party
     {
-        return Party::query()->where('name', trim((string) ($this->data['name'] ?? '')))->first() ?? new Party;
+        // The party there already by that name however typed (spaces, hamza, "ذ.م.م"): updated, not made again.
+        $key = PartyNames::key((string) ($this->data['name'] ?? ''));
+
+        return ($key !== '' ? Party::query()->where('name_key', $key)->orderBy('id')->first() : null) ?? new Party;
     }
 
     protected function afterFill(): void

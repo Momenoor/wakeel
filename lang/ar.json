@@ -5678,5 +5678,9 @@
     "A contact map file (JSON): each body becomes an external entity, its people and offices its contacts. Imported again, nothing is doubled.": "ملف خريطة جهات الاتصال (JSON): تصبح كل جهة جهةً خارجية، والأشخاص والمكاتب فيها جهات اتصال لها. لا يتكرر شيء عند الاستيراد مرة أخرى.",
     "Contact map imported": "تم استيراد خريطة جهات الاتصال",
     ":entities new external entities, :contacts new contacts.": ":entities جهة خارجية جديدة، و:contacts جهة اتصال جديدة.",
-    "That file is not a contact map: a JSON list of cards was expected.": "هذا الملف ليس خريطة جهات اتصال: المتوقع قائمة بطاقات بصيغة JSON."
+    "That file is not a contact map: a JSON list of cards was expected.": "هذا الملف ليس خريطة جهات اتصال: المتوقع قائمة بطاقات بصيغة JSON.",
+    "This looks like :names, already in the system. Use that party, or tick \"Not the same party\" if it is another.": "يبدو أنه :names، الموجود في النظام. استخدم ذلك الطرف، أو حدّد \"ليس الطرف نفسه\" إن كان طرفاً آخر.",
+    "Likely already in the system:": "قد يكون موجوداً في النظام:",
+    "Not the same party": "ليس الطرف نفسه",
+    "Another of a like name: saved as a party of its own.": "طرف آخر باسم مشابه: يُحفظ طرفاً مستقلاً."
 }

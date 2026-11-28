@@ -4,6 +4,7 @@ namespace App\Services\MMS;
 
 use App\Models\MatterMinutes;
 use App\Models\Party;
+use App\Models\Setting;
 use App\Support\RequestMemo;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
@@ -60,6 +61,18 @@ final class PartyMerger
                 ->whereIn('subject_id', $ids)
                 ->update(['subject_id' => $intoId]);
             $moved['matter_minutes.attendees'] = $this->repointAttendees($ids, $intoId);
+
+            // Who belongs to them (an entity's contacts, a company's employees, a party's attendees): no foreign
+            // key holds parties.parent_id, so the database's own list above misses it. Never the kept party
+            // under itself.
+            $moved['parties.parent_id'] = DB::table('parties')->whereIn('parent_id', $ids)->where('id', '!=', $intoId)->update(['parent_id' => $intoId]);
+            DB::table('parties')->where('id', $intoId)->whereIn('parent_id', $ids)->update(['parent_id' => null]);
+
+            // The office's own party, kept in the settings.
+            if (in_array((int) Setting::get('office_owner_party_id'), $ids, true)) {
+                Setting::set('office_owner_party_id', $intoId);
+                $moved['settings.office_owner_party_id'] = 1;
+            }
 
             // On a matter twice in the same capacity now: once.
             $moved['matter_party (doubled)'] = -$this->dedupeMatterParties($intoId);

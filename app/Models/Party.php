@@ -5,9 +5,11 @@ namespace App\Models;
 use App\Services\Translation\EnglishNames;
 use App\Services\WhatsAppService;
 use App\Support\Addresses;
+use App\Support\PartyNames;
 use App\Support\RequestMemo;
 use App\Support\Sql;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -87,6 +89,44 @@ class Party extends Model
     protected static function booted(): void
     {
         static::saved(fn (Party $party) => EnglishNames::later($party));
+    }
+
+    /**
+     * Kept tidy (no stray spaces or tabs), with its key for finding a duplicate (PartyNames): however it is set,
+     * an import's quiet save too.
+     */
+    public function setNameAttribute(?string $value): void
+    {
+        $this->attributes['name'] = $value === null ? null : PartyNames::tidy($value);
+        $this->attributes['name_key'] = $value === null ? null : PartyNames::key($value);
+    }
+
+    /**
+     * The parties there already that are likely this one: the same name however typed (PartyNames::key()), or
+     * one a letter or two apart (a misspelling) — among those at the same level (under the same entity, or under
+     * none). The same name first.
+     *
+     * @return Collection<int, Party>
+     */
+    public static function likelyDuplicates(?string $name, mixed $exceptId = null, mixed $parentId = null): Collection
+    {
+        $key = PartyNames::key($name);
+
+        if ($key === '') {
+            return new Collection;
+        }
+
+        $scope = static::query()
+            ->when(filled($exceptId), fn (Builder $q) => $q->whereKeyNot($exceptId))
+            ->when(filled($parentId), fn (Builder $q) => $q->where('parent_id', $parentId), fn (Builder $q) => $q->whereNull('parent_id'));
+        $ids = $scope
+            ->whereNotNull('name_key')
+            ->pluck('name_key', 'id')
+            ->filter(fn (?string $other): bool => PartyNames::close($key, (string) $other))
+            ->sortBy(fn (?string $other): int => $other === $key ? 0 : 1)
+            ->keys();
+
+        return $ids->isEmpty() ? new Collection : static::query()->findMany($ids->all())->sortBy(fn (Party $p): int => $ids->search($p->getKey()))->values();
     }
 
     protected $casts = [

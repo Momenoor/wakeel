@@ -7,7 +7,9 @@ use App\Filament\Support\ContactFields;
 use App\Filament\Support\EnglishNameField;
 use App\Models\ExpertiseArea;
 use App\Models\Party;
+use App\Support\PartyNames;
 use Closure;
+use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
@@ -15,11 +17,13 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Illuminate\Support\Collection;
 use Illuminate\Support\HtmlString;
 use TomatoPHP\FilamentUsers\Filament\Resources\Users\UserResource;
 
@@ -56,6 +60,7 @@ class PartyForm
             ->columnSpan(1)
             ->schema([
                 EnglishNameField::source(self::name($picking), 'name_en'),
+                ...($picking ? [] : self::duplicateCheck()),
                 // English letters name them by it (Claude puts it into English when set).
                 EnglishNameField::make(TextInput::make('name_en')->label(__('Name in English'))->maxLength(255), 'name'),
                 // As it must appear in letters and templates — an assistant's
@@ -88,7 +93,48 @@ class PartyForm
 
         return $picking
             ? $name->live(onBlur: true)->afterStateUpdated(fn (Get $get, Set $set) => self::fillFromExisting($get, $set))
-            : $name->unique(ignoreRecord: true);
+            // A party there already by this name however typed (spaces, hamza, "ذ.م.م"), or a letter or two apart:
+            // refused, unless said not to be the same (duplicateCheck()).
+            : $name->live(onBlur: true)->rule(fn (Get $get, ?Party $record): Closure => function (string $attribute, mixed $value, Closure $fail) use ($get, $record): void {
+                // Said to be another, or its own name kept (two of one name there before, told apart already).
+                if ($get('not_a_duplicate') || ($record && PartyNames::key((string) $value) === $record->name_key)) {
+                    return;
+                }
+
+                $likely = Party::likelyDuplicates((string) $value, $record?->getKey(), $get('parent_id'));
+
+                if ($likely->isNotEmpty()) {
+                    $fail(__('This looks like :names, already in the system. Use that party, or tick "Not the same party" if it is another.', ['names' => self::names($likely)]));
+                }
+            });
+    }
+
+    /**
+     * The parties there already that the name typed is likely to be, named under it as it is typed — and the box
+     * to say it is another all the same (two people of one name).
+     *
+     * @return list<Component>
+     */
+    private static function duplicateCheck(): array
+    {
+        $likely = fn (Get $get, ?Party $record) => Party::likelyDuplicates($get('name'), $record?->getKey(), $get('parent_id'));
+
+        return [
+            Text::make(fn (Get $get, ?Party $record): ?HtmlString => ($found = $likely($get, $record))->isEmpty() ? null
+                : new HtmlString('<b>'.e(__('Likely already in the system:')).'</b> '.e(self::names($found))))
+                ->color('warning'),
+            Checkbox::make('not_a_duplicate')
+                ->label(__('Not the same party'))
+                ->helperText(__('Another of a like name: saved as a party of its own.'))
+                ->dehydrated(false)
+                ->visible(fn (Get $get, ?Party $record): bool => $likely($get, $record)->isNotEmpty()),
+        ];
+    }
+
+    /** "Name (#id), Name (#id)": the first five. */
+    private static function names(Collection $parties): string
+    {
+        return $parties->take(5)->map(fn (Party $p): string => $p->name.' (#'.$p->getKey().')')->implode('، ');
     }
 
     /** Picking one for a matter: a party there already is with that name — said, and what saving does. */
@@ -128,7 +174,8 @@ class PartyForm
      */
     public static function existingMatch(?string $name): ?Party
     {
-        return filled($name) ? Party::query()->whereRaw('LOWER(name) = ?', [mb_strtolower(trim($name))])->first() : null;
+        // However typed: spaces, case, hamza, "ذ.م.م" (PartyNames::key()).
+        return filled($name) && ($key = PartyNames::key($name)) !== '' ? Party::query()->where('name_key', $key)->orderBy('id')->first() : null;
     }
 
     /**
